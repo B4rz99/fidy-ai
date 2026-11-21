@@ -19,6 +19,7 @@ const exchange = Schema.decodeSync(ConsentIngressExchange)({
     decisionNotBeforeMs: 200,
   },
 });
+
 const message: ConsentIngressMessage = {
   providerMessageId: exchange.initiatingMessageId,
   bodySha256: exchange.initiatingBodySha256,
@@ -34,12 +35,15 @@ it("accepts a decision only after proven delivery and the last disclosure bounda
       "reply"
     ),
   };
+
   expect(canRecordConsentIngressDecision({ exchange, message: reply })).toBe(true);
+
   for (const occurredAtMs of [99, 100, 199, 200]) {
     expect(canRecordConsentIngressDecision({ exchange, message: { ...reply, occurredAtMs } })).toBe(
       false
     );
   }
+
   expect(
     canRecordConsentIngressDecision({
       exchange: {
@@ -67,6 +71,7 @@ it("accepts a decision only after proven delivery and the last disclosure bounda
       },
     })
   ).toBe(false);
+
   const before = {
     ...exchange,
     phase: {
@@ -75,9 +80,11 @@ it("accepts a decision only after proven delivery and the last disclosure bounda
       disclosureMessageId: null,
     },
   };
+
   expect(canRecordConsentIngressDecision({ exchange: before, message: reply })).toBe(false);
   expect(isConsentIngressDecisionPhase(before)).toBe(false);
   expect(isConsentIngressDecisionPhase(exchange)).toBe(true);
+
   const settled = {
     ...exchange,
     phase: {
@@ -88,6 +95,7 @@ it("accepts a decision only after proven delivery and the last disclosure bounda
       decisionNotBeforeMs: 200,
     },
   };
+
   expect(isConsentIngressDecisionPhase(settled)).toBe(true);
   expect(canRecordConsentIngressDecision({ exchange: settled, message: reply })).toBe(false);
 });
@@ -98,6 +106,7 @@ it("recognizes only the identical live initiation as replay and fences expired m
     retained = Option.some(exchange)
   ): "new" | "replay" | "conflict" =>
     classifyConsentIngressReplay({ exchange: retained, message: input });
+
   expect(classify(message, Option.none())).toBe("new");
   expect(classify(message)).toBe("replay");
   expect(
@@ -108,13 +117,16 @@ it("recognizes only the identical live initiation as replay and fences expired m
       ),
     })
   ).toBe("conflict");
+
   const different = {
     ...message,
     providerMessageId: Schema.decodeSync(ConsentIngressExchange.fields.initiatingMessageId)(
       "other"
     ),
   };
+
   expect(classify(different)).toBe("conflict");
+
   for (const receivedAtMs of [10_000, 10_001]) {
     expect(classify({ ...message, receivedAtMs, occurredAtMs: 10_001 })).toBe("conflict");
     expect(classify({ ...different, receivedAtMs, occurredAtMs: 9_999 })).toBe("conflict");

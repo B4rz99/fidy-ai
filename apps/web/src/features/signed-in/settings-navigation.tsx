@@ -16,6 +16,7 @@ export const SettingsNavigation = ({
   const inSettings = useRouterState({
     select: (state) => state.location.pathname.startsWith("/settings/"),
   });
+
   return (
     <details className="shrink-0" open={inSettings}>
       <summary

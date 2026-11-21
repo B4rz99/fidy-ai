@@ -70,13 +70,16 @@ export const SuggestedOperation = Schema.suspend(() => {
       Option.isSome(userOwnedAgentCapability(operation.policy.access))
     )
     .map(suggestedOperationMember);
+
   if (!Arr.isReadonlyArrayNonEmpty(members)) {
     throw new Error("SuggestedOperation requires at least one canonical operation");
   }
+
   return Schema.Union(members);
 })
   .pipe(Schema.brand("SuggestedOperation"))
   .annotate({ identifier: "SuggestedOperation" });
+
 export type SuggestedOperation = typeof SuggestedOperation.Type;
 
 export const NextOperations = Schema.Array(SuggestedOperation)
@@ -121,11 +124,13 @@ export const ErrorCode = Schema.Literals([
   "dashboard_uninitialized",
   "unavailable",
 ]);
+
 export type ErrorCode = typeof ErrorCode.Type;
 
 export const CanonicalRejectedFailure = Schema.Struct({
   canonicalOutcome: Schema.Literal("rejected"),
 });
+
 export type CanonicalRejectedFailure = typeof CanonicalRejectedFailure.Type;
 
 export const isCanonicalRejectedFailure = Schema.is(CanonicalRejectedFailure);
@@ -180,13 +185,21 @@ const errorResponse = <Tag extends string, Detail extends Schema.Top>(
 });
 
 const validationFailedTag = "ValidationFailed";
+
 const unauthenticatedTag = "Unauthenticated";
+
 const scopeMissingTag = "ScopeMissing";
+
 const consentRequiredTag = "ConsentRequired";
+
 const userActionRequiredTag = "UserActionRequired";
+
 const paywallRequiredTag = "PaywallRequired";
+
 const notFoundTag = "NotFound";
+
 const unavailableTag = "Unavailable";
+
 const resourceLimitedTag = "ResourceLimited";
 
 export class QuotaExhausted extends Schema.Error<QuotaExhausted, Brand.Brand<"QuotaExhausted">>(

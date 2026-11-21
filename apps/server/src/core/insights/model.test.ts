@@ -10,6 +10,7 @@ import {
 } from "./contract";
 
 type InsightOccurrenceInput = typeof InsightEvent.Encoded;
+
 type MoneyGroupInput = InsightOccurrenceInput["moneyGroups"][number];
 
 const occurrence = (overrides: Partial<InsightOccurrenceInput> = {}): InsightOccurrenceInput => ({
@@ -51,6 +52,7 @@ it("decodes a generated occurrence with deterministic Currency groups", () => {
 
 it("bounds persisted delivery evidence fields", () => {
   const decode = Schema.decodeUnknownResult(DeliveryEvidenceInput);
+
   const evidence = {
     sentAt: "2026-08-09T23:00:08Z",
     channel: "c".repeat(32),
@@ -59,6 +61,7 @@ it("bounds persisted delivery evidence fields", () => {
   };
 
   expect(Result.isSuccess(decode(evidence))).toBe(true);
+
   for (const field of ["channel", "provider", "providerMessageId"] as const) {
     expect(Result.isFailure(decode({ ...evidence, [field]: `${evidence[field]}x` }))).toBe(true);
   }
@@ -72,9 +75,11 @@ it("rejects schedule revision zero", () => {
 
 it("rejects Currency groups that are duplicated or out of alphabetic order", () => {
   const groups = occurrence().moneyGroups;
+
   const unordered = Schema.decodeResult(InsightEvent)(
     occurrence({ moneyGroups: [...groups].reverse() })
   );
+
   expect(Result.isFailure(unordered)).toBe(true);
   expect(
     Result.isFailure(unordered)
@@ -135,6 +140,7 @@ it("roundtrips persisted reminder standing without mixing attention states", () 
       Schema.encodeSync(ReminderStanding)(Schema.decodeUnknownSync(ReminderStanding)(value))
     ).toEqual(value);
   }
+
   expect(
     Schema.decodeUnknownOption(ReminderStanding)({ _tag: "Attentive", unanswered: 3 })._tag
   ).toBe("None");
@@ -154,6 +160,7 @@ it("roundtrips reminder instructions and temporal delivery decisions", () => {
       Schema.encodeSync(ReminderCadence)(Schema.decodeUnknownSync(ReminderCadence)(value))
     ).toEqual(value);
   }
+
   for (const value of [
     { _tag: "Ready" },
     { _tag: "Expired" },

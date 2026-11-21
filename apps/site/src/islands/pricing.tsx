@@ -10,9 +10,11 @@ const prices = [
   { label: "Mensual", amount: "$28.900", period: "mes" },
   { label: "Anual", amount: "$289.900", period: "año" },
 ] as const;
+
 export const Pricing = (): React.JSX.Element => {
   const [price, setPrice] = useState<(typeof prices)[number]>(prices[1]);
   const [instant, setInstant] = useState(false);
+
   return (
     <>
       {" "}

@@ -13,6 +13,7 @@ export const OAuthNativeReview = Schema.Struct({
   message: Schema.String.check(Schema.isMaxLength(maximumReviewCharacters)),
   expiresAtMilliseconds: Schema.Int,
 });
+
 export type OAuthNativeReview = typeof OAuthNativeReview.Type;
 
 export const OAuthReviewBinding = Schema.Array(
@@ -23,6 +24,7 @@ export const OAuthReviewBinding = Schema.Array(
     revision: Schema.String,
   })
 ).check(Schema.isBetweenLength(1, maximumAtomicBatchCalls));
+
 export type OAuthReviewBinding = typeof OAuthReviewBinding.Type;
 
 export class OAuthConfirmationRetentionUnavailable extends Data.TaggedError(

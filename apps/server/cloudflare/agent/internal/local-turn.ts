@@ -15,7 +15,9 @@ export const Turn = Schema.Struct({
   deadline_ms: Schema.Int,
   request_text: TranscriptText,
 });
+
 export type LocalTurn = typeof Turn.Type;
+
 export const channelAuthority = (
   turn: LocalTurn
 ): "verified-whatsapp" | "no-verified-whatsapp-authority" =>

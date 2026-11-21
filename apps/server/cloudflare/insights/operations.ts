@@ -23,14 +23,18 @@ export const weeklyReportDeliveryQuery: typeof weeklyReportDeliveryQueryOwned = 
 
 export const prepareLocalInsight: typeof prepareTransition = (...input) =>
   prepareTransition(...input);
+
 export const prepareLocalReminder: typeof prepareSchedule = (...input) => prepareSchedule(...input);
+
 export const readLocalReminder: typeof readSchedule = (user) => readSchedule(user);
 
 export const claimLocalReminderPurpose: typeof claimPurpose = (...args) => claimPurpose(...args);
+
 export const reconcileLocalReminder: typeof reconcileReceipt = (...args) =>
   reconcileReceipt(...args);
 
 export const claimLocalDisclosure: typeof claimDisclosure = (...args) => claimDisclosure(...args);
+
 export const isRetainedDisclosure: typeof retainedDisclosure = (...args) =>
   retainedDisclosure(...args);
 

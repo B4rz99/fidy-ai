@@ -10,6 +10,7 @@ export const isCanonicalInput: {
     const operation = Option.getOrThrow(
       Option.fromNullishOr(operationCatalog.byId.get(operationId))
     );
+
     return Option.isSome(Schema.encodeUnknownOption(operation.input)(input));
   }
 );

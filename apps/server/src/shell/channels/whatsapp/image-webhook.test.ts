@@ -5,13 +5,17 @@ import { authenticateWhatsAppInbound } from "./operations";
 const fixture = await Bun.file(
   new URL("./internal/fixtures/kapso-bsuid-image-v2.json", import.meta.url)
 ).text();
+
 const secret = "kapso-image-webhook-secret-32-characters";
+
 const receivedAt = DateTime.makeUnsafe("2026-04-03T12:10:00.000Z");
+
 const decode = (
   body = fixture,
   signature?: string
 ): ReturnType<typeof authenticateWhatsAppInbound> => {
   const rawBody = new TextEncoder().encode(body);
+
   return authenticateWhatsAppInbound({
     rawBody,
     secret: Redacted.make(secret),
@@ -62,6 +66,7 @@ it.effect(
     Effect.gen(function* () {
       const forged = yield* decode(fixture, "00".repeat(32)).pipe(Effect.flip);
       expect(forged._tag).toBe("InvalidWhatsAppSignature");
+
       const invalid = [
         fixture.replace('"media_image_123"', '""'),
         fixture.replace('"media_image_123"', '"   "'),
@@ -71,6 +76,7 @@ it.effect(
           '"from_user_id": "CO.99999999999999999999"'
         ),
       ];
+
       for (const body of invalid) {
         expect((yield* decode(body).pipe(Effect.flip))._tag).toBe("InvalidWhatsAppPayload");
       }

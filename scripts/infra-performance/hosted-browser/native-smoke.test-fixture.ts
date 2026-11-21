@@ -19,8 +19,10 @@ const readLocalAsset = Effect.fnUntraced(function* (
     assets,
     pathname === "/app/transactions" ? "index.html" : "." + pathname
   );
+
   assert.ok(source.startsWith(assets + path.sep));
   const file = Bun.file(source);
+
   return (yield* native(() => file.exists()))
     ? new Response(file)
     : new Response(null, { status: 404 });
@@ -41,16 +43,20 @@ const run = Effect.gen(function* () {
     (runtime) => {
       const read = Effect.fnUntraced(function* (request: Request) {
         const url = new URL(request.url);
+
         if (url.origin === origins.api) return yield* transport(runtime)(request);
         assert.equal(url.origin, origins.browser);
+
         if (url.pathname === "/deployment-metadata.json") {
           return Response.json({
             gitRevision: config.native.web.revision,
             contractDigest: config.native.web.contractDigest,
           });
         }
+
         return yield* readLocalAsset(path, assets, url.pathname);
       });
+
       const client: typeof network = Object.assign(
         (input: Parameters<typeof network>[0], init?: Parameters<typeof network>[1]) =>
           resolvePromise(
@@ -60,6 +66,7 @@ const run = Effect.gen(function* () {
           ),
         { preconnect: network.preconnect }
       );
+
       const witness = Effect.fnUntraced(function* (phase: "before" | "after") {
         return yield* nativeAccountingSnapshot({
           phase,
@@ -69,15 +76,18 @@ const run = Effect.gen(function* () {
           ...config.native.session,
         });
       });
+
       return Effect.gen(function* () {
         const before = yield* witness("before");
         const smoke = yield* runNativeSmoke(config);
         const after = yield* witness("after");
+
         const evidence = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
           before,
           smoke,
           after,
         });
+
         process.stdout.write(evidence);
       }).pipe(Effect.provideService(FetchHttpClient.Fetch, client));
     },

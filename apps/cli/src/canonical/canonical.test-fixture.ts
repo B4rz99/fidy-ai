@@ -5,19 +5,23 @@ import { SavedGrant, apiOrigin } from "../credential/contract";
 import type { CanonicalClientFactory, CanonicalDependencies } from "./contract";
 
 const secretCharacters = 43;
+
 export const bearer = `fin_abcd1234_${"s".repeat(secretCharacters)}`;
+
 type QueryFixture = Readonly<{
   dependencies: CanonicalDependencies;
   stdout: Array<string>;
   stderr: Array<string>;
   requests: Array<string>;
 }>;
+
 type FixtureFactory = (
   response?:
     | Readonly<{ body: string; status: number }>
     | Readonly<{ body: string; status: number; headers: Readonly<Record<string, string>> }>,
   scopes?: ReadonlyArray<PATScope>
 ) => QueryFixture;
+
 export const makeCanonicalFixture =
   (clientFactory: CanonicalClientFactory): FixtureFactory =>
   (response = { body: '{"data":[],"next":[]}', status: 200 }, scopes = ["read"]): QueryFixture => {
@@ -26,6 +30,7 @@ export const makeCanonicalFixture =
     const stdout: Array<string> = [];
     const stderr: Array<string> = [];
     const requests: Array<string> = [];
+
     const grant = Schema.decodeSync(Schema.toCodecJson(SavedGrant))({
       origin: apiOrigin,
       pat: {
@@ -41,6 +46,7 @@ export const makeCanonicalFixture =
         expiresAt: "2099-01-08T00:00:00.000Z",
       },
     });
+
     const dependencies: CanonicalDependencies = {
       clientFactory,
       store: {
@@ -51,6 +57,7 @@ export const makeCanonicalFixture =
       httpClient: HttpClient.make((request) =>
         Effect.sync(() => {
           requests.push(request.url);
+
           return HttpClientResponse.fromWeb(
             request,
             new Response(body, {
@@ -71,5 +78,6 @@ export const makeCanonicalFixture =
         }),
       json: true,
     };
+
     return { dependencies, stdout, stderr, requests };
   };

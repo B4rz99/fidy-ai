@@ -3,16 +3,24 @@ import type { CanonicalSuccess } from "@/transport/client";
 import { formatMoneyWithCode } from "@/transport/money";
 
 export type Budget = CanonicalSuccess<"budgets.listBudgets">["data"][number];
+
 export type BudgetReport = Omit<CanonicalSuccess<"budgets.getBudgetStatus">["data"], "budgets">;
+
 export type BudgetStatus = BudgetReport["statuses"][number];
+
 export type Category = CanonicalSuccess<"categories.listCategories">["data"][number];
+
 export type CurrentUser = CanonicalSuccess<"identity.getCurrentUser">["data"];
 
 export const defaultBudgetGroup = (label: string): string => {
   if (["Vivienda", "Servicios"].includes(label)) return "Hogar";
+
   if (["Restaurantes", "Domicilios", "Mercado"].includes(label)) return "Alimentación";
+
   if (["Transporte", "Viajes"].includes(label)) return "Movilidad";
+
   if (["Salud", "Educación"].includes(label)) return "Bienestar";
+
   return "Otros gastos";
 };
 
@@ -54,8 +62,10 @@ export const budgetFigures = ({
     const cap = BigDecimal.sumAll(selected.map((status) => status.budget.cap.amount));
     const spent = BigDecimal.sumAll(selected.map((status) => status.spent.amount));
     const remaining = BigDecimal.subtract(cap, spent);
+
     const format = (amount: BigDecimal.BigDecimal): string =>
       formatMoneyWithCode({ locale, money: { amount, currency } });
+
     return {
       currency,
       budgeted: format(cap),
@@ -100,19 +110,24 @@ export const summaryFigures = ({
           money.currency === currency ? [money.amount] : []
         )
       );
+
       const expenses = BigDecimal.sumAll(
         report.cashFlow.expenses.flatMap((money) =>
           money.currency === currency ? [money.amount] : []
         )
       );
+
       const cap = BigDecimal.sumAll(
         report.statuses.flatMap((status) =>
           status.budget.cap.currency === currency ? [status.budget.cap.amount] : []
         )
       );
+
       const remaining = BigDecimal.subtract(cap, expenses);
+
       const format = (amount: BigDecimal.BigDecimal): string =>
         formatMoneyWithCode({ locale, money: { currency, amount } });
+
       return {
         currency,
         income: format(income),

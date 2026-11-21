@@ -51,12 +51,15 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const logs: unknown[] = [];
+
       const loggers = new Set([
         Logger.make<unknown, void>(({ message, cause, logLevel }) =>
           logs.push({ message, reasons: cause.reasons, logLevel })
         ),
       ]);
+
       const observe = makeCoreRejectionObserver();
+
       for (const [now, count] of [
         [1_800_000, 1_000],
         [1_740_000, 100],
@@ -66,6 +69,7 @@ it.effect(
           Effect.provideService(Logger.CurrentLoggers, loggers)
         );
       }
+
       const expected = { message: warning, reasons: [], logLevel: "Warn" };
       expect(logs).toEqual([expected, expected]);
       yield* burst(makeCoreRejectionObserver(), { now: 1_920_000, count: 99 }).pipe(
@@ -76,9 +80,11 @@ it.effect(
       );
       expect(logs).toEqual([expected, expected]);
       const independent = makeCoreRejectionObserver();
+
       const brokenLogger = Logger.make(() => {
         throw new Error("private logging diagnostic");
       });
+
       yield* burst(independent, { now: 2_040_000, count: 100 }).pipe(
         Effect.provideService(Logger.CurrentLoggers, new Set([brokenLogger]))
       );
@@ -96,21 +102,26 @@ it.effect("counts only admitted boundary statuses", () =>
     const now = 1_800_000;
     const callback = makeCoreRejectionObserver();
     const mcp = makeCoreRejectionObserver();
+
     const work = Effect.gen(function* () {
       for (let index = 0; index < 99; index += 1) {
         yield* callback({ now, boundary: "providerCallback", status: 400 });
         yield* mcp({ now, boundary: "mcp", status: 429 });
       }
+
       for (const status of [200, 303, 404, 429, 500]) {
         yield* callback({ now, boundary: "providerCallback", status });
       }
+
       for (const status of [200, 303, 500, 503]) {
         yield* mcp({ now, boundary: "mcp", status });
       }
+
       expect(logs).toEqual([]);
       yield* callback({ now, boundary: "providerCallback", status: 422 });
       yield* mcp({ now, boundary: "mcp", status: 403 });
     });
+
     yield* work.pipe(Effect.provideService(Logger.CurrentLoggers, loggers));
     expect(logs).toEqual([warning, warning]);
   })

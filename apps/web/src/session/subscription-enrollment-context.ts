@@ -8,10 +8,12 @@ export const SubscriptionEnrollmentContext: React.Context<
 
 export const useSubscriptionEnrollmentClient = (): SubscriptionEnrollmentClient => {
   const client = useContext(SubscriptionEnrollmentContext);
+
   if (Option.isNone(client)) {
     throw new Error(
       "useSubscriptionEnrollmentClient must be used within SubscriptionEnrollmentLifetime"
     );
   }
+
   return client.value;
 };

@@ -3,6 +3,7 @@ import { Option, type Schema } from "effect";
 import { schemaTarget, schemaType } from "../lib/reference";
 
 type Props = { variants: ReadonlyArray<Schema.JsonObject> };
+
 const variants = Astro.props.variants.map((schema) => ({
   schema,
   target: schemaTarget(schema),

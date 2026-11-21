@@ -4,8 +4,11 @@ import { type Credential } from "../credential/contract";
 import { type LoginDependencies } from "./contract";
 
 const secretCharacterCount = 43;
+
 export const privateProof = "p".repeat(secretCharacterCount);
+
 export const rawBearer = `fin_abcd1234_${"s".repeat(secretCharacterCount)}`;
+
 export const issued = Schema.decodeSync(Schema.toCodecJson(ClaimedPATPairing))({
   bearer: rawBearer,
   pat: {
@@ -21,6 +24,7 @@ export const issued = Schema.decodeSync(Schema.toCodecJson(ClaimedPATPairing))({
     expiresAt: "1970-01-08T00:00:00.000Z",
   },
 });
+
 export const started = Schema.decodeSync(Schema.toCodecJson(StartedPATPairing))({
   pairingId: "01900000-0000-4000-8000-000000000002",
   privateDeviceCode: privateProof,
@@ -28,7 +32,9 @@ export const started = Schema.decodeSync(Schema.toCodecJson(StartedPATPairing))(
   expiresAt: "1970-01-01T00:10:00.000Z",
   pollingIntervalSeconds: 5,
 });
+
 export const request = { recipientLabel: "Mi agente", scopes: ["read"], lifetimeDays: 7 };
+
 export const makeLoginFixture = (): Readonly<{
   dependencies: LoginDependencies;
   saved: Array<Credential>;
@@ -36,6 +42,7 @@ export const makeLoginFixture = (): Readonly<{
 }> => {
   const saved: Array<Credential> = [];
   const claims: Array<number> = [];
+
   return {
     saved,
     claims,
@@ -54,6 +61,7 @@ export const makeLoginFixture = (): Readonly<{
         claim: () =>
           Effect.sync(() => {
             claims.push(1);
+
             return issued;
           }),
       },

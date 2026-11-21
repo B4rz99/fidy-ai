@@ -22,12 +22,14 @@ export const RecurringIdentity = ({ plan }: Readonly<{ plan: PlanInput }>): JSX.
     </span>
   </span>
 );
+
 export const RecurringCategory = ({
   plan,
   categories,
 }: Readonly<{ plan: PlanInput; categories: ReadonlyArray<Category> }>): JSX.Element => {
   const label =
     categories.find((category) => category.id === plan.categoryId)?.label ?? "Sin categoría";
+
   return (
     <span className="flex items-center gap-2 text-muted-foreground">
       <CategoryVisual label={label} bubble large={false} />

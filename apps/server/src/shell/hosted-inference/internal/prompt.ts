@@ -166,6 +166,7 @@ type TranscriptTextEntry = Extract<
   TranscriptEntry,
   { readonly _tag: "UserTranscriptEntry" | "AssistantTranscriptEntry" }
 >;
+
 type TranscriptResultEntry = Pick<
   Extract<TranscriptEntry, { readonly _tag: "CanonicalToolResultEntry" }>,
   "toolCallId" | "operation" | "outcome"
@@ -179,10 +180,13 @@ const exactTranscriptTextMessage = (entry: TranscriptTextEntry): Prompt.MessageE
 const exactTranscriptResultMessage = (entry: TranscriptResultEntry): Prompt.MessageEncoded => {
   const failed =
     entry.outcome._tag !== "Succeeded" && entry.outcome._tag !== "CommittedOutputUnavailable";
+
   let result: Schema.Json;
+
   if (entry.outcome._tag === "Succeeded") result = entry.outcome.output;
   else if (entry.outcome._tag === "CommittedOutputUnavailable") result = entry.outcome;
   else result = entry.outcome.failure;
+
   return {
     role: "tool",
     content: [
@@ -257,6 +261,7 @@ const boundedTranscript = (
     ) {
       return entry;
     }
+
     return {
       ...entry,
       outcome: {
@@ -272,12 +277,15 @@ const boundedTranscript = (
 const projectTranscriptSection = (entry: TranscriptEntry): ReadonlyArray<Prompt.MessageEncoded> =>
   exactTranscriptPromptInternal(boundedTranscript([entry])).map((message) => {
     if (typeof message.content !== "string") return message;
+
     if (message.role === "user") {
       return { ...message, content: untrustedText("transcript_user", message.content) };
     }
+
     if (message.role === "assistant") {
       return { ...message, content: untrustedText("transcript_assistant", message.content) };
     }
+
     return message;
   });
 
@@ -320,6 +328,7 @@ const projectSection = (section: HostedContextSection): ReadonlyArray<Prompt.Mes
       },
     ];
   }
+
   if (section._tag === "TurnStarted") {
     return [
       {
@@ -328,6 +337,7 @@ const projectSection = (section: HostedContextSection): ReadonlyArray<Prompt.Mes
       },
     ];
   }
+
   return projectEvidenceSection(section);
 };
 
@@ -336,6 +346,7 @@ const suppliedEvidenceInventory = (
 ): Prompt.SystemMessageEncoded => {
   const count = (source: HostedContextSection["_tag"]): number =>
     sections.filter(({ _tag }) => _tag === source).length;
+
   const evidenceCounts = {
     Memory: count("Memory"),
     CompactedConversation: count("CompactedConversation"),
@@ -343,6 +354,7 @@ const suppliedEvidenceInventory = (
     ProactiveReply: count("ProactiveReply"),
     ToolResult: count("ToolResult"),
   };
+
   return {
     role: "system",
     content:
@@ -370,6 +382,7 @@ export const projectHostedTextContextInternal = (
   context: HostedTextContext
 ): HostedPromptProjection => {
   const projected = context.sections.flatMap(projectSection);
+
   if (context.activeRequest._tag === "Present") {
     return {
       prefix: [
@@ -383,9 +396,11 @@ export const projectHostedTextContextInternal = (
       activeRequest: context.activeRequest,
     };
   }
+
   const feedbackStart = context.sections.findIndex(
     (section) => section._tag === "InvalidOutputFeedback"
   );
+
   return {
     prefix: [],
     continuationTail: feedbackStart < 0 ? projected : projected.slice(0, feedbackStart),
@@ -412,7 +427,9 @@ export const projectHostedStructuredContextInternal = (
 ];
 
 const startupHostedAgentSessionId = "00000000-0000-4000-8000-000000000001";
+
 const startupUuidHexRadix = 16;
+
 const startupUuidSuffixLength = 12;
 
 export const makeStartupTranscriptInternal = (
@@ -422,6 +439,7 @@ export const makeStartupTranscriptInternal = (
   }>
 ): ReadonlyArray<TranscriptEntry> => {
   const turnId = TranscriptTurnId.make(startupHostedAgentSessionId);
+
   return input.entries.map(({ text }, index) =>
     UserTranscriptEntry.make({
       _tag: "UserTranscriptEntry",

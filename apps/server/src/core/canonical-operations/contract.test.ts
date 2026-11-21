@@ -19,9 +19,11 @@ it("copies credential scopes into a closed canonical capability set", () => {
 
 it("accepts complete group-operation identities and rejects extra separators or surrounding text", () => {
   const decode = Schema.decodeUnknownResult(CanonicalOperationId);
+
   for (const value of ["a.b", "transactions.searchHistory2"]) {
     expect(Result.isSuccess(decode(value))).toBe(true);
   }
+
   for (const value of [".b", "a.", "A.b", "a.B", "a..b", "a_b", "!a.b", "a.b!", "a.b\n", "1a.b"]) {
     expect(Result.isFailure(decode(value))).toBe(true);
   }

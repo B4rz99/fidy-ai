@@ -9,16 +9,20 @@ import extractTSConfig from "dependency-cruiser/config-utl/extract-ts-config";
 const sourceFiles = (packageRoot, directory) =>
   readdirSync(resolve(packageRoot, directory), { withFileTypes: true }).flatMap((entry) => {
     const path = `${directory}/${entry.name}`;
+
     if (entry.isDirectory()) {
       return entry.name === "node_modules" || entry.name.startsWith(".")
         ? []
         : sourceFiles(packageRoot, path);
     }
+
     return /\.[cm]?[jt]sx?$/u.test(entry.name) ? [path] : [];
   });
+
 /** @param {string} packageRoot - Application root. @param {string[]} roots - Requested source inputs. */
 const graphSources = (packageRoot, roots) => {
   if (roots.length === 0) return ["src"];
+
   if (
     !packageRoot.endsWith("/apps/server") ||
     !roots.includes("src") ||
@@ -26,6 +30,7 @@ const graphSources = (packageRoot, roots) => {
   ) {
     return roots;
   }
+
   const repositorySources = execFileSync(
     "git",
     [
@@ -42,6 +47,7 @@ const graphSources = (packageRoot, roots) => {
   )
     .split("\0")
     .filter((path) => /\.[cm]?[jt]sx?$/u.test(path) && existsSync(resolve(packageRoot, path)));
+
   return [...roots, ...repositorySources];
 };
 
@@ -57,10 +63,13 @@ const assertCruisedSomething = (report) => {
 /** @param {import("dependency-cruiser").ICruiseResult} graph - Complete graph. @param {string} packageRoot - Application root. @param {string[]} sourceRoots - Requested inputs. */
 const assertCompleteGraph = (graph, packageRoot, sourceRoots) => {
   const sources = new Set(graph.modules.map(({ source }) => resolve(packageRoot, source)));
+
   const requested = sourceRoots.flatMap((root) =>
     statSync(resolve(packageRoot, root)).isDirectory() ? sourceFiles(packageRoot, root) : [root]
   );
+
   const missing = requested.filter((path) => !sources.has(resolve(packageRoot, path)));
+
   if (missing.length > 0) {
     throw new Error(`dependency-cruiser omitted source inputs: ${missing.join(", ")}`);
   }
@@ -89,23 +98,29 @@ export const loadGraph = async (directory, roots, validate = true) => {
   const sourceRoots = graphSources(packageRoot, roots);
   const ruleSet = await extractDepcruiseConfig(resolve(packageRoot, ".dependency-cruiser.mjs"));
   const fileName = ruleSet.options?.tsConfig?.fileName;
+
   if (fileName === undefined || ruleSet.forbidden === undefined) {
     throw new Error("dependency-cruiser requires a TypeScript config and forbidden rules");
   }
+
   const tsConfig = extractTSConfig(resolve(packageRoot, fileName));
   const previousDirectory = process.cwd();
   process.chdir(packageRoot);
+
   try {
     const { output } = await cruise(sourceRoots, { ruleSet, validate }, undefined, { tsConfig });
+
     if (typeof output === "string") throw new Error("Expected a dependency-cruiser graph object");
     assertCruisedSomething(output);
     assertCompleteGraph(output, packageRoot, sourceRoots);
     const unresolved = unresolvedDependencies(output);
+
     if (unresolved.length > 0) {
       throw new Error(
         unresolved.map(({ from, to }) => `unresolved-dependency: ${from} → ${to}`).join("\n")
       );
     }
+
     return { packageRoot, report: output, forbiddenRules: ruleSet.forbidden };
   } finally {
     process.chdir(previousDirectory);

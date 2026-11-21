@@ -15,4 +15,5 @@ const Spinner = ({ className, ...props }: SpinnerProps): React.JSX.Element => (
     {...props}
   />
 );
+
 export { Spinner };

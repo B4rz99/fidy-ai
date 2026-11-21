@@ -10,7 +10,9 @@ const listed = (stored: boolean): Map<string, boolean> => {
     ["one", true],
     ["two", true],
   ]);
+
   if (stored) rows.set("new", true);
+
   return rows;
 };
 
@@ -19,6 +21,7 @@ it.effect("erases its one new physical User if metering stops during observation
     let stored = false;
     let registrations = 0;
     let erased = 0;
+
     const result = yield* Effect.exit(
       runFleetPilot({
         inventory: () => Effect.sync(() => listed(stored)),
@@ -26,6 +29,7 @@ it.effect("erases its one new physical User if metering stops during observation
           Effect.sync(() => {
             stored = true;
             registrations++;
+
             return {
               id: "original",
               outcome: "created",
@@ -42,6 +46,7 @@ it.effect("erases its one new physical User if metering stops during observation
               Effect.sync(() => {
                 erased++;
                 stored = false;
+
                 return "reference";
               }),
             denied: () => Effect.void,
@@ -53,6 +58,7 @@ it.effect("erases its one new physical User if metering stops during observation
         record: () => Effect.void,
       })
     );
+
     expect(result._tag).toBe("Failure");
     expect({ registrations, erased, stored }).toEqual({
       registrations: 1,
@@ -66,6 +72,7 @@ it.effect("recovers an established pilot session for cleanup after a lost signup
   Effect.gen(function* () {
     let stored = false;
     let cleaned = false;
+
     const result = yield* Effect.exit(
       runFleetPilot({
         inventory: () => Effect.sync(() => listed(stored)),
@@ -81,6 +88,7 @@ it.effect("recovers an established pilot session for cleanup after a lost signup
               Effect.sync(() => {
                 cleaned = true;
                 stored = false;
+
                 return "reference";
               }),
             denied: (): Effect.Effect<void> => Effect.void,
@@ -92,6 +100,7 @@ it.effect("recovers an established pilot session for cleanup after a lost signup
         record: () => Effect.void,
       })
     );
+
     expect(result._tag).toBe("Failure");
     expect(cleaned).toBe(true);
   })
@@ -102,14 +111,18 @@ it.effect(
   () =>
     Effect.gen(function* () {
       let rows = new Map<string, boolean>();
+
       let signups = 0,
         erasures = 0;
+
       const stages: string[] = [];
+
       const completed = yield* runFleetPilot({
         inventory: () => Effect.sync(() => new Map(rows)),
         register: () =>
           Effect.sync(() => {
             signups++;
+
             return {
               id: "original",
               outcome: "created",
@@ -125,6 +138,7 @@ it.effect(
             erase: () =>
               Effect.sync(() => {
                 erasures++;
+
                 return "original";
               }),
             denied: () => Effect.void,
@@ -141,6 +155,7 @@ it.effect(
             stages.push(String(event["stage"]));
           }),
       }).pipe(Effect.forkChild);
+
       yield* TestClock.adjust("8 minutes");
       expect(signups).toBe(0);
       rows = new Map([
@@ -157,6 +172,7 @@ it.effect(
       rows.set("pilot", false);
       yield* TestClock.adjust("1 minute");
       yield* Fiber.join(completed);
+
       for (const stage of [
         "waiting-baseline",
         "waiting-fresh-object",
@@ -165,6 +181,7 @@ it.effect(
       ]) {
         expect(stages).toContain(stage);
       }
+
       expect({ signups, erasures }).toEqual({ signups: 1, erasures: 1 });
     })
 );
@@ -174,6 +191,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const stages: string[] = [];
+
       const result = yield* Effect.result(
         runFleetPilot({
           inventory: () => Effect.succeed(listed(false)),
@@ -189,6 +207,7 @@ it.effect(
             }),
         })
       );
+
       expect(result._tag).toBe("Failure");
       expect(stages).not.toContain("signup-started");
     })
@@ -198,18 +217,22 @@ it.effect("refuses to erase a different User returned by login", () =>
   Effect.gen(function* () {
     let registered = false;
     let erased = false;
+
     const browser = {
       erase: (): Effect.Effect<string> =>
         Effect.sync(() => {
           erased = true;
+
           return "reference";
         }),
       denied: (): Effect.Effect<void> => Effect.void,
     };
+
     const verdict = yield* runFleetPilot({
       register: () =>
         Effect.sync(() => {
           registered = true;
+
           return { ...browser, id: "original", outcome: "created" };
         }),
       login: () => Effect.succeed({ ...browser, id: "other", outcome: "approved" }),
@@ -220,6 +243,7 @@ it.effect("refuses to erase a different User returned by login", () =>
       record: () => Effect.void,
       watch: () => Effect.void,
     }).pipe(Effect.result);
+
     expect(verdict._tag).toBe("Failure");
     expect(erased).toBe(false);
   })

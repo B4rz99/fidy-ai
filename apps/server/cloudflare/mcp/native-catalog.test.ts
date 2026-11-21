@@ -64,6 +64,7 @@ const published = [
   "transactions.updateTransaction",
   "transactions.updateTransactions",
 ];
+
 it("preserves the exact public OAuth MCP tool catalog after shared reads are retired", () => {
   const actual = nativeMcpCatalog()
     .filter(
@@ -75,5 +76,6 @@ it("preserves the exact public OAuth MCP tool catalog after shared reads are ret
     )
     .map(({ id }) => id)
     .toSorted();
+
   expect(actual).toEqual(published);
 });

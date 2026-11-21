@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 const runDriftCheck = (plan: string, mode?: string): SpawnSyncReturns<string> => {
   const directory = mkdtempSync(join(tmpdir(), "fidy-drift-gate-"));
+
   try {
     writeFileSync(
       join(directory, "bun"),
@@ -14,6 +15,7 @@ const runDriftCheck = (plan: string, mode?: string): SpawnSyncReturns<string> =>
         mode: 0o700,
       }
     );
+
     return spawnSync("bash", ["scripts/check-topology-drift.sh", ...(mode ? [mode] : [])], {
       cwd: new URL("..", import.meta.url).pathname,
       encoding: "utf8",

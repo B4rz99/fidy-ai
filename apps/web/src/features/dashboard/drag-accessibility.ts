@@ -11,6 +11,7 @@ const targetLabel = (target: DashboardDropTarget): string => {
   if (target.kind === "dashboard-edge") {
     return target.edge === "top" ? "inicio del tablero" : "final del tablero";
   }
+
   switch (target.edge) {
     case "top":
       return "arriba del Widget";
@@ -64,6 +65,7 @@ export const dashboardAnnouncementText = {
           outcome: { _tag: "Canceled" },
         });
       }
+
       return Option.match(decodeDashboardDropTarget(targetData), {
         onNone: () =>
           dashboardDragAnnouncement.ended({
@@ -80,6 +82,7 @@ export const dashboardAnnouncementText = {
 };
 
 type AccessibilityOptions = NonNullable<ConstructorParameters<typeof Accessibility>[1]>;
+
 type DashboardAnnouncements = Required<AccessibilityOptions>["announcements"];
 
 export const dashboardAnnouncements: DashboardAnnouncements = {

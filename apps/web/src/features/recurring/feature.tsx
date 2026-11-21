@@ -40,6 +40,7 @@ export type { CaptureEditorProps } from "./capture-context";
 const PreviewWorkspace = import.meta.env.DEV
   ? lazy(() => import("./dev-preview").then((module) => ({ default: module.RecurringDataPreview })))
   : RecurringWorkspace;
+
 type Props = Readonly<{
   children: ReactNode;
   profileStale: boolean;
@@ -53,10 +54,12 @@ type Props = Readonly<{
   earlier: (month: string) => void;
   selectMonth: (month: string) => void;
 }>;
+
 const Resources = (props: Props): JSX.Element => {
   const router = useRouter();
   const [calendar, setCalendar] = useState(false);
   const [tab, setTab] = useState("monthly");
+
   const { mounted, admit, ...planning } = useRecurringPlanning({
     apiClient: router.options.context.apiClient,
     profileStale: props.profileStale,
@@ -69,6 +72,7 @@ const Resources = (props: Props): JSX.Element => {
       ...(Option.isSome(props.previous) ? { previousMonth: props.previous.value } : {}),
     },
   });
+
   return (
     <div ref={mounted}>
       <div
@@ -88,7 +92,9 @@ const Resources = (props: Props): JSX.Element => {
     </div>
   );
 };
+
 const noRequestedDisclosure = Option.none<string>();
+
 const useEarlierDisclosure = ({
   month,
   filters,
@@ -102,14 +108,17 @@ const useEarlierDisclosure = ({
   const scope = `${month}:${JSON.stringify(filters)}:`;
   const key = scope + Option.getOrElse(previous, () => "");
   const requested = useRef(noRequestedDisclosure);
+
   const reveal = useCallback<RefCallback<HTMLDetailsElement>>(
     (element) => {
       if (element === null) return;
+
       if (Option.contains(requested.current, key)) element.open = true;
       requested.current = noRequestedDisclosure;
     },
     [key]
   );
+
   return {
     key,
     reveal,
@@ -119,6 +128,7 @@ const useEarlierDisclosure = ({
     },
   };
 };
+
 const ResourceContent = ({
   props,
   planning,
@@ -136,14 +146,17 @@ const ResourceContent = ({
 }>): JSX.Element => {
   const disclosure = useEarlierDisclosure(props);
   const { state, categoryState, waiting, retry } = planning;
+
   if (state._tag === "Failure" || categoryState._tag === "Failure") {
     return (
       <RecurringQueryFailure states={[state, categoryState]} waiting={waiting} retry={retry} />
     );
   }
+
   if (state._tag !== "Ready" || categoryState._tag !== "Ready") {
     return <PendingRead label="Cargando recurrentes" />;
   }
+
   const readState = planning.stale ? "stale" : "current";
 
   return (
@@ -173,6 +186,7 @@ const ResourceContent = ({
     </Suspense>
   );
 };
+
 export const RecurringFeature = ({
   month: selectedMonth,
   captureEditor,
@@ -186,13 +200,16 @@ export const RecurringFeature = ({
   const [profile] = useState(() => workspaceProfileQuery(router.options.context.apiClient));
   const state = useAtomValue(profile).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(profile);
+
   const [clock] = useState(() =>
     Atom.make(() => DateTime.nowUnsafe()).pipe(
       router.options.context.apiClient.runtime.factory.withReactivity(["recurring-resume"])
     )
   );
+
   const now = useAtomValue(clock);
   const { filters, applyFilters, previous, earlier, selectMonth } = useRecurringWorkspaceView();
+
   if (state._tag === "Failure") {
     return (
       <Button contentLayout="wrap" focusAppearance="subtle" onClick={refresh}>
@@ -200,14 +217,19 @@ export const RecurringFeature = ({
       </Button>
     );
   }
+
   if (state._tag !== "Ready") {
     return <PendingRead label="Cargando recurrentes" />;
   }
+
   const user = state.value.data;
+
   const currentMonth = DateTime.formatIsoDate(
     DateTime.makeZonedUnsafe(now, { timeZone: user.timeZone })
   ).slice(0, "2026-01".length);
+
   const month = Option.getOrElse(selectedMonth, () => currentMonth);
+
   return (
     <CaptureEditorContext value={Option.some(captureEditor)}>
       <Resources
@@ -228,6 +250,7 @@ export const RecurringFeature = ({
     </CaptureEditorContext>
   );
 };
+
 const lifecycleMessages = {
   scheduled:
     "está programado. El seguimiento comenzará en la fecha programada. Los registros existentes se conservan.",
@@ -238,15 +261,19 @@ const lifecycleMessages = {
   stopped:
     "dejó de seguirse. No aparecerán nuevas fechas de este plan. Los registros existentes se conservan.",
 };
+
 const failureMessage = (state: SaveState): string => {
   if (state === "uncertain") {
     return "No pudimos confirmar si se guardó. Actualiza y revisa el resultado antes de volver a guardar.";
   }
+
   if (state === "rejected") {
     return "No se guardó el cambio. Actualiza los recurrentes y revisa los datos antes de intentarlo de nuevo.";
   }
+
   return "Actualiza los recurrentes y revisa los datos antes de guardar.";
 };
+
 const SaveNotice = ({
   stale,
   saveState,
@@ -297,9 +324,13 @@ const SaveNotice = ({
     ) : null}
   </>
 );
+
 export const RecurringRoute = (): JSX.Element => <></>;
+
 const preparedClients = Atom.family((_client: FidyClient) => Atom.make(false).pipe(Atom.keepAlive));
+
 const monthLabelLength = 7;
+
 RecurringRoute.preloadData = ({
   apiClient,
   registry,
@@ -318,6 +349,7 @@ RecurringRoute.preloadData = ({
       if (!preparationActive(signal) || registry.get(preparedClients(apiClient))) {
         return;
       }
+
       yield* Effect.tryPromise(() =>
         prepareQuery({
           registry,
@@ -329,14 +361,17 @@ RecurringRoute.preloadData = ({
         })
       );
       const profile = presentCanonicalQuery(registry.get(workspaceProfileQuery(apiClient)));
+
       if (profile._tag !== "Ready" || profile.waiting || Option.isSome(profile.refreshFailure)) {
         return;
       }
+
       const month = Option.getOrElse(selectedMonth, () =>
         DateTime.formatIsoDate(
           DateTime.makeZonedUnsafe(DateTime.nowUnsafe(), { timeZone: profile.value.data.timeZone })
         ).slice(0, monthLabelLength)
       );
+
       yield* Effect.tryPromise(() =>
         prepareQuery({
           registry,
@@ -347,6 +382,7 @@ RecurringRoute.preloadData = ({
           options: { mode: "display", signal: Option.some(signal) },
         })
       );
+
       if (!intent && preparationActive(signal)) {
         registry.set(preparedClients(apiClient), true);
       }

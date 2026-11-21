@@ -14,12 +14,15 @@ import { canonicalRequestProtection } from "../canonical-admission/contract";
 
 const successfulBody = (response: Response): Effect.Effect<string> => {
   expect(response.status).toBe(200);
+
   return native(() => response.text());
 };
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("a capture in the same atomic batch sees the original keyword rules", () =>
     Effect.gen(function* () {
       const journey = yield* nativeTransactionJourney;
+
       const response = yield* native(() =>
         journey.send(
           new Request("https://api.fidyapp.com/operations/atomic-batch", {
@@ -60,6 +63,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           })
         )
       );
+
       const body = yield* native(() => response.json());
       expect(
         yield* native(() =>
@@ -98,6 +102,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           scopes: ["write", "dashboard"],
           current: yield* Clock.currentTimeMillis,
         });
+
         const call = (calls: ReadonlyArray<unknown>, key = "original"): Effect.Effect<Response> =>
           native(() =>
             db.send(
@@ -112,18 +117,22 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               })
             )
           );
+
         const first = {
           callId: alice.user,
           operation: "budgets.createBudget",
           input: { payload: { categoryId: category, cap: { amount: "19", currency: "COP" } } },
         };
+
         const second = { callId: bob.user, operation: "dashboard.initializeDashboard", input: {} };
+
         const counts = (): Effect.Effect<ReadonlyArray<unknown>> =>
           native(() =>
             db.exec(
               "SELECT (SELECT count(*) FROM budgets) AS budgets,(SELECT count(*) FROM user_documents WHERE kind='dashboard') AS dashboards,(SELECT count(*) FROM audit_entries WHERE record_type='credential_call' AND outcome='accepted') AS accepted,(SELECT count(*) FROM commercial_allowance_consumptions) AS charges,(SELECT count(*) FROM canonical_request_receipts) AS receipts"
             )
           );
+
         yield* native(() =>
           db.exec(
             "CREATE TRIGGER interrupt_child_audit BEFORE INSERT ON audit_entries WHEN NEW.operation='dashboard.initializeDashboard' AND NEW.record_type='credential_call' BEGIN SELECT RAISE(IGNORE); END"
@@ -134,10 +143,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           { budgets: 0, dashboards: 0, accepted: 0, charges: 0, receipts: 0 },
         ]);
         yield* native(() => db.exec("DROP TRIGGER interrupt_child_audit"));
+
         const [committed, retry] = yield* Effect.all(
           [call([first, second]), call([first, second])],
           { concurrency: 2 }
         );
+
         expect([committed.status, retry.status]).toEqual([200, 200]);
         const bytes = yield* native(() => committed.text());
         expect(yield* native(() => retry.text())).toBe(bytes);
@@ -174,6 +185,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const db = yield* nativeTransactionJourney;
+
         const send = (
           subject: typeof alice,
           path: string,
@@ -193,16 +205,20 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               })
             )
           );
+
         const keyword = { keyword: "reserved", categoryId: category };
         const created = yield* send(bob, "/category-keyword-rules", "POST", keyword);
+
         const foreign = (yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.Struct({ id: Schema.String }) })
         )(yield* native(() => created.json()))).data.id;
+
         const first = {
           callId: alice.user,
           operation: "categories.createKeywordRule",
           input: { payload: keyword },
         };
+
         for (const child of [
           { operation: "categories.listKeywordRules", input: {}, code: "validation_failed" },
           {
@@ -219,11 +235,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           const refusal = yield* send(alice, "/operations/atomic-batch", "POST", {
             calls: [first, { callId: bob.user, operation: child.operation, input: child.input }],
           });
+
           expect(refusal.status).toBe(400);
           expect(yield* native(() => refusal.json())).toMatchObject({
             error: { failedCallIndex: 1, operation: child.operation, code: child.code },
           });
         }
+
         const own = yield* native(() => db.browser(0, "/category-keyword-rules"));
         const other = yield* native(() => db.browser(1, "/category-keyword-rules"));
         expect(yield* native(() => own.json())).toMatchObject({ data: [] });
@@ -244,6 +262,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const db = yield* nativeTransactionJourney;
+
         const capture = {
           calls: [
             {
@@ -260,8 +279,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             },
           ],
         };
+
         const aliceToken = "fin_abcdefgh_" + "x".repeat(43);
         const bobToken = "fin_bcdefghi_" + "y".repeat(43);
+
         for (const [userId, token] of [
           [alice.user, aliceToken],
           [bob.user, bobToken],
@@ -290,6 +311,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             current: yield* Clock.currentTimeMillis,
           });
         }
+
         const submit = (token: string): Effect.Effect<string> =>
           native(() =>
             db.send(
@@ -313,14 +335,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               })
             )
           ).pipe(Effect.flatMap(successfulBody));
+
         const original = yield* submit(aliceToken);
         expect(yield* submit(bobToken)).not.toBe(original);
         yield* native(() =>
           db.exec("UPDATE canonical_request_receipts SET accepted_at_ms=accepted_at_ms-86300000")
         );
+
         const before = yield* native(() =>
           db.exec("SELECT accepted_at_ms FROM canonical_request_receipts")
         );
+
         expect(yield* submit(aliceToken)).toBe(original);
         expect(
           yield* native(() => db.exec("SELECT accepted_at_ms FROM canonical_request_receipts"))

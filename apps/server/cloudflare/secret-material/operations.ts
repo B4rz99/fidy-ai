@@ -4,7 +4,9 @@ import { Base64Url } from "effect/encoding";
 import { makeWorkerSecureRandom } from "./internal/worker-crypto";
 
 const workerDigest = Effect.runSync(Digest.Digest.pipe(Effect.provide(Digest.layerWebCrypto)));
+
 const secretBytes = 32;
+
 const workerSecureRandom = makeWorkerSecureRandom();
 
 export const newId = (): string => Effect.runSync(workerSecureRandom.uuidV4().pipe(Effect.orDie));

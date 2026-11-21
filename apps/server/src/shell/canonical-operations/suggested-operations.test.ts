@@ -17,7 +17,9 @@ import {
 import { SuggestedOperation } from "~/shell/public-http/contract";
 
 const allCapabilities = ["read", "write", "dashboard"] as const;
+
 const freeCaller = freePatCaller(allCapabilities);
+
 const strictEncoding = { errors: "all", onExcessProperty: "error" } as const;
 
 const SuggestedMemberSpec = Schema.Struct({
@@ -29,13 +31,17 @@ const SuggestedMemberSpec = Schema.Struct({
 
 it("publishes one partial-input OpenAPI member per PAT-callable canonical operation", () => {
   const spec = OpenApi.fromApi(FidyApi);
+
   const suggested = Schema.decodeUnknownSync(
     Schema.Struct({ anyOf: Schema.Array(SuggestedMemberSpec) })
   )(spec.components.schemas.SuggestedOperation);
+
   const publishedTools = suggested.anyOf.flatMap((member) => member.properties.tool.enum);
+
   const createMember = suggested.anyOf.find((member) =>
     member.properties.tool.enum.includes("transactions.createTransaction")
   );
+
   const createArgs = Schema.decodeUnknownSync(
     Schema.Struct({
       properties: Schema.Struct({
@@ -62,6 +68,7 @@ it("accepts typed partials without running checks whose nested input is incomple
     args: Option.some({ payload: { counterparty: Option.some("Rappi") } }),
     hint: "Record the Transaction while its counterparty is known.",
   });
+
   const incompleteMoney = suggestOperation({
     tool: "transactions.createTransaction",
     args: Option.some({
@@ -112,6 +119,7 @@ it("rejects tools and arguments that do not belong to a canonical operation", ()
     tool: "transactions.eraseEverything",
     hint: "Erase everything now.",
   });
+
   const invalidArgument = Schema.encodeUnknownResult(
     SuggestedOperation,
     strictEncoding
@@ -120,6 +128,7 @@ it("rejects tools and arguments that do not belong to a canonical operation", ()
     args: Option.some({ params: { id: "not-a-transaction-id" } }),
     hint: "Fetch the Transaction already under discussion.",
   });
+
   const inputForInputlessOperation = Schema.encodeUnknownResult(
     SuggestedOperation,
     strictEncoding
@@ -140,6 +149,7 @@ it("accepts one sentence containing an abbreviation or version number", () => {
     args: Option.none(),
     hint: "List Transactions, e.g. the latest matching entries.",
   });
+
   const versioned = Schema.encodeUnknownResult(SuggestedOperation)({
     tool: "transactions.listTransactions",
     args: Option.none(),
@@ -156,6 +166,7 @@ it("rejects a multi-sentence or overlong hint", () => {
     args: Option.none(),
     hint: "List Transactions. Then inspect them.",
   });
+
   const overlong = Schema.encodeUnknownResult(SuggestedOperation)({
     tool: "transactions.listTransactions",
     args: Option.none(),
@@ -172,6 +183,7 @@ it("filters missing scopes before enforcing the three-item cap", () => {
     args: Option.none(),
     hint: "Record the Transaction while its details are known.",
   });
+
   const read = suggestOperation({
     tool: "transactions.listTransactions",
     args: Option.none(),

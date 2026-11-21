@@ -14,14 +14,19 @@ import {
 } from "./review-task";
 
 const resources: Array<() => void> = [];
+
 afterEach(() => {
   resources.reverse().forEach((dispose) => dispose());
   resources.length = 0;
   vi.useRealTimers();
 });
+
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
+
 const requestId = "10000000-0000-4000-8000-000000000001";
+
 const callback = "http://127.0.0.1:3456/callback?code=one-use-callback&state=reviewed-state";
+
 const review = Schema.decodeSync(OAuthReview)({
   requestId,
   claimedClientName: "Agente",
@@ -31,12 +36,15 @@ const review = Schema.decodeSync(OAuthReview)({
   requestExpiresAt: "2026-11-10T13:15:00Z",
   connectAvailable: true,
 });
+
 type Reply = Readonly<{ body: Schema.Json; status: number; wait: Promise<void> }>;
+
 const approved: Reply = {
   body: { connectionId: requestId, callback },
   status: 200,
   wait: Promise.resolve(),
 };
+
 const fixture = (
   navigate: (destination: string) => void,
   replies: ReadonlyArray<Reply> = [approved]
@@ -51,10 +59,12 @@ const fixture = (
 }> => {
   vi.useFakeTimers();
   const sent: Array<string> = [];
+
   const http = HttpClient.make((request) => {
     const path = new URL(request.url).pathname;
     const reply = replies[sent.length] ?? approved;
     sent.push(path);
+
     return Effect.tryPromise({
       try: () => reply.wait,
       catch: () =>
@@ -76,11 +86,14 @@ const fixture = (
       )
     );
   });
+
   const client = makeWebAuthClient({
     apiOrigin: "https://api.test.fidyapp.com",
     httpClient: Layer.succeed(HttpClient.HttpClient, http),
   });
+
   let state: ReviewTaskState = initialReviewSelection(review);
+
   const options = {
     client,
     initial: initialReviewSelection(review),
@@ -89,17 +102,21 @@ const fixture = (
     },
     navigate,
   };
+
   state = options.initial;
   const task = makeReviewTask(options);
   const registry = AtomRegistry.make();
+
   const dispatch: Parameters<typeof task.actions>[1] = (decision) =>
     registry.set(task.atom, decision);
+
   let unmount = task.mount();
   resources.push(
     () => registry.dispose(),
     registry.mount(task.atom),
     () => unmount()
   );
+
   return {
     task,
     dispose: (): void => unmount(),
@@ -118,10 +135,12 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const assigned: Array<string> = [];
+
       const current = fixture((destination) => {
         assigned.push(destination);
         throw new Error(destination);
       });
+
       const retained = current.actions();
       retained.connect();
       yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(0));
@@ -143,12 +162,14 @@ it.effect(
     Effect.gen(function* () {
       const { promise: wait, resolve: release } = Promise.withResolvers<void>();
       const assigned: Array<string> = [];
+
       const current = fixture(
         (destination) => {
           assigned.push(destination);
         },
         [{ ...approved, wait }]
       );
+
       current.actions().connect();
       yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(0));
       expect(current.sent).toEqual(["/web/oauth/connect"]);
@@ -168,12 +189,14 @@ for (const event of ["pagehide", "fidy:authentication-ended"]) {
     Effect.gen(function* () {
       const { promise: wait, resolve: release } = Promise.withResolvers<void>();
       const assigned: Array<string> = [];
+
       const current = fixture(
         (destination) => {
           assigned.push(destination);
         },
         [{ ...approved, wait }]
       );
+
       current.actions().connect();
       yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(0));
       window.dispatchEvent(new Event(event));
@@ -190,6 +213,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const assigned: Array<string> = [];
+
       const current = fixture(
         (destination) => {
           assigned.push(destination);
@@ -204,6 +228,7 @@ it.effect(
           approved,
         ]
       );
+
       const retired = current.actions();
       retired.cancel();
       yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(0));
@@ -231,9 +256,11 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const assigned: Array<string> = [];
+
       const current = fixture((destination) => {
         assigned.push(destination);
       });
+
       current.actions().connect();
       yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(0));
       current.actions().connect();
@@ -251,12 +278,14 @@ it.effect(
 it.effect("a malformed approval result cannot navigate or permit another approval", () =>
   Effect.gen(function* () {
     const assigned: Array<string> = [];
+
     const current = fixture(
       (destination) => {
         assigned.push(destination);
       },
       [{ body: { connectionId: requestId }, status: 200, wait: Promise.resolve() }]
     );
+
     current.actions().connect();
     yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(0));
     current.actions().connect();
@@ -273,6 +302,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { promise: wait, resolve: release } = Promise.withResolvers<void>();
+
       const current = fixture(
         () => undefined,
         [
@@ -280,6 +310,7 @@ it.effect(
           { body: yield* Schema.encodeEffect(OAuthReview)(review), status: 200, wait },
         ]
       );
+
       current.actions().cancel();
       yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(0));
       current.actions().readAgain();

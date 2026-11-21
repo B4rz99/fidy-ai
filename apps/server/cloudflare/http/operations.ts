@@ -15,10 +15,13 @@ export const awaitRequestAbort = (
       cleanup();
       resume(Effect.fail(new BoundedBodyReadFailed({ reason: "cancelled" })));
     };
+
     const cleanup = (): void => request.signal.removeEventListener("abort", onAbort);
     request.signal.addEventListener("abort", onAbort, { once: true });
+
     if (request.signal.aborted) onAbort();
     fiberSignal.addEventListener("abort", cleanup, { once: true });
+
     return Effect.sync(cleanup);
   });
 
@@ -27,15 +30,19 @@ export const collectBoundedRequestBody = Effect.fn(function* (
   maximumBytes: number
 ) {
   const declaredLength = Number(request.headers.get("content-length"));
+
   if (Number.isFinite(declaredLength) && declaredLength > maximumBytes) {
     return yield* new BoundedBodyReadFailed({ reason: "resource-limit" });
   }
+
   if (request.signal.aborted) {
     return yield* new BoundedBodyReadFailed({ reason: "cancelled" });
   }
+
   if (request.body === null) return new Uint8Array();
 
   const body = request.body;
+
   return yield* Effect.raceFirst(
     Effect.acquireUseRelease(
       Effect.try({ try: () => body.getReader(), catch: () => new RequestBodyUnreadable() }),
@@ -85,11 +92,14 @@ const collectBody = Effect.fn(function* (
   const chunks: Array<Uint8Array> = [];
   let byteLength = 0;
   let next = yield* readNextChunk(reader);
+
   while (!next.done) {
     if (!(next.value instanceof Uint8Array)) return yield* new RequestBodyUnreadable();
+
     if (byteLength + next.value.byteLength > maximumBytes) {
       return yield* new RequestBodyCapacityExceeded();
     }
+
     if (next.value.byteLength > 0) chunks.push(next.value);
     byteLength += next.value.byteLength;
     next = yield* readNextChunk(reader);
@@ -97,10 +107,12 @@ const collectBody = Effect.fn(function* (
 
   const body = new Uint8Array(byteLength);
   let offset = 0;
+
   for (const chunk of chunks) {
     body.set(chunk, offset);
     offset += chunk.byteLength;
   }
+
   return body;
 });
 
@@ -110,6 +122,7 @@ export const readBoundedRequestBody = Effect.fn(function* (
 ) {
   if (request.signal.aborted) return yield* Effect.failCause(Cause.interrupt());
   const stream = request.body;
+
   if (stream === null) return new Uint8Array();
 
   const acquireReader: Effect.Effect<
@@ -119,6 +132,7 @@ export const readBoundedRequestBody = Effect.fn(function* (
     try: (): ReadableStreamDefaultReader<unknown> => stream.getReader(),
     catch: () => new RequestBodyUnreadable(),
   });
+
   const read = Effect.acquireUseRelease(
     acquireReader,
     (reader) => collectBody(reader, policy.maximumBytes),
@@ -145,12 +159,14 @@ export const boundedJsonBodyWithSize = <A extends Schema.ConstraintDecoder<unkno
 > =>
   Effect.gen(function* () {
     if (request.signal.aborted) return yield* Effect.failCause(Cause.interrupt());
+
     if (
       request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !==
       "application/json"
     ) {
       return Option.none();
     }
+
     return yield* readBoundedRequestBody(request, policy).pipe(
       Effect.flatMap((bytes) =>
         Effect.gen(function* () {
@@ -158,8 +174,10 @@ export const boundedJsonBodyWithSize = <A extends Schema.ConstraintDecoder<unkno
             try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
             catch: () => new RequestBodyUnreadable(),
           });
+
           const json = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text);
           const value = yield* Schema.decodeUnknownEffect(schema)(json);
+
           return { value, byteLength: bytes.byteLength };
         })
       ),

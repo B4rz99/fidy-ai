@@ -35,6 +35,7 @@ describe("resource release refusal diagnostics", () => {
           onSuccess: () => "accepted",
         })
       );
+
       expect(failure).toContain("closed fixture unexpected change");
       expect(failure).not.toContain("unreviewed-coordinate");
     })
@@ -49,6 +50,7 @@ describe("resource release refusal diagnostics", () => {
         nativeResourceStage("planning"),
         Effect.matchCause({ onFailure: nativeResourceFailureMessage, onSuccess: () => "success" })
       );
+
       expect(message).toBe(
         "Native release failed during planning. Alchemy resource operation failed (Forbidden; code=10000); inspect release state."
       );
@@ -61,10 +63,13 @@ describe("resource release refusal diagnostics", () => {
     const wrapped = new Error("private migration text", {
       cause: BadRequest.make({ message: "private provider refusal" }),
     });
+
     wrapped.name = "MigrationError";
+
     const restored = Schema.decodeSync(Schema.Defect())(
       Schema.encodeSync(Schema.Defect())(wrapped)
     );
+
     expect(resourceFailureMessage(Cause.fail(restored))).toBe(
       "Alchemy resource operation failed (MigrationError, BadRequest); inspect release state."
     );
@@ -75,15 +80,19 @@ describe("resource release refusal diagnostics", () => {
     expect(resourceFailureMessage(Cause.fail(cyclic))).toBe(
       "Alchemy resource operation failed (Error); inspect release state."
     );
+
     const nested = new Error("private text", {
       cause: new Error("private proof", { cause: { _tag: "Forbidden", code: 10000 } }),
     });
+
     expect(resourceFailureMessage(Cause.fail(nested))).toBe(
       "Alchemy resource operation failed (Error, Forbidden; code=10000); inspect release state."
     );
+
     const unknown = new Error("private text", {
       cause: { _tag: "private-token", message: "private" },
     });
+
     expect(resourceFailureMessage(Cause.fail(unknown))).toBe(
       "Alchemy resource operation failed (Error); inspect release state."
     );
@@ -114,6 +123,7 @@ describe("resource release refusal diagnostics", () => {
       message: "Bearer private-token",
       body: "private recovery proof",
     });
+
     expect(resourceFailureMessage(cause)).toBe(
       "Alchemy resource operation failed (Forbidden; code=10000); inspect release state."
     );
@@ -124,6 +134,7 @@ describe("resource release refusal diagnostics", () => {
       Cause.fail({ _tag: "UnknownCloudflareError", code: 12130, message: "private" }),
       Cause.die({ _tag: "CloudflareParseError", body: "private" })
     );
+
     expect(resourceFailureMessage(cause)).toBe(
       "Alchemy resource operation failed (UnknownCloudflareError; code=12130, CloudflareParseError); inspect release state."
     );
@@ -192,6 +203,7 @@ it.effect.each([
         )
       )
     );
+
     const result = yield* createScriptVersion({
       accountId: "test-account",
       scriptName: "test-worker",
@@ -207,6 +219,7 @@ it.effect.each([
         onSuccess: () => "unexpected success",
       })
     );
+
     expect(result).toBe(`Alchemy resource operation failed${expected}; inspect release state.`);
     expect(result).not.toContain("private");
   })

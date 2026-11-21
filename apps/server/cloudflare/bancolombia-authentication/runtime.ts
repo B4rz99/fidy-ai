@@ -24,10 +24,13 @@ import {
 } from "./operations";
 
 const maximumPrivateKeyLength = 20000;
+
 const maximumProfileLength = 8192;
+
 const workerSecureRandom = SecureRandom.make((size) =>
   crypto.getRandomValues(new Uint8Array(size))
 );
+
 const workerDigest = Effect.runSync(Digest.Digest.pipe(Effect.provide(Digest.layerWebCrypto)));
 
 const withSandboxClient = <A, E>(
@@ -38,6 +41,7 @@ const withSandboxClient = <A, E>(
     const binding = environment.BANCOLOMBIA_SANDBOX_MTLS;
     const clientId = environment.BANCOLOMBIA_SANDBOX_CLIENT_ID;
     const key = environment.BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM;
+
     if (
       binding === undefined ||
       clientId === undefined ||
@@ -48,13 +52,16 @@ const withSandboxClient = <A, E>(
     ) {
       return yield* new BancolombiaAuthenticationFailed({ stage: "bancolombia_configuration" });
     }
+
     const fetch: typeof globalThis.fetch = Object.assign(
       (input: string | URL | Request, init?: RequestInit) => binding.fetch(input, init),
       { preconnect: globalThis.fetch.preconnect }
     );
+
     const services = yield* Layer.build(OutboundHttpLive).pipe(
       Effect.provideService(FetchHttpClient.Fetch, fetch)
     );
+
     return yield* run({
       secureRandom: workerSecureRandom,
       digest: workerDigest,
@@ -96,6 +103,7 @@ const prepareProfile = (
 ): ReturnType<ConnectionBankPreparation["prepare"]> =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
+
     if (
       request.userId !== profile.userId ||
       now < profile.admission.startsAt.epochMilliseconds ||
@@ -103,6 +111,7 @@ const prepareProfile = (
     ) {
       return yield* new ConnectionAuthorizationUnavailable();
     }
+
     return yield* withSandboxClient(environment, (client) =>
       authorizeBancolombiaSandbox({
         ...client,
@@ -140,6 +149,7 @@ const activateProfile = (
 ): ReturnType<ConnectionBankActivation["activate"]> =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
+
     if (
       request.userId !== profile.userId ||
       now < profile.admission.startsAt.epochMilliseconds ||
@@ -147,6 +157,7 @@ const activateProfile = (
     ) {
       return yield* new ConnectionAuthorizationUnavailable();
     }
+
     return yield* withSandboxClient(environment, (client) =>
       activateBancolombiaSandbox({
         ...client,
@@ -180,9 +191,11 @@ export const makeBancolombiaSandboxCleanup = (
   environment: BancolombiaSandboxEnvironment
 ): Option.Option<ConnectionBankCleanup> => {
   const clientId = environment.BANCOLOMBIA_SANDBOX_CLIENT_ID;
+
   if (clientId === undefined || !Schema.is(Schema.String.check(Schema.isUUID()))(clientId)) {
     return Option.none();
   }
+
   return Option.some({
     clientId,
     revoke: (input) =>

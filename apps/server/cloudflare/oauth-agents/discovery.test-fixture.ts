@@ -30,6 +30,7 @@ export const readDiscovery: ReadonlyArray<string> = [
   "transactions.listTransactions",
   "transactions.searchTransactions",
 ];
+
 const ordinaryWriteDiscovery = [
   "budgets.createBudget",
   "categories.createKeywordRule",
@@ -40,6 +41,7 @@ const ordinaryWriteDiscovery = [
   "transactions.linkTransactions",
   "transactions.unlinkTransactions",
 ];
+
 const sensitiveWriteDiscovery = [
   "budgets.deleteBudget",
   "budgets.updateBudget",
@@ -61,8 +63,11 @@ const sensitiveWriteDiscovery = [
   "transactions.updateTransactions",
   "transactions.deleteTransaction",
 ];
+
 const writeDiscovery = [...ordinaryWriteDiscovery, ...sensitiveWriteDiscovery];
+
 const dashboardDiscovery = ["dashboard.initializeDashboard", "dashboard.applyDashboardEdit"];
+
 const batchDiscovery = ["operations.executeAtomicBatch"];
 
 export const sensitiveDiscovery: ReadonlySet<string> = new Set([
@@ -75,6 +80,7 @@ const additionalReadDeclarations = [
   "identity.getCurrentUser",
   "transactions.listSourceAttestations",
 ];
+
 const additionalWriteDeclarations = ["identity.updateUserPreferences"];
 
 export const discoveryCases = [

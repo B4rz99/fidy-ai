@@ -28,11 +28,13 @@ const metadata = (
     },
   },
 });
+
 it("authenticates both immutable receipts of the interrupted upload before replacing either Worker", () => {
   const core = metadata(upload.coreVersion, false);
   const ingress = metadata(upload.ingressVersion, true);
   expect(() => requireInterruptedUpload({ core, ingress })).not.toThrow();
   expect(() => requireInterruptedUpload({ core: ingress, ingress: core })).toThrow();
+
   for (const different of [
     {
       ...ingress.result,

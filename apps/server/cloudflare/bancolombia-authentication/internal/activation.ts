@@ -12,27 +12,47 @@ import {
 import { ConnectionConsentIntent } from "../../connections/contract";
 
 type Client = SandboxAuthenticationInput;
+
 type Input = Client & BancolombiaActivationInput;
+
 const issuer = "https://auth1-api-open-finance-sandbox.ambientesbc.com";
+
 const signingKeys =
   "https://s3.us-east-1.amazonaws.com/keystore.sandbox.bancol.col-hub-prod.ozoneapi.co.uk/server";
+
 const tokenEndpoint = "https://as1-api-open-finance-sandbox.ambientesbc.com/token";
+
 const accountsEndpoint =
   "https://rs1-api-open-finance-sandbox.ambientesbc.com/open-banking/v1/deposits/accounts";
+
 const maximumTokenLength = 32768;
+
 const maximumTokenSeconds = 86400;
+
 const maximumKeyIdLength = 128;
+
 const minimumModulusLength = 342;
+
 const maximumModulusLength = 1400;
+
 const maximumExponentLength = 16;
+
 const maximumSigningKeys = 32;
+
 const maximumAccountReferenceLength = 512;
+
 const maximumAccounts = 1000;
+
 const maximumPages = 20;
+
 const maximumPageLinkLength = 500;
+
 const successfulResponse = 200;
+
 const millisecondsPerSecond = 1000;
+
 const maximumIdentityAge = 600;
+
 const TokenResponse = Schema.Struct({
   access_token: Schema.String.check(Schema.isBetweenLength(1, maximumTokenLength)),
   refresh_token: Schema.optionalKey(
@@ -45,6 +65,7 @@ const TokenResponse = Schema.Struct({
     Schema.String.check(
       Schema.makeFilter((value) => {
         const scopes = value.split(" ");
+
         return (
           scopes.includes("accounts") &&
           scopes.every((scope) => scope === "accounts" || scope === "openid")
@@ -53,11 +74,13 @@ const TokenResponse = Schema.Struct({
     )
   ),
 });
+
 const HeldGrant = Schema.Struct({
   access_token: Schema.optionalKey(Schema.Unknown),
   refresh_token: Schema.optionalKey(Schema.Unknown),
   expires_in: Schema.optionalKey(Schema.Unknown),
 });
+
 const BankKeys = Schema.Struct({
   keys: Schema.Array(
     Schema.Struct({
@@ -70,6 +93,7 @@ const BankKeys = Schema.Struct({
     })
   ).check(Schema.isBetweenLength(1, maximumSigningKeys)),
 });
+
 const Discovery = Schema.Struct({
   issuer: Schema.Literal(issuer),
   jwks_uri: Schema.Literal(signingKeys),
@@ -77,6 +101,7 @@ const Discovery = Schema.Struct({
   tls_client_certificate_bound_access_tokens: Schema.Literal(true),
   mtls_endpoint_aliases: Schema.Struct({ token_endpoint: Schema.Literal(tokenEndpoint) }),
 });
+
 const Consent = Schema.Struct({
   Data: Schema.Struct({
     ConsentId: Schema.String,
@@ -84,13 +109,16 @@ const Consent = Schema.Struct({
     Permissions: ConnectionConsentIntent.fields.permissions,
   }),
 });
+
 const PageLink = Schema.String.check(Schema.isBetweenLength(1, maximumPageLinkLength));
+
 const PageLinks = Schema.Struct({
   Self: Schema.optionalKey(PageLink),
   Previous: Schema.optionalKey(PageLink),
   Next: Schema.optionalKey(PageLink),
   Last: Schema.optionalKey(PageLink),
 });
+
 const AccountPage = Schema.Struct({
   Data: Schema.Struct({
     AccountReport: Schema.Array(
@@ -103,7 +131,9 @@ const AccountPage = Schema.Struct({
     Links: Schema.optionalKey(PageLinks),
   }),
 });
+
 const failed = (): BancolombiaAuthorizationFailed => new BancolombiaAuthorizationFailed();
+
 const checkHash = (
   input: Input,
   claim: unknown,
@@ -111,11 +141,14 @@ const checkHash = (
 ): Effect.Effect<void, BancolombiaAuthorizationFailed> =>
   Effect.gen(function* () {
     if (claim === undefined) return;
+
     const digest = yield* input.digest
       .digest(Digest.sha256, new TextEncoder().encode(value))
       .pipe(Effect.catchDefect(() => Effect.fail(failed())));
+
     if (claim !== Base64Url.encode(digest.slice(0, digest.length / 2))) return yield* failed();
   }).pipe(Effect.mapError(failed));
+
 const validateIdentity = (
   input: Input,
   response: typeof TokenResponse.Type,
@@ -123,6 +156,7 @@ const validateIdentity = (
 ): Effect.Effect<void, BancolombiaAuthorizationFailed> =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
+
     const verified = yield* Effect.tryPromise({
       try: () =>
         jwtVerify(response.id_token, createLocalJWKSet({ keys: [...keys.keys] }), {
@@ -135,7 +169,9 @@ const validateIdentity = (
         }),
       catch: failed,
     });
+
     const claims = verified.payload;
+
     if (
       claims.sub === undefined ||
       claims.sub.length === 0 ||
@@ -146,10 +182,12 @@ const validateIdentity = (
     ) {
       return yield* failed();
     }
+
     yield* checkHash(input, claims.at_hash, response.access_token);
     yield* checkHash(input, claims.c_hash, Redacted.value(input.code));
     yield* checkHash(input, claims.s_hash, input.state);
   });
+
 const nextPage = (value: string): Option.Option<number> => {
   const parsed = Option.flatMap(Option.fromNullishOr(URL.parse(value)), (url) => {
     if (
@@ -161,13 +199,17 @@ const nextPage = (value: string): Option.Option<number> => {
     ) {
       return Option.none();
     }
+
     const page = url.searchParams.get("pageNumber");
+
     return page !== null && /^[1-9][0-9]{0,4}$/u.test(page)
       ? Option.some(Number(page))
       : Option.none();
   });
+
   return parsed;
 };
+
 const appendAccounts = (
   accounts: Set<string>,
   page: typeof AccountPage.Type
@@ -177,9 +219,11 @@ const appendAccounts = (
       if (accounts.has(account.AccountIdentification) || accounts.size >= maximumAccounts) {
         return yield* failed();
       }
+
       accounts.add(account.AccountIdentification);
     }
   });
+
 const validatePosition = (
   links: (typeof AccountPage.Type)["Data"]["Links"],
   pageCount: number
@@ -191,9 +235,11 @@ const validatePosition = (
     ]) {
       if (link === undefined) continue;
       const parsed = nextPage(link);
+
       if (Option.isNone(parsed) || parsed.value !== position) return yield* failed();
     }
   });
+
 const validateCompletion = (
   totalPages: Option.Option<number>,
   accountCount: number,
@@ -202,6 +248,7 @@ const validateCompletion = (
   accountCount === 0 || Option.getOrElse(totalPages, () => pageCount) !== pageCount
     ? Effect.fail(failed())
     : Effect.void;
+
 const followingPage = (
   input: Readonly<{
     decoded: typeof AccountPage.Type;
@@ -216,27 +263,37 @@ const followingPage = (
     const links = decoded.Data.Links;
     yield* validatePosition(links, pageCount);
     const next = links?.Next;
+
     if (next === undefined) {
       yield* validateCompletion(input.totalPages, accountCount, pageCount);
+
       return Option.none<number>();
     }
+
     const page = nextPage(next);
+
     if (Option.isNone(page) || visited.has(page.value) || page.value !== pageCount + 1) {
       return yield* failed();
     }
+
     if (Option.isSome(input.totalPages) && page.value > input.totalPages.value) {
       return yield* failed();
     }
+
     visited.add(page.value);
+
     return page;
   });
+
 const reconcilePageTotal = (
   previous: Option.Option<number>,
   page: typeof AccountPage.Type
 ): Effect.Effect<Option.Option<number>, BancolombiaAuthorizationFailed> => {
   const last = page.Data.Links?.Last;
+
   if (last === undefined) return Effect.succeed(previous);
   const declared = nextPage(last);
+
   if (
     Option.isNone(declared) ||
     declared.value > maximumPages ||
@@ -244,8 +301,10 @@ const reconcilePageTotal = (
   ) {
     return Effect.fail(failed());
   }
+
   return Effect.succeed(declared);
 };
+
 const discoverAccounts = (
   input: Input,
   bearer: Redacted.Redacted<string>
@@ -256,19 +315,24 @@ const discoverAccounts = (
     const visited = new Set<number>();
     let page = Option.none<number>();
     let totalPages = Option.none<number>();
+
     for (let index = 0; index < maximumPages; index += 1) {
       if ((yield* Clock.currentTimeMillis) >= input.expiresAtMilliseconds) return yield* failed();
       const interactionId = yield* input.secureRandom.uuidV4();
+
       const response = yield* http.execute({
         _tag: "ReadBankAccounts",
         bearer,
         interactionId,
         page,
       });
+
       if (response.status !== successfulResponse) return yield* failed();
+
       const decoded = yield* Schema.decodeEffect(Schema.fromJsonString(AccountPage))(
         new TextDecoder().decode(response.body)
       );
+
       totalPages = yield* reconcilePageTotal(totalPages, decoded);
       yield* appendAccounts(accounts, decoded);
       page = yield* followingPage({
@@ -278,8 +342,10 @@ const discoverAccounts = (
         accountCount: accounts.size,
         pageCount: index + 1,
       });
+
       if (Option.isNone(page)) return Array.from(accounts);
     }
+
     return yield* failed();
   }).pipe(Effect.mapError(failed));
 
@@ -295,34 +361,44 @@ export const activate = (
     const signed = yield* input.assertion;
     const http = makeBancolombiaSandboxOutboundHttp(input.httpClient);
     const discovery = yield* http.execute({ _tag: "Discovery" });
+
     if (discovery.status !== successfulResponse) return yield* failed();
     yield* Schema.decodeEffect(Schema.fromJsonString(Discovery))(
       new TextDecoder().decode(discovery.body)
     );
     const keyResponse = yield* http.execute({ _tag: "BankSigningKeys" });
+
     if (keyResponse.status !== successfulResponse) return yield* failed();
+
     const keys = yield* Schema.decodeEffect(Schema.fromJsonString(BankKeys))(
       new TextDecoder().decode(keyResponse.body)
     );
+
     const exchangedAt = yield* Clock.currentTimeMillis;
+
     if (exchangedAt >= input.expiresAtMilliseconds) return yield* failed();
+
     const response = yield* http.execute({
       _tag: "ExchangeBankCode",
       assertion: signed,
       code: input.code,
       verifier: input.verifier,
     });
+
     const body = new TextDecoder().decode(response.body);
     const held = yield* Schema.decodeEffect(Schema.fromJsonString(HeldGrant))(body);
     const seconds = Schema.decodeUnknownOption(TokenResponse.fields.expires_in)(held.expires_in);
+
     const accessToken = Option.map(
       Schema.decodeUnknownOption(TokenResponse.fields.access_token)(held.access_token),
       Redacted.make
     );
+
     const refreshToken = Option.map(
       Schema.decodeUnknownOption(TokenResponse.fields.access_token)(held.refresh_token),
       Redacted.make
     );
+
     if (Option.isNone(accessToken) && Option.isNone(refreshToken)) return yield* failed();
     yield* input.retainGrant({
       accessToken,
@@ -332,6 +408,7 @@ export const activate = (
         onSome: (value) => exchangedAt + value * millisecondsPerSecond,
       }),
     });
+
     if (response.status !== successfulResponse) return yield* failed();
     const accepted = yield* Schema.decodeEffect(Schema.fromJsonString(TokenResponse))(body);
     yield* validateIdentity(input, accepted, keys);
@@ -339,6 +416,7 @@ export const activate = (
     yield* verifyConsent(input, consentBearer);
     const accounts = yield* discoverAccounts(input, Redacted.make(accepted.access_token));
     yield* verifyConsent(input, consentBearer);
+
     return accounts;
   }).pipe(Effect.mapError(failed), Effect.timeout("60 seconds"), Effect.mapError(failed));
 
@@ -348,17 +426,22 @@ const verifyConsent = (
 ): Effect.Effect<void, BancolombiaAuthorizationFailed> =>
   Effect.gen(function* () {
     const http = makeBancolombiaSandboxOutboundHttp(input.httpClient);
+
     const consent = yield* http.execute({
       _tag: "ReadBankConsent",
       bearer,
       consentId: input.consentId,
       interactionId: yield* input.secureRandom.uuidV4(),
     });
+
     if (consent.status !== successfulResponse) return yield* failed();
+
     const verifiedConsent = yield* Schema.decodeEffect(Schema.fromJsonString(Consent))(
       new TextDecoder().decode(consent.body)
     );
+
     const permissions = verifiedConsent.Data.Permissions;
+
     if (
       verifiedConsent.Data.ConsentId !== input.consentId ||
       permissions.length !== input.intent.permissions.length ||

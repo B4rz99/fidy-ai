@@ -19,7 +19,9 @@ import {
 import { type ReleasePort, releaseController } from "./release-controller";
 
 const revision = "a".repeat(40);
+
 const publicVersion = "11111111-1111-4111-8111-111111111111";
+
 const coreVersion = "22222222-2222-4222-8222-222222222222";
 
 it.effect("requires native default placement on the exact staged Core version", () =>
@@ -41,8 +43,10 @@ it.effect("requires native default placement on the exact staged Core version", 
       { id: coreVersion, placement: { hostname: "example.com" }, accepted: false },
     ]) {
       const requests: Array<string> = [];
+
       const client = HttpClient.make((request) => {
         requests.push(`${request.method} ${new URL(request.url).pathname}`);
+
         return Effect.succeed(
           HttpClientResponse.fromWeb(
             request,
@@ -58,6 +62,7 @@ it.effect("requires native default placement on the exact staged Core version", 
           )
         );
       });
+
       const result = yield* Effect.exit(
         verifyCoreDefaultPlacement(
           { account: "test-account", token: "test-only" },
@@ -65,6 +70,7 @@ it.effect("requires native default placement on the exact staged Core version", 
           client
         )
       );
+
       expect(Exit.isSuccess(result)).toBe(observation.accepted);
       expect(requests).toEqual([
         `GET /client/v4/accounts/test-account/workers/scripts/core/versions/${coreVersion}`,
@@ -78,10 +84,13 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const requests: string[] = [];
+
       const client = HttpClient.make((request) => {
         requests.push(`${request.method} ${new URL(request.url).pathname}`);
+
         if (request.method === "PATCH") {
           expect(request.body._tag).toBe("Uint8Array");
+
           if (request.body._tag === "Uint8Array") {
             expect(JSON.parse(new TextDecoder().decode(request.body.body))).toEqual({
               observability: {
@@ -100,6 +109,7 @@ it.effect(
             });
           }
         }
+
         return Effect.succeed(
           HttpClientResponse.fromWeb(
             request,
@@ -117,6 +127,7 @@ it.effect(
           )
         );
       });
+
       yield* configureReleaseObservability(
         { account: "test-account", token: "test-only" },
         ["ingress", "core"],
@@ -154,6 +165,7 @@ it.effect("refuses staging when query privacy or native issue detection is not p
           )
         )
       );
+
       const result = yield* Effect.exit(
         configureReleaseObservability(
           { account: "test-account", token: "test-only" },
@@ -161,6 +173,7 @@ it.effect("refuses staging when query privacy or native issue detection is not p
           client
         )
       );
+
       expect(Exit.isFailure(result)).toBe(true);
     }
   })
@@ -180,7 +193,9 @@ it.live(
           lifetime: "read-only",
         })
       );
+
       expect(result._tag).toBe("Failure");
+
       if (result._tag === "Failure") {
         expect(releaseFailureMessage(result.cause)).toBe(
           "Release tooling failed (Cloudflare API code 10210; resource=queue); inspect traffic state"
@@ -203,7 +218,9 @@ it.live(
           lifetime: "read-only",
         })
       );
+
       expect(result._tag).toBe("Failure");
+
       if (result._tag === "Failure") {
         expect(releaseFailureMessage(result.cause)).toBe(
           "Release tooling failed (Cloudflare API code 100405); inspect traffic state"
@@ -215,6 +232,7 @@ it.live(
 it.live("preserves a safe native rejection after routing reconciliation fails", () =>
   Effect.gen(function* () {
     let writes = 0;
+
     const port: ReleasePort = {
       trunk: () => Effect.succeed(revision),
       current: () =>
@@ -233,18 +251,23 @@ it.live("preserves a safe native rejection after routing reconciliation fails", 
             ],
             lifetime: "started-write",
           });
+
           return { id: coreVersion, versions: [{ id: coreVersion, percentage: 100 }] };
         }),
     };
+
     const result = yield* Effect.exit(
       releaseController.deployExact(port, "prod-core", [{ id: coreVersion, percentage: 100 }])
     );
+
     expect(result._tag).toBe("Failure");
+
     if (result._tag === "Failure") {
       expect(releaseFailureMessage(result.cause)).toBe(
         "Release tooling failed (Cloudflare API code 100405); inspect traffic state"
       );
     }
+
     expect(writes).toBe(1);
   })
 );
@@ -261,7 +284,9 @@ it.live("reports only a Cloudflare API code when native release tooling refuses 
         lifetime: "read-only",
       })
     );
+
     expect(result._tag).toBe("Failure");
+
     if (result._tag === "Failure") {
       expect(releaseFailureMessage(result.cause)).toBe(
         "Release tooling failed (Cloudflare API code 100405); inspect traffic state"
@@ -269,10 +294,12 @@ it.live("reports only a Cloudflare API code when native release tooling refuses 
     }
   })
 );
+
 const trunkReference = {
   ref: "refs/heads/trunk",
   object: { type: "commit", sha: revision },
 };
+
 const captureInput = {
   revision,
   stableRevision: "b".repeat(40),
@@ -280,14 +307,17 @@ const captureInput = {
   publicName: "prod-ingress",
   coreName: "prod-core",
 };
+
 const referenceHarness = (
   reference: unknown = trunkReference,
   applicationRevision = revision
 ): { port: ReleasePort; requests: ReadonlyArray<string> } => {
   const requests: string[] = [];
+
   const client = HttpClient.make((request) => {
     requests.push(`${request.method} ${request.url}`);
     let body: unknown;
+
     if (request.url === "https://api.github.com/repos/test/fidy/git/ref/heads/trunk") {
       body = reference;
     } else if (request.url === "https://api.github.com/repos/test/fidy/commits/trunk") {
@@ -306,8 +336,10 @@ const referenceHarness = (
         },
       };
     }
+
     return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(body)));
   });
+
   const port = releasePort({
     env: {
       account: "0".repeat(32),
@@ -321,6 +353,7 @@ const referenceHarness = (
     },
     client,
   });
+
   return { port, requests };
 };
 
@@ -329,6 +362,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const verifier = "e".repeat(40);
+
       for (const [name, value] of Object.entries({
         GITHUB_ACTIONS: "true",
         GITHUB_REF: "refs/heads/trunk",
@@ -344,13 +378,16 @@ it.effect(
       })) {
         vi.stubEnv(name, value);
       }
+
       const port = (head: string, application: string = archivedDormant.revision): ReleasePort =>
         referenceHarness({ ...trunkReference, object: { type: "commit", sha: head } }, application)
           .port;
+
       for (const operation of ["reseal-fixture-fallback", "diagnose-fixture-pairing"]) {
         vi.stubEnv("FIXTURE_RELEASE_OPERATION", operation);
         expect(yield* port(verifier).trunk()).toBe(archivedDormant.revision);
       }
+
       expect(yield* port(revision).trunk().pipe(Effect.isFailure)).toBe(true);
       vi.stubEnv("FIXTURE_PAIRING_APPLICATION", revision);
       vi.stubEnv("RELEASE_GIT_SHA", revision);
@@ -362,12 +399,15 @@ it.effect(
       expect(yield* port(verifier).trunk().pipe(Effect.exit)).toHaveProperty("_tag", "Failure");
     }).pipe(Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())))
 );
+
 it.effect("accepts only the exact interrupted successor under its current protected verifier", () =>
   Effect.gen(function* () {
     const application = "de04a192c3836be0efb488b170a7b93b9f98f28f";
     const verifier = "e".repeat(40);
+
     const workflow =
       "B4rz99/fidy-ai/.github/workflows/native-fixture-successor-plan.yml@refs/heads/trunk";
+
     for (const [name, value] of Object.entries({
       FIXTURE_SUCCESSOR_RESUME: "true",
       FIXTURE_STAGED_VERIFIER_SHA: verifier,
@@ -386,10 +426,12 @@ it.effect("accepts only the exact interrupted successor under its current protec
     })) {
       vi.stubEnv(name, value);
     }
+
     const { port } = referenceHarness(
       { ...trunkReference, object: { type: "commit", sha: verifier } },
       application
     );
+
     for (const operation of [
       "stage-fixture-successor",
       "recover-fixture-successor",
@@ -398,6 +440,7 @@ it.effect("accepts only the exact interrupted successor under its current protec
       vi.stubEnv("FIXTURE_RELEASE_OPERATION", operation);
       expect(yield* port.trunk()).toBe(application);
     }
+
     vi.stubEnv("RELEASE_GIT_SHA", revision);
     expect(yield* port.trunk().pipe(Effect.exit)).toHaveProperty("_tag", "Failure");
     vi.stubEnv("RELEASE_GIT_SHA", application);
@@ -408,17 +451,20 @@ it.effect("accepts only the exact interrupted successor under its current protec
     expect(yield* port.trunk().pipe(Effect.exit)).toHaveProperty("_tag", "Failure");
   }).pipe(Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())))
 );
+
 it.effect(
   "aborts rejected status and declared oversized native responses before returning release failure",
   () =>
     Effect.gen(function* () {
       const services = yield* Layer.build(FetchHttpClient.layer);
+
       for (const options of [
         { status: 503, headers: new Headers() },
         { status: 200, headers: new Headers({ "content-length": "100001" }) },
       ]) {
         let aborted = false;
         let pulled = 0;
+
         const fetch: typeof globalThis.fetch = Object.assign(
           (
             _input: Parameters<typeof globalThis.fetch>[0],
@@ -427,6 +473,7 @@ it.effect(
             init?.signal?.addEventListener("abort", () => {
               aborted = true;
             });
+
             return Promise.resolve(
               new Response(
                 new ReadableStream<Uint8Array>(
@@ -443,6 +490,7 @@ it.effect(
           },
           { preconnect: globalThis.fetch.preconnect }
         );
+
         const port = releasePort({
           client: Context.get(services, HttpClient.HttpClient),
           env: {
@@ -456,9 +504,11 @@ it.effect(
             smokeAttestationFile: "/unused-attestation",
           },
         });
+
         const outcome = yield* port
           .current("prod-ingress")
           .pipe(Effect.provideService(FetchHttpClient.Fetch, fetch), Effect.exit);
+
         expect(Exit.isFailure(outcome)).toBe(true);
         expect(aborted).toBe(true);
         expect(pulled).toBe(0);
@@ -496,6 +546,7 @@ describe("Production release trunk guard", () => {
         { ...trunkReference, object: { type: "tag", sha: revision } },
         { ...trunkReference, object: { type: "commit", sha: "d".repeat(40) } },
       ];
+
       for (const reference of rejected) {
         const { port, requests } = referenceHarness(reference);
         const result = yield* Effect.exit(releaseController.captureRelease(port, captureInput));
@@ -514,6 +565,7 @@ describe("Production release trunk guard", () => {
         ...trunkReference,
         extra: "x".repeat(100_001),
       });
+
       const result = yield* Effect.exit(releaseController.captureRelease(port, captureInput));
       expect(Exit.isFailure(result)).toBe(true);
       expect(requests).toEqual(["GET https://api.github.com/repos/test/fidy/git/ref/heads/trunk"]);
@@ -523,6 +575,7 @@ describe("Production release trunk guard", () => {
 
 it("keeps foreign failures and defects out of release CLI diagnostics", () => {
   const foreign = Error("secret-provider-body-and-token");
+
   for (const cause of [Cause.fail(foreign), Cause.die(foreign)]) {
     expect(releaseFailureMessage(cause)).toBe(
       "Production release routing failed; inspect Worker deployment state before recovery."
@@ -551,6 +604,7 @@ it.effect.each([
         )
       )
     );
+
     const port = releasePort({
       env: {
         account: "0".repeat(32),
@@ -564,10 +618,13 @@ it.effect.each([
       },
       client,
     });
+
     const outcome = yield* Effect.exit(
       port.deploy("prod-core", [{ id: coreVersion, percentage: 100 }])
     );
+
     expect(Exit.isFailure(outcome)).toBe(true);
+
     if (Exit.isFailure(outcome)) {
       expect(releaseFailureMessage(outcome.cause)).toBe(diagnostic);
     }
@@ -597,28 +654,35 @@ it.effect.each([
       smokeProof: "0".repeat(64),
       smokeAttestationFile: "/unused-attestation",
     };
+
     const restored = "aa0aa000-0000-4000-8000-00000000000a";
     const candidate = "bb0bb000-0000-4000-8000-00000000000b";
+
     const publicWorker = {
       name: "prod-ingress",
       deploymentId: publicVersion,
       stableVersionId: publicVersion,
     };
+
     const coreWorker = {
       name: "prod-core",
       deploymentId: coreVersion,
       stableVersionId: coreVersion,
     };
+
     const publicBefore = { id: publicVersion, versions: [{ id: candidate, percentage: 100 }] };
     const coreBefore = { id: coreVersion, versions: [{ id: candidate, percentage: 100 }] };
     const requests: Array<string> = [];
+
     const response = {
       success: true,
       result: { id: restored, versions: [{ version_id: coreVersion, percentage: 100 }] },
     };
+
     const client = HttpClient.make((request) => {
       const url = new URL(request.url);
       requests.push(request.method + " " + url.pathname + url.search);
+
       const body =
         url.searchParams.has("force") || scenario === "ordinary success"
           ? Response.json(response)
@@ -632,8 +696,10 @@ it.effect.each([
               },
               { status: scenario === "different status" ? 409 : 400 }
             );
+
       return Effect.succeed(HttpClientResponse.fromWeb(request, body));
     });
+
     const port = canonicalRestorePort({
       port: {
         ...releasePort({ env, client }),
@@ -645,9 +711,13 @@ it.effect.each([
           Effect.sync(() => {
             const current = name === publicWorker.name ? publicBefore : coreBefore;
             const past = { id: restored, versions: [{ id: coreVersion, percentage: 100 }] };
+
             if (requests.length === 0 || name !== publicWorker.name) return [current, past];
+
             if (scenario === "live pair changed") return [{ ...current, id: restored }, past];
+
             if (scenario === "history changed") return [current];
+
             return [current, past];
           }),
         deployable: () => Effect.succeed(scenario !== "not deployable"),
@@ -666,10 +736,13 @@ it.effect.each([
           ? Effect.fail(Error("Closed proof failed"))
           : Effect.void,
     });
+
     const restoreStable = port.restoreStable;
+
     if (restoreStable === undefined) {
       return yield* Effect.fail(Error("Canonical restoration missing"));
     }
+
     const outcome = yield* Effect.exit(
       restoreStable({
         target: {
@@ -680,12 +753,16 @@ it.effect.each([
         companion: { name: publicWorker.name, previous: publicBefore },
       })
     );
+
     expect(Exit.isSuccess(outcome)).toBe(
       scenario === "single refusal" || scenario === "ordinary success"
     );
+
     const post =
       "POST /client/v4/accounts/" + env.account + "/workers/scripts/prod-core/deployments";
+
     const expected = scenario === "foreign target" ? [] : [post];
+
     if (scenario === "single refusal") expected.push(post + "?force=true");
     expect(requests).toEqual(expected);
   })
@@ -702,19 +779,23 @@ describe("Production release Worker receipts", () => {
       status: "updated",
       attr: { workerName, versionId, hash: { main: "state-hash" } },
     });
+
     const smoke = {
       logicalId: "ReleaseSmoke-" + fixtureUpload.revision,
       status: "updated",
       attr: { workerName: "fidy-native-smoke-" + fixtureUpload.revision },
     };
+
     const state = {
       public: worker("Ingress", "fidy-native-storage-ingress", uploadedPair.publicVersionId),
       core: worker("Core", "fidy-native-storage-core", uploadedPair.coreVersionId),
       smoke,
     };
+
     expect(decodePairingUploadReceipts(JSON.stringify(state)).core.versionId).toEqual(
       Option.some(uploadedPair.coreVersionId)
     );
+
     for (const changed of [
       { ...smoke, status: "updating" },
       { ...smoke, attr: { ...smoke.attr, versionId: coreVersion } },
@@ -724,6 +805,7 @@ describe("Production release Worker receipts", () => {
         decodePairingUploadReceipts(JSON.stringify({ ...state, smoke: changed }))
       ).toThrow();
     }
+
     expect(() =>
       decodePairingUploadReceipts(
         JSON.stringify({ ...state, core: worker("Core", "fidy-native-storage-core", coreVersion) })
@@ -750,6 +832,7 @@ describe("Production release Worker receipts", () => {
   it("accepts the current output of a replaced Worker resource", () => {
     const ingressVersion = "11111111-1111-4111-8111-111111111111";
     const coreVersion = "22222222-2222-4222-8222-222222222222";
+
     const state = {
       ingress: {
         logicalId: "Ingress",
@@ -809,11 +892,13 @@ describe("Production release Worker receipts", () => {
   it("uses an interrupted update receipt only for baseline capture", () => {
     const ingressVersion = "11111111-1111-4111-8111-111111111111";
     const coreVersion = "22222222-2222-4222-8222-222222222222";
+
     const attributes = {
       workerName: "prod-ingress",
       versionId: ingressVersion,
       hash: { main: "ingress-digest" },
     };
+
     const state = {
       ingress: {
         logicalId: "Ingress",
@@ -957,6 +1042,7 @@ describe("Production release Worker receipts", () => {
   it("decodes the Worker receipts when Alchemy progress precedes the state JSON", () => {
     const publicVersion = "11111111-1111-4111-8111-111111111111";
     const coreVersion = "22222222-2222-4222-8222-222222222222";
+
     const state = {
       publicResource: {
         logicalId: "Ingress",

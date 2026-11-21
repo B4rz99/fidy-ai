@@ -4,6 +4,7 @@ import { CanonicalCapability } from "~/core/canonical-operations/contract";
 import type { AccessTier } from "~/core/access-tier/contract";
 
 export const AgentConfirmation = Schema.Literals(["not-required", "required"]);
+
 export type AgentConfirmation = typeof AgentConfirmation.Type;
 
 export const AtomicBatchEligible = Context.Reference<boolean>(
@@ -12,12 +13,14 @@ export const AtomicBatchEligible = Context.Reference<boolean>(
 );
 
 export const CanonicalOperationKind = Schema.Literals(["query", "mutation"]);
+
 export type CanonicalOperationKind = typeof CanonicalOperationKind.Type;
 
 export const UserOwnedAgentScopeCheck = Schema.Union([
   Schema.TaggedStruct("Operation", { capability: CanonicalCapability }),
   Schema.TaggedStruct("Children", {}),
 ]);
+
 export type UserOwnedAgentScopeCheck = typeof UserOwnedAgentScopeCheck.Type;
 
 const CanonicalOperationAccess = Schema.Union([
@@ -48,6 +51,7 @@ const PublishedOperationAccessWire = Schema.Union([
 ]);
 
 type CanonicalOperationAccess = typeof CanonicalOperationAccess.Type;
+
 type PublishedOperationAccessWire = typeof PublishedOperationAccessWire.Type;
 
 const decodePublishedAccess = (access: PublishedOperationAccessWire): CanonicalOperationAccess => {
@@ -105,9 +109,11 @@ export const OperationAccess = PublishedOperationAccessWire.pipe(
     })
   )
 );
+
 export type OperationAccess = typeof OperationAccess.Type;
 
 export const PublishedOperationAccess = Schema.toEncoded(OperationAccess);
+
 export type PublishedOperationAccess = typeof PublishedOperationAccess.Type;
 
 export type CanonicalAuthorityRoot = "verified-whatsapp" | "no-verified-whatsapp-authority";
@@ -168,6 +174,7 @@ export const userOwnedAgentCapability = (
   access: OperationAccess
 ): Option.Option<CanonicalCapability> => {
   if (access._tag !== "UserOwnedAgentScoped") return Option.none();
+
   return scopeCapability(access.scope);
 };
 

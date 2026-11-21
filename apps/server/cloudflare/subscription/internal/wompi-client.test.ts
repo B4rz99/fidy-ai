@@ -30,10 +30,15 @@ import assert from "node:assert/strict";
 
 const exampleKey = (visibility: "pub" | "prv", environment: "prod" | "test"): string =>
   [visibility, environment, "f1d7c0de".repeat(3)].join("_");
+
 const sandboxPublicKey = exampleKey("pub", "test");
+
 const sandboxPrivateKey = exampleKey("prv", "test");
+
 const productionPublicKey = exampleKey("pub", "prod");
+
 const productionPrivateKey = exampleKey("prv", "prod");
+
 const sharedProviderConfig = {
   KAPSO_API_KEY: "test-kapso-key",
   WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
@@ -49,6 +54,7 @@ const config = ConfigProvider.layer(
     WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
   })
 );
+
 const productionConfig = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
     ...sharedProviderConfig,
@@ -58,6 +64,7 @@ const productionConfig = ConfigProvider.layer(
     WOMPI_INTEGRITY_SECRET: `prod_integrity_${"f1d7c0de".repeat(3)}`,
   })
 );
+
 const mismatchedPublicConfig = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
     ...sharedProviderConfig,
@@ -67,6 +74,7 @@ const mismatchedPublicConfig = ConfigProvider.layer(
     WOMPI_INTEGRITY_SECRET: `prod_integrity_${"f1d7c0de".repeat(3)}`,
   })
 );
+
 const mismatchedPrivateConfig = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
     ...sharedProviderConfig,
@@ -76,7 +84,9 @@ const mismatchedPrivateConfig = ConfigProvider.layer(
     WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
   })
 );
+
 const invalidPrivateKeyCandidate = `CANARY-wompi-private-${"f1d7c0de".repeat(2)}`;
+
 const invalidPrivateConfig = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
     ...sharedProviderConfig,
@@ -86,12 +96,17 @@ const invalidPrivateConfig = ConfigProvider.layer(
     WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
   })
 );
+
 const sha256HexCharacters = 64;
+
 const transientCardToken = "tok_test_browser_only";
+
 const endUserAcceptanceToken =
   "header.eyJwZXJtYWxpbmsiOiJodHRwczovL3dvbXBpLmV4YW1wbGUvZW5kLXVzZXIucGRmIiwiZmlsZV9oYXNoIjoiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMiJ9.signature";
+
 const personalDataAcceptanceToken =
   "header.eyJwZXJtYWxpbmsiOiJodHRwczovL3dvbXBpLmV4YW1wbGUvcGVyc29uYWwtZGF0YS5wZGYiLCJmaWxlX2hhc2giOiIzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIn0.signature";
+
 const merchantBody = `{
   "data": {
     "presigned_acceptance": {
@@ -113,6 +128,7 @@ const clientLayerWithConfig = (
   const transport = testOutboundTransportLayer((request) =>
     Effect.succeed(request.url.includes("/v1/merchants/") ? merchantResponse : sourceResponse)
   );
+
   return WompiEnrollmentClient.layer.pipe(
     Layer.provide(OutboundHttp.layer),
     Layer.provide(Layer.mergeAll(transport, configLayer, TestCrypto))
@@ -125,10 +141,13 @@ const clientLayer = (
   clientLayerWithConfig(sourceResponse, new Response(merchantBody, { status: 200 }), config);
 
 let sandboxProductionCalls = 0;
+
 const sandboxProductionTransport = testOutboundTransportLayer(() => {
   sandboxProductionCalls++;
+
   return Effect.succeed(new Response("{}"));
 });
+
 layer(
   OutboundHttp.layer.pipe(
     Layer.provide(Layer.mergeAll(sandboxProductionTransport, productionConfig, TestCrypto))
@@ -151,11 +170,13 @@ layer(
 });
 
 let daviplataApproved = false;
+
 const daviplataTransport = testOutboundTransportLayer((request) => {
   expect(request.url).toBe(
     "https://sandbox.wompi.co/v1/tokens/daviplata/daviplata_devtest_authorization"
   );
   expect(request.headers.authorization).toBe(`Bearer ${sandboxPublicKey}`);
+
   return Effect.succeed(
     Response.json({
       data: {
@@ -169,6 +190,7 @@ const daviplataTransport = testOutboundTransportLayer((request) => {
     })
   );
 });
+
 layer(
   WompiEnrollmentClient.layer.pipe(
     Layer.provide(OutboundHttp.layer),
@@ -190,6 +212,7 @@ layer(
 
 const loadContracts = Effect.gen(function* () {
   const wompi = yield* WompiEnrollmentClient;
+
   return yield* wompi.contracts(DateTime.makeUnsafe("2026-04-01T00:00:00.000Z"));
 });
 
@@ -197,6 +220,7 @@ for (const status of ["PENDING", "APPROVED"] as const) {
   const transport = testOutboundTransportLayer((request) => {
     expect(request.url).toBe("https://sandbox.wompi.co/v1/tokens/nequi/nequi_test_authorization");
     expect(request.headers.authorization).toBe(`Bearer ${sandboxPublicKey}`);
+
     return Effect.succeed(
       new Response(
         JSON.stringify({
@@ -210,6 +234,7 @@ for (const status of ["PENDING", "APPROVED"] as const) {
       )
     );
   });
+
   layer(
     WompiEnrollmentClient.layer.pipe(
       Layer.provide(OutboundHttp.layer),
@@ -230,12 +255,14 @@ for (const status of ["PENDING", "APPROVED"] as const) {
 
 const verifyPaymentSource = Effect.gen(function* () {
   const wompi = yield* WompiEnrollmentClient;
+
   return yield* wompi.verifyPaymentSource(WompiSourceId.make(3891), "card");
 });
 
 const createPaymentSource = Effect.gen(function* () {
   const wompi = yield* WompiEnrollmentClient;
   const contracts = yield* wompi.contracts(DateTime.makeUnsafe("2026-04-01T00:00:00.000Z"));
+
   return yield* wompi.createPaymentSource({
     token: Redacted.make(transientCardToken),
     method: "card",
@@ -374,9 +401,11 @@ for (const status of [302, 307, 308]) {
     it.effect("maps the response to a closed definitive failure", () =>
       Effect.gen(function* () {
         const exit = yield* createPaymentSource.pipe(Effect.exit);
+
         const unannotatedExit = Exit.isFailure(exit)
           ? Exit.fail(Option.getOrThrow(Cause.findErrorOption(exit.cause)))
           : exit;
+
         assert.deepStrictEqual(
           unannotatedExit,
           Exit.fail(new WompiSourceCreationFailed({ certainty: "rejected" }))
@@ -550,6 +579,7 @@ for (const [name, configLayer, candidate] of [
 ] as const) {
   it.effect(`rejects an invalid ${name} without echoing the candidate`, () => {
     const runtime = ManagedRuntime.make(layerWithConfig(configLayer));
+
     return Effect.acquireUseRelease(
       Effect.succeed(runtime),
       () =>
@@ -557,6 +587,7 @@ for (const [name, configLayer, candidate] of [
           const failure = yield* exitFailure(
             yield* Effect.tryPromise(() => runtime.runPromiseExit(loadContracts))
           );
+
           const rendered = yield* renderedFailure(failure);
           expect(rendered).not.toContain(candidate);
         }),

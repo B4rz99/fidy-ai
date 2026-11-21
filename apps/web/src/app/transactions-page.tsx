@@ -36,10 +36,13 @@ export const TransactionsPage = (): JSX.Element => {
   const [query] = useState(() => transactionEntryConsent(client));
   const status = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
+
   if (status._tag === "Failure" && sessionBinding === "none") {
     return <AccessRefused withdrawn={false} />;
   }
+
   const consent = currentConsent(status);
+
   if (Option.isSome(consent)) {
     if (consent.value.status === "Granted") {
       return (
@@ -49,11 +52,14 @@ export const TransactionsPage = (): JSX.Element => {
         </SignedInContent>
       );
     }
+
     if (consent.value.status === "Revoked") return <PrivacyTransactionFeature />;
   }
+
   if (status._tag === "Initial") {
     return <PendingRead label="Cargando transacciones" />;
   }
+
   return (
     <main className="p-5">
       <p>No pudimos verificar tu acceso a las transacciones.</p>
@@ -83,6 +89,7 @@ TransactionsPage.prepareEntry = ({
   signal: AbortSignal;
 }>): Promise<Readonly<{ preparation: Promise<void> }> | void> => {
   if (preload || !preparationActive(signal)) return Promise.resolve();
+
   return Effect.runPromise(
     Effect.gen(function* () {
       const consent = transactionEntryConsent(context.webAuthClient);
@@ -97,11 +104,14 @@ TransactionsPage.prepareEntry = ({
           },
         })
       );
+
       if (!preparationActive(signal)) return;
       const status = context.registry.get(consent);
+
       if (AsyncResult.isSuccess(status) && status.value.status === "Revoked") {
         yield* Effect.tryPromise(() => PrivacyTransactionFeature.preload());
       }
+
       if (AsyncResult.isSuccess(status) && !status.waiting && status.value.status === "Granted") {
         return {
           preparation: TransactionsPage.preloadData({
@@ -113,6 +123,7 @@ TransactionsPage.prepareEntry = ({
           }).catch(() => undefined),
         };
       }
+
       return undefined;
     })
   );

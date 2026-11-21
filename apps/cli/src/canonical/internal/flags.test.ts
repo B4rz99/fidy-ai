@@ -13,6 +13,7 @@ it("disambiguates siblings, transport containers and reserved options without ac
     }),
     query: Schema.Struct({ id: Schema.Boolean }),
   });
+
   const plan = deriveFlags(Schema.toJsonSchemaDocument(schema));
   expect(plan.flags.map((flag) => flag.name)).toEqual([
     "payload-input",
@@ -20,6 +21,7 @@ it("disambiguates siblings, transport containers and reserved options without ac
     "payload-id",
     "query-id",
   ]);
+
   const nested = deriveFlags(
     Schema.toJsonSchemaDocument(
       Schema.Struct({
@@ -30,6 +32,7 @@ it("disambiguates siblings, transport containers and reserved options without ac
       })
     )
   );
+
   expect(nested.flags.map((flag) => flag.name)).toEqual(["left-category-id", "right-category-id"]);
   expect(
     assembleFlags({
@@ -49,6 +52,7 @@ it("preserves omitted defaults, explicit false, zero and empty text for the owni
       mode: Schema.Literals(["one", "two"]),
     }),
   });
+
   const plan = deriveFlags(Schema.toJsonSchemaDocument(schema));
   expect(plan.flags.map(({ name, required }) => ({ name, required }))).toEqual([
     { name: "enabled", required: false },
@@ -76,6 +80,7 @@ it("a schema extension generates new help and assembly without a parallel field 
       pageSize: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 20 }))),
     }),
   });
+
   const plan = deriveFlags(Schema.toJsonSchemaDocument(schema));
   expect(plan.flags).toMatchObject([
     {
@@ -87,6 +92,7 @@ it("a schema extension generates new help and assembly without a parallel field 
   expect(
     Schema.decodeUnknownSync(schema)(assembleFlags({ args: ["--page-size", "12"], plan }))
   ).toEqual({ query: { pageSize: 12 } });
+
   for (const value of ["0", "21"]) {
     expect(() =>
       Schema.decodeUnknownSync(schema)(assembleFlags({ args: ["--page-size", value], plan }))
@@ -105,6 +111,7 @@ it("keeps complex unions, arrays, unconstrained and free-text strings on structu
       ]),
     }),
   });
+
   const plan = deriveFlags(Schema.toJsonSchemaDocument(schema));
   expect(plan.flags).toEqual([]);
   expect(plan.structured.map((field) => field.path)).toEqual([

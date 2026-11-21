@@ -21,16 +21,22 @@ const listings = [
   ["ingestion.getReviewWorkspace", ""],
   ["ingestion.getReviewPageContext", ""],
 ] as const;
+
 const endpoints = listings.map(([id, query]) => {
   const op = operationCatalog.byId.get(id);
+
   if (op === undefined) throw new Error("Missing operation " + id);
+
   return { id, path: op.route + query, operation: op };
 });
+
 const fixture = Effect.gen(function* () {
   const store = yield* makeNativeTransactionJourney(undefined, nativeLostReadPlatform);
+
   const sql = (
     ...args: Parameters<typeof store.exec>
   ): Effect.Effect<Awaited<ReturnType<typeof store.exec>>> => native(() => store.exec(...args));
+
   const now = yield* Clock.currentTimeMillis;
   yield* sql(
     "UPDATE users SET trial_started_at_ms=created_at_ms-1209600000,trial_ends_at_ms=created_at_ms-604800000 WHERE id=?",
@@ -44,6 +50,7 @@ const fixture = Effect.gen(function* () {
         bob.user
       )
   );
+
   const request = (path: string, headers: Record<string, string> = {}): Effect.Effect<Response> =>
     native(() =>
       store.send(
@@ -57,30 +64,38 @@ const fixture = Effect.gen(function* () {
         })
       )
     );
+
   const counts = (): ReturnType<typeof sql> =>
     sql(
       "SELECT (SELECT count(*) FROM audit_entries) AS audit,(SELECT count(*) FROM canonical_request_buckets) AS buckets,(SELECT count(*) FROM canonical_request_leases) AS leases,(SELECT count(*) FROM commercial_allowance_consumptions) AS charges"
     );
+
   return { store, sql, request, counts, now };
 });
+
 const refusedHeaders: ReadonlyArray<Record<string, string>> = [
   { authorization: "Bearer invalid" },
   { "Fidy-Session-Binding": "" },
   { "Fidy-Session-Binding": bob.session },
   { cookie: "" },
 ];
+
 const wrongCredentials = Effect.fnUntraced(function* (subject: Effect.Success<typeof fixture>) {
   const before = yield* subject.counts();
+
   for (const target of endpoints) {
     for (const headers of refusedHeaders) {
       const response = yield* subject.request(target.path, headers);
       expect(response.status, target.id + " " + Object.keys(headers).join(",")).toBe(401);
     }
   }
+
   expect(yield* subject.counts()).toEqual(before);
 });
+
 const refusedStanding = Effect.fnUntraced(function* (mode: "revoked" | "expired" | "withdrawn") {
   const subject = yield* fixture;
+
   if (mode === "revoked") {
     yield* subject.sql(
       "UPDATE web_sessions SET revoked_at_ms=? WHERE id=?",
@@ -88,6 +103,7 @@ const refusedStanding = Effect.fnUntraced(function* (mode: "revoked" | "expired"
       alice.session
     );
   }
+
   if (mode === "expired") {
     yield* subject.sql(
       "UPDATE web_sessions SET idle_expires_at_ms=? WHERE id=?",
@@ -95,10 +111,12 @@ const refusedStanding = Effect.fnUntraced(function* (mode: "revoked" | "expired"
       alice.session
     );
   }
+
   if (mode === "withdrawn") {
     const snapshot = yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(
       currentDisclosureFor()
     );
+
     yield* subject.sql(
       "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms,disclosure_json) VALUES('grant',?,'processing_grant',?,?)",
       alice.user,
@@ -112,13 +130,17 @@ const refusedStanding = Effect.fnUntraced(function* (mode: "revoked" | "expired"
       subject.now
     );
   }
+
   const before = yield* subject.counts();
+
   for (const target of endpoints) {
     const response = yield* subject.request(target.path);
     expect(response.status, mode + " " + target.id).toBe(401);
   }
+
   expect(yield* subject.counts()).toEqual(before);
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "refuses absent or mismatched binding, missing cookies and explicit invalid authorization for every listing before accounting",
@@ -133,6 +155,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const subject = yield* fixture;
         const core = yield* native(() => subject.store.runtime.getWorker("core"));
+
         const routes = [
           ["GET", oauthPaths.authorize],
           ["POST", "/providers/kapso/callback"],
@@ -142,7 +165,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           ["GET", "/health"],
           ["POST", "/internal/titular-erasure"],
         ];
+
         const before = yield* subject.counts();
+
         for (const [method, path] of routes) {
           const reply = yield* native(() =>
             core.fetch("https://api.fidyapp.com" + path, {
@@ -153,18 +178,22 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               },
             })
           );
+
           const replyBody = yield* native(() => reply.text());
           expect(reply.status, path + " " + replyBody).toBe(401);
         }
+
         expect(yield* subject.counts()).toEqual(before);
       })
   );
+
   for (const state of ["revoked", "expired", "withdrawn"] as const) {
     test.effect(
       "refuses every listing with " + state + " authority without charging or disclosing",
       () => refusedStanding(state)
     );
   }
+
   test.effect("preserves each User's quota, active leases and complete listing response", () =>
     Effect.gen(function* () {
       const subject = yield* fixture;
@@ -187,6 +216,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       yield* subject.sql(
         "INSERT INTO categories VALUES('invalid-category','unrelated invalid Category',1000000)"
       );
+
       for (const target of endpoints) {
         const response = yield* subject.request(target.path);
         expect(response.status, target.id).toBe(200);
@@ -199,6 +229,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(limit, target.id).toMatch(/^[1-9][0-9]*$/u);
         expect(response.headers.get(canonicalAllowanceHeaders.remaining), target.id).toBe(limit);
       }
+
       expect(yield* subject.sql("SELECT id FROM canonical_request_leases")).toEqual([
         { id: "own" },
       ]);
@@ -212,10 +243,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       ).toEqual([{ n: 0 }]);
     })
   );
+
   for (const pressure of ["rate", "concurrency"] as const) {
     test.effect("enforces shared " + pressure + " protection across all canonical listings", () =>
       Effect.gen(function* () {
         const subject = yield* fixture;
+
         if (pressure === "rate") {
           yield* subject.sql(
             "INSERT INTO canonical_request_buckets VALUES(?,?)",
@@ -231,16 +264,20 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             subject.now + 60000
           );
         }
+
         const before = yield* subject.counts();
+
         for (const target of endpoints) {
           const reply = yield* subject.request(target.path);
           expect(reply.status, target.id).toBe(429);
           expect(reply.headers.get("retry-after"), target.id).toBe("1");
         }
+
         expect(yield* subject.counts()).toEqual(before);
       })
     );
   }
+
   test.effect(
     "rolls back admission and disclosures if the User cannot commit the required Audit",
     () =>
@@ -250,9 +287,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           "CREATE TRIGGER interrupt_audit BEFORE INSERT ON audit_entries BEGIN SELECT RAISE(IGNORE); END"
         );
         const before = yield* subject.counts();
+
         for (const target of endpoints) {
           expect((yield* subject.request(target.path)).status, target.id).toBe(503);
         }
+
         expect(yield* subject.counts()).toEqual(before);
       })
   );
@@ -262,6 +301,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const subject = yield* fixture;
         yield* subject.sql("CREATE TABLE lose_read_reply(path TEXT PRIMARY KEY) STRICT");
+
         for (const target of endpoints) {
           const path = target.path.split("?")[0];
           yield* subject.sql("INSERT INTO lose_read_reply VALUES(?)", path);
@@ -277,6 +317,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             { n: 0 },
           ]);
         }
+
         expect(
           yield* subject.sql("SELECT count(*) AS n FROM commercial_allowance_consumptions")
         ).toEqual([{ n: 0 }]);

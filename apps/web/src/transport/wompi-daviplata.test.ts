@@ -7,12 +7,15 @@ import { afterEach, expect, it, vi } from "vitest";
 import { startDaviplataWithWompi } from "./wompi-daviplata";
 
 const approvedUrl = "https://sandbox.wompi.co/synthetic/send";
+
 const mountedSignal = (): AbortSignal => new AbortController().signal;
 
 afterEach(() => vi.restoreAllMocks());
 
 const policy = { sendUrl: approvedUrl, confirmUrl: "https://sandbox.wompi.co/synthetic/confirm" };
+
 const tokenId = "daviplata_devtest_synthetic";
+
 const initialResponse = (sendUrl = policy.sendUrl): Response =>
   Response.json({
     data: {
@@ -25,6 +28,7 @@ const initialResponse = (sendUrl = policy.sendUrl): Response =>
       },
     },
   });
+
 const otpResponse = (
   status: "PENDING" | "APPROVED" | "DECLINED",
   bearer: string,
@@ -53,8 +57,10 @@ it("rotates one-use OTP authority and keeps approved authorization inside the pr
         .mockResolvedValueOnce(initialResponse())
         .mockResolvedValueOnce(otpResponse("PENDING", "synthetic-send-bearer"))
         .mockResolvedValueOnce(otpResponse("APPROVED", "synthetic-confirm-bearer"));
+
       const documentNumber = Redacted.make("1122233");
       const productNumber = Redacted.make("3991111111");
+
       const challenge = yield* startDaviplataWithWompi({
         publicKey: "pub_test_synthetic",
         policy,
@@ -63,6 +69,7 @@ it("rotates one-use OTP authority and keeps approved authorization inside the pr
         signal: mountedSignal(),
         expiresAt: (yield* Clock.currentTimeMillis) + 60_000,
       });
+
       const otp = Redacted.make("574829");
       const result = yield* challenge.confirm(otp);
       expect(result.status).toBe("approved");
@@ -71,6 +78,7 @@ it("rotates one-use OTP authority and keeps approved authorization inside the pr
         policy.sendUrl,
         policy.confirmUrl,
       ]);
+
       for (const call of provider.mock.calls) {
         expect(call[1]).toMatchObject({
           method: "POST",
@@ -81,6 +89,7 @@ it("rotates one-use OTP authority and keeps approved authorization inside the pr
         });
         expect(call[1]?.signal).toBeInstanceOf(AbortSignal);
       }
+
       expect(provider.mock.calls[1]?.[1]?.body).toBeUndefined();
       expect(provider.mock.calls[2]?.[1]?.headers).toEqual({
         authorization: "Bearer synthetic-send-bearer",
@@ -120,6 +129,7 @@ it("separates approved-submission recovery from OTP actions and refuses recovery
         )
         .mockResolvedValueOnce(initialResponse())
         .mockResolvedValueOnce(otpResponse("PENDING", "synthetic-send-bearer"));
+
       const challenge = yield* start(provider);
       expect((yield* challenge.retrySubmission()).status).toBe("refused");
       const approval = yield* challenge.confirm(Redacted.make("574829"));
@@ -133,6 +143,7 @@ it("separates approved-submission recovery from OTP actions and refuses recovery
       expect(provider).toHaveBeenCalledTimes(3);
       challenge.dispose();
       expect((yield* challenge.retrySubmission()).status).toBe("refused");
+
       if (approval.status === "approved") expect(() => Redacted.value(approval.token)).toThrow();
     })
   ));
@@ -145,6 +156,7 @@ it("does not accept authorization approval from an OTP-send response", () =>
           Promise.resolve(otpResponse("APPROVED", "synthetic-unexpected-approval"))
         )
         .mockResolvedValueOnce(initialResponse());
+
       const failed = yield* Effect.exit(start(provider));
       expect(Exit.isFailure(failed)).toBe(true);
       expect(provider).toHaveBeenCalledTimes(2);
@@ -163,22 +175,27 @@ it.each([
       Effect.gen(function* () {
         const foreignBearer = "synthetic-foreign-bearer";
         const foreignPk = "daviplata_devtest_other_synthetic";
+
         const provider = vi
           .fn((_url: RequestInfo | URL, _init?: RequestInit): Promise<Response> =>
             Promise.resolve(otpResponse("APPROVED", "synthetic-later-approval"))
           )
           .mockResolvedValueOnce(initialResponse());
+
         if (stage === "CONFIRM") {
           provider.mockResolvedValueOnce(otpResponse("PENDING", "synthetic-send-bearer"));
         }
+
         provider.mockResolvedValueOnce(otpResponse(status, foreignBearer, foreignPk));
         const started = yield* Effect.exit(start(provider));
+
         if (stage === "SEND") {
           expect(Exit.isFailure(started)).toBe(true);
         } else {
           if (!Exit.isSuccess(started)) {
             throw new Error("Expected the legitimate initial send to succeed");
           }
+
           const challenge = started.value;
           const otp = Redacted.make("574829");
           expect(yield* challenge.confirm(otp)).toEqual({ status: "uncertain" });
@@ -189,8 +206,10 @@ it.each([
           expect(yield* challenge.retrySubmission()).toEqual({ status: "refused" });
           expect(() => Redacted.value(subsequentOtp)).toThrow();
         }
+
         yield* Effect.yieldNow;
         expect(provider).toHaveBeenCalledTimes(stage === "SEND" ? 2 : 3);
+
         for (const [, init] of provider.mock.calls) expect(init?.signal?.aborted).toBe(true);
         expect(provider.mock.calls.map(([, init]) => init?.headers)).not.toContainEqual(
           expect.objectContaining({ authorization: `Bearer ${foreignBearer}` })
@@ -203,18 +222,22 @@ it("fingerprints one-use authority with SHA-256, clears borrowed digest buffers,
   Effect.runPromise(
     Effect.gen(function* () {
       const digest = vi.spyOn(globalThis.crypto.subtle, "digest");
+
       const provider = vi
         .fn((_url: RequestInfo | URL, _init?: RequestInit): Promise<Response> =>
           Promise.resolve(otpResponse("APPROVED", "synthetic-terminal-bearer"))
         )
         .mockResolvedValueOnce(initialResponse())
         .mockResolvedValueOnce(otpResponse("PENDING", "synthetic-send-bearer"));
+
       const challenge = yield* start(provider);
       const approval = yield* challenge.confirm(Redacted.make("574829"));
       expect(digest).toHaveBeenCalledTimes(3);
+
       for (const [algorithm, bytes] of digest.mock.calls) {
         expect(algorithm).toBe("SHA-256");
         expect(ArrayBuffer.isView(bytes)).toBe(true);
+
         if (ArrayBuffer.isView(bytes)) {
           expect(
             new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength).every(
@@ -223,7 +246,9 @@ it("fingerprints one-use authority with SHA-256, clears borrowed digest buffers,
           ).toBe(true);
         }
       }
+
       expect(Object.keys(approval).sort()).toEqual(["status", "token"]);
+
       if (approval.status !== "approved") throw new Error("Expected synthetic approval");
       expect(Redacted.isRedacted(approval.token)).toBe(true);
       expect(Redacted.value(approval.token)).toBe(tokenId);
@@ -239,11 +264,13 @@ it("cancels a pending digest on disposal without posting borrowed one-use author
         .fn(() => Promise.resolve(otpResponse("APPROVED", "synthetic-terminal-bearer")))
         .mockResolvedValueOnce(initialResponse())
         .mockResolvedValueOnce(otpResponse("PENDING", "synthetic-send-bearer"));
+
       const challenge = yield* start(provider);
       const pending = Promise.withResolvers<ArrayBuffer>();
       const hashing = Promise.withResolvers<void>();
       vi.spyOn(globalThis.crypto.subtle, "digest").mockImplementation(() => {
         hashing.resolve();
+
         return pending.promise;
       });
       const otp = Redacted.make("574829");
@@ -281,6 +308,7 @@ it.each([
       const provider = vi.fn(() => Promise.resolve(initialResponse()));
       const documentNumber = Redacted.make("1122233");
       const productNumber = Redacted.make("3991111111");
+
       const result = yield* Effect.exit(
         startDaviplataWithWompi({
           publicKey: "pub_test_synthetic",
@@ -291,6 +319,7 @@ it.each([
           expiresAt: (yield* Clock.currentTimeMillis) + 60_000,
         })
       );
+
       expect(Exit.isFailure(result)).toBe(true);
       expect(provider).not.toHaveBeenCalled();
       expect(() => Redacted.value(documentNumber)).toThrow();
@@ -319,17 +348,22 @@ it("serializes competing OTP actions without consuming the next one-use bearer",
     Effect.gen(function* () {
       const pending = Promise.withResolvers<Response>();
       const started = Promise.withResolvers<void>();
+
       const provider = vi
         .fn((_url: RequestInfo | URL, _init?: RequestInit): Promise<Response> => {
           started.resolve();
+
           return pending.promise;
         })
         .mockResolvedValueOnce(initialResponse())
         .mockResolvedValueOnce(otpResponse("PENDING", "synthetic-send-bearer"));
+
       const challenge = yield* start(provider);
+
       const first = yield* Effect.forkChild(challenge.confirm(Redacted.make("574829")), {
         startImmediately: true,
       });
+
       yield* Effect.tryPromise(() => started.promise);
       expect((yield* challenge.resend()).status).toBe("busy");
       const competingOtp = Redacted.make("574829");
@@ -346,12 +380,14 @@ it("permits an explicit incorrect-code retry with rotated authority but caps sen
   Effect.runPromise(
     Effect.gen(function* () {
       let rotation = 0;
+
       const provider = vi
         .fn((_url: RequestInfo | URL, _init?: RequestInit) =>
           Promise.resolve(otpResponse("PENDING", `synthetic-rotation-${++rotation}`))
         )
         .mockResolvedValueOnce(initialResponse())
         .mockResolvedValueOnce(otpResponse("PENDING", "synthetic-send-bearer"));
+
       const challenge = yield* start(provider);
       expect((yield* challenge.resend()).status).toBe("retry-allowed");
       expect((yield* challenge.resend()).status).toBe("refused");
@@ -374,6 +410,7 @@ it("stops permanently after ambiguous validation without automatically retrying 
         .fn((): Promise<Response> => Promise.reject(new Error("synthetic-hostile-error")))
         .mockResolvedValueOnce(initialResponse())
         .mockResolvedValueOnce(otpResponse("PENDING", "synthetic-send-bearer"));
+
       const challenge = yield* start(provider);
       const result = yield* challenge.confirm(Redacted.make("111111"));
       expect(result).toEqual({ status: "uncertain" });
@@ -388,6 +425,7 @@ it("cancels a pending reader and wipes authority when the mounted challenge is d
     Effect.gen(function* () {
       const reading = Promise.withResolvers<void>();
       let cancelled = false;
+
       const provider = vi
         .fn((_url: RequestInfo | URL, _init?: RequestInit) =>
           Promise.resolve(
@@ -405,6 +443,7 @@ it("cancels a pending reader and wipes authority when the mounted challenge is d
         )
         .mockResolvedValueOnce(initialResponse())
         .mockResolvedValueOnce(otpResponse("PENDING", "synthetic-send-bearer"));
+
       const challenge = yield* start(provider);
       const otp = Redacted.make("111111");
       const fiber = yield* Effect.forkChild(challenge.confirm(otp), { startImmediately: true });
@@ -421,6 +460,7 @@ effectIt.effect("expires authorization absolutely even while the provider body i
   Effect.gen(function* () {
     const reading = Promise.withResolvers<void>();
     let cancelled = false;
+
     const provider = vi
       .fn(() =>
         Promise.resolve(
@@ -438,10 +478,13 @@ effectIt.effect("expires authorization absolutely even while the provider body i
       )
       .mockResolvedValueOnce(initialResponse())
       .mockResolvedValueOnce(otpResponse("PENDING", "synthetic-send-bearer"));
+
     const challenge = yield* start(provider);
+
     const fiber = yield* Effect.forkChild(challenge.confirm(Redacted.make("111111")), {
       startImmediately: true,
     });
+
     yield* Effect.tryPromise(() => reading.promise);
     yield* TestClock.adjust("61 seconds");
     expect((yield* Fiber.join(fiber)).status).toBe("uncertain");
@@ -454,6 +497,7 @@ it("rejects dishonest streamed response sizes before parsing and cancels the bod
   Effect.runPromise(
     Effect.gen(function* () {
       let cancelled = false;
+
       const provider = vi.fn(() =>
         Promise.resolve(
           new Response(
@@ -469,6 +513,7 @@ it("rejects dishonest streamed response sizes before parsing and cancels the bod
           )
         )
       );
+
       const result = yield* Effect.exit(start(provider));
       expect(Exit.isFailure(result)).toBe(true);
       expect(cancelled).toBe(true);
@@ -483,6 +528,7 @@ it("refuses reused OTP bearers rather than sending a one-use credential twice", 
         .fn(() => Promise.resolve(otpResponse("PENDING", "synthetic-send-bearer")))
         .mockResolvedValueOnce(initialResponse())
         .mockResolvedValueOnce(otpResponse("PENDING", "synthetic-send-bearer"));
+
       const challenge = yield* start(provider);
       expect((yield* challenge.confirm(Redacted.make("111111"))).status).toBe("uncertain");
       expect((yield* challenge.confirm(Redacted.make("222222"))).status).toBe("refused");
@@ -497,6 +543,7 @@ it("completes the actual Sandbox OTP service protocol without following provider
       const observedTokenId = "daviplata_test_synthetic";
       const send = endpoint + "?token=daviplata_test_synthetic&operation=RESEND_OTP";
       const confirm = endpoint + "?token=daviplata_test_synthetic&operation=VALIDATE_OTP_API";
+
       const provider = vi
         .fn((_url: RequestInfo | URL, _init?: RequestInit): Promise<Response> =>
           Promise.resolve(Response.json({}))
@@ -518,6 +565,7 @@ it("completes the actual Sandbox OTP service protocol without following provider
         .mockResolvedValueOnce(
           otpResponse("APPROVED", "synthetic-confirm-bearer", observedTokenId)
         );
+
       const challenge = yield* startDaviplataWithWompi({
         publicKey: "pub_test_synthetic",
         policy: { sendUrl: endpoint, confirmUrl: endpoint },
@@ -529,6 +577,7 @@ it("completes the actual Sandbox OTP service protocol without following provider
         signal: mountedSignal(),
         expiresAt: (yield* Clock.currentTimeMillis) + 60_000,
       });
+
       const result = yield* challenge.confirm(Redacted.make("574829"));
       expect(result.status).toBe("approved");
       expect(provider.mock.calls.map((call) => call[0])).toEqual([
@@ -552,6 +601,7 @@ it.each([
   Effect.runPromise(
     Effect.gen(function* () {
       const endpoint = "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox";
+
       const provider = vi.fn(() =>
         Promise.resolve(
           Response.json({
@@ -568,6 +618,7 @@ it.each([
           })
         )
       );
+
       const result = yield* Effect.exit(
         startDaviplataWithWompi({
           publicKey: "pub_test_synthetic",
@@ -581,6 +632,7 @@ it.each([
           expiresAt: (yield* Clock.currentTimeMillis) + 60_000,
         })
       );
+
       expect(Exit.isFailure(result)).toBe(true);
       expect(provider).toHaveBeenCalledTimes(1);
     })
@@ -595,8 +647,10 @@ it.each(["expired", "lost-mutation"] as const)(
         const provider = vi.fn((): Promise<Response> =>
           Promise.reject(new Error("Synthetic lost mutation"))
         );
+
         const documentNumber = Redacted.make("1122233");
         const productNumber = Redacted.make("3991111111");
+
         const result = yield* startDaviplataWithWompi({
           publicKey: "pub_test_synthetic",
           policy,
@@ -610,6 +664,7 @@ it.each(["expired", "lost-mutation"] as const)(
             onFailure: (error) => error.status,
           })
         );
+
         expect(result).toBe(scenario === "expired" ? "refused" : "uncertain");
         expect(provider).toHaveBeenCalledTimes(scenario === "expired" ? 0 : 1);
         expect(() => Redacted.value(documentNumber)).toThrow();
@@ -624,12 +679,14 @@ it("retains conclusive initial OTP refusal separately from setup mutation loss",
       const provider = vi
         .fn(() => Promise.resolve(otpResponse("DECLINED", "synthetic-declined")))
         .mockResolvedValueOnce(initialResponse());
+
       const status = yield* start(provider).pipe(
         Effect.match({
           onSuccess: () => "unexpected-success",
           onFailure: (error) => error.status,
         })
       );
+
       expect(status).toBe("refused");
       expect(provider).toHaveBeenCalledTimes(2);
     })

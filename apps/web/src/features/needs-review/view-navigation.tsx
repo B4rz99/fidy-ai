@@ -7,6 +7,7 @@ import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { Input } from "@/ui/components/input";
 
 export type Filter = "pending" | "history" | "created" | "skipped" | "expired";
+
 type Props = Readonly<{
   contextFeedback: ReactNode;
   sourceId: string;
@@ -20,6 +21,7 @@ type Props = Readonly<{
   search: string;
   setSearch: (value: string) => void;
 }>;
+
 const filters = [
   { value: "pending", label: "Pendientes" },
   { value: "history", label: "Historial" },
@@ -27,8 +29,10 @@ const filters = [
   { value: "skipped", label: "Omitidas" },
   { value: "expired", label: "Vencidas" },
 ] as const;
+
 export const ReviewNavigation = (props: Props): JSX.Element => {
   const searchHelp = useId();
+
   return (
     <>
       <nav aria-label="Vistas de revisión" data-review="navigation">
@@ -61,6 +65,7 @@ export const ReviewNavigation = (props: Props): JSX.Element => {
     </>
   );
 };
+
 const ReviewFilters = (props: Props & Readonly<{ searchHelp: string }>): JSX.Element => (
   <div data-review="filters">
     {props.filter !== "pending" ? (
@@ -75,6 +80,7 @@ const ReviewFilters = (props: Props & Readonly<{ searchHelp: string }>): JSX.Ele
         width="auto"
         onChange={(value) => {
           const next = filters.find((option) => option.value === value);
+
           if (next !== undefined) props.select(next.value, 0);
         }}
       />

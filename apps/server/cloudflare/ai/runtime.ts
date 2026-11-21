@@ -18,12 +18,14 @@ const transportFailure = (
   request: OpenAiRequest
 ): HostedInferenceError => {
   let reason: HostedInferenceFailureReason = { _tag: "ProviderUnavailable" };
+
   if (failure.reason === "response-too-large") {
     reason =
       request.response_format === undefined
         ? { _tag: "InvalidOutput", description: "Hosted provider response was invalid" }
         : { _tag: "StructuredOutputExceeded" };
   }
+
   return new HostedInferenceError({
     reason,
     retryable: failure.reason !== "response-too-large",
@@ -37,6 +39,7 @@ export const makeOpenAiRun =
     Effect.gen(function* () {
       const services = yield* Layer.build(OutboundHttpLive);
       const client = Context.get(services, HttpClient.HttpClient);
+
       const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
         model,
         ...request,
@@ -53,9 +56,11 @@ export const makeOpenAiRun =
             })
         )
       );
+
       const response = yield* makeOpenAiOutboundHttp({ apiKey, client })
         .execute(body)
         .pipe(Effect.mapError((failure) => transportFailure(failure, request)));
+
       return new Response(new Uint8Array(response.body), {
         status: response.status,
         headers: response.headers,
@@ -72,10 +77,12 @@ export const makeLocalHostedInference = ({
   admit: (units: number) => Effect.Effect<boolean, HostedInferenceError>;
 }): Effect.Effect<HostedInferenceService, HostedInferenceError> => {
   const key = Schema.decodeOption(ApiKey)(environment.OPENAI_API_KEY);
+
   return makeOpenAiHostedInference({
     model: Option.fromNullishOr(environment.HOSTED_AI_MODEL),
     run: Option.map(key, (apiKey) => {
       const run = makeOpenAiRun(Redacted.make(apiKey));
+
       return (model, request) =>
         Effect.gen(function* () {
           const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
@@ -90,6 +97,7 @@ export const makeLocalHostedInference = ({
                 })
             )
           );
+
           if (
             !(yield* admit(
               new TextEncoder().encode(encoded).length + request.max_completion_tokens
@@ -101,6 +109,7 @@ export const makeLocalHostedInference = ({
               retryAfter: Option.none(),
             });
           }
+
           return yield* run(model, request);
         });
     }),

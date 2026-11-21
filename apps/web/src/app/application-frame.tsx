@@ -27,27 +27,34 @@ const independentControlRoutes: ReadonlySet<string> = new Set([
 
 export const ApplicationFrame = (): JSX.Element => {
   const { authentication } = useSession();
+
   const frame = useRouterState({
     select: (state) => {
       if (state.matches.some((match) => match.routeId === "/authenticated")) {
         return authentication === "expired" ? "refused" : "application";
       }
+
       if (state.matches.some((match) => match.routeId === "/independent-application")) {
         return "application";
       }
+
       return "standalone";
     },
   });
+
   const oauthReview = useRouterState({
     select: (state) =>
       state.matches.some(
         (match) => match.routeId === "/independent-application/oauth/review/$requestId"
       ),
   });
+
   const independentControls = useRouterState({
     select: (state) => state.matches.some((match) => independentControlRoutes.has(match.routeId)),
   });
+
   if (frame === "standalone") return <Outlet />;
+
   return (
     <ConsentApplicationFrame
       frame={frame}
@@ -73,9 +80,11 @@ const ConsentApplicationFrame = ({
   const { webAuthClient } = useRouter().options.context;
   const [query] = useState(() => transactionEntryConsent(webAuthClient));
   const readOnly = useAtomValue(query, hasWithdrawnConsent);
+
   const authenticatedRoute = useRouterState({
     select: (state) => state.matches.some((match) => match.routeId === "/authenticated"),
   });
+
   if (readOnly) {
     return (
       <ApplicationShell readOnly prepareNavigation={() => undefined} reviewPendingCount={null}>
@@ -83,7 +92,9 @@ const ConsentApplicationFrame = ({
       </ApplicationShell>
     );
   }
+
   if (frame === "refused") return <AccessRefused withdrawn={false} />;
+
   return (
     <ProductApplicationFrame oauthReview={oauthReview} independentControls={independentControls} />
   );
@@ -99,6 +110,7 @@ const ProductApplicationFrame = ({
   const { hostedTurnClient: client } = useRouter().options.context;
   const { authentication } = useSession();
   const prepareNavigation = useNavigationPreparation();
+
   const shell = (
     <ApplicationShell
       readOnly={false}
@@ -123,6 +135,7 @@ const ProductApplicationFrame = ({
       )}
     </ApplicationShell>
   );
+
   return independentControls || authentication === "expired" ? (
     shell
   ) : (

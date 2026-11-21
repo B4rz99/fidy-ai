@@ -16,6 +16,7 @@ const assertTypedFailure = <E>(exit: Exit.Exit<unknown, E>, expected: E): void =
 };
 
 const at = DateTime.makeUnsafe("2026-08-12T10:00:00Z");
+
 const memory = (index: number, text: string): Memory =>
   Memory.make({
     id: MemoryId.make(`01912345-6789-7abc-8def-${String(index).padStart(12, "0")}`),
@@ -44,6 +45,7 @@ it.effect("admits the complete ASCII aggregate at 15,000 bytes and rejects one e
       Effect.provideService(HostedInference, inference),
       Effect.exit
     );
+
     assertTypedFailure(exit, new MemoryCapacityExceeded());
     expect(String(exit)).not.toContain("a".repeat(554));
   })
@@ -64,6 +66,7 @@ it.effect("counts UTF-8 bytes in the replaced aggregate and refuses a revision a
       current,
       memory(0, "é".repeat(1_388) + "aa")
     ).pipe(Effect.provideService(HostedInference, inference), Effect.exit);
+
     assertTypedFailure(exit, new MemoryCapacityExceeded());
     expect(String(exit)).not.toContain("é".repeat(1_388));
   })

@@ -8,6 +8,7 @@ const expiredMaterial: CanonicalSuccess<"ingestion.getReviewMaterial"> = {
   data: { available: false, reason: "expired" },
   next: [],
 };
+
 export const reviewMaterialQuery = ({
   client,
   item,
@@ -22,12 +23,15 @@ export const reviewMaterialQuery = ({
     reactivityKeys: ["ingestion-review-original"],
     timeToLive: "400 millis",
   });
+
   return Atom.readable(
     (get) => {
       const deadline = get(originalDeadlineQuery(item));
+
       if (DateTime.toEpochMillis(deadline) <= DateTime.toEpochMillis(DateTime.nowUnsafe())) {
         return AsyncResult.success(expiredMaterial);
       }
+
       return get(material);
     },
     (refresh) => refresh(material)

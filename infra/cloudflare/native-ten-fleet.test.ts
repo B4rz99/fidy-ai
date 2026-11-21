@@ -10,10 +10,12 @@ const fixture = (): {
   rows: Map<string, boolean>;
 } => {
   const calls: string[] = [];
+
   const rows = new Map([
     ["prior", true],
     ["old", false],
   ]);
+
   const state: TenState = {
     at: 1,
     baseline: [...rows],
@@ -21,6 +23,7 @@ const fixture = (): {
     members: [],
     events: [],
   };
+
   const port: TenFleetPort = {
     save: () => Effect.void,
     inventory: () => Effect.sync(() => new Map(rows)),
@@ -34,6 +37,7 @@ const fixture = (): {
       Effect.sync(() => {
         calls.push("signup" + ord);
         rows.set("object" + ord, true);
+
         return { id: "user" + ord, outcome: "created" };
       }),
     login: (ord) =>
@@ -44,6 +48,7 @@ const fixture = (): {
           Effect.sync(() => {
             calls.push("erase" + ord);
             rows.set("object" + ord, false);
+
             return "receipt" + ord;
           }),
         denied: () =>
@@ -61,6 +66,7 @@ const fixture = (): {
         calls.push("observed");
       }),
   };
+
   return { port, state, calls, rows };
 };
 
@@ -84,6 +90,7 @@ it.effect(
 it.effect("reconciles a lost signup reply without creating any later cohort member", () =>
   Effect.gen(function* () {
     const { port, state, calls, rows } = fixture();
+
     const verdict = yield* runTenFleet(
       state,
       {
@@ -95,6 +102,7 @@ it.effect("reconciles a lost signup reply without creating any later cohort memb
       },
       "measure"
     ).pipe(Effect.result);
+
     expect(verdict._tag).toBe("Failure");
     expect(calls).toEqual(["signup2", "signup3", "erase2", "erase3"]);
     expect([...rows.values()].filter(Boolean)).toHaveLength(1);
@@ -108,6 +116,7 @@ it.effect(
     Effect.gen(function* () {
       const { port, state, calls } = fixture();
       state.members.push({ ordinal: 2, user: "user2", physical: "" });
+
       const result = yield* runTenFleet(
         state,
         {
@@ -116,6 +125,7 @@ it.effect(
         },
         "cleanup"
       ).pipe(Effect.result);
+
       expect(result._tag).toBe("Failure");
       expect(calls).toEqual([]);
     })
@@ -145,11 +155,13 @@ it.effect("stops before erasure when fresh login identifies a different User", (
     const { port, state, calls, rows } = fixture();
     rows.set("object2", true);
     state.members.push({ ordinal: 2, user: "user2", physical: "object2" });
+
     const result = yield* runTenFleet(
       state,
       { ...port, login: () => port.login(3) },
       "cleanup"
     ).pipe(Effect.result);
+
     expect(result._tag).toBe("Failure");
     expect(calls).toEqual([]);
     expect(rows.get("object2")).toBe(true);
@@ -166,6 +178,7 @@ it.effect(
         { ordinal: 2, user: "user2", physical: "object2" },
         { ordinal: 3, user: "", physical: "" }
       );
+
       const result = yield* runTenFleet(
         state,
         {
@@ -177,6 +190,7 @@ it.effect(
         },
         "cleanup"
       ).pipe(Effect.result);
+
       expect(calls).toEqual(["erase2"]);
       expect(result._tag).toBe("Failure");
       expect(

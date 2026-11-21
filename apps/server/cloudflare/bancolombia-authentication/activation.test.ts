@@ -7,10 +7,14 @@ import { TestCrypto } from "../../src/shell/testing/crypto-harness";
 import { activateBancolombiaSandbox } from "./operations";
 
 const issuer = "https://auth1-api-open-finance-sandbox.ambientesbc.com";
+
 const as = "https://as1-api-open-finance-sandbox.ambientesbc.com";
+
 const rs = "https://rs1-api-open-finance-sandbox.ambientesbc.com";
+
 const jwks =
   "https://s3.us-east-1.amazonaws.com/keystore.sandbox.bancol.col-hub-prod.ozoneapi.co.uk/server";
+
 const clientId = "10000000-0000-4000-8000-000000000001";
 
 it.effect(
@@ -20,20 +24,25 @@ it.effect(
       const services = yield* Layer.build(TestCrypto);
       const secureRandom = Context.get(services, SecureRandom.SecureRandom);
       const digest = Context.get(services, Digest.Digest);
+
       const client = yield* Effect.tryPromise(() =>
         generateKeyPair("RS256", { extractable: true })
       );
+
       const bank = yield* Effect.tryPromise(() => generateKeyPair("RS256", { extractable: true }));
+
       const publicKey = {
         ...(yield* Effect.tryPromise(() => exportJWK(client.publicKey))),
         kid: "client",
         alg: "RS256",
       };
+
       const bankKey = {
         ...(yield* Effect.tryPromise(() => exportJWK(bank.publicKey))),
         kid: "bank",
         alg: "RS256",
       };
+
       const idToken = yield* Effect.tryPromise(() =>
         new SignJWT({ openbanking_intent_id: "synthetic-consent" })
           .setProtectedHeader({ alg: "RS256", kid: "bank" })
@@ -44,10 +53,13 @@ it.effect(
           .setExpirationTime(300)
           .sign(bank.privateKey)
       );
+
       let retained = false;
+
       const httpClient = HttpClient.make((request) =>
         Effect.sync(() => {
           let body: unknown;
+
           if (request.url.endsWith("/.well-known/openid-configuration")) {
             body = {
               issuer,
@@ -64,6 +76,7 @@ it.effect(
           } else if (request.url === `${as}/token`) {
             if (request.body._tag !== "Uint8Array") throw new Error("Expected encoded form");
             const form = new URLSearchParams(new TextDecoder().decode(request.body.body));
+
             if (form.get("grant_type") === "client_credentials") {
               return HttpClientResponse.fromWeb(
                 request,
@@ -75,6 +88,7 @@ it.effect(
                 })
               );
             }
+
             expect(form.get("grant_type")).toBe("authorization_code");
             expect(form.get("scope")).toBe("accounts");
             expect(form.get("code")).toBe("synthetic-code");
@@ -114,9 +128,11 @@ it.effect(
               },
             };
           }
+
           return HttpClientResponse.fromWeb(request, Response.json(body));
         })
       );
+
       const accounts = yield* activateBancolombiaSandbox({
         secureRandom,
         digest,
@@ -143,6 +159,7 @@ it.effect(
             retained = true;
           }),
       });
+
       expect(accounts).toEqual(["synthetic-account-a", "synthetic-account-b"]);
     })
 );

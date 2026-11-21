@@ -9,7 +9,9 @@ import { afterEach, beforeEach, vi } from "vitest";
 import { browserHttpClientLayer } from "./browser-http-policy";
 
 const origin = "https://api.test.fidyapp.com";
+
 const traceId = "0123456789abcdef0123456789abcdef";
+
 const makeClient = (raw: HttpClient.HttpClient): Effect.Effect<HttpClient.HttpClient> =>
   Layer.build(
     Layer.succeed(HttpClient.HttpClient, raw).pipe(browserHttpClientLayer("web-auth", origin))
@@ -29,6 +31,7 @@ describe("browser transport diagnostics", () => {
   it.effect("projects one bounded record and preserves the server trace through body refusal", () =>
     Effect.gen(function* () {
       const sentinel = "private-financial-credential-sentinel";
+
       const client = yield* makeClient(
         HttpClient.make((request) =>
           Effect.succeed(
@@ -41,9 +44,11 @@ describe("browser transport diagnostics", () => {
           )
         )
       );
+
       const result = yield* Effect.exit(
         client.post(`${origin}/private/${sentinel}?proof=${sentinel}`)
       );
+
       expect(Exit.isFailure(result)).toBe(true);
       expect(diagnosticConsole.info).toHaveBeenCalledExactlyOnceWith("fidy.browser.transport", {
         component: "browser",
@@ -60,6 +65,7 @@ describe("browser transport diagnostics", () => {
       expect(
         yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(calls)
       ).not.toContain(sentinel);
+
       if (Exit.isFailure(result)) {
         expect(yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result)).toContain(
           traceId
@@ -74,6 +80,7 @@ describe("browser transport diagnostics", () => {
   it.effect("rejects untrusted trace receipts and emits no raw transport failures", () =>
     Effect.gen(function* () {
       const sentinel = "private-provider-body";
+
       const refused = yield* makeClient(
         HttpClient.make((request) =>
           Effect.succeed(
@@ -87,6 +94,7 @@ describe("browser transport diagnostics", () => {
           )
         )
       );
+
       yield* refused.post(`${origin}/work`);
       expect(diagnosticConsole.info).toHaveBeenLastCalledWith("fidy.browser.transport", {
         component: "browser",
@@ -97,6 +105,7 @@ describe("browser transport diagnostics", () => {
         durationMilliseconds: 0,
         statusClass: "5xx",
       });
+
       const failed = yield* makeClient(
         HttpClient.make((request) =>
           Effect.fail(
@@ -110,6 +119,7 @@ describe("browser transport diagnostics", () => {
           )
         )
       );
+
       yield* Effect.exit(failed.post(`${origin}/work`));
       expect(diagnosticConsole.info).toHaveBeenLastCalledWith("fidy.browser.transport", {
         component: "browser",
@@ -131,9 +141,11 @@ describe("browser transport diagnostics", () => {
   it.effect("preserves mixed failure and interruption as failed work when export throws", () =>
     Effect.gen(function* () {
       let sent = 0;
+
       const client = yield* makeClient(
         HttpClient.make((request) => {
           sent++;
+
           return Effect.failCause(
             Cause.combine(
               Cause.fail(
@@ -146,8 +158,10 @@ describe("browser transport diagnostics", () => {
           );
         })
       );
+
       const result = yield* Effect.exit(client.post(`${origin}/work`));
       expect(Exit.isFailure(result)).toBe(true);
+
       if (!Exit.isFailure(result)) return;
       expect(Cause.hasInterrupts(result.cause)).toBe(true);
       expect(Cause.findErrorOption(result.cause)._tag).toBe("Some");
@@ -165,6 +179,7 @@ describe("browser transport diagnostics", () => {
       });
       const unavailable = yield* Effect.exit(client.post(`${origin}/work`));
       expect(Exit.isFailure(unavailable)).toBe(true);
+
       if (!Exit.isFailure(unavailable)) return;
       expect(Cause.hasInterrupts(unavailable.cause)).toBe(true);
       expect(Cause.findErrorOption(unavailable.cause)._tag).toBe("Some");
@@ -176,15 +191,18 @@ describe("browser transport diagnostics", () => {
     Effect.gen(function* () {
       const started = Deferred.makeUnsafe<void>();
       let cancelled = false;
+
       const cancel = (): void => {
         cancelled = true;
       };
+
       const raw = HttpClient.make(() =>
         Deferred.succeed(started, undefined).pipe(
           Effect.andThen(Effect.never),
           Effect.ensuring(Effect.sync(cancel))
         )
       );
+
       const client = yield* makeClient(raw);
       const fiber = yield* Effect.forkChild(client.post(`${origin}/work`));
       yield* Deferred.await(started);
@@ -219,11 +237,13 @@ describe("browser transport diagnostics", () => {
       vi.mocked(diagnosticConsole.info).mockImplementation(() => {
         throw new Error("sink unavailable");
       });
+
       const available = yield* makeClient(
         HttpClient.make((request) =>
           Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")))
         )
       );
+
       expect((yield* available.post(`${origin}/work`)).status).toBe(200);
     })
   );
@@ -233,9 +253,11 @@ describe("browser transport diagnostics", () => {
     () =>
       Effect.gen(function* () {
         let sent = 0;
+
         const client = yield* makeClient(
           HttpClient.make((request) => {
             sent++;
+
             return sent === 1
               ? Effect.fail(
                   new HttpClientError.HttpClientError({
@@ -245,6 +267,7 @@ describe("browser transport diagnostics", () => {
               : Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
           })
         );
+
         yield* client.get(`${origin}/work`);
         expect(diagnosticConsole.info).toHaveBeenCalledExactlyOnceWith("fidy.browser.transport", {
           component: "browser",

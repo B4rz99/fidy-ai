@@ -155,24 +155,34 @@ export const cloudflareTestShards = ({
 }>): ReadonlyArray<ReadonlyArray<string>> => {
   if (!Number.isInteger(count) || count < 1) throw new Error("Shard count must be positive");
   const prefix = `${cloudflareRoot.replaceAll("\\", "/").replace(/\/$/u, "")}/`;
+
   const duration = (file: string): number =>
     estimatedSeconds[file.replaceAll("\\", "/").slice(prefix.length)] ?? 1;
+
   const shards = Array.from({ length: count }, () => {
     const shardFiles: string[] = [];
+
     return { files: shardFiles, seconds: 0 };
   });
+
   const ordered = [...files].sort((left, right) => {
     const difference = duration(right) - duration(left);
+
     if (difference !== 0) return difference;
+
     if (left < right) return -1;
+
     return left > right ? 1 : 0;
   });
+
   for (const file of ordered) {
     const lightest = shards.reduce((selected, shard) =>
       shard.seconds < selected.seconds ? shard : selected
     );
+
     lightest.files.push(file);
     lightest.seconds += duration(file);
   }
+
   return shards.map((shard) => shard.files);
 };

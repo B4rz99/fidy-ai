@@ -19,16 +19,21 @@ import { claimIngestionCapacity, updateSharedCapacity } from "./email-capacity";
 import { mediaEvidenceLifetimeMs } from "./media-retention-policy";
 
 type Inbound = typeof NativeMedia.Type;
+
 const endOfProviderSecond = 999;
+
 const stageLifetimeMs = 60_000,
   userLimit = 50,
   pageSize = 32;
+
 const denied = 403,
   conflict = 409,
   limited = 429,
   unavailable = 503,
   accepted = 202;
+
 const noStore = { "cache-control": "no-store" };
+
 const failure = (code: string, status: number): Response =>
   Response.json(
     {
@@ -43,9 +48,11 @@ const failure = (code: string, status: number): Response =>
     },
     { status, headers: { ...noStore, ...(code === "rate_limited" ? { "retry-after": "1" } : {}) } }
   );
+
 const standing = Effect.fn(function* (input: Inbound, current: number) {
   const user = UserId.make(input.userId),
     sql = yield* SqliteClient;
+
   const live = protectConsentStatement({
     subject: { _tag: "User", userId: user },
     requirement: "active",
@@ -54,20 +61,26 @@ const standing = Effect.fn(function* (input: Inbound, current: number) {
       params: [user, input.portfolio, input.bsuid, input.occurredAt + endOfProviderSecond],
     },
   });
+
   if ((yield* sql.unsafe(live.sql, live.params)).length !== 1) {
     return failure("user_action_required", denied);
   }
+
   const pro = activeProUserCondition({ userId: user, nowEpochMs: current }),
     used = allowanceConsumptionCount({ userId: user, allowance: "media_submission", current });
+
   const [raw] = yield* sql.unsafe(`SELECT ${pro.sql} AS pro,(${used.sql}) AS used`, [
     ...pro.params,
     ...used.params,
   ]);
+
   return yield* Schema.decodeUnknownEffect(Schema.Struct({ pro: Schema.Int, used: Schema.Int }))(
     raw
   );
 });
+
 type Standing = Exclude<Effect.Success<ReturnType<typeof standing>>, Response>;
+
 const response = Effect.fn(function* (id: string, current: number, meter: Standing) {
   const status = projectQuotaStatus({
     accessTier: meter.pro === 1 ? "pro" : "free",
@@ -79,9 +92,11 @@ const response = Effect.fn(function* (id: string, current: number, meter: Standi
       media_submission: meter.used,
     },
   });
+
   const allowance = yield* Schema.encodeEffect(Schema.toCodecJson(AllowanceMeter))(
     status.mediaSubmissions
   );
+
   return Response.json(
     {
       data: {
@@ -95,7 +110,9 @@ const response = Effect.fn(function* (id: string, current: number, meter: Standi
     { status: accepted, headers: noStore }
   );
 });
+
 const freeLimit = freeAllowanceLimits.media_submission;
+
 const checkLimit = (current: number): Response =>
   Response.json(
     {
@@ -109,16 +126,22 @@ const checkLimit = (current: number): Response =>
     },
     { status: limited, headers: noStore }
   );
+
 type Publication = { input: Inbound; digest: string; current: number };
+
 const inspect = Effect.fn(function* ({ input, digest, current }: Publication) {
   const meter = yield* standing(input, current);
+
   if (meter instanceof Response) return meter;
   const sql = yield* SqliteClient;
+
   const [published] =
     yield* sql`SELECT id,input_digest FROM media_submissions WHERE user_id=${input.userId} AND portfolio_id=${input.portfolio} AND message_id=${input.message}`;
+
   if (published === undefined) {
     return meter.pro === 0 && meter.used >= freeLimit ? checkLimit(current) : meter;
   }
+
   return published.input_digest === digest
     ? yield* response(
         yield* Schema.decodeUnknownEffect(Schema.String)(published.id),
@@ -127,55 +150,76 @@ const inspect = Effect.fn(function* ({ input, digest, current }: Publication) {
       )
     : failure("validation_failed", conflict);
 });
+
 const hold = Effect.fn(function* (
   { input, digest, current }: Publication,
   storage: DurableObjectStorage
 ) {
   const sql = yield* SqliteClient;
+
   return yield* withStoreAdmission((admitGrowth) =>
     Effect.gen(function* () {
       const admission = yield* inspect({ input, digest, current });
+
       if (admission instanceof Response) return admission;
+
       const [slot] =
         yield* sql`SELECT id,input_digest,state FROM media_capacity_receipts WHERE user_id=${input.userId} AND portfolio=${input.portfolio} AND message=${input.message}`;
+
       if (slot !== undefined) {
         if (slot.input_digest !== digest) return failure("validation_failed", conflict);
+
         return slot.state === "storing"
           ? yield* Schema.decodeUnknownEffect(Schema.String)(slot.id)
           : failure("unavailable", unavailable);
       }
+
       const [size] =
         yield* sql`SELECT count(*) AS used FROM (SELECT id FROM media_capacity_receipts WHERE user_id=${input.userId} UNION SELECT id FROM media_submissions WHERE user_id=${input.userId} AND capacity_held=1)`;
+
       if ((yield* Schema.decodeUnknownEffect(Schema.Int)(size?.used)) >= userLimit) {
         return failure("rate_limited", limited);
       }
+
       yield* admitGrowth;
+
       const id = newId(),
         due = current + stageLifetimeMs;
+
       yield* sql`INSERT INTO media_capacity_receipts(id,user_id,portfolio,message,input_digest,accepted_at_ms,expires_at_ms,due_ms,state) VALUES(${id},${input.userId},${input.portfolio},${input.message},${digest},${current},${current + mediaEvidenceLifetimeMs},${due},'storing')`;
       yield* preserveStoreAlarm(storage, due);
+
       return id;
     })
   );
 });
+
 const publish = Effect.fn(function* ({ input, digest, current }: Publication, id: string) {
   const sql = yield* SqliteClient,
     meter = yield* inspect({ input, digest, current });
+
   if (meter instanceof Response) return meter;
+
   const [claimed] =
     yield* sql`UPDATE media_capacity_receipts SET state='retained',due_ms=expires_at_ms WHERE id=${id} AND user_id=${input.userId} AND input_digest=${digest} AND state='storing' AND capacity_claimed=1 AND due_ms>${current} RETURNING id`;
+
   if (claimed === undefined) return failure("unavailable", unavailable);
   yield* sql`INSERT INTO media_submissions(id,user_id,portfolio_id,bsuid,message_id,input_digest,media_id,caption,accepted_at_ms,expires_at_ms,service_market,locale,time_zone) SELECT r.id,u.id,r.portfolio,${input.bsuid},r.message,r.input_digest,${input.mediaId},nullif(${input.caption},''),r.accepted_at_ms,r.expires_at_ms,u.service_market,u.locale,u.time_zone FROM media_capacity_receipts r JOIN users u ON u.id=r.user_id WHERE r.id=${id}`;
   yield* sql`INSERT INTO ingestion_review_items(id,user_id,source_kind,media_submission_id,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone) SELECT id,user_id,'media',id,'extraction-unavailable',accepted_at_ms,expires_at_ms,service_market,locale,time_zone FROM media_submissions WHERE id=${id}`;
+
   const units = meter.pro === 1 ? 0 : 1,
     period = DateTime.toEpochMillis(allowancePeriod(DateTime.makeUnsafe(current)).startsAt);
+
   yield* sql`INSERT INTO commercial_allowance_consumptions VALUES(${input.userId},'media_submission',${id},${period},${current},${units})`;
   yield* sql`INSERT INTO audit_entries(record_type,id,user_id,outcome,occurred_at_ms) VALUES('media_admission',${id},${input.userId},'accepted',${current})`;
+
   const [evidence] =
     yield* sql`SELECT 1 FROM media_submissions m JOIN ingestion_review_items r ON r.user_id=m.user_id AND r.media_submission_id=m.id JOIN commercial_allowance_consumptions c ON c.user_id=m.user_id AND c.allowance='media_submission' AND c.identity=m.id JOIN audit_entries a ON a.user_id=m.user_id AND a.record_type='media_admission' AND a.outcome='accepted' AND a.id=m.id WHERE m.id=${id} AND m.user_id=${input.userId} AND m.input_digest=${digest} AND c.units=${units}`;
+
   if (evidence === undefined) {
     return yield* new CanonicalAdmissionUnavailable({ cause: "media_publication" });
   }
+
   return yield* response(id, current, { ...meter, used: meter.used + units });
 });
 
@@ -188,11 +232,14 @@ export const admitLocalMedia = Effect.fn(function* ({
   const input = yield* Schema.decodeUnknownEffect(NativeMedia)(
     yield* Effect.tryPromise(() => request.json())
   );
+
   if (!owns(input.userId)) return failure("user_action_required", denied);
+
   const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Array(Schema.String)))([
     input.mediaId,
     input.caption,
   ]);
+
   const digest = Hex.encode(
     new Uint8Array(
       yield* Effect.tryPromise(() =>
@@ -200,18 +247,23 @@ export const admitLocalMedia = Effect.fn(function* ({
       )
     )
   );
+
   const current = yield* Clock.currentTimeMillis;
   const id = yield* hold({ input, digest, current }, storage);
+
   if (id instanceof Response) return id;
+
   if (
     !(yield* claimIngestionCapacity({ directory: env.DIRECTORY, purpose: "media" }, id, storage))
   ) {
     return failure("rate_limited", limited);
   }
+
   return yield* publish({ input, digest, current: yield* Clock.currentTimeMillis }, id).pipe(
     withStoreCapacity("growth")
   );
 });
+
 export const releaseDueMedia = Effect.fn(function* (
   directory: DurableObjectNamespace,
   current: number,
@@ -219,9 +271,11 @@ export const releaseDueMedia = Effect.fn(function* (
 ) {
   const sql = yield* SqliteClient;
   const filter = erasing === undefined ? sql`due_ms<=${current}` : sql`user_id=${erasing}`;
+
   const work = yield* withStoreCapacity("required")(
     sql`UPDATE media_capacity_receipts SET state='discarding' WHERE id IN(SELECT id FROM media_capacity_receipts WHERE ${filter} ORDER BY due_ms LIMIT ${pageSize}) RETURNING id`
   );
+
   for (const row of work) {
     const id = yield* Schema.decodeUnknownEffect(Schema.String)(row.id);
     yield* updateSharedCapacity({ directory, purpose: "media" }, id, "Release");

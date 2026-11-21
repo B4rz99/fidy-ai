@@ -18,6 +18,7 @@ type ToolbarProps = Readonly<{
   page: number;
   control: InboxControl;
 }>;
+
 const ReviewSelection = ({
   view,
   visibleItems,
@@ -28,6 +29,7 @@ const ReviewSelection = ({
 }: ToolbarProps): JSX.Element => {
   const checked = new Set(control.checked);
   const visibleIds = new Set(visibleItems.map((item) => item.id));
+
   return (
     <SelectionSummary
       showClear
@@ -37,6 +39,7 @@ const ReviewSelection = ({
       onClear={control.clearChecked}
       onRemove={(id) => {
         const item = view.items.find((item) => item.id === id);
+
         if (item !== undefined) control.toggle(item);
       }}
       items={view.items.flatMap((item, index) =>
@@ -54,6 +57,7 @@ const ReviewSelection = ({
     />
   );
 };
+
 const ReviewBulkAction = ({
   selected,
   control,
@@ -61,6 +65,7 @@ const ReviewBulkAction = ({
   const pending = selected.some((item) => item.status === "pending");
   const label = selectedCountLabel(control.checked.length);
   const unavailable = selected.length === 0 || selected.length !== control.checked.length;
+
   return (
     <Button
       variant="outline"
@@ -71,12 +76,15 @@ const ReviewBulkAction = ({
     </Button>
   );
 };
+
 export const ReviewToolbar = ({ view, control, ...props }: ToolbarProps): JSX.Element => {
   if (control.checked.length === 0 && control.undoCount === 0 && control.feedback === "") {
     return <></>;
   }
+
   const checked = new Set(control.checked);
   const selected = view.items.filter((item) => checked.has(item.id));
+
   return (
     <div data-review="bulk">
       <ReviewSelection {...props} view={view} control={control} />

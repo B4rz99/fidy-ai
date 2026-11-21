@@ -8,10 +8,15 @@ import type { DashboardCatalogEntry } from "./editor-model";
 import { dashboardTargetAcceptsSource, resolveDashboardDrop } from "./drag-model";
 
 const sourceId = Schema.decodeSync(WidgetId)("f1d1a000-0000-4000-8000-000000000801");
+
 const targetId = Schema.decodeSync(WidgetId)("f1d1a000-0000-4000-8000-000000000802");
+
 const newId = Schema.decodeSync(WidgetId)("f1d1a000-0000-4000-8000-000000000803");
+
 const TransactionListLimit = Schema.Int.pipe(Schema.brand("TransactionListLimit"));
+
 const transactionListLimit = 10;
+
 const entry = {
   id: "recent-transactions",
   name: "Transacciones recientes",
@@ -22,7 +27,9 @@ const entry = {
     limit: Schema.decodeSync(TransactionListLimit)(transactionListLimit),
   },
 } satisfies DashboardCatalogEntry;
+
 const announcementSource = { kind: "widget" as const, widgetId: sourceId, label: "Gastos" };
+
 const centerTarget = {
   kind: "widget-edge" as const,
   widgetId: targetId,
@@ -79,11 +86,13 @@ describe("Dashboard semantic drag destinations", () => {
       [{ kind: "widget-edge", widgetId: targetId, edge: "left" }, "a la izquierda del Widget"],
       [centerTarget, "el centro del Widget para intercambiar posiciones"],
     ] as const;
+
     for (const [target, label] of destinations) {
       expect(dashboardAnnouncementText.over(announcementSource, target, Option.none())).toEqual(
         Option.some(`Gastos. ${label}.`)
       );
     }
+
     expect(
       dashboardAnnouncementText.over(announcementSource, { kind: "unknown" }, Option.none())
     ).toEqual(Option.none());
@@ -172,11 +181,13 @@ describe("Dashboard drag adapter", () => {
       widgetId: sourceId,
       label: "Gastos",
     });
+
     const target: Option.Option<DashboardDropTarget> = Option.some({
       kind: "widget-edge",
       widgetId: sourceId,
       edge: "left",
     });
+
     expect(
       resolveDashboardDrop({ canceled: true, makeWidgetId: () => newId, source, target })
     ).toEqual(Option.none());

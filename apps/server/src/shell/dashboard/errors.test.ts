@@ -18,8 +18,11 @@ import { toApiFailure } from "./operations";
 import "~/shell/api";
 
 const widgetId = Schema.decodeSync(WidgetId)("f1d1a000-0000-4000-8000-000000000991");
+
 const widgetIds = Schema.decodeSync(LayoutRegionSelector)([widgetId]);
+
 const categoryId = Schema.decodeSync(CategoryId)("f1d1a000-0000-4000-8000-000000000992");
+
 const caller = {
   accessCaller: { _tag: "PAT" as const, capabilities: ["dashboard" as const] },
   tier: "free" as const,

@@ -56,12 +56,14 @@ it("rejects UUID spellings that would be canonicalized", () => {
 
 it("accepts continuation and content unions at their public seams", () => {
   const turnId = TranscriptTurnId.make("f1d1a000-0000-4000-8000-000000000301");
+
   const user = UserTranscriptEntry.make({
     id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000302"),
     turnId,
     text: TranscriptText.make("request"),
     occurredAt: DateTime.makeUnsafe("2026-08-11T12:00:00Z"),
   });
+
   const call = CanonicalToolCallEntry.make({
     id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000303"),
     turnId,
@@ -98,6 +100,7 @@ it("accepts non-reversed terminal times for every terminal ConversationTurn", ()
 
 it("models fixed metadata-only failure markers and rejects reversed Turn time", () => {
   const turnId = TranscriptTurnId.make("f1d1a000-0000-4000-8000-000000000301");
+
   const marker = FailedTurnTranscriptEntry.make({
     id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000302"),
     turnId,
@@ -107,6 +110,7 @@ it("models fixed metadata-only failure markers and rejects reversed Turn time", 
 
   expect(Object.keys(marker).toSorted()).toEqual(["_tag", "id", "occurredAt", "reason", "turnId"]);
   expect(Result.isFailure(Schema.decodeUnknownResult(TranscriptContentEntry)(marker))).toBe(true);
+
   const reversed = Schema.decodeResult(ConversationTurn)({
     _tag: "Failed",
     id: turnId,
@@ -114,6 +118,7 @@ it("models fixed metadata-only failure markers and rejects reversed Turn time", 
     startedAt: "2026-08-11T12:01:00Z",
     terminalAt: "2026-08-11T12:00:00Z",
   });
+
   expect(Result.isFailure(reversed)).toBe(true);
   expect(Result.isFailure(reversed) ? String(reversed.failure) : "").toContain("terminalAt");
   expect(

@@ -31,6 +31,7 @@ const ChartContainer = ({
 }: ChartContainerProps): React.JSX.Element => {
   const uniqueId = React.useId().replaceAll(":", "");
   const chartId = `chart-${uniqueId}`;
+
   return (
     <div
       className={cn(

@@ -11,6 +11,7 @@ const setup = Effect.fn(function* (bsuid: string = "CO.13491208655302741918") {
   const runtime = yield* (yield* nativeBillingPlatform)(),
     owner = yield* seed(runtime, alice, false),
     other = yield* seed(runtime, bob, false);
+
   const portfolio = "123456789012345";
   yield* owner.exec(
     "UPDATE users SET whatsapp_portfolio_id=?,whatsapp_bsuid=?,whatsapp_verified_at_ms=? WHERE id=?",
@@ -28,6 +29,7 @@ const setup = Effect.fn(function* (bsuid: string = "CO.13491208655302741918") {
       "image-fixture"
     )
   );
+
   const deliver = Effect.fn(function* (message: string, caption?: string) {
     const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
       message: {
@@ -42,9 +44,11 @@ const setup = Effect.fn(function* (bsuid: string = "CO.13491208655302741918") {
       conversation: { business_scoped_user_id: bsuid },
       phone_number_id: portfolio,
     });
+
     const signature = new Bun.CryptoHasher("sha256", "callback-fixture-secret")
       .update(body)
       .digest("hex");
+
     return yield* native(() =>
       runtime.dispatchFetch("https://api.fidyapp.com/providers/kapso/callback", {
         method: "POST",
@@ -57,6 +61,7 @@ const setup = Effect.fn(function* (bsuid: string = "CO.13491208655302741918") {
       })
     );
   });
+
   const grant = Effect.gen(function* () {
     yield* owner.exec(
       "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms,disclosure_json) VALUES('22570000-0000-4000-8000-000000000001',?,'processing_grant',?,?)",
@@ -65,16 +70,20 @@ const setup = Effect.fn(function* (bsuid: string = "CO.13491208655302741918") {
       yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(currentDisclosureFor())
     );
   });
+
   return { owner, other, deliver, grant };
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "publishes a signed image only in its active User, atomically charging and retaining its original Review and media Audit",
     () =>
       Effect.gen(function* () {
         const { owner, other, deliver, grant } = yield* setup();
+
         const counts =
           "SELECT (SELECT count(*) FROM media_submissions) AS media,(SELECT count(*) FROM ingestion_review_items WHERE source_kind='media') AS review,(SELECT count(*) FROM audit_entries WHERE record_type='media_admission') AS audit,(SELECT coalesce(sum(units),0) FROM commercial_allowance_consumptions WHERE allowance='media_submission') AS units";
+
         expect((yield* deliver("wamid.media1", "original")).status).toBe(403);
         expect(yield* owner.exec(counts)).toEqual([{ media: 0, review: 0, audit: 0, units: 0 }]);
         yield* grant;
@@ -127,8 +136,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           "CREATE TRIGGER no_media_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='media_admission' BEGIN SELECT RAISE(IGNORE); END"
         );
         expect((yield* deliver("wamid.audit-delay", "photo")).status).toBe(503);
+
         const evidence =
           "SELECT (SELECT count(*) FROM media_submissions) AS media,(SELECT count(*) FROM ingestion_review_items WHERE source_kind='media') AS reviews,(SELECT count(*) FROM commercial_allowance_consumptions WHERE allowance='media_submission') AS charges";
+
         expect(yield* owner.exec(evidence)).toEqual([{ media: 0, reviews: 0, charges: 0 }]);
         yield* owner.exec("DROP TRIGGER no_media_audit");
         expect((yield* deliver("wamid.audit-delay", "photo")).status).toBe(202);
@@ -142,6 +153,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const { owner, other, deliver, grant } = yield* setup();
         expect((yield* deliver("wamid.voice1")).status).toBe(429);
         yield* grant;
+
         for (const message of [
           "wamid.voice1",
           "wamid.voice1",
@@ -152,9 +164,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         ]) {
           expect((yield* deliver(message)).status).toBe(200);
         }
+
         expect((yield* deliver("wamid.voice6")).status).toBe(429);
+
         const count =
           "SELECT (SELECT count(*) FROM whatsapp_voice_refusals WHERE outcome='accepted') AS refusals,(SELECT count(*) FROM hosted_turns) AS turns";
+
         expect(yield* owner.exec(count)).toEqual([{ refusals: 5, turns: 0 }]);
         expect(yield* other.exec(count)).toEqual([{ refusals: 0, turns: 0 }]);
         yield* owner.exec(

@@ -6,10 +6,13 @@ import type { HostedContinuationEvent } from "../../../src/shell/hosted-inferenc
 import { transactionReceipt } from "./capture-reply";
 
 type HostedToolEvent = Extract<HostedContinuationEvent, { readonly _tag: "ToolResult" }>;
+
 export type HostedToolAction =
   | Readonly<{ _tag: "Result"; event: HostedToolEvent; mutationSucceeded: boolean }>
   | Readonly<{ _tag: "Challenge"; text: TranscriptText }>;
+
 const queryAbsence = Schema.Struct({ error: Schema.Struct({ code: Schema.Literal("not_found") }) });
+
 const confirmedQueryResult = (outcome: CanonicalToolOutcome): boolean =>
   outcome._tag === "Succeeded" ||
   (outcome._tag === "CanonicalOperationFailed" && Schema.is(queryAbsence)(outcome.failure));
@@ -32,10 +35,12 @@ export const failedQueryReply = (
 
 const toolReceipt = (action: HostedToolAction, timeZone: string): Option.Option<TranscriptText> => {
   if (action._tag !== "Result" || action.event.outcome._tag !== "Succeeded") return Option.none();
+
   if (action.event.operation === "connections.connectInstitution") {
     const result = Schema.decodeUnknownOption(Schema.Struct({ data: ConnectInstitutionResult }))(
       action.event.outcome.output
     );
+
     if (Option.isSome(result) && result.value.data.type === "continue_in_browser") {
       return Option.some(
         TranscriptText.make(
@@ -44,6 +49,7 @@ const toolReceipt = (action: HostedToolAction, timeZone: string): Option.Option<
       );
     }
   }
+
   return transactionReceipt({
     operation: action.event.operation,
     output: action.event.outcome.output,
@@ -63,18 +69,22 @@ export const committedAnswer = ({
       "Una operación se completó; el estado de las demás no está confirmado."
     );
   }
+
   const partial = actions.value.some(
     (action) =>
       action._tag === "Result" &&
       action.event.outcome._tag !== "Succeeded" &&
       action.event.outcome._tag !== "CommittedOutputUnavailable"
   );
+
   if (!partial) {
     for (const action of actions.value) {
       const receipt = toolReceipt(action, timeZone);
+
       if (Option.isSome(receipt)) return receipt.value;
     }
   }
+
   return TranscriptText.make(
     partial
       ? "Completé una parte de lo que pediste. Quedaron cambios sin hacer."

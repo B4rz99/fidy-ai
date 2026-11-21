@@ -17,9 +17,13 @@ const prepareObservedRequest = (origin: string, context: boolean): InitialBrowse
       transactions: false,
     })
   );
+
 const origin = "https://api.test.fidyapp.com";
+
 const first = "20000000-0000-4000-8000-000000000001";
+
 const second = "20000000-0000-4000-8000-000000000002";
+
 const granted = {
   binding: first,
   initial: {
@@ -39,23 +43,29 @@ const granted = {
     },
   },
 };
+
 afterEach(() => vi.unstubAllGlobals());
+
 it("drops all prepared private context when the current cookie's binding changed before adoption", () => {
   const network = vi
     .fn()
     .mockResolvedValueOnce(Response.json(granted))
     .mockResolvedValueOnce(Response.json({ binding: second }));
+
   vi.stubGlobal("fetch", network);
   const request = prepareObservedRequest(origin, true);
   const initial = beginInitialBrowserSession({ ...request, request });
+
   return initial.ready
     .then(() => {
       const result = Effect.runSync(Option.getOrThrow(initial.take({})).result);
       expect(Exit.isSuccess(result)).toBe(true);
+
       if (Exit.isSuccess(result)) {
         expect(result.value.binding).toBe(second);
         expect(Option.isNone(result.value.initial)).toBe(true);
       }
+
       expect(network).toHaveBeenCalledTimes(2);
     })
     .finally(() => initial.cancel());
@@ -70,6 +80,7 @@ it("an authentication transition before mount retires even an already-fulfilled 
       yield* Effect.tryPromise(() => request.result);
       window.dispatchEvent(new Event(authenticationEndedEvent));
       const initial = beginInitialBrowserSession({ ...request, request });
+
       try {
         yield* Effect.tryPromise(() => initial.ready);
         expect(Option.isNone(initial.take({}))).toBe(true);
@@ -79,6 +90,7 @@ it("an authentication transition before mount retires even an already-fulfilled 
       }
     })
   ));
+
 it("only the same mounted observer may replay a prepared observation; another epoch cannot adopt it", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -91,6 +103,7 @@ it("only the same mounted observer may replay a prepared observation; another ep
       );
       const request = prepareObservedRequest(origin, true);
       const initial = beginInitialBrowserSession({ ...request, request });
+
       try {
         yield* Effect.tryPromise(() => initial.ready);
         const owner = {};
@@ -104,6 +117,7 @@ it("only the same mounted observer may replay a prepared observation; another ep
       }
     })
   ));
+
 it("retires a completed synchronous handoff when authentication changes before adoption", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -114,6 +128,7 @@ it("retires a completed synchronous handoff when authentication changes before a
       );
       const request = prepareObservedRequest(origin, true);
       const initial = beginInitialBrowserSession({ ...request, request });
+
       try {
         yield* Effect.tryPromise(() => initial.ready);
         window.dispatchEvent(new Event(authenticationEndedEvent));
@@ -124,6 +139,7 @@ it("retires a completed synchronous handoff when authentication changes before a
       }
     })
   ));
+
 it("also rechecks the current cookie when private entry has no prepared request", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -131,12 +147,15 @@ it("also rechecks the current cookie when private entry has no prepared request"
         .fn()
         .mockResolvedValueOnce(Response.json(granted))
         .mockResolvedValueOnce(Response.json({ binding: second }));
+
       vi.stubGlobal("fetch", network);
+
       const entry = yield* loadBrowserSessionEntry({
         apiOrigin: origin,
         context: true,
         request: Option.none(),
       });
+
       expect(entry.binding).toBe(second);
       expect(Option.isNone(entry.initial)).toBe(true);
       expect(network).toHaveBeenCalledTimes(2);

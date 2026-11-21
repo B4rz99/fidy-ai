@@ -22,10 +22,14 @@ export const keywordRuleIdFromPath: typeof decodeRuleId = (input) => decodeRuleI
 export const keywordRuleUnknownId = (): Response => unknownRuleId();
 
 export const categorizeLocalCapture: typeof nativeCategory = (input) => nativeCategory(input);
+
 export const localKeywordRules: typeof listRules = (user) => listRules(user);
+
 export const newKeywordRuleId: typeof allocateRuleId = () => allocateRuleId();
+
 export const prepareLocalKeywordRule: typeof prepareRule = (command, user, current) =>
   prepareRule(command, user, current);
 
 export const resolveLocalCategory: typeof resolveCategory = (input) => resolveCategory(input);
+
 export const retainLocalCategory: typeof retainCategory = (reference) => retainCategory(reference);

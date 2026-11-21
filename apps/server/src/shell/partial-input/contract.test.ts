@@ -24,6 +24,7 @@ it("partials identified object members inside arrays, unions, records, and suspe
     }),
     Schema.Struct({ kind: Schema.Literal("simple"), value: Schema.String }),
   ]).annotate({ identifier: "CatalogItem" });
+
   const input = Schema.Struct({
     items: Schema.Array(item).annotate({ identifier: "CatalogItems" }),
     lookup: Schema.Record(
@@ -32,7 +33,9 @@ it("partials identified object members inside arrays, unions, records, and suspe
     ),
     tree: CatalogTree,
   });
+
   const partial = makePartialInputSchema(input);
+
   const result = Schema.encodeUnknownResult(partial)({
     items: [{ kind: "detailed", detail: { left: "known" } }],
     lookup: { first: { left: "known" } },
@@ -46,6 +49,7 @@ it("partials identified object members inside arrays, unions, records, and suspe
       HttpApiEndpoint.get("getPartial", "/partial", { success: partial })
     )
   );
+
   const published = JSON.stringify(OpenApi.fromApi(surfaceApi));
   expect(published).toContain("CatalogItemsPartial");
   expect(published).toContain("CatalogItemPartial");
@@ -60,6 +64,7 @@ it("checks only record values whose keys match each index signature", () => {
       Schema.Struct({ right: Schema.String, additional: Schema.String })
     ),
   ]).check(Schema.makeFilter(() => ({ path: [], issue: "Expected allowed" })));
+
   const partial = makePartialInputSchema(checkedInput);
   const result = Schema.encodeUnknownResult(partial)({ entry: { left: "known" } });
 
@@ -68,12 +73,14 @@ it("checks only record values whose keys match each index signature", () => {
 
 it("matches template, numeric, symbol, and union record keys before checking values", () => {
   const value = Schema.Struct({ left: Schema.String, right: Schema.String });
+
   const checkedRecord = (key: Schema.Record.Key): Schema.Codec<unknown, unknown> =>
     makePartialInputSchema(
       Schema.StructWithRest(Schema.Struct({}), [Schema.Record(key, value)]).check(
         Schema.makeFilter(() => ({ path: [], issue: "Expected allowed" }))
       )
     );
+
   const template = checkedRecord(Schema.TemplateLiteral(["item-", Schema.String]));
   const number = checkedRecord(Schema.Finite);
   const symbolOrNumber = checkedRecord(Schema.Union([Schema.Symbol, Schema.Finite]));
@@ -109,11 +116,14 @@ it("does not use a mismatched union member to treat partial input as complete", 
       input.label === "allowed" ? undefined : { path: ["label"], issue: "Expected allowed" }
     )
   );
+
   const partial = makePartialInputSchema(checkedInput);
+
   const incomplete = Schema.encodeUnknownResult(partial)({
     choice: { kind: "detailed" },
     label: "blocked",
   });
+
   const complete = Schema.encodeUnknownResult(partial)({
     choice: {
       kind: "detailed",
@@ -134,11 +144,14 @@ it("does not select a shallower overlapping union member through excess properti
     }),
     Schema.Struct({ kind: Schema.Literal("entry") }),
   ]).check(Schema.makeFilter(() => ({ path: [], issue: "Expected allowed" })));
+
   const partial = makePartialInputSchema(checkedInput);
+
   const incomplete = Schema.encodeUnknownResult(partial)({
     kind: "entry",
     detail: { left: "known" },
   });
+
   const complete = Schema.encodeUnknownResult(partial)({
     kind: "entry",
     detail: { left: "known", right: "known" },
@@ -150,6 +163,7 @@ it("does not select a shallower overlapping union member through excess properti
 
 it("delays enclosing checks until fixed and variadic tuple members are complete", () => {
   const member = Schema.Struct({ left: Schema.String, right: Schema.String });
+
   const checkedInput = Schema.Struct({
     fixed: Schema.Tuple([member, Schema.Finite]),
     variadic: Schema.TupleWithRest(Schema.Tuple([member]), [member, member]),
@@ -159,7 +173,9 @@ it("delays enclosing checks until fixed and variadic tuple members are complete"
       input.label === "allowed" ? undefined : { path: ["label"], issue: "Expected allowed" }
     )
   );
+
   const partial = makePartialInputSchema(checkedInput);
+
   const incompleteFixed = Schema.encodeUnknownResult(partial)({
     fixed: [{ left: "known" }, 1],
     variadic: [
@@ -168,11 +184,13 @@ it("delays enclosing checks until fixed and variadic tuple members are complete"
     ],
     label: "blocked",
   });
+
   const incompleteVariadic = Schema.encodeUnknownResult(partial)({
     fixed: [{ left: "known", right: "known" }, 1],
     variadic: [{ left: "known", right: "known" }, { left: "known" }],
     label: "blocked",
   });
+
   const complete = Schema.encodeUnknownResult(partial)({
     fixed: [{ left: "known", right: "known" }, 1],
     variadic: [
@@ -191,6 +209,7 @@ it("delays array and union checks while their selected nested input is incomplet
   const member = Schema.Struct({ left: Schema.String, right: Schema.String });
   const rejected = Schema.makeFilter(() => ({ path: [], issue: "Expected allowed" }));
   const partialArray = makePartialInputSchema(Schema.Array(member).check(rejected));
+
   const partialUnion = makePartialInputSchema(
     Schema.Union([
       Schema.Struct({ kind: Schema.Literal("object"), value: member }),
@@ -224,10 +243,15 @@ it("retains tuple arity and order while partialing nested tuple values", () => {
     readonly left: string;
     readonly right: string;
   };
+
   type PartialTupleObject = Partial<TupleObject>;
+
   type InputTuple = readonly [TupleObject, number];
+
   type PartialTuple = readonly [PartialTupleObject, number];
+
   type VariadicInputTuple = readonly [TupleObject, ...Array<TupleObject>, number];
+
   type PartialVariadicTuple = readonly [PartialTupleObject, ...Array<PartialTupleObject>, number];
 
   expectTypeOf<PartialInput<InputTuple>>().toEqualTypeOf<PartialTuple>();
@@ -239,6 +263,7 @@ it("retains tuple arity and order while partialing nested tuple values", () => {
   const partial = makePartialInputSchema(
     Schema.Tuple([Schema.Struct({ left: Schema.String, right: Schema.String }), Schema.Finite])
   );
+
   const nestedPartial = Schema.encodeUnknownResult(partial)([{ left: "known" }, 1]);
   const wrongArity = Schema.encodeUnknownResult(partial)([{ left: "known" }, 1, 2]);
   const wrongOrder = Schema.encodeUnknownResult(partial)([1, { left: "known" }]);

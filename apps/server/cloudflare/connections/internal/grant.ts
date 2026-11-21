@@ -4,8 +4,11 @@ import { Base64Url } from "effect/encoding";
 import { ConnectionAuthorizationUnavailable, type ConnectionBankGrant } from "../contract";
 
 const keyLength = 32;
+
 const nonceLength = 12;
+
 const EncodedKey = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/u));
+
 const Grant = Schema.Struct({
   accessToken: Schema.OptionFromNullOr(Schema.String),
   refreshToken: Schema.OptionFromNullOr(Schema.String),
@@ -18,6 +21,7 @@ export const decodeGrantKey = (
   Effect.gen(function* () {
     const encoded = yield* Schema.decodeEffect(EncodedKey)(Redacted.value(key));
     const bytes = Base64Url.decode(encoded);
+
     if (
       Result.isFailure(bytes) ||
       bytes.success.length !== keyLength ||
@@ -25,6 +29,7 @@ export const decodeGrantKey = (
     ) {
       return yield* new ConnectionAuthorizationUnavailable();
     }
+
     return bytes.success;
   }).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable()));
 
@@ -33,19 +38,23 @@ export const sealGrant = (
 ): Effect.Effect<string, ConnectionAuthorizationUnavailable, SecureRandom.SecureRandom> =>
   Effect.gen(function* () {
     const bytes = yield* decodeGrantKey(input.key);
+
     const plaintext = yield* Schema.encodeEffect(Schema.fromJsonString(Grant))({
       accessToken: Option.map(input.grant.accessToken, Redacted.value),
       refreshToken: Option.map(input.grant.refreshToken, Redacted.value),
       expiresAtMilliseconds: input.grant.expiresAtMilliseconds,
     });
+
     const entropy = yield* SecureRandom.SecureRandom;
     const nonce = yield* entropy.randomBytes(nonceLength);
+
     return yield* Effect.tryPromise({
       try: () =>
         crypto.subtle
           .importKey("raw", Uint8Array.from(bytes), "AES-GCM", false, ["encrypt"])
           .then((key) => {
             const iv = Uint8Array.from(nonce);
+
             return crypto.subtle
               .encrypt(
                 { name: "AES-GCM", iv, additionalData: new TextEncoder().encode(input.purpose) },
@@ -67,11 +76,14 @@ export const openGrant = (
   Effect.gen(function* () {
     const bytes = yield* decodeGrantKey(input.key);
     const parts = input.envelope.split(".");
+
     if (parts.length !== 3 || parts[0] !== "v1") {
       return yield* new ConnectionAuthorizationUnavailable();
     }
+
     const nonce = Base64Url.decode(parts[1] ?? "");
     const ciphertext = Base64Url.decode(parts[2] ?? "");
+
     if (
       Result.isFailure(nonce) ||
       nonce.success.length !== nonceLength ||
@@ -79,6 +91,7 @@ export const openGrant = (
     ) {
       return yield* new ConnectionAuthorizationUnavailable();
     }
+
     const plaintext = yield* Effect.tryPromise({
       try: () =>
         crypto.subtle
@@ -97,7 +110,9 @@ export const openGrant = (
           .then((decrypted) => new TextDecoder().decode(decrypted)),
       catch: () => new ConnectionAuthorizationUnavailable(),
     });
+
     const grant = yield* Schema.decodeEffect(Schema.fromJsonString(Grant))(plaintext);
+
     return {
       ...grant,
       accessToken: Option.map(grant.accessToken, Redacted.make),

@@ -4,7 +4,9 @@ import test from "node:test";
 import { launderingViolations } from "./laundering.mjs";
 
 const packageRoot = "/synthetic/server";
+
 const from = "src/shell/example/operations.ts";
+
 const privateTarget = "src/shell/example/private.ts";
 
 /**
@@ -560,6 +562,7 @@ await test("rejects private values stored in public constructor parameter proper
       declaration
     );
   }
+
   assert.deepEqual(
     inspect(`import { hidden } from "@example/source"; export class Api {
     constructor(private repository = hidden) {}
@@ -584,6 +587,7 @@ await test("retains private identity through assignments to public class fields 
       declaration
     );
   }
+
   assert.deepEqual(
     inspect(`import { hidden } from "@example/source"; export class Api {
     #stored: unknown;
@@ -806,6 +810,7 @@ await test("Published Trio files reject namespace blocks for both type and value
     reason:
       "Published Trio files declare earned names directly; TypeScript namespace and module blocks cannot wrap or hide their public surface.",
   };
+
   for (const source of [
     'import type { PrivateRow } from "@example/source"; export namespace Published { export type Row = PrivateRow; }',
     'import { hidden } from "@example/source"; export namespace Published { export const invoke = hidden; }',

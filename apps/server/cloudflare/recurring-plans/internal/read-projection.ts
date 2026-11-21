@@ -7,6 +7,7 @@ export const workspaceMonths = (
   query: typeof RecurringWorkspaceQuery.Type
 ): ReadonlyArray<string> => {
   const prior = query.previousMonth ?? monthOffset(query.month, -1);
+
   return [
     ...new Set(
       [prior, query.month].flatMap((month) =>
@@ -15,7 +16,9 @@ export const workspaceMonths = (
     ),
   ].sort();
 };
+
 const monthLength = 7;
+
 const monthOffset = (month: string, offset: number): string =>
   DateTime.formatIsoDateUtc(
     DateTime.add(DateTime.makeUnsafe(`${month}-01`), { months: offset })
@@ -30,12 +33,15 @@ const revisionSelection = (
     from: `${month}-01`,
     through: `${monthOffset(month, 1)}-01`,
   }));
+
   windows.push({
     from: DateTime.formatIsoDateUtc(DateTime.subtract(now, { days: 1 })),
     through: DateTime.formatIsoDateUtc(DateTime.add(now, { days: 2 })),
   });
+
   const point = (kind: "MIN" | "MAX", condition: string): string =>
     `(SELECT ${kind}(r.from_date) FROM recurring_plan_revisions r WHERE r.user_id=p.user_id AND r.plan_id=p.id ${condition})`;
+
   return {
     sql: `WITH owner AS MATERIALIZED (${users.sql}), windows AS (
     SELECT json_extract(value,'$.from') lo,json_extract(value,'$.through') hi FROM json_each(?)
@@ -69,11 +75,15 @@ export const localWorkspaceProjection = Effect.fn(function* (
   now: DateTime.Utc
 ) {
   const months = workspaceMonths(query);
+
   if (query.view === "compact") {
     const revisions = revisionSelection({ sql: "SELECT ? AS userId", params: [user] }, months, now);
     const projection = yield* readLocalCompactProjection(user, revisions, now);
+
     return { ...projection, months };
   }
+
   const document = yield* readLocalDocument(user);
+
   return { schedule: document, editing: document, months };
 });

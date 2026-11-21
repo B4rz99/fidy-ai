@@ -6,7 +6,9 @@ import {
 } from "./operations";
 
 const current = 1_000_000_000;
+
 const dayMs = 86_400_000;
+
 describe("reviewed OAuth expiration", () => {
   it.each([
     {
@@ -51,6 +53,7 @@ describe("reviewed OAuth expiration", () => {
     );
   });
 });
+
 describe("finite OAuth issuance", () => {
   it("gives authorization codes only one minute", () => {
     expect(oauthAuthorizationCodeExpiresAt(current)).toBe(1_000_060_000);

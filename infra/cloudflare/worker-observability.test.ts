@@ -24,13 +24,17 @@ const UploadMetadata = Schema.fromJsonString(
 it.effect("uploads query-redacted custom logs without automatic request invocations", () =>
   Effect.gen(function* () {
     let captured = false;
+
     const client = HttpClient.make((request) =>
       Effect.gen(function* () {
         expect(request.method).toBe("PUT");
+
         if (request.body._tag !== "FormData") return yield* Effect.die("Expected Worker upload");
+
         const metadata = yield* Schema.decodeUnknownEffect(UploadMetadata)(
           request.body.formData.get("metadata")
         );
+
         expect(metadata.observability).toEqual({
           enabled: true,
           redact_query_string: true,
@@ -38,12 +42,14 @@ it.effect("uploads query-redacted custom logs without automatic request invocati
           logs: { enabled: true, invocation_logs: false, persist: true },
         });
         captured = true;
+
         return HttpClientResponse.fromWeb(
           request,
           Response.json({ success: true, errors: [], messages: [], result: {} })
         );
       }).pipe(Effect.orDie)
     );
+
     yield* putScript({
       accountId: "test-account",
       scriptName: "fidy-authentication-test",

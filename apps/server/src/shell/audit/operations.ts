@@ -61,6 +61,7 @@ export const prepareOAuthActivityPage = (
           })
         )
       )(raw);
+
       const entries = yield* Effect.forEach(rows, (row) =>
         Schema.decodeUnknownEffect(Schema.toType(OAuthRecentActivity))(
           row.activity.map((entry) => ({
@@ -76,6 +77,7 @@ export const prepareOAuthActivityPage = (
           ])
         )
       );
+
       return new Map(entries);
     }).pipe(Effect.catchCause(() => Effect.fail(new AuditUnavailable()))),
 });
@@ -121,13 +123,16 @@ export const recordClaimedPAT: typeof patEvidence.recordClaimedPAT = (input) =>
 
 export const recordPATList: typeof patEvidence.recordPATList = (input) =>
   patEvidence.recordPATList(input);
+
 export const recordOnePATRevocation: typeof patEvidence.recordOnePATRevocation = (input) =>
   patEvidence.recordOnePATRevocation(input);
 
 export const recordAllPATRevocations: typeof patEvidence.recordAllPATRevocations = (input) =>
   patEvidence.recordAllPATRevocations(input);
+
 export const recordCanonicalPATWork: typeof patEvidence.recordCanonicalPATWork = (input) =>
   patEvidence.recordCanonicalPATWork(input);
+
 export const recordRejectedPATWork: typeof patEvidence.recordRejectedPATWork = (input) =>
   patEvidence.recordRejectedPATWork(input);
 
@@ -149,6 +154,7 @@ export const preparePATActivity = (
   decode: (rows: unknown) => Effect.Effect<PATActivityHistory, AuditUnavailable>;
 }> => {
   const cutoff = input.current - auditRetentionDays * utcDayMilliseconds;
+
   return {
     statement: {
       sql: `SELECT operation,outcome,occurred_at_ms AS occurredAt FROM audit_entries WHERE record_type='credential_call' AND user_id = ? AND pat_id = (${input.grant.sql})
@@ -162,6 +168,7 @@ export const preparePATActivity = (
         const rows = yield* Schema.decodeUnknownEffect(
           Schema.Array(ActivityRow).check(Schema.isMaxLength(maximumPATActivityEntries + 1))
         )(raw);
+
         return yield* Schema.decodeUnknownEffect(Schema.toType(PATActivityHistory))({
           entries: rows.slice(0, maximumPATActivityEntries).map((row) => ({
             ...row,

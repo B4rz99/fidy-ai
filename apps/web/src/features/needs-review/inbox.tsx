@@ -17,6 +17,7 @@ import { type Item, type Workspace, deadline, sources, statuses } from "./model"
 import { reviewAmount, reviewExpiry, reviewTitle } from "./presentation";
 
 const pageSize = 50;
+
 export type InboxProps = Readonly<{
   contexts: PageContexts;
   contextLoading: boolean;
@@ -30,6 +31,7 @@ export type InboxProps = Readonly<{
   pageLength: number;
   move: (offset: number) => void;
 }>;
+
 export const Inbox = (props: InboxProps): JSX.Element => (
   <aside data-review="inbox" aria-label="Bandeja de revisión">
     <div data-review="inbox-head">
@@ -85,16 +87,21 @@ const ReviewRow = ({ item, props }: Readonly<{ item: Item; props: InboxProps }>)
   const expired = useReviewExpired(item);
   const description = useId();
   const context = Option.fromUndefinedOr(props.contexts.get(item.id));
+
   const position =
     props.page + props.unfilteredItems.findIndex((entry) => entry.id === item.id) + 1;
+
   const reference = sourceReference({ item, context, position });
   const excerpt = sourceExcerpt({ item, context });
+
   const evidenceLabel = contextState({
     expired: originalContextExpired(item, context),
     loading: props.contextLoading,
     source: item.source,
   });
+
   const actionable = ["pending", "skipped"].includes(item.status);
+
   return (
     <div data-review="inbox-row" data-active={Option.contains(props.selected, item.id)}>
       <div data-review="row-check">
@@ -151,7 +158,9 @@ const contextState = ({
   source,
 }: Readonly<{ expired: boolean; loading: boolean; source: Item["source"] }>): string => {
   if (expired) return "Original vencido";
+
   if (loading) return "Cargando contexto…";
+
   return source === "email"
     ? "Sin fragmento disponible. Abre el correo para buscar en su original."
     : "Sin fragmento disponible";

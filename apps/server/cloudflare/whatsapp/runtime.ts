@@ -10,6 +10,7 @@ export const receiveWhatsAppWebhook: typeof receiveIngress = (environment) =>
 
 export const nativeDeliveryRequest: typeof nativeDeliveryRequestOwned = (...args) =>
   nativeDeliveryRequestOwned(...args);
+
 export const routeWhatsAppStatus: typeof routeWhatsAppStatusOwned = (...args) =>
   routeWhatsAppStatusOwned(...args);
 

@@ -36,11 +36,13 @@ it.effect.each(["123456789", "987654321"])(
       let addressedByPhone = false;
       const sandboxPhoneNumberId = Option.some("123456789");
       const sandboxPhone = Option.some(E164PhoneNumber.make("+573001234567"));
+
       const sender = makeHostedSender({
         apiKey: Redacted.make("sandbox-test-key"),
         sandboxPhoneNumberId,
         httpClient: makeTestOutboundTransport((request) => {
           if (request.body._tag !== "Uint8Array") return Effect.die("Expected JSON bytes");
+
           const body = Schema.decodeUnknownSync(
             Schema.Struct({
               to: Schema.optionalKey(Schema.String),
@@ -48,11 +50,13 @@ it.effect.each(["123456789", "987654321"])(
               biz_opaque_callback_data: Schema.String,
             })
           )(JSON.parse(new TextDecoder().decode(request.body.body)));
+
           addressedByPhone = body.to === "573001234567";
           expect(body.recipient).toBe(
             businessPhoneNumberId === "123456789" ? undefined : "CO.573001234567"
           );
           expect(body.biz_opaque_callback_data).toBe("22222222-2222-4222-8222-222222222222");
+
           return Effect.succeed(
             testOutboundTransportResponse(
               request,
@@ -64,6 +68,7 @@ it.effect.each(["123456789", "987654321"])(
           );
         }),
       });
+
       const result = yield* sender({
         confirmation: Option.none(),
         recipient: WhatsAppBusinessScopedUserId.make("CO.573001234567"),
@@ -74,6 +79,7 @@ it.effect.each(["123456789", "987654321"])(
           "22222222-2222-4222-8222-222222222222"
         ),
       });
+
       expect(addressedByPhone).toBe(businessPhoneNumberId === "123456789");
       expect(result.messageEvidence.providerMessageId).toBe("wamid.sandbox-hosted");
     })
@@ -82,14 +88,17 @@ it.effect.each(["123456789", "987654321"])(
 it.effect("fails closed before provider egress when a sandbox caller has no phone evidence", () =>
   Effect.gen(function* () {
     let requests = 0;
+
     const sender = makeHostedSender({
       apiKey: Redacted.make("sandbox-test-key"),
       sandboxPhoneNumberId: Option.some("123456789"),
       httpClient: makeTestOutboundTransport(() => {
         requests++;
+
         return Effect.die("Unexpected egress");
       }),
     });
+
     const exit = yield* sender({
       confirmation: Option.none(),
       recipient: WhatsAppBusinessScopedUserId.make("CO.573001234567"),
@@ -98,9 +107,11 @@ it.effect("fails closed before provider egress when a sandbox caller has no phon
       text: TranscriptText.make("hola"),
       correlationToken: HostedDeliveryCorrelationToken.make("22222222-2222-4222-8222-222222222222"),
     }).pipe(Effect.exit);
+
     const unannotatedExit = Exit.isFailure(exit)
       ? Exit.fail(Option.getOrThrow(Cause.findErrorOption(exit.cause)))
       : exit;
+
     assert.deepStrictEqual(
       unannotatedExit,
       Exit.fail(
@@ -119,18 +130,22 @@ it.effect("fails closed before provider egress when a sandbox caller has no phon
 it.effect("addresses the fixed voice failure reply to the authenticated sandbox phone", () =>
   Effect.gen(function* () {
     let addressedByPhone = false;
+
     const sender = makeVoiceUnavailableSender({
       apiKey: Redacted.make("sandbox-test-key"),
       sandboxPhoneNumberId: Option.some("123456789"),
       httpClient: makeTestOutboundTransport((request) => {
         if (request.body._tag !== "Uint8Array") return Effect.die("Expected JSON bytes");
+
         const body = Schema.decodeUnknownSync(
           Schema.Struct({ to: Schema.String, text: Schema.Struct({ body: Schema.String }) })
         )(JSON.parse(new TextDecoder().decode(request.body.body)));
+
         addressedByPhone = body.to === "573001234567";
         expect(body.text.body).toBe(
           "No pude procesar la nota de voz. Envíala de nuevo o escríbeme."
         );
+
         return Effect.succeed(
           testOutboundTransportResponse(
             request,
@@ -142,6 +157,7 @@ it.effect("addresses the fixed voice failure reply to the authenticated sandbox 
         );
       }),
     });
+
     yield* sender({
       caller: {
         businessScopedUserId: WhatsAppBusinessScopedUserId.make("CO.573001234567"),
@@ -173,6 +189,7 @@ const sendInput = (
 const fakeOutboundHttp = (response: () => Response): OutboundHttpService => ({
   execute: () => {
     const providerResponse = response();
+
     return Effect.tryPromise({
       try: () => providerResponse.arrayBuffer(),
       catch: () =>
@@ -206,15 +223,18 @@ const responseWithStatusOutsideFetchRange = (): Response => {
     ok: { value: false },
     status: { value: 600 },
   });
+
   return response;
 };
 
 it.effect("encodes the BSUID message for the published Kapso destination", () =>
   Effect.gen(function* () {
     let outboundRequest: Option.Option<OutboundHttpRequest> = Option.none();
+
     const service = makeService({
       execute: (request) => {
         outboundRequest = Option.some(request);
+
         return Effect.succeed({
           status: 200,
           headers: {},
@@ -227,6 +247,7 @@ it.effect("encodes the BSUID message for the published Kapso destination", () =>
         });
       },
     });
+
     const correlationToken = DisclosureDeliveryCorrelationToken.make(
       "11111111-1111-4111-8111-111111111111"
     );
@@ -238,6 +259,7 @@ it.effect("encodes the BSUID message for the published Kapso destination", () =>
     );
 
     const request = Option.getOrThrow(outboundRequest);
+
     if (request._tag !== "KapsoMessages") return yield* Effect.die("unexpected destination");
     expect(request).toMatchObject({
       _tag: "KapsoMessages",
@@ -255,9 +277,11 @@ it.effect("encodes the BSUID message for the published Kapso destination", () =>
 it.effect("forwards hosted Turn correlation without treating it as a recipient", () =>
   Effect.gen(function* () {
     let outboundRequest: Option.Option<OutboundHttpRequest> = Option.none();
+
     const service = makeService({
       execute: (request) => {
         outboundRequest = Option.some(request);
+
         return Effect.succeed({
           status: 200,
           headers: {},
@@ -267,9 +291,11 @@ it.effect("forwards hosted Turn correlation without treating it as a recipient",
         });
       },
     });
+
     const token = HostedDeliveryCorrelationToken.make("22222222-2222-4222-8222-222222222222");
     yield* service.sendText(sendInput({ opaqueCallbackData: Option.some(token) }));
     const request = Option.getOrThrow(outboundRequest);
+
     if (request._tag !== "KapsoMessages") return yield* Effect.die("unexpected destination");
     const body = yield* Schema.decodeEffect(UnknownJsonString)(request.body);
     expect(body).toMatchObject({
@@ -283,10 +309,12 @@ it.effect("forwards hosted Turn correlation without treating it as a recipient",
 it.effect("uses to only in explicit sandbox phone mode", () =>
   Effect.gen(function* () {
     let outboundRequest: Option.Option<OutboundHttpRequest> = Option.none();
+
     const service = makeService(
       {
         execute: (request) => {
           outboundRequest = Option.some(request);
+
           return Effect.succeed({
             status: 200,
             headers: {},
@@ -305,6 +333,7 @@ it.effect("uses to only in explicit sandbox phone mode", () =>
     yield* service.sendText(sendInput());
 
     const request = Option.getOrThrow(outboundRequest);
+
     if (request._tag !== "KapsoMessages") return yield* Effect.die("unexpected destination");
     const requestBody = yield* Schema.decodeEffect(UnknownJsonString)(request.body);
     expect(requestBody).toMatchObject({ to: "573001234567" });
@@ -316,6 +345,7 @@ it.effect("returns validated provider evidence at the local completion time", ()
   Effect.gen(function* () {
     const completedAt = DateTime.makeUnsafe("2026-09-01T12:34:56.000Z");
     yield* TestClock.setTime(DateTime.toEpochMillis(completedAt));
+
     const service = makeService(
       fakeOutboundHttp(() =>
         Response.json({
@@ -343,6 +373,7 @@ it.effect("cancels Effect HTTP execution when delivery is interrupted", () =>
   Effect.gen(function* () {
     const started = yield* Deferred.make<void>();
     const cancelled = yield* Deferred.make<void>();
+
     const service = makeService({
       execute: () =>
         Deferred.succeed(started, undefined).pipe(
@@ -350,9 +381,11 @@ it.effect("cancels Effect HTTP execution when delivery is interrupted", () =>
           Effect.onInterrupt(() => Deferred.succeed(cancelled, undefined))
         ),
     });
+
     const fiber = yield* service
       .sendText(sendInput())
       .pipe(Effect.forkChild({ startImmediately: true }));
+
     yield* Deferred.await(started);
 
     yield* Fiber.interrupt(fiber);
@@ -366,12 +399,15 @@ it.effect("cancels Effect HTTP execution when delivery is interrupted", () =>
 it.effect("classifies the adapter deadline as an ambiguous timeout", () =>
   Effect.gen(function* () {
     const started = yield* Deferred.make<void>();
+
     const service = makeService({
       execute: () => Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
     });
+
     const fiber = yield* service
       .sendText(sendInput())
       .pipe(Effect.flip, Effect.forkChild({ startImmediately: true }));
+
     yield* Deferred.await(started);
     yield* TestClock.adjust("15 seconds");
     const failure = yield* Fiber.join(fiber);
@@ -484,6 +520,7 @@ it.effect("maps redirect responses to closed definitive failures", () =>
       });
 
       const exit = yield* service.sendText(sendInput()).pipe(Effect.exit);
+
       const unannotatedExit = Exit.isFailure(exit)
         ? Exit.fail(Option.getOrThrow(Cause.findErrorOption(exit.cause)))
         : exit;
@@ -630,6 +667,7 @@ it.effect("keeps provider bodies and send inputs out of typed failures", () =>
       bsuid: "CO.privatebsuid",
       response: "remote-private-body",
     };
+
     const service = makeWhatsAppDelivery({
       deliveryMode: "bsuid",
       sandboxPhoneNumberId: Option.none(),
@@ -658,11 +696,13 @@ it.effect("keeps provider bodies and send inputs out of typed failures", () =>
         })
       )
       .pipe(Effect.flip);
+
     const ordinaryOutput = yield* Schema.encodeEffect(UnknownJsonString)(failure);
 
     expect(ordinaryOutput).toBe(
       '{"safeReason":"invalid_response","deliveryCertainty":"rejected","automaticRetry":false,"responseStatus":{"_id":"Option","_tag":"Some","value":400},"_tag":"WhatsAppSendFailed"}'
     );
+
     for (const secret of Object.values(sensitive)) expect(ordinaryOutput).not.toContain(secret);
   })
 );
@@ -700,9 +740,11 @@ it.effect(
   () =>
     Effect.gen(function* () {
       let outboundRequest: Option.Option<OutboundHttpRequest> = Option.none();
+
       const service = makeService({
         execute: (request) => {
           outboundRequest = Option.some(request);
+
           return Effect.succeed({
             status: 200,
             headers: {},
@@ -715,6 +757,7 @@ it.effect(
           });
         },
       });
+
       const command = `CONFIRMAR ${"a".repeat(64)}`;
       yield* service.sendText(
         sendInput({
@@ -723,6 +766,7 @@ it.effect(
         })
       );
       const request = Option.getOrThrow(outboundRequest);
+
       if (request._tag !== "KapsoMessages") return yield* Effect.die("Unexpected destination");
       const body = yield* Schema.decodeEffect(UnknownJsonString)(request.body);
       expect(body).toMatchObject({
@@ -740,12 +784,15 @@ it.effect(
 it.effect("refuses an oversized confirmation review before provider egress", () =>
   Effect.gen(function* () {
     let requests = 0;
+
     const service = makeService({
       execute: () => {
         requests++;
+
         return Effect.die("must not send a truncated confirmation");
       },
     });
+
     const outcome = yield* service
       .sendText(
         sendInput({
@@ -754,6 +801,7 @@ it.effect("refuses an oversized confirmation review before provider egress", () 
         })
       )
       .pipe(Effect.exit);
+
     expect(Exit.isFailure(outcome)).toBe(true);
     expect(requests).toBe(0);
   })

@@ -12,6 +12,7 @@ type BindingEntry = Readonly<{
   session: BrowserSessionLifetime;
   initial: BrowserSessionObservation;
 }>;
+
 type BindingLifecycle =
   | Readonly<{ _tag: "CheckingInitial" }>
   | Readonly<{ _tag: "Bound"; entry: BindingEntry }>
@@ -19,7 +20,9 @@ type BindingLifecycle =
   | Readonly<{ _tag: "Unavailable" }>
   | Readonly<{ _tag: "Retired" }>
   | Readonly<{ _tag: "Disposed" }>;
+
 export type BindingState = BindingEntry & Readonly<{ checking: boolean }>;
+
 type BindingObserver = Readonly<{
   apiOrigin: string;
   initial: InitialBrowserSession;
@@ -28,23 +31,28 @@ type BindingObserver = Readonly<{
   update: (state: BindingState) => void;
   failed: () => void;
 }>;
+
 const observeBindingEvents = (validate: () => void, retire: () => void): (() => void) => {
   const visible = (): void => {
     if (document.visibilityState === "visible") validate();
   };
+
   const restored = (event: PageTransitionEvent): void => {
     if (event.persisted) validate();
   };
+
   window.addEventListener(authenticationEndedEvent, retire);
   window.addEventListener("pageshow", restored);
   document.addEventListener("visibilitychange", visible);
   validate();
+
   return () => {
     window.removeEventListener(authenticationEndedEvent, retire);
     window.removeEventListener("pageshow", restored);
     document.removeEventListener("visibilitychange", visible);
   };
 };
+
 const bindingRead = (
   prepared: ReturnType<InitialBrowserSession["take"]>,
   apiOrigin: string,
@@ -81,12 +89,14 @@ export const observeBinding = (input: BindingObserver): (() => void) => {
   const first = initial.apiOrigin === apiOrigin ? initial.take(owner) : Option.none();
   let consumed = false;
   const cancel = (): void => cancelBinding(lifetime, first);
+
   const retire = (): void => {
     if (state._tag === "CheckingInitial" || state._tag === "Bound" || state._tag === "Rechecking") {
       state = { _tag: "Retired" };
       cancel();
     }
   };
+
   const validate = (): void => {
     if (state._tag === "Bound") {
       state = { _tag: "Rechecking", entry: state.entry };
@@ -94,6 +104,7 @@ export const observeBinding = (input: BindingObserver): (() => void) => {
     } else if (state._tag !== "CheckingInitial" || consumed) {
       return;
     }
+
     const prepared = consumed ? Option.none() : first;
     consumed = true;
     Effect.runFork(
@@ -101,15 +112,19 @@ export const observeBinding = (input: BindingObserver): (() => void) => {
         Effect.matchCause({
           onSuccess: (current) => {
             if (state._tag !== "CheckingInitial" && state._tag !== "Rechecking") return;
+
             if (state._tag === "Rechecking" && current.binding !== state.entry.session.binding) {
               retire();
               expired();
+
               return;
             }
+
             const entry =
               state._tag === "Rechecking"
                 ? state.entry
                 : createEntry(current, lifetime.signal, validate);
+
             state = { _tag: "Bound", entry };
             update({ ...entry, checking: false });
           },
@@ -125,7 +140,9 @@ export const observeBinding = (input: BindingObserver): (() => void) => {
       { signal: lifetime.signal }
     );
   };
+
   const removeListeners = observeBindingEvents(validate, retire);
+
   return () => {
     state = { _tag: "Disposed" };
     cancel();

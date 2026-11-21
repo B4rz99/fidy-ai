@@ -11,6 +11,7 @@ import {
 } from "./runtime";
 
 const userId = "10000000-0000-4000-8000-000000000001";
+
 const profile = {
   contract: "bancolombia-sandbox-consent-2026-10-27",
   userId,
@@ -29,12 +30,15 @@ it.effect(
   () =>
     Effect.gen(function* () {
       let calls = 0;
+
       const binding = {
         fetch: (): Promise<Response> => {
           calls += 1;
+
           return Promise.resolve(Response.json({}));
         },
       };
+
       for (const environment of [
         {},
         {
@@ -54,12 +58,14 @@ it.effect(
           Exit.fail(new BancolombiaAuthenticationFailed({ stage: "bancolombia_configuration" }))
         );
       }
+
       expect(calls).toBe(0);
     })
 );
 
 it("installs only a bounded, matching-User support-collection sandbox profile", () => {
   const encode = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
+
   for (const configured of [
     undefined,
     "{",
@@ -81,6 +87,7 @@ it("installs only a bounded, matching-User support-collection sandbox profile", 
       })
     ).toEqual(Option.none());
   }
+
   expect(
     Option.isSome(
       makeBancolombiaSandboxPreparation({
@@ -104,6 +111,7 @@ it("installs only a bounded, matching-User support-collection sandbox profile", 
 it.effect("refuses missing mTLS through the admitted profile preparation boundary", () =>
   Effect.gen(function* () {
     const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(profile);
+
     const bank = Option.getOrThrow(
       makeBancolombiaSandboxPreparation({
         environment: {
@@ -114,6 +122,7 @@ it.effect("refuses missing mTLS through the admitted profile preparation boundar
         userId,
       })
     );
+
     const result = yield* bank
       .prepare({
         userId: yield* Schema.decodeEffect(UserId)(userId),
@@ -124,6 +133,7 @@ it.effect("refuses missing mTLS through the admitted profile preparation boundar
         recordConsent: () => Effect.void,
       })
       .pipe(Effect.exit);
+
     assert.deepStrictEqual(result, Exit.fail(new ConnectionAuthorizationUnavailable()));
   })
 );

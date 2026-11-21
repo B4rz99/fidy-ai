@@ -13,7 +13,9 @@ import {
 import { native } from "../user-store.test-fixture";
 
 const planId = "40000000-0000-4000-8000-000000000123";
+
 const money = { amount: "9007199254740993.15", currency: "USD" };
+
 const plan = {
   name: "Arriendo",
   kind: "expense",
@@ -24,7 +26,9 @@ const plan = {
   frequency: "monthly",
   timeZone: "America/Bogota",
 };
+
 const month = "/recurring-plans?month=2024-02";
+
 const fulfillment = {
   id: "40000000-0000-4000-8000-000000000151",
   planId,
@@ -33,8 +37,10 @@ const fulfillment = {
   money,
   settled: true,
 };
+
 const read = Effect.fn(function* (response: Response) {
   expect(response.status).toBe(200);
+
   return (yield* Schema.decodeUnknownEffect(
     Schema.Struct({ data: Schema.toCodecJson(RecurringWorkspace) })
   )(yield* native(() => response.json()))).data;
@@ -59,6 +65,7 @@ const browserWrite = (
       })
     )
   );
+
 const capture = Effect.fn(function* (
   db: Effect.Success<typeof nativeTransactionJourney>,
   subject: typeof alice
@@ -73,7 +80,9 @@ const capture = Effect.fn(function* (
       occurredAt: "2024-02-29T18:00:00Z",
     },
   });
+
   expect(result.status).toBe(201);
+
   return (yield* Schema.decodeUnknownEffect(
     Schema.Struct({ data: Schema.Struct({ id: Schema.String }) })
   )(yield* native(() => result.json()))).data.id;
@@ -93,6 +102,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           scopes: ["read", "write"],
           current: yield* Clock.currentTimeMillis,
         });
+
         const edit = (
           expectedRevision: number,
           change: object,
@@ -111,10 +121,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               })
             )
           );
+
         expect((yield* read(yield* native(() => db.browser(0, month)))).document.revision).toBe(0);
         expect((yield* edit(0, { kind: "create", id: planId, plan }, "create")).status).toBe(200);
+
         const fulfill = (): Effect.Effect<Response> =>
           edit(1, { kind: "fulfill", fulfillment }, "lost-fulfillment");
+
         yield* native(() =>
           db.exec(
             "CREATE TRIGGER refuse_recurring_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation='recurringPlans.applyRecurringEdit' BEGIN SELECT RAISE(ABORT,'audit_unavailable'); END"
@@ -172,6 +185,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const db = yield* nativeTransactionJourney;
+
         const subjectEdit = (
           subject: typeof alice,
           expectedRevision: number,
@@ -182,15 +196,18 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             method: "POST",
             body: { expectedRevision, edit },
           });
+
         expect((yield* subjectEdit(alice, 0, { kind: "create", id: planId, plan })).status).toBe(
           200
         );
         const foreign = yield* capture(db, bob);
         const own = yield* capture(db, alice);
+
         const fulfill = (transactionId: string): object => ({
           kind: "fulfill",
           fulfillment: { ...fulfillment, transactionId },
         });
+
         expect((yield* subjectEdit(bob, 0, fulfill(foreign))).status).toBe(400);
         expect((yield* subjectEdit(alice, 1, fulfill(foreign))).status).toBe(400);
         expect((yield* subjectEdit(alice, 1, fulfill(own))).status).toBe(200);
@@ -261,14 +278,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(full.document.plans.every((entry) => entry.revisions.length === revisions)).toBe(
           true
         );
+
         const earlier = yield* read(
           yield* native(() => db.browser(0, month + "&previousMonth=2003-02&view=compact"))
         );
+
         expect(earlier.previousMonth).toBe("2003-01");
         expect(earlier.previous).toHaveLength(plans);
         expect(earlier.previous.every((item) => item.plan.name === "Renta 37")).toBe(true);
         expect(earlier.document.plans.every((entry) => entry.revisions.length === 2)).toBe(true);
         const mark = { ...fulfillment, planId: "40000000-0000-4000-8000-000000000099" };
+
         const fulfill = (): Effect.Effect<Response> =>
           native(() =>
             db.send(
@@ -286,6 +306,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               })
             )
           );
+
         const committed = yield* fulfill();
         expect(committed.status).toBe(200);
         const body = yield* native(() => committed.text());
@@ -300,6 +321,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const replay = yield* fulfill();
         expect(replay.status).toBe(200);
         expect(yield* native(() => replay.text())).toBe(body);
+
         const batch = (): Effect.Effect<Response> =>
           native(() =>
             db.send(
@@ -335,6 +357,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               })
             )
           );
+
         const accepted = yield* batch();
         expect(accepted.status).toBe(200);
         const original = yield* native(() => accepted.text());

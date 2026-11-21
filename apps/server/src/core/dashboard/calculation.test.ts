@@ -9,12 +9,18 @@ import {
 } from "./operations";
 
 const bogota = Schema.decodeSync(IanaTimeZone)("America/Bogota");
+
 const newYork = Schema.decodeSync(IanaTimeZone)("America/New_York");
+
 const cop = Currency.make("COP");
+
 const usd = Currency.make("USD");
+
 const decimal = BigDecimal.fromStringUnsafe;
+
 const money = (amount: string, currency: Currency): Money =>
   Money.make({ amount: decimal(amount), currency });
+
 const encodeGroups = Schema.encodeSync(MoneyGroups);
 
 it("resolves Monday weeks and rolling local days in the applied IANA time zone", () => {
@@ -43,6 +49,7 @@ it("keeps local week boundaries exact across daylight-saving transitions", () =>
 
 it("resolves the last 30 days from local day boundaries", () => {
   const now = DateTime.makeUnsafe("2026-07-22T12:00:00.000Z");
+
   const lastThirty = resolveDashboardPeriod({
     now,
     period: "last-30-days",

@@ -18,8 +18,10 @@ export const budgetCategories = {
 } as const;
 
 const PRIVATE_DIRECTORY_MODE = 0o700;
+
 export const privateDirectory = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
+
   const root = yield* Effect.acquireRelease(
     fs.makeTempDirectory({ directory: tmpdir(), prefix: "fidy-mcp-proof-" }).pipe(
       Effect.tap((root) => fs.chmod(root, PRIVATE_DIRECTORY_MODE)),
@@ -29,6 +31,7 @@ export const privateDirectory = Effect.gen(function* () {
     ),
     (root) => fs.remove(root, { recursive: true, force: true }).pipe(Effect.orDie)
   );
+
   return yield* fs
     .realPath(root)
     .pipe(

@@ -19,6 +19,7 @@ const fixtureUrl = (name: string): URL =>
 
 const interpretFixture = Effect.fn(function* (name: string) {
   const html = yield* Effect.tryPromise(() => Bun.file(fixtureUrl(name)).text()).pipe(Effect.orDie);
+
   return yield* interpretNotificationEmail({
     content: {
       receivedEmailId: ReceivedEmailId.make(`received-${name}`),
@@ -39,6 +40,7 @@ it.effect(
     Effect.gen(function* () {
       const davibank = yield* interpretFixture("davibank-card");
       expect(davibank._tag).toBe("Interpreted");
+
       if (davibank._tag === "Interpreted") {
         expect(davibank.evidence).toMatchObject({
           formatId: "davibank-card",
@@ -55,6 +57,7 @@ it.effect(
 
       const bbva = yield* interpretFixture("bbva-pse");
       expect(bbva._tag).toBe("Interpreted");
+
       if (bbva._tag === "Interpreted") {
         expect(bbva.evidence.formatId).toBe("bbva-pse");
         expect(bbva.evidence.accountHints.accountLastFour).toEqual(Option.some("0012"));
@@ -64,6 +67,7 @@ it.effect(
 
       const rappicard = yield* interpretFixture("rappicard-purchase");
       expect(rappicard._tag).toBe("Interpreted");
+
       if (rappicard._tag === "Interpreted") {
         expect(rappicard.evidence.formatId).toBe("rappicard-purchase");
         expect(rappicard.evidence.accountHints.cardLastFour).toEqual(Option.some("0034"));
@@ -78,6 +82,7 @@ it.effect("uses explicit Currency and rejects conflicting Currency or unsafe suf
     const html = yield* Effect.tryPromise(() =>
       Bun.file(fixtureUrl("rappicard-purchase")).text()
     ).pipe(Effect.orDie);
+
     const interpret = (
       source: string,
       subject: Option.Option<string> = Option.none(),
@@ -96,21 +101,28 @@ it.effect("uses explicit Currency and rejects conflicting Currency or unsafe suf
         },
         context,
       });
+
     const explicit = yield* interpret(html.replace("$42.500", "USD 42.500"));
     expect(explicit._tag).toBe("Interpreted");
+
     if (explicit._tag === "Interpreted") {
       expect(explicit.extraction.money.currency).toBe("USD");
       expect(explicit.evidence.currencyBasis).toBe("explicit");
     }
+
     expect((yield* interpret(html.replace("$42.500", "COP USD 42.500")))._tag).toBe("NeedsReview");
+
     const withCurrencyRow = (value: string): string =>
       html.replace("</table>", `<tr><td>Currency</td><td>${value}</td></tr></table>`);
+
     const rowExplicit = yield* interpret(withCurrencyRow("USD"));
     expect(rowExplicit._tag).toBe("Interpreted");
+
     if (rowExplicit._tag === "Interpreted") {
       expect(rowExplicit.extraction.money.currency).toBe("USD");
       expect(rowExplicit.evidence.currencyBasis).toBe("explicit");
     }
+
     expect((yield* interpret(withCurrencyRow("COP USD")))._tag).toBe("NeedsReview");
     expect((yield* interpret(withCurrencyRow("USD €")))._tag).toBe("NeedsReview");
     expect((yield* interpret(withCurrencyRow("US$")))._tag).toBe("NeedsReview");
@@ -128,6 +140,7 @@ it.effect("uses explicit Currency and rejects conflicting Currency or unsafe suf
     expect((yield* interpret(html.replace("654321", "pago pse")))._tag).toBe("NeedsReview");
 
     const completeNumber = "4111111111111111";
+
     for (const unsafe of [
       interpret(html.replace("*0034", completeNumber)),
       interpret(html.replace("TIENDA FICTICIA", completeNumber)),
@@ -165,13 +178,17 @@ it.effect("fails closed for unknown, image-only, ambiguous, and complete-number 
         },
         context,
       });
+
     expect((yield* make("<p>Compra desconocida</p>"))._tag).toBe("NeedsReview");
+
     const davibank = yield* Effect.tryPromise(() =>
       Bun.file(fixtureUrl("davibank-card")).text()
     ).pipe(Effect.orDie);
+
     const rappicard = yield* Effect.tryPromise(() =>
       Bun.file(fixtureUrl("rappicard-purchase")).text()
     ).pipe(Effect.orDie);
+
     expect(yield* make(`${davibank}${rappicard}`)).toMatchObject({
       _tag: "NeedsReview",
       reason: "ambiguous-format",
@@ -179,6 +196,7 @@ it.effect("fails closed for unknown, image-only, ambiguous, and complete-number 
     expect((yield* make("<p>rappicard pago pse davibank 4111111111111111</p>"))._tag).toBe(
       "NeedsReview"
     );
+
     const imageOnly = yield* interpretNotificationEmail({
       content: {
         receivedEmailId: ReceivedEmailId.make("received-image"),
@@ -190,15 +208,18 @@ it.effect("fails closed for unknown, image-only, ambiguous, and complete-number 
       },
       context,
     });
+
     expect(imageOnly).toMatchObject({ _tag: "NeedsReview", reason: "unsupported-content" });
 
     const deeplyNested = `<table><tr><td>${"<div>".repeat(20_000)}x${"</div>".repeat(
       20_000
     )}</td><td>value</td></tr></table>`;
+
     expect(yield* make(deeplyNested)).toMatchObject({
       _tag: "NeedsReview",
       reason: "unsupported-content",
     });
+
     for (const hidden of [
       rappicard.replace("<body>", "<body hidden>"),
       rappicard.replace("<body>", '<body style="display: none">'),

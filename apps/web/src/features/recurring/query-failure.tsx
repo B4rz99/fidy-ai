@@ -18,6 +18,7 @@ export const RecurringQueryFailure = ({
       state.failure._tag === "DeclaredFailure" &&
       Predicate.isTagged(state.failure.error, "ResourceLimited")
   );
+
   return (
     <div className="p-5">
       <CanonicalQueryRetry

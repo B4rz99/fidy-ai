@@ -22,12 +22,14 @@ layer(BunFileSystem.layer)((it) => {
             return Promise.reject(new Error("private adapter details"));
           },
         });
+
         expect(yield* Effect.result(makeInputReader(() => body)("-"))).toMatchObject({
           failure: { reason: "InputTooLarge" },
         });
         expect(body.locked).toBe(false);
       })
   );
+
   for (const completion of [
     "overflow",
     "deadline",
@@ -39,23 +41,30 @@ layer(BunFileSystem.layer)((it) => {
     it.effect(`releases input ownership on ${completion} even if cancellation never settles`, () =>
       Effect.gen(function* () {
         let cancelled = false;
+
         const body = new ReadableStream<unknown>({
           start(controller): void {
             if (completion === "overflow") controller.enqueue(new Uint8Array(65_537));
+
             if (completion === "success") {
               controller.enqueue(new Uint8Array());
               controller.enqueue(new TextEncoder().encode("{}"));
               controller.close();
             }
+
             if (completion === "read failure") controller.error(new Error("source unavailable"));
+
             if (completion === "invalid chunk") controller.enqueue("private invalid bytes");
           },
           cancel(): Promise<void> {
             cancelled = true;
+
             return Promise.withResolvers<void>().promise;
           },
         });
+
         const input = makeInputReader(() => body)("-");
+
         if (completion === "interruption") {
           const fiber = yield* input.pipe(Effect.forkChild);
           yield* TestClock.adjust("1 second");
@@ -66,6 +75,7 @@ layer(BunFileSystem.layer)((it) => {
           expect(yield* Fiber.join(fiber)).toMatchObject({ failure: { reason: "InvalidInput" } });
         } else {
           const result = yield* Effect.result(input);
+
           if (completion === "success") expect(result).toMatchObject({ success: "{}" });
           else {
             expect(result).toMatchObject({
@@ -73,17 +83,20 @@ layer(BunFileSystem.layer)((it) => {
             });
           }
         }
+
         expect(body.locked).toBe(false);
         expect(cancelled).toBe(completion !== "success" && completion !== "read failure");
       })
     );
   }
+
   it.effect(
     "rejects invalid path, query and payload fields before sending an authenticated request",
     () =>
       Effect.gen(function* () {
         const fixture = makeCanonicalFixture(makeCanonicalClient)(undefined, ["read", "write"]);
         const credential = Option.getOrThrow(yield* fixture.dependencies.store.load);
+
         const client = yield* makeCanonicalClient({
           httpClient: fixture.dependencies.httpClient,
           credential,
@@ -91,6 +104,7 @@ layer(BunFileSystem.layer)((it) => {
           captureAllowance: () => {},
           captureTrace: () => {},
         });
+
         for (const { name, input } of [
           { name: "getTransaction", input: { params: { id: "invalid-id" } } },
           { name: "listTransactions", input: { query: { currency: "invalid-currency" } } },
@@ -109,6 +123,7 @@ layer(BunFileSystem.layer)((it) => {
             )
           ).toMatchObject({ failure: { _tag: "SchemaError" } });
         }
+
         expect(fixture.requests).toEqual([]);
       }).pipe(Effect.scoped)
   );
@@ -144,8 +159,10 @@ layer(BunFileSystem.layer)((it) => {
       Effect.gen(function* () {
         let cancelled = false;
         const overflowBytes = 65_537;
+
         const overflow = makeInputReader((path) => {
           expect(path).toBe("-");
+
           return new ReadableStream<unknown>({
             start: (controller): void => {
               controller.enqueue(new Uint8Array(overflowBytes));
@@ -155,11 +172,13 @@ layer(BunFileSystem.layer)((it) => {
             },
           });
         });
+
         expect(yield* Effect.result(overflow("-"))).toMatchObject({
           failure: { reason: "InputTooLarge" },
         });
         expect(cancelled).toBe(true);
         cancelled = false;
+
         const pending = makeInputReader(
           () =>
             new ReadableStream<unknown>({
@@ -168,6 +187,7 @@ layer(BunFileSystem.layer)((it) => {
               },
             })
         );
+
         const deadline = yield* pending("-").pipe(Effect.result, Effect.forkChild);
         yield* TestClock.adjust("16 seconds");
         expect(yield* Fiber.join(deadline)).toMatchObject({ failure: { reason: "InvalidInput" } });

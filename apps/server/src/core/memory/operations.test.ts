@@ -31,6 +31,7 @@ describe("Memory capacity", () => {
       const exit = yield* Effect.exit(
         admitMemory({ candidate, aggregateTokens: maximumAggregateMemoryTokens + 1 })
       );
+
       assert.deepStrictEqual(exit, Exit.fail(new MemoryCapacityExceeded()));
       expect(String(exit)).not.toContain(candidate.text);
     })

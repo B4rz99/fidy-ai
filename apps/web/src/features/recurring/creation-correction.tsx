@@ -11,6 +11,7 @@ export const CreationCorrection = ({
 }: Pick<CreationResultProps, "categories" | "disabled" | "save"> &
   Readonly<{ item: Occurrence }>): JSX.Element => {
   const [editing, setEditing] = useState(false);
+
   return (
     <>
       <p className="text-sm text-muted-foreground">

@@ -26,7 +26,9 @@ export const PublicOutput = Schema.Union([
   }),
   Schema.TaggedStruct("LoggedOut", {}),
 ]);
+
 export type PublicOutput = typeof PublicOutput.Type;
+
 export type CommandDependencies = LoginDependencies &
   Readonly<{
     readLine: (question: string) => Effect.Effect<string, CliFailure>;

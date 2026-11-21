@@ -19,7 +19,9 @@ export const hostedStatementSelection = ({
     WHERE s.user_id=? AND s.hosted_abandoned_at_ms IS NULL AND s.hosted_expires_at_ms>?`,
   params: [turn, current, user, current],
 });
+
 export const hostedStatements = Effect.fn(function* (turn: string, user: UserId, current: number) {
   const scope = hostedStatementSelection({ turn, user, current });
+
   return (yield* SqliteClient).unsafe(scope.sql, scope.params);
 });

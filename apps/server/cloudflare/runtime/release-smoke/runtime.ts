@@ -12,11 +12,14 @@ import {
 export class ReleaseSmokeWorkflowV2 extends WorkflowEntrypoint<SmokeExecutorEnvironment, unknown> {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<SmokeCompletion> {
     const environment = this.env;
+
     const work = Effect.gen(function* () {
       const decoded = Schema.decodeUnknownOption(SmokeWork)(event.payload);
+
       if (Option.isNone(decoded)) return yield* new SmokeBindingFailed({ stage: "platform" });
       const input = decoded.value;
       const now = yield* Clock.currentTimeMillis;
+
       if (
         input.expiresAtMs <= now ||
         input.expiresAtMs > now + smokeLifetimeMs ||
@@ -26,7 +29,9 @@ export class ReleaseSmokeWorkflowV2 extends WorkflowEntrypoint<SmokeExecutorEnvi
       ) {
         return yield* new SmokeBindingFailed({ stage: "identity" });
       }
+
       const context = yield* Effect.context<never>();
+
       return yield* platform({
         stage: "platform",
         tryWork: () =>
@@ -62,6 +67,7 @@ export class ReleaseSmokeWorkflowV2 extends WorkflowEntrypoint<SmokeExecutorEnvi
           ),
       });
     });
+
     return observeWorkerPromise(() => Effect.runPromise(work), {
       environment: workerRelease(environment),
       telemetry: cloudflareWorkerTelemetry,

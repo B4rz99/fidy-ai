@@ -22,6 +22,7 @@ import {
 
 const id = (number: number): RecurringPlanId =>
   RecurringPlanId.make(`10000000-0000-4000-8000-${String(number).padStart(12, "0")}`);
+
 const settings = Schema.decodeSync(RecurringPlanInput)({
   name: "Rent",
   kind: "expense",
@@ -32,24 +33,29 @@ const settings = Schema.decodeSync(RecurringPlanInput)({
   firstDate: "2026-01-15",
   timeZone: "America/Bogota",
 });
+
 const tracked = (number: number, plan: RecurringPlanInput = settings): RecurringPlan => ({
   id: Schema.decodeSync(RecurringPlan.fields.id)(id(number)),
   revisions: [{ from: plan.firstDate, plan }],
   pauses: [],
 });
+
 const ledger = (...plans: ReadonlyArray<RecurringPlan>): RecurringDocument => ({
   ...emptyRecurringDocument(),
   plans,
 });
+
 const apply = (document: RecurringDocument, edit: RecurringEdit): RecurringDocument =>
   Effect.runSync(
     applyRecurringEdit({ document, command: { expectedRevision: document.revision, edit } })
   );
+
 const project = (
   document: RecurringDocument,
   month = "2026-02"
 ): ReadonlyArray<RecurringOccurrence> =>
   projectRecurringMonth({ document, month, now: DateTime.makeUnsafe("2026-03-15T12:00:00Z") });
+
 const mark = (number: number, planId: RecurringPlanId, date: string): RecurringFulfillment => ({
   id: id(number),
   planId,
@@ -68,6 +74,7 @@ it("preserves quarterly alignment when selecting months long after the first dat
     })
   ).toEqual(["2026-04-15"]);
 });
+
 it("preserves weekly alignment when selecting a month long after the first date", () => {
   expect(
     projectDates({
@@ -77,6 +84,7 @@ it("preserves weekly alignment when selecting a month long after the first date"
     })
   ).toEqual(["2026-04-02", "2026-04-09", "2026-04-16", "2026-04-23", "2026-04-30"]);
 });
+
 it("never projects a revision before its effective start", () => {
   const plan: RecurringPlan = {
     ...tracked(1, { ...settings, frequency: "weekly", firstDate: "2026-01-01" }),
@@ -87,10 +95,13 @@ it("never projects a revision before its effective start", () => {
       },
     ],
   };
+
   expect(project(ledger(plan))).toEqual([]);
 });
+
 it("stops an old revision at the exact start of the next revision", () => {
   const first = { ...settings, firstDate: "2026-01-01" };
+
   const plan: RecurringPlan = {
     ...tracked(1, first),
     revisions: [
@@ -98,8 +109,10 @@ it("stops an old revision at the exact start of the next revision", () => {
       { from: "2026-02-01", plan: { ...first, frequency: "yearly" as const } },
     ],
   };
+
   expect(project(ledger(plan))).toEqual([]);
 });
+
 it("does not reuse an exception belonging to a different plan on the same date", () => {
   const document = {
     ...ledger(tracked(1), tracked(2)),
@@ -112,6 +125,7 @@ it("does not reuse an exception belonging to a different plan on the same date",
       },
     ],
   };
+
   expect(
     project(document, "2026-01").map((item) => ({
       planId: item.planId,
@@ -122,13 +136,16 @@ it("does not reuse an exception belonging to a different plan on the same date",
     { planId: id(1), expectedDate: "2026-01-15" },
   ]);
 });
+
 it("excludes retained exceptions whose expected dates belong to the preceding month", () => {
   const document = {
     ...ledger(tracked(1)),
     exceptions: [{ planId: id(1), date: "2026-01-15", skipped: true }],
   };
+
   expect(project(document).map((item) => item.date)).toEqual(["2026-02-15"]);
 });
+
 it("keeps another plan's exception when unskipping the same calendar date", () => {
   const exception = {
     planId: id(2),
@@ -136,12 +153,14 @@ it("keeps another plan's exception when unskipping the same calendar date", () =
     skipped: false,
     replacement: { ...settings, name: "Other rent" },
   };
+
   const document = { ...ledger(tracked(1), tracked(2)), exceptions: [exception] };
   expect(
     apply(document, { kind: "skip", planId: id(1), date: exception.date, skipped: false })
       .exceptions
   ).toEqual([exception, { planId: id(1), date: exception.date, skipped: false }]);
 });
+
 it("refuses forward edits naming an absent plan even when another plan exists", () => {
   expect(
     Exit.isFailure(
@@ -163,9 +182,11 @@ it("refuses forward edits naming an absent plan even when another plan exists", 
     )
   ).toBe(true);
 });
+
 it("freezes only the edited plan's completed future occurrences", () => {
   const original = ledger(tracked(1), tracked(2));
   const paid = apply(original, { kind: "fulfill", fulfillment: mark(10, id(1), "2026-04-15") });
+
   const changed = apply(paid, {
     kind: "edit",
     planId: id(2),
@@ -173,14 +194,17 @@ it("freezes only the edited plan's completed future occurrences", () => {
     scope: "forward",
     plan: { ...settings, name: "Changed rent" },
   });
+
   expect(changed.exceptions).toEqual([]);
   expect(changed.fulfillments).toEqual(paid.fulfillments);
 });
+
 it("leaves past completed occurrences unfrozen during a later forward edit", () => {
   const paid = apply(ledger(tracked(1)), {
     kind: "fulfill",
     fulfillment: mark(10, id(1), "2026-01-15"),
   });
+
   const changed = apply(paid, {
     kind: "edit",
     planId: id(1),
@@ -188,14 +212,17 @@ it("leaves past completed occurrences unfrozen during a later forward edit", () 
     scope: "forward",
     plan: { ...settings, name: "New rent" },
   });
+
   expect(changed.exceptions).toEqual([]);
   expect(changed.plans[0]?.revisions.map((revision) => revision.from)).toEqual([
     "2026-01-15",
     "2026-03-15",
   ]);
 });
+
 it("replaces every later revision when a forward edit precedes the initial effective date", () => {
   const document = ledger(tracked(1));
+
   const changed = apply(document, {
     kind: "edit",
     planId: id(1),
@@ -203,6 +230,7 @@ it("replaces every later revision when a forward edit precedes the initial effec
     scope: "forward",
     plan: { ...settings, name: "Replacement rent", firstDate: "2026-01-01" },
   });
+
   expect(changed.plans[0]?.revisions).toEqual([
     {
       from: "2026-01-01",
@@ -210,6 +238,7 @@ it("replaces every later revision when a forward edit precedes the initial effec
     },
   ]);
 });
+
 it("replaces an equal-date revision without duplicating its original entry", () => {
   const changed = apply(ledger(tracked(1)), {
     kind: "edit",
@@ -218,15 +247,18 @@ it("replaces an equal-date revision without duplicating its original entry", () 
     scope: "forward",
     plan: { ...settings, name: "Replacement rent" },
   });
+
   expect(changed.plans[0]?.revisions).toEqual([
     { from: "2026-01-15", plan: { ...settings, name: "Replacement rent" } },
   ]);
 });
+
 it("permits two independent manual payment marks on the same occurrence", () => {
   const paid = apply(ledger(tracked(1)), {
     kind: "fulfill",
     fulfillment: mark(10, id(1), "2026-02-15"),
   });
+
   const twice = apply(paid, { kind: "fulfill", fulfillment: mark(11, id(1), "2026-02-15") });
   expect(Schema.encodeSync(RecurringDocument)(twice).fulfillments).toEqual(
     [10, 11].map((number) => ({
@@ -239,6 +271,7 @@ it("permits two independent manual payment marks on the same occurrence", () => 
     }))
   );
 });
+
 it("permits independent Transaction associations for the same occurrence", () => {
   const first = { ...mark(10, id(1), "2026-02-15"), transactionId: id(110) };
   const second = { ...mark(11, id(1), "2026-02-15"), transactionId: id(111) };
@@ -248,12 +281,14 @@ it("permits independent Transaction associations for the same occurrence", () =>
     second,
   ]);
 });
+
 it("links a suggestion to one selected plan in a collection", () => {
   const document = ledger(tracked(1), tracked(2));
   expect(
     apply(document, { kind: "suggestion", seriesId: id(55), action: "link", planId: id(1) })
       .suggestions
   ).toEqual([{ seriesId: id(55), disposition: "linked", planId: id(1) }]);
+
   for (const before of [emptyRecurringDocument(), document]) {
     expect(
       Exit.isFailure(
@@ -270,6 +305,7 @@ it("links a suggestion to one selected plan in a collection", () => {
     ).toBe(true);
   }
 });
+
 it("reversing an absent mark retains the current payment and excludes only the supplied identity", () => {
   const first = { ...mark(10, id(1), "2026-02-15"), transactionId: id(110) };
   const paid = apply(ledger(tracked(1)), { kind: "fulfill", fulfillment: first });
@@ -294,9 +330,11 @@ it("clips both partial months and an explicit end later than the requested windo
     })
   ).toEqual(["2026-01-20"]);
 });
+
 it("does not fold distinct Unicode Counterparty names while suggesting associations", () => {
   const document = ledger(tracked(1, { ...settings, counterparty: "Straße" }));
   const items = project(document);
+
   const fact = {
     id: id(110),
     money: settings.money,
@@ -305,6 +343,7 @@ it("does not fold distinct Unicode Counterparty names while suggesting associati
     counterparty: "STRASSE",
     categoryId: id(11),
   };
+
   if (fact.money === undefined) throw new Error("Expected fixed Money");
   expect(
     proposeRecurringMatches({
@@ -314,6 +353,7 @@ it("does not fold distinct Unicode Counterparty names while suggesting associati
     })
   ).toEqual([]);
 });
+
 it("retains an existing frozen exception without duplicating it on a forward edit", () => {
   const moved = apply(ledger(tracked(1)), {
     kind: "edit",
@@ -322,10 +362,12 @@ it("retains an existing frozen exception without duplicating it on a forward edi
     date: "2026-04-15",
     plan: { ...settings, name: "Frozen rent", firstDate: "2026-04-16" },
   });
+
   const paid = apply(moved, {
     kind: "fulfill",
     fulfillment: { ...mark(10, id(1), "2026-04-15"), actualDate: "2026-04-16" },
   });
+
   const changed = apply(paid, {
     kind: "edit",
     scope: "forward",
@@ -333,21 +375,27 @@ it("retains an existing frozen exception without duplicating it on a forward edi
     date: "2026-03-15",
     plan: { ...settings, name: "Changed rent" },
   });
+
   expect(changed.exceptions).toEqual(paid.exceptions);
 });
+
 it("replaces the selected payment even when another occurrence's mark precedes it", () => {
   const first = apply(ledger(tracked(1)), {
     kind: "fulfill",
     fulfillment: mark(10, id(1), "2026-01-15"),
   });
+
   const second = apply(first, { kind: "fulfill", fulfillment: mark(11, id(1), "2026-02-15") });
+
   const replaced = apply(second, {
     kind: "fulfill",
     replaces: id(11),
     fulfillment: mark(12, id(1), "2026-02-15"),
   });
+
   expect(replaced.fulfillments.map((entry) => entry.id)).toEqual([id(10), id(12)]);
 });
+
 it("returns a typed refusal when fulfilling an absent occurrence", () => {
   expect(
     Exit.isFailure(
@@ -363,6 +411,7 @@ it("returns a typed refusal when fulfilling an absent occurrence", () => {
     )
   ).toBe(true);
 });
+
 it("reads an occurrence moved to an earlier date with its unconfirmed disposition", () => {
   const moved = apply(ledger(tracked(1)), {
     kind: "edit",
@@ -371,18 +420,22 @@ it("reads an occurrence moved to an earlier date with its unconfirmed dispositio
     date: "2026-02-15",
     plan: { ...settings, firstDate: "2026-02-10" },
   });
+
   expect(
     Option.getOrThrow(
       readRecurringOccurrence({ document: moved, planId: id(1), date: "2026-02-15" })
     ).status
   ).toBe("unconfirmed");
 });
+
 it("treats an absent remaining estimate as unknown rather than inventing Money", () => {
   const item = Option.getOrThrow(Option.fromUndefinedOr(project(ledger(tracked(1)))[0]));
   const { remaining: _, ...withoutRemaining } = item;
+
   const totals = summarizeRecurring([
     { ...withoutRemaining, plan: { ...item.plan, amountMode: "estimated" } },
   ]);
+
   expect(
     totals.map((total) => ({
       amount: BigDecimal.format(total.estimated.amount),
@@ -409,9 +462,12 @@ it("observes dated standing without applying future changes early", () => {
     pauses: [{ from: "2026-03-01", through: "2026-04-01" }],
     stoppedOn: "2026-05-01",
   };
+
   const document = ledger(plan);
+
   const observe = (date: string): Effect.Success<ReturnType<typeof observeRecurringPlan>> =>
     Effect.runSync(observeRecurringPlan({ document, planId: plan.id, date }));
+
   expect(Option.getOrThrow(observe("2026-01-01")).status).toBe("scheduled");
   expect(Option.getOrThrow(observe("2026-02-01"))).toEqual({ plan: settings, status: "active" });
   expect(Option.getOrThrow(observe("2026-03-01")).status).toBe("paused");
@@ -435,13 +491,16 @@ it("allows same-day resume and stopped-plan edits while replacing the future suf
     date: "2026-03-01",
     action: "pause",
   });
+
   const resumed = apply(paused, {
     kind: "lifecycle",
     planId: id(1),
     date: "2026-03-01",
     action: "resume",
   });
+
   expect(resumed.plans[0]?.pauses).toEqual([{ from: "2026-03-01", through: "2026-03-01" }]);
+
   const future = apply(resumed, {
     kind: "edit",
     planId: id(1),
@@ -449,16 +508,19 @@ it("allows same-day resume and stopped-plan edits while replacing the future suf
     scope: "forward",
     plan: { ...settings, name: "June settings" },
   });
+
   const paid = apply(future, {
     kind: "fulfill",
     fulfillment: { ...mark(10, id(1), "2026-07-15"), settled: true },
   });
+
   const stopped = apply(paid, {
     kind: "lifecycle",
     planId: id(1),
     date: "2026-05-01",
     action: "stop",
   });
+
   const edited = apply(stopped, {
     kind: "edit",
     planId: id(1),
@@ -466,6 +528,7 @@ it("allows same-day resume and stopped-plan edits while replacing the future suf
     scope: "forward",
     plan: { ...settings, name: "Replacement" },
   });
+
   expect(
     edited.plans[0]?.revisions.map((entry) => ({ from: entry.from, name: entry.plan.name }))
   ).toEqual([
@@ -479,6 +542,7 @@ it("allows same-day resume and stopped-plan edits while replacing the future suf
     ).plan.name
   ).toBe("June settings");
   expect(edited.fulfillments).toEqual(paid.fulfillments);
+
   for (const action of ["pause", "resume", "stop"] as const) {
     expect(
       Exit.isFailure(

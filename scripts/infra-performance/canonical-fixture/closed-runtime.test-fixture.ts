@@ -10,8 +10,10 @@ import {
 } from "../../../apps/server/cloudflare/user-store.test-fixture";
 
 const text = (value: string): { type: "text"; value: string } => ({ type: "text", value });
+
 const meteredManifest = Effect.fnUntraced(function* (module: string, name: string) {
   const manifest = yield* workerManifest(module);
+
   const wrapOwners =
     name === "core"
       ? Object.keys(nativeOwners)
@@ -27,12 +29,14 @@ const meteredManifest = Effect.fnUntraced(function* (module: string, name: strin
           )
           .join("\n")
       : "";
+
   const mapping =
     name === "ingress"
       ? 'const url=new URL(request.url);if(url.hostname!=="127.0.0.1")return new Response(null,{status:403});request=new Request("' +
         installedOrigins.acceptance.api +
         '"+url.pathname+url.search,request);'
       : "";
+
   const wrapper =
     'import * as Production from "./production.mjs"; import {observed,observedBindings,totals,buckets} from "./meter.mjs"; export * from "./production.mjs";' +
     wrapOwners +
@@ -43,6 +47,7 @@ const meteredManifest = Effect.fnUntraced(function* (module: string, name: strin
       ? "scheduled(controller,env){return Production.default.scheduled(controller,observedBindings(env));}"
       : "") +
     "};";
+
   return {
     mainModule: "index.mjs",
     modules: {
@@ -57,26 +62,33 @@ const meteredManifest = Effect.fnUntraced(function* (module: string, name: strin
     },
   };
 });
+
 const observedManifest = Effect.fnUntraced(function* (module: string, name: string) {
   if (yield* Config.Boolean("FIDY_BROWSER_METER").pipe(Config.withDefault(false))) {
     return yield* meteredManifest(module, name);
   }
+
   const manifest = yield* workerManifest(module);
+
   if (name !== "ingress") return manifest;
+
   const entrypoints = new Bun.Transpiler({ loader: "js" }).scan(
     manifest.modules["index.mjs"].contents
   ).exports;
+
   if (entrypoints.toSorted().join(",") !== "default,makePublicWorker") {
     return yield* Effect.fail(
       Error("Ingress bundle differs from the captured public export inventory")
     );
   }
+
   const wrapper = `import worker from "./production.mjs";
     export default { ...worker,fetch(request,env,ctx) {
       const url=new URL(request.url);
       if(url.hostname!=="127.0.0.1") return new Response(null,{status:403});
       return worker.fetch(new Request("${installedOrigins.acceptance.api}"+url.pathname+url.search,request),env,ctx);
     }};`;
+
   return {
     mainModule: "index.mjs",
     modules: {
@@ -85,6 +97,7 @@ const observedManifest = Effect.fnUntraced(function* (module: string, name: stri
     },
   };
 });
+
 const worker = Effect.fnUntraced(function* (
   name: string,
   module: string,
@@ -99,12 +112,17 @@ const worker = Effect.fnUntraced(function* (
     env,
     manifest: yield* observedManifest(module, name),
   };
+
   return { config };
 });
+
 const deriveSecret = (secret: string, revision: string, purpose: string): string =>
   new Bun.CryptoHasher("sha256", secret).update(revision + "/" + purpose).digest("hex");
+
 const api = installedOrigins.acceptance;
+
 const digestWidth = 64;
+
 const sharedBindings = (
   revision: string,
   secret: string
@@ -119,18 +137,23 @@ const sharedBindings = (
   RELEASE_FIXTURE: { type: "worker" as const, worker: "closed-provider" },
   SMOKE_BUCKET: { type: "r2" as const, name: "private-receipt-rehearsal" },
 });
+
 const fixtureGeneration = Effect.fnUntraced(function* (revision: string) {
   const baseline = yield* Config.Boolean("FIDY_REHEARSAL_BASELINE").pipe(Config.withDefault(false));
   const fallback = yield* Config.Boolean("FIDY_REHEARSAL_FALLBACK").pipe(Config.withDefault(false));
+
   const entry = (name: string): string =>
     (baseline ? "../../../closed-baseline/apps/server/cloudflare/" : "./") + name + ".ts";
+
   const providerRevision = yield* Config.String("FIDY_NATIVE_FIXTURE_PROVIDER_REVISION").pipe(
     Config.withDefault(revision)
   );
+
   const providerEntry =
     providerRevision === revision
       ? entry("release-smoke-worker")
       : "../../../closed-baseline/apps/server/cloudflare/release-smoke-worker.ts";
+
   return {
     baseline,
     ingressEntry: entry(fallback ? "fixture-fallback-ingress" : "public-worker"),
@@ -139,20 +162,24 @@ const fixtureGeneration = Effect.fnUntraced(function* (revision: string) {
     providerRevision,
   };
 });
+
 export const closedRuntime = Effect.fnUntraced(function* (
   { revision, secret }: { revision: string; secret: string },
   directory: string = "",
   member: PerformanceMember = "performance-1"
 ) {
   const privateKey = Redacted.value(yield* Config.Redacted("TEST_FIXTURE_PRIVATE_KEY"));
+
   const { baseline, ingressEntry, coreEntry, providerEntry, providerRevision } =
     yield* fixtureGeneration(revision);
+
   const shared = {
     ...sharedBindings(revision, secret),
     ...(providerRevision === revision
       ? {}
       : { ACCEPTANCE_PROVIDER_REVISION: text(providerRevision) }),
   };
+
   return new Miniflare({
     ...(directory === "" ? {} : { resourcePersistencePath: directory }),
     handleStructuredLogs: (): void => undefined,
@@ -197,19 +224,23 @@ export const closedRuntime = Effect.fnUntraced(function* (
     ]),
   });
 });
+
 const run = Effect.gen(function* () {
   const revision = yield* Config.String("FIDY_NATIVE_REVISION");
   const secret = Redacted.value(yield* Config.Redacted("SMOKE_PROOF"));
+
   const member = yield* Config.Literals(
     ["performance-1", "performance-2"],
     "FIDY_BOUND_FIXTURE_MEMBER"
   ).pipe(Config.withDefault("performance-1"));
+
   yield* Effect.acquireUseRelease(
     closedRuntime({ revision, secret }, "", member),
     (runtime) => serveFixture(runtime, member),
     (runtime) => Effect.tryPromise(() => runtime.dispose()).pipe(Effect.orDie)
   );
 });
+
 if (import.meta.main) {
   await Effect.runPromise(run).catch(() => {
     process.stderr.write("Closed workerd rehearsal stopped\n");

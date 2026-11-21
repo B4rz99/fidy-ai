@@ -17,6 +17,7 @@ it.effect(
     Effect.gen(function* () {
       const refusal =
         '{"error":{"code":"unavailable","message":"The operation is unavailable. Retry later."},"next":[]}';
+
       for (const body of [refusal, "private error detail", refusal + "private error detail"]) {
         const outcome = yield* controlsDigest(
           {
@@ -27,11 +28,13 @@ it.effect(
           },
           (request) => {
             expect(new URL(request.url).pathname).toBe("/web/pairings");
+
             return Effect.succeed(new Response(body, { status: 503 }));
           }
         ).pipe(
           Effect.matchCause({ onFailure: releaseFailureMessage, onSuccess: () => "accepted" })
         );
+
         expect(outcome).toBe(
           "Retained control refused at pairing start, HTTP 503" +
             (body === refusal ? ", canonical admission unavailable" : "")
@@ -50,6 +53,7 @@ it.live(
         core: "11111111-1111-4111-8111-111111111111",
         ingress: "22222222-2222-4222-8222-222222222222",
       };
+
       const wire = Effect.fn(function* (request: Request) {
         const { api, browser } = installedOrigins.acceptance;
         expect(request.url).toBe(api + "/web/pairings");
@@ -73,14 +77,17 @@ it.live(
         headers.delete("x-fidy-acceptance-proof");
         headers.delete("traceparent");
         headers.delete("b3");
+
         return {
           headers: Object.fromEntries(headers),
           body: request.body === null ? null : yield* Effect.tryPromise(() => request.text()),
         };
       });
+
       const calls: Array<Effect.Success<ReturnType<typeof wire>>> = [];
       const client = Context.get(yield* Layer.build(ReleaseHttpLive), HttpClient.HttpClient);
       const run = Effect.runPromiseWith(yield* Effect.context<never>());
+
       const receive: typeof fetch = Object.assign(
         (
           input: Parameters<typeof fetch>[0],
@@ -88,16 +95,21 @@ it.live(
         ): Promise<Response> =>
           run(wire(new Request(input, init))).then((received) => {
             calls.push(received);
+
             return new Response("private response", { status: 503 });
           }),
         { preconnect: globalThis.fetch.preconnect }
       );
+
       const send = (request: Request): ReturnType<ReturnType<typeof acceptanceSend>> =>
         acceptanceSend(client)(request).pipe(Effect.provideService(FetchHttpClient.Fetch, receive));
+
       yield* controlsDigest(pair, send).pipe(Effect.ignore);
+
       for (const body of ["json", "empty"] as const) {
         expect(yield* observePairingStart(pair, body, send)).toBe("HTTP 503");
       }
+
       yield* controlsDigest(pair, (request) =>
         bufferedAcceptanceSend(client)(request).pipe(
           Effect.provideService(FetchHttpClient.Fetch, receive)
@@ -121,16 +133,20 @@ it.effect(
         ingress: "11111111-1111-4111-8111-111111111111",
         core: "22222222-2222-4222-8222-222222222222",
       };
+
       const origin = installedOrigins.acceptance.api;
+
       const cookieHeaders = (name: string): HeadersInit => ({
         "set-cookie": name + "=test; Path=/; Secure; HttpOnly; SameSite=Lax",
       });
+
       for (const [signed, unsigned, expected] of [
         [200, 503, "180908d13917383f405a0ece55ff98c32294fe42c5396a612d1606b95f50f2c5"],
         [503, 503, "Retained control refused at transaction history, HTTP 503"],
         [200, 200, "Closed acceptance expected HTTP 503; received 200"],
       ] as const) {
         const ids = [pair.ingress, pair.core];
+
         const responses: Record<string, (request: Request) => Response> = {
           "/web/pairings": () =>
             Response.json({
@@ -168,13 +184,17 @@ it.effect(
             ),
           "/user": () => Response.json({ data: { id: ids.shift() } }),
         };
+
         const observed = yield* controlsDigest(pair, (request) =>
           Effect.sync(() => {
             const handler = responses[new URL(request.url).pathname];
+
             if (handler === undefined) throw Error("Unexpected control path");
+
             return handler(request);
           })
         ).pipe(Effect.match({ onFailure: (error) => error.message, onSuccess: (value) => value }));
+
         expect(observed).toBe(expected);
       }
     })

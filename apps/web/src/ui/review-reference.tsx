@@ -10,6 +10,7 @@ import {
 
 export const ReviewReference = (): JSX.Element => {
   const [date, setDate] = useState("2026-10-24");
+
   return (
     <section id="review" className="scroll-mt-6">
       <h2 className="mb-4 text-xl font-semibold">Revisión de ingesta</h2>

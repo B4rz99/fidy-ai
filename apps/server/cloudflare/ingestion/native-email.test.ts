@@ -17,6 +17,7 @@ import { alice, bob, seed } from "../financial-user-store.test-fixture";
 import { native, nativeBillingPlatform, nativePurgePlatform } from "../user-store.test-fixture";
 
 const storedText = Schema.decodeUnknownSync(Schema.String);
+
 const emailRecipient = Effect.fn(function* (runtime: Miniflare, subject: typeof alice) {
   const owner = yield* seed(runtime, subject, false);
   yield* owner.exec(
@@ -24,26 +25,32 @@ const emailRecipient = Effect.fn(function* (runtime: Miniflare, subject: typeof 
     subject.user,
     owner.now
   );
+
   const headers = {
     origin: "https://app.fidyapp.com",
     cookie: "__Host-fidy_session=" + subject.bearer,
     "Fidy-Session-Binding": subject.session,
   };
+
   const get = yield* native(() =>
     runtime.dispatchFetch("https://api.fidyapp.com/ingestion/email-forwarding", { headers })
   );
+
   const address = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       data: Schema.Struct({ address: Schema.Struct({ address: Schema.String }) }),
     })
   )(yield* native(() => get.json()));
+
   const { PRIVATE_EMAIL: worker } = yield* native(() =>
     runtime.getBindings<{ PRIVATE_EMAIL: Pick<Fetcher, "fetch"> }>("core")
   );
+
   const mime =
     "From: sender@example.com\r\nTo: " +
     address.data.address.address +
     "\r\nSubject: aviso\r\n\r\nPrivate unknown format";
+
   const send = (
     publicDelivery: boolean,
     material = mime
@@ -55,17 +62,21 @@ const emailRecipient = Effect.fn(function* (runtime: Miniflare, subject: typeof 
         body: material,
       })
     );
+
   return { runtime, owner, send, mime };
 });
+
 const emailJourney = Effect.fn(function* () {
   return yield* emailRecipient(yield* (yield* nativeBillingPlatform)(), alice);
 });
+
 const fixtureControl = Effect.fn(function* (
   user: ReturnType<Awaited<ReturnType<Miniflare["getDurableObjectNamespace"]>>["getByName"]>,
   path: string
 ) {
   return yield* native(() => user.fetch("https://fixture.invalid/" + path, { method: "POST" }));
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "uses only native Email Routing events on the Email Worker while User alarms own retained work",
@@ -80,12 +91,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const runtime = yield* (yield* nativePurgePlatform)();
         const journey = yield* emailRecipient(runtime, alice);
+
         const user = (yield* native(() =>
           runtime.getDurableObjectNamespace("USER_STORE", "core")
         )).getByName(alice.user);
+
         const cases = yield* caseDriver(runtime);
         yield* fixtureControl(user, "hold-original");
         const sending = yield* journey.send(false).pipe(Effect.forkScoped);
+
         const [writer] = yield* journey.owner
           .exec("SELECT nonce,object_key FROM original_writers")
           .pipe(
@@ -95,17 +109,21 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               schedule: Schedule.spaced("30 millis"),
             })
           );
+
         const key = yield* Schema.decodeUnknownEffect(Schema.String)(writer?.object_key);
         const bucket = yield* native(() => runtime.getR2Bucket("EMAIL_BUCKET", "core"));
         expect(yield* native(() => bucket.head(key))).toBeNull();
         expect((yield* admitPurge(runtime)).status).toBe(202);
+
         for (let step = 0; step < 4; step++) expect(yield* cases.step()).toBe("Draining");
         yield* fixtureControl(user, "release-original");
         const sent = yield* Fiber.await(sending);
         expect(sent._tag === "Failure" || sent.value.status !== 204).toBe(true);
+
         const phase = yield* cases
           .step()
           .pipe(Effect.repeat({ until: (value) => value === "ExternalPending", times: 12 }));
+
         expect(phase).toBe("ExternalPending");
         expect(yield* native(() => bucket.head(key))).toBeNull();
         expect(
@@ -143,6 +161,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* owner.exec("SELECT id FROM forwarded_email_receipts")).toEqual([]);
         expect((yield* send(false)).status).toBe(204);
         expect((yield* send(false)).status).toBe(204);
+
         const rows = yield* owner
           .exec(
             "SELECT id,object_key,expires_at_ms-received_at_ms AS retained,outcome FROM forwarded_email_receipts"
@@ -154,15 +173,19 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             ),
             Effect.retry({ times: 60, schedule: Schedule.spaced("50 millis") })
           );
+
         expect(rows).toHaveLength(1);
         expect(rows[0]?.retained).toBe(7776000000);
         const bucket = yield* native(() => runtime.getR2Bucket("EMAIL_BUCKET", "core"));
         const object = yield* native(() => bucket.get(storedText(rows[0]?.object_key)));
+
         if (object === null) return yield* Effect.die("Expected private email");
         expect(yield* native(() => object.text())).toBe(mime);
+
         const own = yield* owner.exec(
           "SELECT id,evidence_expires_at_ms FROM ingestion_review_items"
         );
+
         expect(own).toHaveLength(1);
         yield* owner.exec(
           "UPDATE forwarded_email_receipts SET received_at_ms=0,expires_at_ms=7776000000,outcome=NULL"
@@ -198,23 +221,28 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             outstandingEmailLimit
           )
         );
+
         for (const recipient of [first, second]) {
           yield* recipient.owner.exec(
             "CREATE TRIGGER stop_claim_ack BEFORE UPDATE OF capacity_claimed ON forwarded_email_receipts WHEN NEW.capacity_claimed=1 BEGIN SELECT RAISE(ABORT,'fixture'); END"
           );
         }
+
         const attempts = yield* Effect.all(
           [Effect.exit(first.send(false)), Effect.exit(second.send(false))],
           { concurrency: 2 }
         );
+
         expect(attempts.filter((item) => item._tag === "Failure")).toHaveLength(1);
         const admitted = attempts[0]._tag === "Failure" ? first : second;
         const refused = admitted === first ? second : first;
         const refusal = attempts.find((item) => item._tag === "Success");
         expect(refusal?._tag === "Success" && refusal.value.status).toBe(422);
+
         const [claim] = yield* admitted.owner.exec(
           "SELECT id,expires_at_ms,capacity_slot,capacity_generation,capacity_claimed FROM forwarded_email_receipts WHERE state='storing'"
         );
+
         expect(claim).toMatchObject({ capacity_slot: retainedEmailLimit, capacity_claimed: 0 });
         expect(
           yield* native(() =>
@@ -223,10 +251,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             )
           )
         ).toEqual([{ n: outstandingEmailLimit }]);
+
         for (const recipient of [first, second]) {
           yield* recipient.owner.exec("DROP TRIGGER stop_claim_ack");
         }
+
         expect((yield* admitted.send(false)).status).toBe(204);
+
         const ready = yield* admitted.owner
           .exec("SELECT capacity_settled,outcome FROM forwarded_email_receipts")
           .pipe(
@@ -236,6 +267,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             ),
             Effect.retry({ times: 100, schedule: Schedule.spaced("50 millis") })
           );
+
         expect(ready).toEqual([{ capacity_settled: 1, outcome: "needs-review" }]);
         expect((yield* refused.send(false, refused.mime + "new")).status).toBe(422);
         yield* native(() =>
@@ -258,9 +290,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           )
         );
         expect((yield* refused.send(false, refused.mime + "next")).status).toBe(204);
+
         const ns = yield* native(() =>
           first.runtime.getDurableObjectNamespace("DIRECTORY", "core")
         );
+
         const mutate = (
           action: "Claim" | "Release"
         ): Effect.Effect<Awaited<ReturnType<ReturnType<typeof ns.getByName>["fetch"]>>> =>
@@ -276,6 +310,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               }),
             })
           );
+
         expect((yield* mutate("Release")).status).toBe(204);
         expect((yield* mutate("Release")).status).toBe(204);
         expect((yield* mutate("Claim")).status).toBe(409);
@@ -294,9 +329,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const { runtime, owner, send, mime } = yield* emailJourney();
+
         const period = DateTime.toEpochMillis(
           allowancePeriod(DateTime.makeUnsafe(owner.now)).startsAt
         );
+
         yield* owner.exec(
           "WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<?) INSERT INTO commercial_allowance_consumptions SELECT ?,'forwarded_email','fixture-'||i,?,?,1 FROM n",
           freeForwardedEmailCap,
@@ -305,9 +342,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           owner.now
         );
         expect((yield* send(false)).status).toBe(204);
+
         const [deferred] = yield* owner.exec(
           "SELECT id,expires_at_ms FROM forwarded_email_receipts WHERE deferred_checked_at_ms IS NOT NULL AND outcome IS NULL"
         );
+
         expect(deferred).toBeDefined();
         yield* owner.exec(
           "INSERT INTO consent_history(id,user_id,record_type,grant_record_id,session_id,occurred_at_ms) VALUES('withdraw',?,'processing_withdrawal','grant',?,?)",
@@ -328,6 +367,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               .fetch("https://owner.internal/work/check", { method: "POST" })
           )).status
         ).toBe(204);
+
         const settled = yield* owner
           .exec(
             "SELECT id,expires_at_ms FROM forwarded_email_receipts WHERE dispatch_sent_at_ms IS NOT NULL AND outcome='needs-review'"
@@ -339,6 +379,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             ),
             Effect.retry({ times: 60, schedule: Schedule.spaced("50 millis") })
           );
+
         expect(settled).toEqual([deferred]);
         expect(yield* owner.exec("SELECT email_receipt_id FROM ingestion_review_items")).toEqual([
           { email_receipt_id: deferred?.id },
@@ -357,9 +398,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         "CREATE TRIGGER stop_activation BEFORE UPDATE OF state ON forwarded_email_receipts WHEN NEW.state='queued' BEGIN SELECT RAISE(ABORT,'fixture'); END"
       );
       expect((yield* Effect.exit(send(false)))._tag).toBe("Failure");
+
       const [stage] = yield* owner.exec(
         "SELECT object_key FROM forwarded_email_receipts WHERE state='storing'"
       );
+
       const bucket = yield* native(() => runtime.getR2Bucket("EMAIL_BUCKET", "core"));
       const key = storedText(stage?.object_key);
       expect(yield* native(() => bucket.head(key))).not.toBeNull();
@@ -394,25 +437,31 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const { runtime, owner, send } = yield* emailJourney();
+
         const material =
           "From: bank@example.test\r\nTo: mailbox@example.test\r\nSubject: Compra\r\nContent-Type: text/html; charset=utf-8\r\n\r\n" +
           `<!doctype html><html><body>
       <p>DAVIbank te notifica que realizaste con tu tarjeta Visa Oro la siguiente transacción o compra recurrente:</p>
       <table><tr><td>Comercio</td><td>COMERCIO FICTICIO</td></tr><tr><td>Monto</td><td>12,500</td></tr><tr><td>Fecha</td><td>2026/01/15</td></tr><tr><td>Hora</td><td>10:15:30</td></tr></table></body></html>`;
+
         yield* owner.exec("UPDATE users SET time_zone='America/Lima' WHERE id=?", alice.user);
         yield* owner.exec(
           "CREATE TRIGGER stop_activation BEFORE UPDATE OF state ON forwarded_email_receipts WHEN NEW.state='queued' BEGIN SELECT RAISE(ABORT,'fixture'); END"
         );
         expect((yield* Effect.exit(send(false, material)))._tag).toBe("Failure");
+
         const [staged] = yield* owner.exec(
           "SELECT expires_at_ms,state,object_key FROM forwarded_email_receipts"
         );
+
         expect(staged?.state).toBe("storing");
         yield* owner.exec("DROP TRIGGER stop_activation");
         yield* owner.exec("UPDATE forwarded_email_receipts SET stage_checked_at_ms=0");
+
         const usersBefore = yield* native(() =>
           runtime.getDurableObjectNamespace("USER_STORE", "core")
         );
+
         expect(
           (yield* native(() =>
             usersBefore
@@ -420,6 +469,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               .fetch("https://owner.internal/work/check", { method: "POST" })
           )).status
         ).toBe(204);
+
         const rows = yield* owner
           .exec(
             "SELECT r.id,r.object_key,r.expires_at_ms,c.structure,c.expires_at_ms AS candidate_expiry,c.revision FROM forwarded_email_receipts r JOIN ingest_sample_candidates c ON c.receipt_id=r.id"
@@ -431,7 +481,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             ),
             Effect.retry({ times: 100, schedule: Schedule.spaced("50 millis") })
           );
+
         const [row] = rows;
+
         if (row === undefined) return yield* Effect.die("Expected candidate");
         expect(row.candidate_expiry).toBe(row.expires_at_ms);
         expect(row.expires_at_ms).toBe(staged?.expires_at_ms);
@@ -461,9 +513,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         );
         yield* owner.exec("UPDATE ingest_sample_candidates SET expires_at_ms=7776000000");
         const users = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
+
         const check = yield* native(() =>
           users.getByName(alice.user).fetch("https://owner.internal/work/check", { method: "POST" })
         );
+
         expect(check.status).toBe(204);
         yield* owner.exec("SELECT state FROM forwarded_email_receipts").pipe(
           Effect.filterOrFail(

@@ -9,6 +9,7 @@ it("preserves cancellation instants and provider progress on the wire", () => {
       paidThrough: "2026-11-01T00:00:00.000Z",
       sourceCancellation,
     };
+
     const codec = Schema.toCodecJson(SubscriptionCancellation);
     expect(Schema.encodeSync(codec)(Schema.decodeSync(codec)(value))).toEqual(value);
   }

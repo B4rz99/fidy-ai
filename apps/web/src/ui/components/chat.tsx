@@ -13,11 +13,15 @@ import {
 } from "./popover";
 
 const compactViewportInset = 8;
+
 const compactQuery = "(max-height: 500px)";
+
 const isCompact = (): boolean => window.matchMedia(compactQuery).matches;
+
 const subscribeCompact = (onChange: () => void): (() => void) => {
   const media = window.matchMedia(compactQuery);
   media.addEventListener("change", onChange);
+
   return () => media.removeEventListener("change", onChange);
 };
 
@@ -35,6 +39,7 @@ export const ChatWindow = ({
   prepare,
 }: ChatWindowProps): JSX.Element => {
   const compact = useSyncExternalStore(subscribeCompact, isCompact);
+
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger
@@ -66,6 +71,7 @@ export const ChatWindow = ({
 
 const ChatHeader = ({ onClose }: Readonly<{ onClose: () => void }>): JSX.Element => {
   const { theme, toggle } = useTheme();
+
   return (
     <header className="chat-header">
       <HugeiconsIcon
@@ -122,6 +128,7 @@ export const ChatComposer = ({
   onSubmit,
 }: ChatComposerProps): JSX.Element => {
   const messageId = useId();
+
   return (
     <form className="chat-composer" onSubmit={onSubmit}>
       <label className="sr-only" htmlFor={messageId}>

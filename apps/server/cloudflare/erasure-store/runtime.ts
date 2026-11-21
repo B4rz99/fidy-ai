@@ -38,6 +38,7 @@ type ErasureEnvironment = AcceptanceWindowBindings &
     PRICING: DurableObjectNamespace;
     MAINTENANCE: DurableObjectNamespace;
   };
+
 export class Erasure extends DurableObject<ErasureEnvironment> {
   private readonly runtime;
   constructor(state: DurableObjectState, env: ErasureEnvironment) {
@@ -47,6 +48,7 @@ export class Erasure extends DurableObject<ErasureEnvironment> {
       owner: erasureStoreHistory.owner,
       ceilingBytes: env.SQLITE_STORE_CAPACITY_BYTES,
     });
+
     if (state.id.equals(env.ERASURE.idFromName(erasureRegistryName))) {
       state.waitUntil(
         state.blockConcurrencyWhile(() =>
@@ -67,9 +69,11 @@ export class Erasure extends DurableObject<ErasureEnvironment> {
     const unavailable = Effect.catchCause(() =>
       Effect.succeed(new Response(null, { status: 503 }))
     );
+
     if ([confirmDrainUrl, confirmPurgeUrl].includes(request.url)) {
       return this.runtime.runPromise(confirmPurge(request).pipe(unavailable));
     }
+
     switch (request.url) {
       case confirmCleanupUrl:
         return this.runtime.runPromise(confirmCleanup(request).pipe(unavailable));
@@ -91,6 +95,7 @@ export class Erasure extends DurableObject<ErasureEnvironment> {
     if (!this.ctx.id.equals(this.env.ERASURE.idFromName(erasureRegistryName))) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
+
     if (ownerCheckRequest(request)) {
       return this.runtime.runPromise(
         repairCaseAlarm(this.ctx.storage).pipe(
@@ -103,10 +108,13 @@ export class Erasure extends DurableObject<ErasureEnvironment> {
         )
       );
     }
+
     if (request.method === "POST") return this.command(request);
+
     if (request.method !== "GET" || request.url !== storeReadinessUrl) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
+
     return this.runtime.runPromise(
       storeReadiness({ history: erasureStoreHistory, release: this.env.CF_VERSION_METADATA.id })
     );

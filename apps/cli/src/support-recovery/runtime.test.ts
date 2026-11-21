@@ -18,11 +18,13 @@ it.effect("approves only through the fixed Access route without exporting either
         expect(request.method).toBe("POST");
         expect(request.headers["cf-access-token"]).toBe("access-token");
         expect(request.headers["authorization"]).toBeUndefined();
+
         return Effect.succeed(
           HttpClientResponse.fromWeb(request, Response.json({ status: "approved" }))
         );
       })
     );
+
     expect(yield* submit(input, Redacted.make("access-token"))).toBe("approved");
   })
 );
@@ -35,14 +37,18 @@ it.effect("a lost or contradictory response never approves or retries recovery",
       new Response("redirect", { status: 302, headers: { location: "https://attacker.invalid" } }),
       new Response("x".repeat(2048)),
     ];
+
     for (const response of cases) {
       let requests = 0;
+
       const submit = makeRecoveryClient(
         HttpClient.make((request) => {
           requests += 1;
+
           return Effect.succeed(HttpClientResponse.fromWeb(request, response));
         })
       );
+
       expect(yield* submit(input, Redacted.make("access"))).toBe("uncertain");
       expect(requests).toBe(1);
     }
@@ -60,6 +66,7 @@ it.effect("authoritative refusals reveal no claimant match details", () =>
       const submit = makeRecoveryClient(
         HttpClient.make((request) => Effect.succeed(HttpClientResponse.fromWeb(request, response)))
       );
+
       const outcome = yield* submit(input, Redacted.make("access"));
       expect(outcome).toBe(response.status === 400 ? "not_approved" : "unavailable");
     }
@@ -70,6 +77,7 @@ it.effect("a response deadline releases owned transport and preserves uncertaint
   Effect.gen(function* () {
     const started = yield* Deferred.make<void>();
     let released = false;
+
     const submit = makeRecoveryClient(
       HttpClient.make(() =>
         Deferred.succeed(started, undefined).pipe(
@@ -82,6 +90,7 @@ it.effect("a response deadline releases owned transport and preserves uncertaint
         )
       )
     );
+
     const fiber = yield* submit(input, Redacted.make("access")).pipe(Effect.forkChild);
     yield* Deferred.await(started);
     yield* TestClock.adjust("16 seconds");
@@ -94,6 +103,7 @@ it.effect("interruption releases a held response reader without a second decisio
   Effect.gen(function* () {
     const started = yield* Deferred.make<void>();
     let cancelled = false;
+
     const submit = makeRecoveryClient(
       HttpClient.make((request) =>
         Effect.succeed(
@@ -113,6 +123,7 @@ it.effect("interruption releases a held response reader without a second decisio
         )
       )
     );
+
     const fiber = yield* submit(input, Redacted.make("access")).pipe(Effect.forkChild);
     yield* Deferred.await(started);
     yield* Fiber.interrupt(fiber);

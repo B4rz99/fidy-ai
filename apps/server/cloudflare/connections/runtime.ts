@@ -32,30 +32,39 @@ type NativeBrowserUnit = {
   storage: DurableObjectStorage;
   environment: BancolombiaSandboxEnvironment & { BROWSER_ORIGIN: string };
 };
+
 const unavailableStatus = 503;
+
 const maximumCallbackLength = 8192;
+
 const validCallbackKeys = (query: URLSearchParams): boolean =>
   Array.from(query.keys()).every(
     (key) =>
       ["code", "state", "error", "error_description", "iss"].includes(key) &&
       query.getAll(key).length === 1
   );
+
 export const callbackResult = (
   request: Request
 ): Option.Option<Pick<ConnectionCallbackAdmission, "state" | "result">> => {
   const url = new URL(request.url);
   const query = url.searchParams;
+
   if (url.search.length > maximumCallbackLength || url.pathname !== connectionCallbackPath) {
     return Option.none();
   }
+
   if (!validCallbackKeys(query)) return Option.none();
+
   if (query.has("code") === query.has("error")) return Option.none();
+
   if (
     query.has("iss") &&
     query.get("iss") !== "https://auth1-api-open-finance-sandbox.ambientesbc.com"
   ) {
     return Option.none();
   }
+
   return Schema.decodeUnknownOption(
     Schema.Struct({
       state: ConnectionCallbackAdmission.fields.state,
@@ -83,6 +92,7 @@ export const sandboxConnectionAdapters = ({
   ),
   synchronization: Option.none(),
 });
+
 export const nativeConnectionBrowser = ({
   unit,
   adapters,
@@ -94,8 +104,10 @@ export const nativeConnectionBrowser = ({
     if (new URL(unit.request.url).pathname !== connectionCallbackPath) {
       return yield* browser(unit, unit.environment.BROWSER_ORIGIN, adapters.preparation);
     }
+
     const proof = yield* Effect.tryPromise(() => readBoundWebSessionProof(unit.request));
     const result = callbackResult(unit.request);
+
     if (
       unit.request.method === "GET" &&
       Option.isSome(proof) &&
@@ -112,6 +124,7 @@ export const nativeConnectionBrowser = ({
         canSynchronize: Option.isSome(adapters.synchronization),
       });
     }
+
     return new Response(null, { status: 204 });
   }).pipe(
     Effect.provideService(
@@ -127,6 +140,7 @@ export const nativeConnectionBrowser = ({
 
 export const checkConnectionAlarm: typeof repairSynchronizationAlarm = (storage) =>
   repairSynchronizationAlarm(storage);
+
 export const offerConnectionWork = (input: {
   now: number;
   storage: DurableObjectStorage;
@@ -140,15 +154,19 @@ export const offerConnectionWork = (input: {
       bancolombiaSandboxAdmission(input.environment)
     )
   );
+
 export const runConnectionWork = Effect.fn(
   function* (unit: NativeBrowserUnit, adapters: ConnectionAdapters) {
     const work = yield* Schema.decodeUnknownEffect(SynchronizationWork, {
       onExcessProperty: "error",
     })(yield* Effect.tryPromise(() => unit.request.json()));
+
     if (!unit.owns(work.userId)) return new Response(null, { status: 404 });
+
     if (Option.isNone(adapters.synchronization) || Option.isNone(adapters.grantKey)) {
       return new Response(null, { status: 503 });
     }
+
     yield* executeSynchronization({
       work,
       provider: adapters.synchronization.value,
@@ -160,6 +178,7 @@ export const runConnectionWork = Effect.fn(
         bancolombiaSandboxAdmission(unit.environment)
       )
     );
+
     return new Response(null, { status: 204 });
   },
   Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
@@ -179,18 +198,22 @@ export class ConnectionSynchronizationWorkflow extends WorkflowEntrypoint<
             const work = yield* Schema.decodeEffect(SynchronizationWork, {
               onExcessProperty: "error",
             })(event.payload);
+
             if (event.instanceId !== work.jobId) {
               return yield* Effect.fail("invalid_synchronization" as const);
             }
+
             const body = yield* Schema.encodeEffect(Schema.fromJsonString(SynchronizationWork))(
               work
             );
+
             const result = yield* Effect.tryPromise(() =>
               this.env.USER_STORE.getByName(work.userId).fetch(
                 "https://user.invalid/work/connection-synchronization",
                 { method: "POST", body }
               )
             );
+
             if (!result.ok) return yield* Effect.fail("synchronization_unavailable" as const);
           })
         )
@@ -199,19 +222,23 @@ export class ConnectionSynchronizationWorkflow extends WorkflowEntrypoint<
 }
 
 type RetentionUnit = { storage: DurableObjectStorage; adapters: ConnectionAdapters };
+
 const cleanupEnabled = (adapters: ConnectionAdapters): boolean =>
   Option.isSome(adapters.grantKey) && Option.isSome(adapters.cleanup);
+
 export const repairConnectionRetention = ({
   storage,
   adapters,
 }: RetentionUnit): ReturnType<typeof repairRetention> =>
   repairRetention(storage, cleanupEnabled(adapters));
+
 export const expireConnectionAttempts = ({
   storage,
   now,
   adapters,
 }: RetentionUnit & { now: number }): ReturnType<typeof expireAttempts> =>
   expireAttempts(storage, now, cleanupEnabled(adapters));
+
 export const cleanConnectionGrants = ({
   storage,
   adapters,

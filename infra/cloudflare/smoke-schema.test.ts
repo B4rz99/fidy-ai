@@ -17,10 +17,12 @@ const awaitSmokeCompletion = Effect.fn(function* (poll: () => Promise<Response>)
   for (let attempt = 0; attempt < 200; attempt++) {
     const response = yield* Effect.tryPromise(poll);
     const body: unknown = yield* Effect.tryPromise(() => response.json());
+
     if (Schema.is(Schema.Struct({ status: Schema.Literal("passed") }))(body)) return;
     expect(response.status).toBe(200);
     yield* Effect.sleep("10 millis");
   }
+
   return yield* Effect.die("Native smoke completion exceeded the local poll budget");
 });
 
@@ -34,6 +36,7 @@ const executorFor = (
   coreSettings: Pick<SmokeEnvironment, "NATIVE_STORAGE_ADMISSION" | "NATIVE_FIXTURE_MEMBER">;
 }> => {
   const revision = "de04a192c3836be0efb488b170a7b93b9f98f28f";
+
   return retained
     ? {
         revision,
@@ -62,19 +65,25 @@ const nativeSmokeJourney = Effect.fnUntraced(function* (retainExecutor: boolean)
       external: ["cloudflare:workers"],
     })
   );
+
   const output = bundle.outputs[0];
+
   if (!bundle.success || output === undefined) {
     return yield* Effect.die("Native smoke build failed");
   }
+
   const script = yield* Effect.tryPromise(() => output.text());
   const release = smokeEnvironment();
+
   const {
     revision: executorRevision,
     version: executorVersion,
     queueName,
     coreSettings,
   } = executorFor(release, retainExecutor);
+
   const priorRevision = "f".repeat(40);
+
   const nativeWorker = (revision: string, version: string, queue: string): WorkerOptions => ({
     config: {
       name: revision,
@@ -121,18 +130,22 @@ const nativeSmokeJourney = Effect.fnUntraced(function* (retainExecutor: boolean)
       },
     },
   });
+
   const mf = new Miniflare({
     workers: [
       nativeWorker(executorRevision, executorVersion, queueName),
       nativeWorker(priorRevision, "22222222-2222-4222-8222-222222222222", priorRevision),
     ],
   });
+
   yield* Effect.addFinalizer(() => Effect.tryPromise(() => mf.dispose()).pipe(Effect.orDie));
   yield* Effect.tryPromise(() => mf.ready);
   const owners = yield* (yield* nativeUserPlatform)();
+
   const ownersBindings = yield* Effect.tryPromise(() =>
     owners.getBindings<Required<SharedBindings>>("core")
   );
+
   const bindings = yield* Effect.tryPromise(() =>
     mf.getBindings<{
       SMOKE_BUCKET: R2Bucket;
@@ -141,9 +154,11 @@ const nativeSmokeJourney = Effect.fnUntraced(function* (retainExecutor: boolean)
       SMOKE_LIMITER: RateLimit;
     }>(executorRevision)
   );
+
   let publications = 0;
   let bankCalls = 0;
   let offered: unknown;
+
   const environment = smokeEnvironment({
     ...coreSettings,
     USER_STORE: ownersBindings.USER_STORE,
@@ -159,10 +174,12 @@ const nativeSmokeJourney = Effect.fnUntraced(function* (retainExecutor: boolean)
       send: (work: unknown): Promise<void> => {
         offered = work;
         publications++;
+
         return Promise.resolve();
       },
     }),
   });
+
   const probe = (id: string, bindings = environment): Promise<Response> =>
     handleSmoke({
       bankAuthentication: Option.some(
@@ -187,6 +204,7 @@ const nativeSmokeJourney = Effect.fnUntraced(function* (retainExecutor: boolean)
         }),
       }),
     });
+
   expect((yield* Effect.tryPromise(() => probe("a"))).status).toBe(202);
   expect(publications).toBe(1);
   expect(bankCalls).toBe(0);
@@ -195,6 +213,7 @@ const nativeSmokeJourney = Effect.fnUntraced(function* (retainExecutor: boolean)
     coreVersionId: environment.CF_VERSION_METADATA.id,
     contractDigest: environment.CONTRACT_DIGEST,
   });
+
   const poll = (overrides = environment): Promise<Response> =>
     handleSmoke({
       bankAuthentication: Option.none(),
@@ -206,6 +225,7 @@ const nativeSmokeJourney = Effect.fnUntraced(function* (retainExecutor: boolean)
         }
       ),
     });
+
   expect(yield* Effect.tryPromise(() => poll().then((response) => response.json()))).toMatchObject({
     status: "pending",
   });
@@ -219,18 +239,22 @@ const nativeSmokeJourney = Effect.fnUntraced(function* (retainExecutor: boolean)
   yield* Effect.tryPromise(() => bindings.SMOKE_QUEUE.send(offered));
   yield* Effect.tryPromise(() => bindings.SMOKE_QUEUE.send(offered));
   yield* awaitSmokeCompletion(() => poll());
+
   const core = {
     gitRevision: release.RELEASE_GIT_SHA,
     contractDigest: release.CONTRACT_DIGEST,
     workerVersionId: release.CF_VERSION_METADATA.id,
   };
+
   const completed = {
     probeId: "a".repeat(32),
     coreVersionId: core.workerVersionId,
     executor: { ...core, gitRevision: executorRevision, workerVersionId: executorVersion },
     expiresAtMs: now + 300000,
   };
+
   const otherExecutorVersion = "44444444-4444-4444-8444-444444444444";
+
   for (const output of [
     { ...completed, probeId: "b".repeat(32) },
     { ...completed, executor: { ...completed.executor, gitRevision: "f".repeat(40) } },
@@ -259,9 +283,11 @@ const nativeSmokeJourney = Effect.fnUntraced(function* (retainExecutor: boolean)
         }),
       })
     );
+
     expect(stale.status).toBe(503);
     expect(stale.headers.get("x-fidy-smoke-failure")).toBe("probe_state");
   }
+
   if (retainExecutor) {
     for (const disabled of [
       { NATIVE_STORAGE_ADMISSION: "open" },
@@ -273,9 +299,11 @@ const nativeSmokeJourney = Effect.fnUntraced(function* (retainExecutor: boolean)
       expect(rejected.headers.get("x-fidy-smoke-failure")).toBe("probe_state");
     }
   }
+
   const prior = yield* Effect.tryPromise(() =>
     mf.getBindings<{ SMOKE_WORKFLOW: Workflow; SMOKE_QUEUE: Queue }>(priorRevision)
   );
+
   const priorEnvironment = {
     ...environment,
     RELEASE_GIT_SHA: priorRevision,
@@ -284,12 +312,14 @@ const nativeSmokeJourney = Effect.fnUntraced(function* (retainExecutor: boolean)
     SMOKE_QUEUE_NAME: priorRevision,
     SMOKE_WORKFLOW: prior.SMOKE_WORKFLOW,
   };
+
   expect((yield* Effect.tryPromise(() => probe("a", priorEnvironment))).status).toBe(202);
   yield* awaitSmokeCompletion(() => poll(priorEnvironment));
   expect(yield* Effect.tryPromise(() => poll().then((response) => response.json()))).toMatchObject({
     status: "passed",
     core,
   });
+
   const readOnly = yield* Effect.tryPromise(() =>
     probe("c", {
       ...environment,
@@ -300,9 +330,11 @@ const nativeSmokeJourney = Effect.fnUntraced(function* (retainExecutor: boolean)
       },
     })
   );
+
   expect(readOnly.status).toBe(503);
   expect(readOnly.headers.get("x-fidy-smoke-failure")).toBe("schema");
   expect(publications).toBe(1);
+
   const refused = yield* Effect.tryPromise(() =>
     probe("b", {
       ...environment,
@@ -313,12 +345,15 @@ const nativeSmokeJourney = Effect.fnUntraced(function* (retainExecutor: boolean)
       },
     })
   );
+
   expect(refused.status).toBe(503);
   expect(refused.headers.get("x-fidy-smoke-failure")).toBe("schema");
   expect(publications).toBe(1);
+
   for (let attempt = 0; attempt < 8; attempt++) {
     yield* Effect.tryPromise(() => bindings.SMOKE_LIMITER.limit({ key: "release-smoke" }));
   }
+
   const limited = yield* Effect.tryPromise(() =>
     probe("d", {
       ...environment,
@@ -329,12 +364,14 @@ const nativeSmokeJourney = Effect.fnUntraced(function* (retainExecutor: boolean)
       },
     })
   );
+
   expect(limited.status).toBe(503);
   expect(limited.headers.get("x-fidy-smoke-failure")).toBe("admission");
   expect(publications).toBe(1);
 
   expect(yield* Effect.tryPromise(() => refused.text())).not.toContain("payment_source_context");
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "verifies native storage and version-scoped Queue and Workflow completion before accepting a candidate",

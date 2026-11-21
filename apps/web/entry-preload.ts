@@ -15,13 +15,17 @@ export const entryPreload = (): Plugin => ({
     handler(html, { bundle }) {
       if (bundle === undefined) return [];
       const files = new Set<string>();
+
       const visit = (name: string): void => {
         if (files.has(name)) return;
         const chunk = bundle[name];
+
         if (chunk?.type !== "chunk") return;
         files.add(name);
+
         for (const dependency of chunk.imports) visit(dependency);
       };
+
       for (const chunk of Object.values(bundle)) {
         if (
           chunk.type === "chunk" &&
@@ -30,7 +34,9 @@ export const entryPreload = (): Plugin => ({
           visit(chunk.fileName);
         }
       }
+
       const tags: Array<HtmlTagDescriptor> = [];
+
       for (const name of files) {
         if (html.includes(`href="/${name}"`)) continue;
         tags.push({
@@ -39,6 +45,7 @@ export const entryPreload = (): Plugin => ({
           injectTo: "head",
         });
       }
+
       return tags;
     },
   },

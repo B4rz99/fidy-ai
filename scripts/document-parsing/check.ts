@@ -10,59 +10,95 @@ import { runProtectedDocumentProof } from "./protected-document-proof";
 import { heapUsage, inspectorTarget, profileWorkerRequest } from "./workerd-inspector";
 
 const kibibyte = Number("1024");
+
 const mebibyte = Number("1048576");
+
 const maximumBundleBytes = Number("64") * mebibyte;
+
 const maximumMemoryBytes = Number("128") * mebibyte;
+
 const maximumStartupMilliseconds = Number("1000");
+
 const startupMicrosecondsPerMillisecond = Number("1000");
+
 const readinessAttempts = Number("80");
+
 const readinessRetryMilliseconds = Number("100");
+
 const unprocessableContentStatus = Number("422");
+
 const payloadTooLargeStatus = Number("413");
+
 const zipCentralHeaderLength = Number("46");
+
 const zipCentralSignature = Number("0x02014b50");
+
 const zipExpandedSizeOffset = Number("24");
+
 const forgedExpandedBytes = Number("26") * mebibyte;
+
 const representativeXlsxRows = Number("10000");
+
 const representativeXlsxColumns = Number("8");
+
 const serverPort = 8793;
+
 const inspectorPort = 9293;
+
 const infrastructureRoot = new URL("../../apps/server/cloudflare/", import.meta.url).pathname;
+
 const documentWorkersRoot = `${infrastructureRoot}documents`;
+
 const workspaceRoot = new URL("../..", import.meta.url).pathname;
+
 const temporaryDirectory = `${workspaceRoot}/.document-parsing-proof`;
+
 const bundlePath = `${temporaryDirectory}/document-parsing-worker.js`;
+
 const profilePath = `${temporaryDirectory}/startup.cpuprofile`;
+
 const extractionConfigPath = `${documentWorkersRoot}/document-extraction.wrangler.jsonc`;
+
 const protectedConfigPath = `${documentWorkersRoot}/protected-document.wrangler.jsonc`;
+
 const configPath = `${documentWorkersRoot}/document-parsing.wrangler.jsonc`;
+
 const wranglerPath = `${workspaceRoot}/node_modules/.bin/wrangler`;
 
 const StartupProfile = Schema.Struct({ endTime: Schema.Finite, startTime: Schema.Finite });
+
 const ParseResult = Schema.Struct({
   elapsedMilliseconds: Schema.Finite,
   format: Schema.Literals(["csv", "xlsx"]),
   outcome: Schema.Literal("parsed"),
   rowCount: Schema.Int,
 });
+
 const RejectedResult = Schema.Struct({
   outcome: Schema.Literal("rejected"),
   reason: Schema.String,
 });
+
 const WranglerProofConfig = Schema.Struct({
   compatibility_date: Schema.String,
   limits: Schema.Struct({ cpu_ms: Schema.Int }),
 });
+
 const decodeProofConfig = Schema.decodeSync(Schema.fromJsonString(WranglerProofConfig));
+
 const removeJsoncTrailingCommas = (contents: string): string =>
   contents.replace(/,\s*(?<closingToken>[}\]])/gu, "$<closingToken>");
+
 const config = decodeProofConfig(removeJsoncTrailingCommas(await readFile(configPath, "utf8")));
+
 const protectedConfig = decodeProofConfig(
   removeJsoncTrailingCommas(await readFile(protectedConfigPath, "utf8"))
 );
+
 const extractionConfig = decodeProofConfig(
   removeJsoncTrailingCommas(await readFile(extractionConfigPath, "utf8"))
 );
+
 if (
   protectedConfig.compatibility_date !== config.compatibility_date ||
   protectedConfig.limits.cpu_ms !== config.limits.cpu_ms ||
@@ -71,6 +107,7 @@ if (
 ) {
   throw new Error("Document proof Workers must pin the same compatibility and CPU limits");
 }
+
 const maximumCpuMilliseconds = config.limits.cpu_ms;
 
 const requestStatement = (
@@ -96,33 +133,41 @@ const runWranglerCommand = (command: Array<string>): string => {
     maxBuffer: 1_048_576,
     killSignal: "SIGKILL",
   });
+
   if (result.exitCode !== 0) {
     throw new Error(`Document parsing proof command failed: ${command[1]}`);
   }
+
   return new TextDecoder().decode(result.stdout);
 };
 
 const workbookBytes = (workbook: XLSX.WorkBook, bookType: "xlsx" | "xlsm"): Uint8Array => {
   const buffer: unknown = XLSX.write(workbook, { bookType, compression: true, type: "array" });
+
   if (!(buffer instanceof ArrayBuffer)) {
     throw new Error("SheetJS did not produce an ArrayBuffer");
   }
+
   return new Uint8Array(buffer);
 };
 
 const forgeExpandedSize = (original: Uint8Array): Uint8Array => {
   const bytes = original.slice();
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
   for (let offset = 0; offset + zipCentralHeaderLength <= bytes.length; offset += 1) {
     if (view.getUint32(offset, true) === zipCentralSignature) {
       view.setUint32(offset + zipExpandedSizeOffset, forgedExpandedBytes, true);
+
       return bytes;
     }
   }
+
   throw new Error("Generated XLSX has no central directory entry");
 };
 
 await rm(temporaryDirectory, { force: true, recursive: true });
+
 await mkdir(temporaryDirectory, { recursive: true });
 
 const bundleOutput = runWranglerCommand([
@@ -136,13 +181,19 @@ const bundleOutput = runWranglerCommand([
   "--metafile",
   `${temporaryDirectory}/bundle-meta.json`,
 ]);
+
 const emittedBundleBytes = (await stat(bundlePath)).size;
+
 const uploadSizeMatch = /Total Upload: (?<kibibytes>[\d.]+) KiB/u.exec(bundleOutput);
+
 const uploadKibibytes = Number(uploadSizeMatch?.groups?.kibibytes);
+
 if (!Number.isFinite(uploadKibibytes) || !bundleOutput.includes("No bindings found.")) {
   throw new Error("Wrangler did not report an unbound production-like Worker upload");
 }
+
 const bundleBytes = Math.ceil(uploadKibibytes * kibibyte);
+
 if (bundleBytes > maximumBundleBytes) {
   throw new Error("Document parser exceeds the Worker bundle limit");
 }
@@ -156,6 +207,7 @@ const startupOutput = runWranglerCommand([
   "--outfile",
   profilePath,
 ]);
+
 const protectedBundleBytes = await runProtectedDocumentProof({
   configPath: protectedConfigPath,
   infrastructureRoot,
@@ -166,8 +218,10 @@ const protectedBundleBytes = await runProtectedDocumentProof({
 const profile = Schema.decodeSync(Schema.fromJsonString(StartupProfile))(
   await readFile(profilePath, "utf8")
 );
+
 const startupMilliseconds =
   (profile.endTime - profile.startTime) / startupMicrosecondsPerMillisecond;
+
 if (startupMilliseconds > maximumStartupMilliseconds) {
   throw new Error("Document parser exceeds the Worker startup limit");
 }
@@ -214,8 +268,10 @@ try {
           ),
           Effect.catch(() => Effect.sleep(readinessRetryMilliseconds).pipe(Effect.as(false)))
         );
+
         if (ready) return;
       }
+
       throw new Error("Document parser workerd did not start");
     }).pipe(Effect.timeout("15 seconds"))
   );
@@ -227,6 +283,7 @@ try {
     { length: 20_000 },
     (_, index) => `2026-01-01,${index},bounded representative row ${index}`
   );
+
   const csvProfile = await profileWorkerRequest({
     debuggerUrl,
     signal: Option.none(),
@@ -235,11 +292,14 @@ try {
         "content-type": "application/pdf",
       }),
   });
+
   const response = csvProfile.response;
   const parsed = Schema.decodeUnknownSync(ParseResult)(await response.json());
+
   if (!response.ok || parsed.format !== "csv" || parsed.rowCount !== rows.length) {
     throw new Error("Document parser failed the bounded workerd fixture");
   }
+
   if (csvProfile.cpuMilliseconds > maximumCpuMilliseconds) {
     throw new Error("Document parser exceeds the configured Worker CPU limit");
   }
@@ -265,6 +325,7 @@ try {
       label: "protected-pdf-password",
     },
   ];
+
   await Effect.runPromise(
     Effect.forEach(
       unsupportedDocuments,
@@ -273,9 +334,11 @@ try {
           const unsupportedResponse = yield* Effect.tryPromise((signal) =>
             requestStatement(document.body, signal, document.headers)
           );
+
           const rejected = yield* Schema.decodeUnknownEffect(RejectedResult)(
             yield* Effect.tryPromise(() => unsupportedResponse.json())
           );
+
           if (
             unsupportedResponse.status !== unprocessableContentStatus ||
             rejected.reason !== "unsupported-format"
@@ -296,12 +359,15 @@ try {
           const body = yield* Effect.tryPromise(() =>
             readFile(`${documentWorkersRoot}/fixtures/${fixture}`)
           );
+
           const activeResponse = yield* Effect.tryPromise((signal) =>
             requestStatement(body, signal)
           );
+
           const activeResult = yield* Schema.decodeUnknownEffect(ParseResult)(
             yield* Effect.tryPromise(() => activeResponse.json())
           );
+
           if (!activeResponse.ok || activeResult.format !== "xlsx") {
             throw new Error(`Workerd did not safely parse hostile workbook structure: ${fixture}`);
           }
@@ -320,6 +386,7 @@ try {
     XLSX.utils.aoa_to_sheet([["Date"], ["2026-01-01"]]),
     "Statement"
   );
+
   const hostileWorkbooks = [
     {
       body: workbookBytes(oversizedWorkbook, "xlsx"),
@@ -340,6 +407,7 @@ try {
       label: "malformed-csv",
     },
   ];
+
   await Effect.runPromise(
     Effect.forEach(
       hostileWorkbooks,
@@ -348,9 +416,11 @@ try {
           const hostileResponse = yield* Effect.tryPromise((signal) =>
             requestStatement(hostile.body, signal)
           );
+
           const rejected = yield* Schema.decodeUnknownEffect(RejectedResult)(
             yield* Effect.tryPromise(() => hostileResponse.json())
           );
+
           if (
             hostileResponse.status !== hostile.expectedStatus ||
             rejected.reason !== hostile.expectedReason
@@ -365,25 +435,30 @@ try {
   const representativeHeaders = Array.from({ length: representativeXlsxColumns }, (_, index) =>
     index === 0 ? "Date" : `Field${index}`
   );
+
   const representativeRows = Array.from({ length: representativeXlsxRows }, () =>
     Array.from({ length: representativeXlsxColumns }, (_, index) =>
       index === 0 ? "2026-01-01" : "bounded"
     )
   );
+
   const representativeWorkbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(
     representativeWorkbook,
     XLSX.utils.aoa_to_sheet([representativeHeaders, ...representativeRows]),
     "Statement"
   );
+
   const xlsxProfile = await profileWorkerRequest({
     debuggerUrl,
     signal: Option.none(),
     sendRequest: (signal) =>
       requestStatement(workbookBytes(representativeWorkbook, "xlsx"), signal),
   });
+
   const xlsxResponse = xlsxProfile.response;
   const parsedXlsx = Schema.decodeUnknownSync(ParseResult)(await xlsxResponse.json());
+
   if (
     !xlsxResponse.ok ||
     parsedXlsx.format !== "xlsx" ||
@@ -391,11 +466,13 @@ try {
   ) {
     throw new Error("Document parser failed the near-limit XLSX workerd fixture");
   }
+
   if (xlsxProfile.cpuMilliseconds > maximumCpuMilliseconds) {
     throw new Error("XLSX parsing exceeds the configured Worker CPU limit");
   }
 
   const retainedHeapBytes = await heapUsage({ debuggerUrl, signal: Option.none() });
+
   if (retainedHeapBytes > maximumMemoryBytes) {
     throw new Error("Document parser exceeds the Worker memory limit");
   }

@@ -15,6 +15,7 @@ export const Field = ({
     {children}
   </div>
 );
+
 export const ScheduleFields = ({
   initial,
   categories,
@@ -23,6 +24,7 @@ export const ScheduleFields = ({
   categories: ReadonlyArray<Category>;
 }>): JSX.Element => {
   const [frequency, setFrequency] = useState<string>(initial.frequency ?? "monthly");
+
   return (
     <>
       <Field label="Frecuencia" name="frequency">
@@ -59,6 +61,7 @@ export const ScheduleFields = ({
     </>
   );
 };
+
 export const IdentityFields = ({
   initial,
 }: Readonly<{ initial: Partial<PlanInput> }>): JSX.Element => (

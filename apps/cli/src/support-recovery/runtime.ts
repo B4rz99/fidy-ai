@@ -12,12 +12,15 @@ import {
 import { readPrompt } from "./internal/prompt";
 
 const maximumResponseBytes = 1024;
+
 const maximumRequestBytes = 256;
+
 const OutcomeBody = Schema.fromJsonString(
   Schema.Struct({
     status: Schema.Literals(["approved", "not_approved", "unauthorized", "limited", "unavailable"]),
   })
 );
+
 const outcomes: Readonly<
   Record<typeof OutcomeBody.Type.status, Readonly<{ status: number; outcome: RecoveryOutcome }>>
 > = {
@@ -40,17 +43,21 @@ export const makeRecoveryClient = (
     captureAllowance: () => {},
     captureTrace: () => {},
   });
+
   return Effect.fn(
     function* (input, assertion) {
       const body = yield* Schema.encodeEffect(Schema.fromJsonString(RecoveryInput))(input);
+
       const response = yield* client.execute(
         HttpClientRequest.post(recoveryOperatorUrl).pipe(
           HttpClientRequest.setHeader("cf-access-token", Redacted.value(assertion)),
           HttpClientRequest.bodyText(body, "application/json")
         )
       );
+
       const outcome = yield* Schema.decodeEffect(OutcomeBody)(yield* response.text);
       const reply = outcomes[outcome.status];
+
       return response.status === reply.status ? reply.outcome : "uncertain";
     },
     Effect.orElseSucceed((): RecoveryOutcome => "uncertain")
@@ -58,6 +65,7 @@ export const makeRecoveryClient = (
 };
 
 const pairingCharacters = 9;
+
 const recoveryCharacters = 29;
 
 export const makeRecoveryOperator = Effect.fn(function* (
@@ -66,6 +74,7 @@ export const makeRecoveryOperator = Effect.fn(function* (
 ) {
   const terminal = yield* Terminal.Terminal;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
   const operator: RecoveryOperator = {
     ...terminalOutput,
     authenticate: authenticateAccess(recoveryOperatorUrl).pipe(
@@ -86,5 +95,6 @@ export const makeRecoveryOperator = Effect.fn(function* (
     }).pipe(Effect.map(Redacted.make)),
     submit: makeRecoveryClient(httpClient),
   };
+
   return operator;
 });

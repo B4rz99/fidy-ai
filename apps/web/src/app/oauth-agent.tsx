@@ -15,17 +15,21 @@ export const OAuthAgent = (): JSX.Element => {
   const router = useRouter();
   const client = router.options.context.webAuthClient;
   const { authentication } = useSession();
+
   const [consentQuery] = useState(() =>
     client.query("processingConsent", "status", {
       timeToLive: "0 seconds",
       reactivityKeys: ["processing-consent"],
     })
   );
+
   const [bindingQuery] = useState(() =>
     client.query("browserSession", "binding", { query: {}, timeToLive: "0 seconds" })
   );
+
   const consent = useAtomValue(consentQuery).pipe(presentCanonicalQuery, freshValue);
   const session = useAtomValue(bindingQuery).pipe(presentCanonicalQuery, freshValue);
+
   if (
     authentication === "expired" ||
     Option.isNone(consent) ||
@@ -35,6 +39,7 @@ export const OAuthAgent = (): JSX.Element => {
   ) {
     return <></>;
   }
+
   return (
     <HostedAgentProvider client={router.options.context.hostedTurnClient}>
       <HostedAgentFeature />

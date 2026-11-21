@@ -10,7 +10,9 @@ const conditionalJobs = [
   "security-sast",
   "security-sca",
 ] as const;
+
 type ConditionalJob = (typeof conditionalJobs)[number];
+
 type CheckPlan = Readonly<Record<ConditionalJob, boolean>>;
 
 const runtimeJobs: ReadonlyArray<ConditionalJob> = [
@@ -20,6 +22,7 @@ const runtimeJobs: ReadonlyArray<ConditionalJob> = [
   "cloudflare-infra",
   "security-sast",
 ];
+
 const ownedPaths: ReadonlyArray<{
   readonly prefix: string;
   readonly jobs: ReadonlyArray<ConditionalJob>;
@@ -33,6 +36,7 @@ const ownedPaths: ReadonlyArray<{
   },
   { prefix: "apps/web/", jobs: ["builds", "unit", "cloudflare-infra", "security-sast"] },
 ];
+
 const scannerPaths = {
   ".fluidattacks/sca.yaml": ["security-sca"],
   ".fluidattacks/sast.yaml": ["security-sast"],
@@ -56,9 +60,12 @@ const isDependencyInput = (path: string): boolean =>
 
 const checksForPath = (path: string): ReadonlyArray<ConditionalJob> => {
   if (isProse(path)) return [];
+
   if (isDependencyInput(path)) return conditionalJobs;
   const scanner = Object.entries(scannerPaths).find(([scannerPath]) => scannerPath === path);
+
   if (scanner !== undefined) return scanner[1];
+
   return ownedPaths.find(({ prefix }) => path.startsWith(prefix))?.jobs ?? conditionalJobs;
 };
 
@@ -71,17 +78,22 @@ export const selectChecks = (paths: ReadonlyArray<string>): CheckPlan => {
     "security-sast": false,
     "security-sca": false,
   };
+
   for (const path of paths) {
     for (const job of checksForPath(path)) selected[job] = true;
   }
+
   return selected;
 };
 
 export const selectNativeChecks = (paths: ReadonlyArray<string>): boolean =>
   paths.some((path) => {
     if (isProse(path)) return false;
+
     if (isDependencyInput(path)) return true;
+
     if (Object.hasOwn(scannerPaths, path)) return false;
+
     return !["apps/web/", "apps/site/", "apps/docs/", "infra/", ".patterns/", ".repos/"].some(
       (prefix) => path.startsWith(prefix)
     );
@@ -91,12 +103,15 @@ if (import.meta.main) {
   const base = Bun.env.PR_BASE_SHA;
   const head = Bun.env.PR_HEAD_SHA;
   const output = Bun.env.GITHUB_OUTPUT;
+
   if (base === undefined || head === undefined || output === undefined) {
     throw new Error("PR_BASE_SHA, PR_HEAD_SHA, and GITHUB_OUTPUT are required");
   }
+
   if (!/^[0-9a-f]{40}$/u.test(base) || !/^[0-9a-f]{40}$/u.test(head) || output.length === 0) {
     throw new Error("PR_BASE_SHA, PR_HEAD_SHA, and GITHUB_OUTPUT are required");
   }
+
   const diff = Bun.spawnSync([
     "git",
     "diff",
@@ -105,6 +120,7 @@ if (import.meta.main) {
     "-z",
     `${base}...${head}`,
   ]);
+
   if (diff.exitCode !== 0) throw new Error("Cannot determine the PR diff");
   const paths = new TextDecoder().decode(diff.stdout).split("\0").filter(Boolean);
   const plan = selectChecks(paths);

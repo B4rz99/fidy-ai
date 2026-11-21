@@ -32,6 +32,7 @@ it("decodes the one User dashboard without storage identity or format fields", (
 
   expect(document.title).toBe("Mi tablero");
   expect(document.layout.kind).toBe("leaf");
+
   if (document.layout.kind === "leaf") {
     expect(document.layout.widget.type).toBe("spending-chart");
     expect(document.layout.widget.title).toBe("Gastos por categoría");
@@ -81,11 +82,13 @@ it("decodes every closed widget variant without implicit monetary defaults", () 
   });
 
   expect(document.layout.kind).toBe("split");
+
   if (document.layout.kind === "split") {
     expect(
       document.layout.children.map((child) => child.node.kind === "leaf" && child.node.widget.type)
     ).toEqual(["spending-chart", "budget-bar", "transaction-list", "custom-metric"]);
   }
+
   expect(collectDashboardCategoryReferences(document)).toEqual([
     {
       categoryId,
@@ -121,12 +124,14 @@ it("requires one to sixteen unique Category references", () => {
       },
     },
   });
+
   const categories = Array.from(
     { length: 16 },
     (_, index) => `10000000-0000-4000-8000-${(index + 1).toString().padStart(12, "0")}`
   );
 
   expect(Schema.decodeUnknownSync(DashboardDocument)(makeDocument(categories))).toBeDefined();
+
   for (const invalid of [[], [...categories, categoryId], [categoryId, categoryId]]) {
     expect(
       Result.isFailure(Schema.decodeUnknownResult(DashboardDocument)(makeDocument(invalid)))
@@ -144,12 +149,15 @@ it("requires an applied period to end strictly after it starts", () => {
       toExclusive: "2026-07-01T05:00:00.001Z",
     })
   ).toBeDefined();
+
   for (const toExclusive of [from, "2026-07-01T04:59:59.999Z"]) {
     const result = Schema.decodeUnknownResult(AppliedDashboardPeriod)({
       ...shared,
       toExclusive,
     });
+
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(String(result.failure)).toContain('["toExclusive"]');
     }
@@ -248,6 +256,7 @@ type RawTransactionWidget = Readonly<{
   type: "transaction-list";
   limit: number;
 }>;
+
 type RawLayout =
   | Readonly<{ kind: "leaf"; widget: RawTransactionWidget }>
   | Readonly<{
@@ -255,6 +264,7 @@ type RawLayout =
       axis: "row" | "column";
       children: readonly [RawChild, RawChild, ...ReadonlyArray<RawChild>];
     }>;
+
 type RawChild = Readonly<{ weight: number; node: RawLayout }>;
 
 const transactionWidget = (id: string): RawTransactionWidget => ({
@@ -265,12 +275,15 @@ const transactionWidget = (id: string): RawTransactionWidget => ({
 
 it("enforces the layout depth boundary and retains the first traversal issue", () => {
   let nextId = 330;
+
   const leaf = (id = nextId++): RawLayout => ({
     kind: "leaf",
     widget: transactionWidget(`f1d1a000-0000-4000-8000-${id.toString().padStart(12, "0")}`),
   });
+
   const nested = (splitCount: number): RawLayout => {
     let node = leaf();
+
     for (let depth = 0; depth < splitCount; depth += 1) {
       node = {
         kind: "split",
@@ -281,12 +294,15 @@ it("enforces the layout depth boundary and retains the first traversal issue", (
         ],
       };
     }
+
     return node;
   };
+
   const valid = Schema.decodeSync(DashboardDocument)({
     title: "Resumen",
     layout: nested(8),
   });
+
   const tooDeep = Schema.decodeResult(DashboardDocument)({
     title: "Resumen",
     layout: nested(9),
@@ -298,6 +314,7 @@ it("enforces the layout depth boundary and retains the first traversal issue", (
   );
 
   const duplicate = leaf(399);
+
   const firstIssue = Schema.decodeResult(DashboardDocument)({
     title: "Resumen",
     layout: {
@@ -319,6 +336,7 @@ it("enforces the layout depth boundary and retains the first traversal issue", (
       ],
     },
   });
+
   expect(Result.isFailure(firstIssue) ? String(firstIssue.failure) : "").toContain(
     "Expected a unique WidgetId in DashboardDocument"
   );
@@ -326,6 +344,7 @@ it("enforces the layout depth boundary and retains the first traversal issue", (
 
 it("reports the exact nested WidgetId path for a duplicate identity", () => {
   const duplicateId = WidgetId.make("f1d1a000-0000-4000-8000-000000000398");
+
   const widget = {
     id: duplicateId,
     type: "transaction-list" as const,
@@ -366,7 +385,9 @@ it("rejects duplicate widget identities and non-canonical same-axis nesting", ()
     aggregation: "sum",
     period: "this-month",
   };
+
   const leaf = { kind: "leaf", widget };
+
   const invalidLayouts = [
     {
       kind: "split",
@@ -412,6 +433,7 @@ it("rejects duplicate widget identities and non-canonical same-axis nesting", ()
     "Expected a unique WidgetId in DashboardDocument",
     "Expected canonical layout without nested splits on the same axis",
   ];
+
   for (const [index, layout] of invalidLayouts.entries()) {
     const result = Schema.decodeUnknownResult(DashboardDocument)({ title: "Resumen", layout });
     expect(Result.isFailure(result) ? String(result.failure) : "").toContain(expectedIssues[index]);
@@ -420,9 +442,11 @@ it("rejects duplicate widget identities and non-canonical same-axis nesting", ()
 
 it("decodes complete local day and month chart bucket labels with their calendar component bounds", () => {
   const decode = Schema.decodeUnknownResult(DashboardBucket);
+
   for (const date of ["2026-01-01", "2026-09-10", "2026-10-20", "2026-11-30", "2026-12-31"]) {
     expect(Result.isSuccess(decode({ kind: "day", date }))).toBe(true);
   }
+
   for (const date of [
     "x2026-01-01",
     "2026-01-01x",
@@ -436,9 +460,11 @@ it("decodes complete local day and month chart bucket labels with their calendar
   ]) {
     expect(Result.isFailure(decode({ kind: "day", date }))).toBe(true);
   }
+
   for (const month of ["2026-01", "2026-09", "2026-10", "2026-12"]) {
     expect(Result.isSuccess(decode({ kind: "month", month }))).toBe(true);
   }
+
   for (const month of ["x2026-01", "2026-01x", "2026-00", "2026-13", "2026-1", "202a-01"]) {
     expect(Result.isFailure(decode({ kind: "month", month }))).toBe(true);
   }

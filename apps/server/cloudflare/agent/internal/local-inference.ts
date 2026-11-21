@@ -43,22 +43,29 @@ type Environment = OpenAiEnvironment & {
   PRICING: Pick<DurableObjectNamespace, "getByName">;
   BROWSER_ORIGIN: string;
 };
+
 const contextFor = Effect.fn(function* (turn: LocalTurn, state: "queued" | "running" = "running") {
   const sql = yield* SqliteClient;
   const user = yield* liveTurn(turn, yield* Clock.currentTimeMillis, state);
+
   const memories = yield* Schema.decodeUnknownEffect(
     Schema.Array(Schema.Struct({ text: MemoryText }))
   )(yield* sql`SELECT text FROM memories WHERE user_id=${turn.user_id} ORDER BY created_at_ms,id`);
+
   const { summary, rows } = yield* continuity(turn, state === "queued" ? "prefix" : "full");
+
   const [reply] =
     yield* sql`SELECT p.entry_json FROM hosted_whatsapp_inbound i JOIN whatsapp_deliveries w ON w.user_id=i.user_id AND w.portfolio=i.portfolio AND w.bsuid=i.bsuid AND w.endpoint=i.endpoint AND w.provider_message_id=i.reply_to AND w.state='delivered' AND w.family='proactivity' JOIN proactive_transcript p ON p.user_id=w.user_id AND p.id=w.operation_id WHERE i.turn_id=${turn.id} AND i.user_id=${turn.user_id} AND p.occurred_ms<=i.occurred_ms+999`;
+
   const referred = Option.flatMap(
     Option.fromUndefinedOr(reply?.entry_json),
     Schema.decodeUnknownOption(
       Schema.fromJsonString(Schema.toCodecJson(ProactiveInsightTranscriptEntry))
     )
   );
+
   const session = { sessionId: turn.session_id, userId: turn.user_id };
+
   return assembleWorkingContext({
     ...session,
     activeTurnId: turn.id,
@@ -79,16 +86,19 @@ const contextFor = Effect.fn(function* (turn: LocalTurn, state: "queued" | "runn
     activeRequest: turn.request_text,
   });
 });
+
 export const validateAdmission = Effect.fn(function* (
   environment: OpenAiEnvironment,
   turn: LocalTurn | Response
 ) {
   if (turn instanceof Response) return turn;
+
   if (!isHostedConfirmationAttempt(turn.request_text)) {
     const inference = yield* makeLocalHostedInference({
       environment,
       admit: () => Effect.succeed(false),
     });
+
     yield* inference.validateText({
       context: yield* contextFor(turn, "queued"),
       toolChoice: "auto",
@@ -98,21 +108,27 @@ export const validateAdmission = Effect.fn(function* (
       ),
     });
   }
+
   return channelReply(channelStatus.accepted)({ status: "processing", turnId: turn.id });
 });
+
 export const preflightRefusal = (error: HostedInferenceError): Response =>
   ["CapacityExceeded", "ActiveRequestCapacityExceeded", "ResourceLimit"].includes(error.reason._tag)
     ? channelReply(channelStatus.quota)({ status: "capacity_exceeded" })
     : unavailable();
+
 const modelFor = Effect.fn(function* (env: Environment, turn: LocalTurn) {
   const claim = Effect.fn(
     function* (units: number) {
       const work = { phase: "model" as const, units };
       yield* liveTurn(turn, yield* Clock.currentTimeMillis);
+
       if (!(yield* reserveSharedProviderSpend(env.DIRECTORY, work))) return false;
+
       return yield* Effect.gen(function* () {
         const current = yield* Clock.currentTimeMillis;
         yield* liveTurn(turn, current);
+
         return yield* chargeLocalProvider(work, "user", current);
       }).pipe(withStoreCapacity("required"));
     },
@@ -125,12 +141,15 @@ const modelFor = Effect.fn(function* (env: Environment, turn: LocalTurn) {
         })
     )
   );
+
   const scoped = yield* Effect.context<Effect.Services<ReturnType<typeof claim>>>();
+
   return yield* makeLocalHostedInference({
     environment: env,
     admit: (units) => claim(units).pipe(Effect.provide(scoped)),
   });
 });
+
 const present = Effect.fn(function* (
   turn: LocalTurn,
   reply: { text: TranscriptText; iteration: number },
@@ -139,25 +158,34 @@ const present = Effect.fn(function* (
   const until = yield* propose(turn, reply.text, reply.iteration);
   yield* preserveStoreAlarm(storage, until);
 });
+
 const confirm = Effect.fn(function* (turn: LocalTurn, storage: DurableObjectStorage) {
   const held = yield* takeChallenge(turn);
+
   let text = TranscriptText.make(
     "La confirmación ya no está disponible. Vuelve a solicitar la operación para revisar sus detalles."
   );
+
   if (Option.isSome(held)) {
     const action = held.value;
+
     const result = yield* applyTool(
       { id: "confirm:" + turn.id, operation: action.operation, params: action.input_json },
       { turn, iteration: 1, storage, confirmed: action }
     );
+
     if (result.outcome._tag === "Succeeded") {
       text = TranscriptText.make("Se confirmó y completó la operación.");
     }
   }
+
   yield* present(turn, { text, iteration: 1 }, storage);
 });
+
 type ToolRound = { turn: LocalTurn; iteration: number; storage: DurableObjectStorage };
+
 type ToolResult = Extract<HostedToolAction, { _tag: "Result" }>;
+
 const finishActions = Effect.fn(function* (
   actions: ReadonlyArray<ToolResult>,
   { turn, iteration, storage }: ToolRound
@@ -174,17 +202,23 @@ const finishActions = Effect.fn(function* (
         storage
       );
     }).pipe(withStoreCapacity("required"));
+
     return true;
   }
+
   const refused = Option.isNone(turn.browser_id) ? failedQueryReply(actions) : Option.none();
+
   if (Option.isSome(refused)) {
     yield* present(turn, { text: refused.value, iteration }, storage).pipe(
       withStoreCapacity("required")
     );
+
     return true;
   }
+
   return false;
 });
+
 const invalidToolGroup = (
   calls: ReadonlyArray<HostedTextToolCall>,
   catalog: ReturnType<typeof localHostedCatalog>
@@ -195,18 +229,21 @@ const invalidToolGroup = (
       (tool) =>
         catalog.find((op) => op.id === tool.operation)?.policy.agentConfirmation === "required"
     ));
+
 const reserveToolRoutes = Effect.fn(function* (
   tool: HostedTextToolCall,
   turn: LocalTurn,
   directory: Environment["DIRECTORY"]
 ) {
   const enable = "ingestion.enableEmailForwarding";
+
   const batch =
     tool.operation === "operations.executeAtomicBatch"
       ? Schema.decodeUnknownOption(Schema.Struct({ payload: getAtomicBatchInputSchema() }), {
           onExcessProperty: "error",
         })(tool.params)
       : Option.none();
+
   if (
     tool.operation === "ingestion.getEmailForwarding" ||
     tool.operation === enable ||
@@ -216,6 +253,7 @@ const reserveToolRoutes = Effect.fn(function* (
     yield* reserveBatchForwarding(turn.user_id, directory);
   }
 });
+
 const runTools = Effect.fn(function* (
   calls: ReadonlyArray<HostedTextToolCall>,
   round: ToolRound,
@@ -223,10 +261,13 @@ const runTools = Effect.fn(function* (
 ) {
   const { turn, iteration, storage } = round;
   const catalog = localHostedCatalog(channelAuthority(turn));
+
   if (invalidToolGroup(calls, catalog)) return yield* new AgentUnavailable();
   const actions: ToolResult[] = [];
+
   for (const tool of calls) {
     yield* reserveToolRoutes(tool, turn, env.DIRECTORY);
+
     const offers =
       tool.operation === "subscription.listSubscriptionOffers"
         ? yield* readLocalSubscriptionOffers(env.PRICING).pipe(Effect.option)
@@ -239,12 +280,16 @@ const runTools = Effect.fn(function* (
         storage,
         commercial: { origin: env.BROWSER_ORIGIN, offers },
       });
+
       const challenge = yield* visibleChallenge(turn.id, yield* Clock.currentTimeMillis);
+
       if (Option.isSome(challenge)) {
         yield* present(turn, { text: challenge.value.effect, iteration }, storage);
       }
+
       return { event, presented: Option.isSome(challenge) };
     }).pipe(withStoreCapacity("growth"));
+
     if (applied.presented) return Option.none();
     actions.push({
       _tag: "Result",
@@ -254,14 +299,19 @@ const runTools = Effect.fn(function* (
         catalog.find((op) => op.id === tool.operation)?.policy.kind === "mutation",
     });
   }
+
   if (yield* finishActions(actions, round)) return Option.none();
+
   return Option.some(actions.map(({ event }) => event));
 });
+
 type RoundProgress = { repairUsed: boolean; mutationAttempted: boolean };
+
 const canRepair = (reason: string, round: ToolRound, previous: RoundProgress): boolean =>
   !previous.repairUsed &&
   reason === "InvalidOutput" &&
   (Option.isNone(round.turn.browser_id) || round.iteration === 1);
+
 const providerRound = Effect.fn(function* (
   prepared: PreparedHostedText,
   round: ToolRound,
@@ -269,14 +319,19 @@ const providerRound = Effect.fn(function* (
 ) {
   const { turn, iteration, storage } = round;
   const result = yield* Effect.result(prepared.execute);
+
   if (Result.isSuccess(result)) return { _tag: "Result" as const, output: result.success };
   const reason = result.failure.reason._tag;
+
   if (previous.mutationAttempted) return yield* result.failure;
+
   if (canRepair(reason, round, previous)) {
     previous.repairUsed = true;
     const repair = yield* Effect.result(prepared.repairInvalidOutput);
+
     if (Result.isSuccess(repair)) return { _tag: "Retry" as const, prepared: repair.success };
   }
+
   if (
     Option.isNone(turn.browser_id) &&
     ["ProviderQuotaExceeded", "ProviderUnavailable", "InvalidOutput"].includes(reason)
@@ -291,16 +346,20 @@ const providerRound = Effect.fn(function* (
       },
       storage
     ).pipe(withStoreCapacity("required"));
+
     return { _tag: "Proposed" as const };
   }
+
   return yield* result.failure;
 });
+
 const finishReply = Effect.fn(function* (
   result: HostedTextResult,
   { turn, storage, iteration }: ToolRound
 ) {
   if (result.finishReason !== "stop") return yield* new AgentUnavailable();
   const answer = yield* Schema.decodeUnknownEffect(TranscriptText)(result.text);
+
   return yield* present(
     turn,
     {
@@ -312,13 +371,16 @@ const finishReply = Effect.fn(function* (
     storage
   ).pipe(withStoreCapacity("required"));
 });
+
 const validToolRound = (result: HostedTextResult, total: number): boolean =>
   result.finishReason === "tool-calls" && total <= maximumToolCallsPerTurn;
+
 const includesMutation = (
   calls: ReadonlyArray<HostedTextToolCall>,
   catalog: ReturnType<typeof localHostedCatalog>
 ): boolean =>
   calls.some((tool) => catalog.find((op) => op.id === tool.operation)?.policy.kind === "mutation");
+
 const runRounds = Effect.fn(function* (
   inference: HostedInferenceService,
   turn: LocalTurn,
@@ -326,36 +388,49 @@ const runRounds = Effect.fn(function* (
 ) {
   const context = yield* contextFor(turn).pipe(withStoreCapacity("required"));
   const catalog = localHostedCatalog(channelAuthority(turn));
+
   let prepared = yield* inference.prepareText({
     context,
     toolChoice: "auto",
     maximumToolCalls: HostedToolCallMaximum.make(maximumToolCallsPerTurn),
     availableOperations: catalog.map((op) => op.id),
   });
+
   let total = 0;
   const previous = { repairUsed: false, mutationAttempted: false };
+
   for (let iteration = 1; iteration <= maximumHostedTurnIterations; iteration++) {
     const step = yield* providerRound(prepared, { turn, storage, iteration }, previous);
+
     if (step._tag === "Proposed") return;
+
     if (step._tag === "Retry") {
       prepared = step.prepared;
       continue;
     }
+
     const result = step.output;
+
     if (result.toolCalls.length === 0) {
       return yield* finishReply(result, { turn, storage, iteration });
     }
+
     total += result.toolCalls.length;
+
     if (!validToolRound(result, total)) {
       return yield* new AgentUnavailable();
     }
+
     previous.mutationAttempted ||= includesMutation(result.toolCalls, catalog);
     const events = yield* runTools(result.toolCalls, { turn, iteration, storage }, env);
+
     if (Option.isNone(events)) return;
     prepared = yield* result.continuation.prepare(events.value);
   }
+
   return yield* new AgentUnavailable();
 });
+
 export const executeTurn = Effect.fn(function* (
   env: Environment,
   turn: LocalTurn,
@@ -367,9 +442,11 @@ export const executeTurn = Effect.fn(function* (
   ) {
     return;
   }
+
   if (isHostedConfirmationAttempt(turn.request_text)) {
     return yield* confirm(turn, storage).pipe(withStoreCapacity("growth"));
   }
+
   const inference = yield* modelFor(env, turn);
   yield* compact(turn, inference).pipe(Effect.ignore);
   yield* runRounds(inference, turn, { storage, env });

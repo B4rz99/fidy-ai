@@ -11,7 +11,9 @@ import {
 import { maximumStatementChunkActivities } from "./statement-processing-limits";
 
 const Work = StatementWork;
+
 const CoordinatorWork = StatementCoordinatorActivity;
+
 const WorkflowState = Schema.Struct({
   status: Schema.Literals([
     "queued",
@@ -37,7 +39,9 @@ export const isStatementExtractionWork = (body: unknown): boolean =>
   Option.isSome(Schema.decodeUnknownOption(Work)(body));
 
 const missingWorkStatus = 404;
+
 type MessagePage = ReadonlyArray<Readonly<{ body: unknown; ack: () => void }>>;
+
 const handoffStatements = (input: {
   workflow: StatementWorkflow;
   messages: MessagePage;
@@ -47,15 +51,19 @@ const handoffStatements = (input: {
   Effect.gen(function* () {
     for (const message of input.messages) {
       const work = Schema.decodeUnknownOption(Work)(message.body);
+
       if (Option.isNone(work)) {
         message.ack();
         continue;
       }
+
       if (!(yield* input.pending(work.value))) {
         message.ack();
         continue;
       }
+
       const params = yield* sanitizeWorkTrace(work.value);
+
       const started = yield* Effect.exit(
         attempt(() =>
           input.workflow.create({
@@ -65,10 +73,12 @@ const handoffStatements = (input: {
           })
         )
       );
+
       if (Exit.isFailure(started)) {
         if (Cause.hasInterrupts(started.cause)) return yield* Effect.failCause(started.cause);
         yield* input.reconcile(work.value);
       }
+
       message.ack();
     }
   }).pipe(Effect.withSpan("ingestion.statementReceive"));
@@ -81,6 +91,7 @@ export const receiveNativeStatementExtraction = (input: {
   messages: MessagePage;
 }): Effect.Effect<void, StatementDeliveryUnavailable> => {
   const { USER_STORE: users, STATEMENT_EXTRACTION_WORKFLOW: workflow } = input.environment;
+
   return handoffStatements({
     messages: input.messages,
     workflow,
@@ -89,20 +100,25 @@ export const receiveNativeStatementExtraction = (input: {
         const body = yield* Schema.encodeEffect(Schema.fromJsonString(Work))(work).pipe(
           Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))
         );
+
         const response = yield* attempt(() =>
           users
             .getByName(work.userId)
             .fetch("https://user.invalid/ingestion/statement/pending", { method: "POST", body })
         );
+
         if (response.status === missingWorkStatus) return false;
+
         if (!response.ok) {
           return yield* new StatementDeliveryUnavailable({ cause: "statement_owner" });
         }
+
         return true;
       }),
     reconcile: (work) =>
       Effect.gen(function* () {
         const state = yield* workflowState(workflow, work.submissionId);
+
         if (["errored", "terminated", "complete"].includes(state.status)) {
           const owner = users;
           yield* attempt(() => coordinatedStatementStep(owner, work, "StatementFailed"));
@@ -121,17 +137,22 @@ const workflowState = (
 ): Effect.Effect<typeof WorkflowState.Type, StatementDeliveryUnavailable> =>
   Effect.gen(function* () {
     const instance = yield* attempt(() => workflow.get(id));
+
     const statusMethod =
       typeof instance === "object" && instance !== null && "status" in instance
         ? instance.status
         : undefined;
+
     if (typeof statusMethod !== "function") {
       return yield* new StatementDeliveryUnavailable({ cause: "Workflow status unavailable" });
     }
+
     const status = yield* attempt(() => {
       const result: unknown = statusMethod.call(instance);
+
       return Promise.resolve(result);
     });
+
     return yield* Schema.decodeUnknownEffect(WorkflowState)(status).pipe(
       Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))
     );
@@ -142,7 +163,9 @@ type Activity = <A extends boolean>(
   options: WorkflowStepConfig,
   run: () => Promise<A>
 ) => Promise<A>;
+
 const HTTP_OK = 200;
+
 const HTTP_ACCEPTED = 202;
 
 const coordinatedStatementStep = (
@@ -154,10 +177,12 @@ const coordinatedStatementStep = (
     Effect.gen(function* () {
       const safeWork = yield* sanitizeWorkTrace(work);
       const traceHeaders = yield* workTraceHeaders(safeWork);
+
       const body = yield* Schema.encodeEffect(Schema.fromJsonString(CoordinatorWork))({
         _tag: kind,
         ...safeWork,
       }).pipe(Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause })));
+
       const result = yield* Effect.tryPromise({
         try: () =>
           coordinator.getByName(work.userId).fetch(
@@ -169,12 +194,14 @@ const coordinatedStatementStep = (
           ),
         catch: (cause) => new StatementDeliveryUnavailable({ cause }),
       });
+
       if (
         result.status !== HTTP_OK &&
         !(kind === "StatementWork" && result.status === HTTP_ACCEPTED)
       ) {
         return yield* new StatementDeliveryUnavailable({ cause: "coordinator_unavailable" });
       }
+
       return result.status === HTTP_ACCEPTED;
     })
   );
@@ -187,10 +214,13 @@ export const runStatementExtractionWorkflow = (
   }>
 ): Promise<void> => {
   const work = Schema.decodeUnknownOption(Work)(input.payload);
+
   if (Option.isNone(work)) return Promise.resolve();
+
   return Effect.runPromise(
     Effect.gen(function* () {
       let finished = false;
+
       for (let index = 0; index < maximumStatementChunkActivities; index += 1) {
         const outcome = yield* Effect.exit(
           Effect.tryPromise({
@@ -203,15 +233,18 @@ export const runStatementExtractionWorkflow = (
             catch: (cause) => new StatementDeliveryUnavailable({ cause }),
           })
         );
+
         if (Exit.isFailure(outcome)) {
           if (Cause.hasInterrupts(outcome.cause)) return yield* Effect.failCause(outcome.cause);
           break;
         }
+
         if (!outcome.value) {
           finished = true;
           break;
         }
       }
+
       if (finished) return;
       yield* Effect.tryPromise({
         try: () =>

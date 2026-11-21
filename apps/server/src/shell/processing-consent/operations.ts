@@ -20,6 +20,7 @@ export const prepareProcessingConsentStatusRead = ({
   current,
 }: Readonly<{ subject: WebSessionSubject; current: number }>): OwnedStatement => {
   const authority = webSessionCredentialAuthority({ subject, current });
+
   return receiptRead({
     sql: `w.id=? AND w.user_id=? AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
     params: [subject.id, subject.userId, ...authority.bindings],
@@ -38,6 +39,7 @@ export const decodeProcessingConsentStatusRead = (
   Effect.gen(function* () {
     if (rows.length === 0) return Option.none();
     const row = yield* Schema.decodeUnknownEffect(ReceiptRow)(rows[0]);
+
     const result = yield* Schema.decodeUnknownEffect(ProcessingConsentStatus)({
       status: row.status,
       withdrawal:
@@ -45,6 +47,7 @@ export const decodeProcessingConsentStatusRead = (
           ? null
           : { reference: row.reference, occurredAtMs: row.occurredAtMs },
     });
+
     return Option.some(result);
   });
 

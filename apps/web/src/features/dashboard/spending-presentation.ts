@@ -20,6 +20,7 @@ const presentBucket = (
   key: SpendingResult["buckets"][number]["key"]
 ): Readonly<{ key: string; label: string; fill: string }> => {
   const label = bucketLabel(key);
+
   return key.kind === "category"
     ? { key: key.category.id, label, fill: dashboardCategoryVisual(key.category.id).fill }
     : { key: label, label, fill: "var(--dashboard-chart-fill)" };
@@ -38,14 +39,17 @@ export const currencyChartData = ({
   currency,
 }: Readonly<{ data: SpendingResult; currency: string }>): ReadonlyArray<CurrencyChartDatum> => {
   const zero = BigDecimal.make(0n, 0);
+
   const values = data.buckets.flatMap((bucket) => {
     const group = bucket.moneyGroups.find((candidate) => candidate.currency === currency);
+
     if (
       bucket.key.kind === "category" &&
       (group === undefined || !BigDecimal.isPositive(group.outflow.amount))
     ) {
       return [];
     }
+
     return [
       {
         ...presentBucket(bucket.key),
@@ -54,7 +58,9 @@ export const currencyChartData = ({
       },
     ];
   });
+
   const geometry = moneySeriesGeometry(values.map(({ outflowAmount }) => outflowAmount));
+
   return values.map(({ outflowAmount: _outflow, ...value }, index) => ({
     ...value,
     outflow: geometry[index] ?? 0,

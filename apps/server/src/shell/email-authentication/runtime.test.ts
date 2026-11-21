@@ -37,6 +37,7 @@ const assertFailure = (
   const unannotatedExit = Exit.isFailure(input.exit)
     ? Exit.fail(Option.getOrThrow(Cause.findErrorOption(input.exit.cause)))
     : input.exit;
+
   assert.deepStrictEqual(unannotatedExit, Exit.fail(input.expected));
 };
 
@@ -59,6 +60,7 @@ it.effect("accepts only a bounded provider message identity after a successful s
       yield* sendResponse({ status: 202, body: '{"id":"accepted-message"}' }),
       Exit.void
     );
+
     for (const body of [
       '{"id":""}',
       '{"id":12}',
@@ -122,10 +124,12 @@ it.effect("contains outbound failures without replaying uncertain delivery", () 
       Option.some(400),
     ]) {
       let attempts = 0;
+
       const delivery = makeEmailDelivery({
         outboundHttp: {
           execute: () => {
             attempts += 1;
+
             return Effect.fail(
               new OutboundHttpFailure({
                 reason: "response-body-failed",
@@ -136,6 +140,7 @@ it.effect("contains outbound failures without replaying uncertain delivery", () 
           },
         },
       });
+
       const exit = yield* delivery.send(deliveryInput()).pipe(Effect.exit);
       assertFailure({
         exit,
@@ -176,22 +181,28 @@ it.effect(
           path: "/login",
         },
       ] as const;
+
       for (const expected of purposes) {
         const delivery = makeEmailDelivery({
           outboundHttp: {
             execute: (request) =>
               Effect.gen(function* () {
                 expect(request._tag).toBe("ResendEmailDelivery");
+
                 if (request._tag !== "ResendEmailDelivery") {
                   throw new Error("Unexpected provider operation");
                 }
+
                 expect(request.idempotencyKey).toBe("private-delivery-idempotency");
+
                 const email = yield* Schema.decodeEffect(ProviderEmail, {
                   onExcessProperty: "error",
                 })(request.body).pipe(Effect.orDie);
+
                 expect(email.from).toBe("Fidy <obarboza@fidyapp.com>");
                 expect(email.to).toEqual(["person@example.com"]);
                 expect(email.subject).toBe(expected.subject);
+
                 for (const body of [email.text, email.html]) {
                   expect(body).toContain("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ");
                   expect(body).toContain(`https://app.fidyapp.com${expected.path}`);
@@ -201,6 +212,7 @@ it.effect(
                   expect(body).not.toContain("person@example.com");
                   expect(body).not.toContain("private-delivery-idempotency");
                 }
+
                 return {
                   status: 200,
                   headers: {},
@@ -209,6 +221,7 @@ it.effect(
               }),
           },
         });
+
         yield* delivery.send({ ...deliveryInput(), purpose: expected.purpose });
       }
     })
@@ -217,6 +230,7 @@ it.effect(
 it.effect("interrupts stalled delivery at its fixed deadline without declaring rejection", () =>
   Effect.gen(function* () {
     let interrupted = false;
+
     const delivery = makeEmailDelivery({
       outboundHttp: {
         execute: () =>
@@ -229,9 +243,11 @@ it.effect("interrupts stalled delivery at its fixed deadline without declaring r
           ),
       },
     });
+
     const sending = yield* delivery
       .send(deliveryInput())
       .pipe(Effect.exit, Effect.forkChild({ startImmediately: true }));
+
     yield* TestClock.adjust("14 seconds");
     assertFailure({
       exit: yield* Fiber.join(sending),

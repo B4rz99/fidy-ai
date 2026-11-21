@@ -24,9 +24,13 @@ import type { CanonicalAuthorityRoot } from "~/shell/canonical-policy/contract";
 export const webSessionCookieName = "__Host-fidy_session";
 
 type HostedAuditCaller = Extract<AuditCaller, { readonly _tag: "HostedAgentSession" }>;
+
 type OAuthAuditCaller = Extract<AuditCaller, { readonly _tag: "OAuthAgent" }>;
+
 type PatAuditCaller = Extract<AuditCaller, { readonly _tag: "PAT" }>;
+
 type WebSessionAuditCaller = Extract<AuditCaller, { readonly _tag: "WebSession" }>;
+
 type CanonicalAuthority =
   | Readonly<{ auditCaller: HostedAuditCaller; authorityRoot: CanonicalAuthorityRoot }>
   | Readonly<{

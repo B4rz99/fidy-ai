@@ -24,6 +24,7 @@ const scenario = Effect.gen(function* () {
       alice.user
     )
   );
+
   const send = (path: string, method: string, body: unknown): Effect.Effect<Response> =>
     native(() =>
       db.send(
@@ -39,6 +40,7 @@ const scenario = Effect.gen(function* () {
         })
       )
     );
+
   const token = "fin_abcdefgh_" + "x".repeat(43);
   yield* seedNativePAT({
     db,
@@ -47,6 +49,7 @@ const scenario = Effect.gen(function* () {
     scopes: ["read"],
     current: yield* Clock.currentTimeMillis,
   });
+
   const profile = yield* native(() =>
     db.send(
       new Request("https://api.fidyapp.com/user", {
@@ -54,6 +57,7 @@ const scenario = Effect.gen(function* () {
       })
     )
   );
+
   expect(profile.status).toBe(200);
   expect(yield* native(() => profile.json())).toMatchObject({
     data: { id: alice.user, timeZone: "America/Bogota" },
@@ -64,11 +68,13 @@ const scenario = Effect.gen(function* () {
   expect(yield* native(() => first.json())).toMatchObject({
     data: { id: alice.user, ...preferences },
   });
+
   const call = {
     callId: alice.session,
     operation: "identity.updateUserPreferences",
     input: { payload: { ...preferences, timeZone: "America/Lima" } },
   };
+
   const rollback = yield* send("/operations/atomic-batch", "POST", {
     calls: [
       call,
@@ -79,6 +85,7 @@ const scenario = Effect.gen(function* () {
       },
     ],
   });
+
   expect(rollback.status).toBe(400);
   const own = yield* native(() => db.browser(0, "/user"));
   expect(yield* native(() => own.json())).toMatchObject({ data: preferences });
@@ -88,6 +95,7 @@ const scenario = Effect.gen(function* () {
     data: { results: [{ output: { data: { id: alice.user, timeZone: "America/Lima" } } }] },
   });
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "updates preferences through the same owner individually and in an atomic batch",

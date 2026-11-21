@@ -157,6 +157,7 @@ export const RedeemBrowserLoginPairingPayload = Schema.Struct({
   pairingId: Schema.optional(Schema.Unknown),
   privateVerifier: Schema.optional(Schema.Unknown),
 });
+
 export type RedeemBrowserLoginPairingPayload = typeof RedeemBrowserLoginPairingPayload.Type;
 
 export const PendingBrowserLoginPairing = Schema.Struct({
@@ -166,11 +167,13 @@ export const PendingBrowserLoginPairing = Schema.Struct({
     Schema.isGreaterThanOrEqualTo(browserLoginPollingIntervalSeconds)
   ),
 }).annotate({ identifier: "PendingBrowserLoginPairing", httpApiStatus: 202 });
+
 export type PendingBrowserLoginPairing = typeof PendingBrowserLoginPairing.Type;
 
 export const AuthenticatedBrowserLoginPairing = Schema.Struct({
   status: Schema.Literal("authenticated"),
 }).annotate({ identifier: "AuthenticatedBrowserLoginPairing", httpApiStatus: 200 });
+
 export type AuthenticatedBrowserLoginPairing = typeof AuthenticatedBrowserLoginPairing.Type;
 
 export const BrowserLoginWebAuthGroup = HttpApiGroup.make("browserLogin")

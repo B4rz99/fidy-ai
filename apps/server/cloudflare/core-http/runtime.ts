@@ -41,7 +41,9 @@ import {
 
 const rejectionBoundary = (request: Request): CoreRejectionBoundary => {
   const pathname = new URL(request.url).pathname;
+
   if (pathname === "/mcp") return "mcp";
+
   return pathname === "/providers/kapso/callback" || pathname === "/providers/wompi/billing-events"
     ? "providerCallback"
     : "http";
@@ -59,11 +61,13 @@ const sharedReadiness = Effect.fn(function* (request: Request, environment: Core
   ) {
     return new Response(null, { status: 404 });
   }
+
   const core = {
     workerVersionId: environment.CF_VERSION_METADATA.id,
     gitRevision: environment.RELEASE_GIT_SHA,
     contractDigest: environment.CONTRACT_DIGEST,
   };
+
   return yield* initializeSharedStores(environment).pipe(
     Effect.map((markers) =>
       Response.json(
@@ -75,6 +79,7 @@ const sharedReadiness = Effect.fn(function* (request: Request, environment: Core
     Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
   );
 });
+
 const performanceProbe = Effect.fn(function* (request: Request, environment: CoreHttpEnvironment) {
   const valid = yield* performanceEvidenceAdmitted({
     request,
@@ -82,28 +87,34 @@ const performanceProbe = Effect.fn(function* (request: Request, environment: Cor
     boundary: "core",
     now: yield* Clock.currentTimeMillis,
   });
+
   return Option.some(
     valid
       ? yield* routeSessionRequest({ request, environment })
       : new Response(null, { status: 404 })
   );
 });
+
 const readinessPath = (request: Request, url: URL): boolean =>
   isStorageCompatibility(request) ||
   isStorageBootstrap(request) ||
   (request.method === "GET" && url.pathname === smokePath && url.search === "?readiness=1");
+
 const storageProbe = Effect.fn(function* (request: Request, environment: CoreHttpEnvironment) {
   if (isPerformanceEvidence(request)) return yield* performanceProbe(request, environment);
   const url = new URL(request.url);
+
   const readable =
     environment.RECOVERY_ISOLATION === "isolated"
       ? readinessPath(request, url)
       : environment.NATIVE_STORAGE_ADMISSION === "open" &&
         environment.RECOVERY_ISOLATION === "" &&
         isStorageCompatibility(request);
+
   if (environment.MAINTENANCE !== undefined && readable) {
     return Option.some(yield* sharedReadiness(request, environment));
   }
+
   return Option.none<Response>();
 });
 
@@ -111,28 +122,37 @@ const consumeVersionOverride = (request: Request): Request => {
   if (!request.headers.has(smokeVersionHeader)) return request;
   const headers = new Headers(request.headers);
   headers.delete(smokeVersionHeader);
+
   return new Request(request, { headers });
 };
 
 export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): CoreHttpHandler => {
   const observeRejections = makeCoreRejectionObserver();
+
   return (incoming, installed) => {
     const environment = closedHostEnvironment({
       request: incoming,
       environment: installed,
       boundary: "core",
     });
+
     return Effect.gen(function* () {
       const admission = yield* releaseAdmission(incoming, environment, "core");
+
       if (Option.isSome(admission.denial)) return admission.denial.value;
       const request = consumeVersionOverride(admission.request);
+
       if (isAcceptanceReceipt(request)) return yield* fixtureChargeReceipt(request, environment);
+
       if (isAcceptanceWindow(request)) return yield* renewAcceptanceWindow(request, environment);
       const storage = yield* storageProbe(request, environment);
+
       if (Option.isSome(storage)) return storage.value;
+
       const clients = yield* Layer.build(OutboundHttpLive).pipe(
         Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
       );
+
       const response = yield* executeCoreHttp({
         bankAuthentication: verifyBancolombiaSandboxAuthentication(environment),
         request,
@@ -141,11 +161,13 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
       }).pipe(
         Effect.provideService(HttpClient.HttpClient, Context.get(clients, HttpClient.HttpClient))
       );
+
       yield* observeRejections({
         status: response.status,
         boundary: rejectionBoundary(request),
         now: yield* Clock.currentTimeMillis,
       });
+
       return response;
     }).pipe(
       Effect.provideService(ConnectionInstitutions, institutions),

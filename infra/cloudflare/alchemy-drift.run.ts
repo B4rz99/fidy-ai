@@ -11,7 +11,9 @@ const state = Layer.unwrap(
     const backend = resolveStateBackend({ development, stage });
 
     if (backend === "cloudflare") return Cloudflare.state();
+
     if (backend === "local") return Alchemy.localState();
+
     return Alchemy.inMemoryState();
   }).pipe(Effect.orDie)
 );

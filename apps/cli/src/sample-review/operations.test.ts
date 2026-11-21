@@ -8,6 +8,7 @@ it.effect("shows only the reviewed structural artifact before sending the human 
     const candidateId = "10000000-0000-4000-8000-000000000092";
     const sampleId = "10000000-0000-4000-8000-000000000093";
     const digest = "d".repeat(64);
+
     const artifact = {
       serviceMarket: "CO",
       sourceFormat: "notification-email",
@@ -16,6 +17,7 @@ it.effect("shows only the reviewed structural artifact before sending the human 
       anonymizationRevision: "structural-tags-v1",
       structure: { table: 1, tr: 1, td: 2, p: 0, span: 0, div: 0 },
     } as const;
+
     const prompts = [userId, "APROBAR"];
     const output: string[] = [];
     const calls: unknown[] = [];
@@ -30,10 +32,13 @@ it.effect("shows only the reviewed structural artifact before sending the human 
       submit: (command) =>
         Effect.sync(() => {
           calls.push(command);
+
           if (command.action === "preview") {
             return { status: "preview", candidateId, revision: 2, digest, artifact } as const;
           }
+
           expect(output.join("")).toContain('"td": 2');
+
           return { status: "published", sampleId } as const;
         }),
     });

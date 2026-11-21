@@ -18,6 +18,7 @@ const unavailable = (): Response =>
       headers: { "cache-control": "no-store", "content-type": "application/json; charset=utf-8" },
     }
   );
+
 const methodNotAllowed = (): Response =>
   Response.json(
     { status: "method_not_allowed" },
@@ -41,6 +42,7 @@ export const supportResponse = ({
   telemetry: TelemetryService;
 }>): Effect.Effect<Response, never, HttpClient.HttpClient> => {
   if (request.method !== "POST") return Effect.succeed(methodNotAllowed());
+
   return telemetry.rootSpan(
     {
       component: "api",

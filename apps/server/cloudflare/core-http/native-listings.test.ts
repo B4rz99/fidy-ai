@@ -33,14 +33,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             alice.user
           )
         );
+
         for (const [id, query] of observedListings) {
           const operation = operationCatalog.byId.get(id);
+
           if (operation === undefined) throw new Error("Unknown listing " + id);
           const target = operation.route + query;
           const response = yield* native(() => store.browser(0, target));
           expect(response.status, id).toBe(200);
           yield* native(() => response.arrayBuffer());
           const before = yield* native(() => store.exec("SELECT count(*) AS n FROM audit_entries"));
+
           const refused = yield* native(() =>
             store.send(
               new Request("https://" + productionTopology.ingress.hostname + target, {
@@ -53,6 +56,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               })
             )
           );
+
           expect(refused.status, id).toBe(401);
           yield* native(() => refused.arrayBuffer());
           expect(

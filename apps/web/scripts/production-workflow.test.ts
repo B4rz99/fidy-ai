@@ -1,15 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 const repositoryRoot = new URL("../../../", import.meta.url);
+
 const source = (path: string): Promise<string> => Bun.file(new URL(path, repositoryRoot)).text();
+
 const workflow = await source(".github/workflows/native-storage-release.yml");
+
 const checks = await source(".github/workflows/ci.yml");
+
 const cliRelease = await source(".github/workflows/cli-release.yml");
+
 const profileAction = await source(
   ".github/actions/configure-alchemy-cloudflare-profile/action.yml"
 );
+
 const ordered = (text: string, parts: readonly string[]): void => {
   let previous = -1;
+
   for (const part of parts) {
     const next = text.indexOf(part);
     expect(next, part).toBeGreaterThan(previous);
@@ -29,6 +36,7 @@ describe("protected native releases", () => {
     ]) {
       expect(workflow).toContain(gate);
     }
+
     expect(workflow).not.toContain("  push:");
     expect(workflow).not.toMatch(
       /production-resources.ts|verify-retirement|deferred-d1-quota|SCHEMA_CUTOVER/u
@@ -37,8 +45,10 @@ describe("protected native releases", () => {
   it("pins every external Action and builds release metadata before the first provider mutation", () => {
     for (const action of workflow.matchAll(/uses: ([^\s]+)/gu)) {
       const name = action[1] ?? "";
+
       if (!name.startsWith("./")) expect(name).toMatch(/@[a-f0-9]{40}$/u);
     }
+
     ordered(workflow, [
       "Require closed admission",
       "actions/checkout@",
@@ -96,6 +106,7 @@ describe("protected native releases", () => {
     for (const group of ["builds", "cloudflare-adapters", "cloudflare-infra"]) {
       expect(checks).toContain("bun run verify -- --group " + group);
     }
+
     expect(workflow).toContain("run: bun run build:production");
   });
 });

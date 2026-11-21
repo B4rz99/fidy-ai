@@ -4,7 +4,9 @@ import { memoryOperationIds } from "./contract";
 
 const routes = memoryOperationIds.map((id) => {
   const operation = operationCatalog.byId.get(id);
+
   if (operation === undefined) throw new Error(`Missing canonical operation ${id}`);
+
   return operation;
 });
 

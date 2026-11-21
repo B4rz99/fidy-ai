@@ -23,10 +23,12 @@ const PriceRow = Schema.Struct({
   tax_treatment: Schema.String,
   terms_json: Schema.String,
 });
+
 const Terms = Schema.Struct({
   ...Price.fields.renewalTerms.fields,
   paymentMethods: Price.fields.paymentMethods,
 });
+
 const StandingRow = Schema.Struct({
   has_pro_grant: Schema.Literals([0, 1]),
   started_at_ms: Schema.Finite,
@@ -45,6 +47,7 @@ const StandingRow = Schema.Struct({
   paid_through_ms: Schema.NullOr(Schema.Finite),
   source_cancellation: Schema.NullOr(SubscriptionCancellation.fields.sourceCancellation),
 });
+
 const AttemptRow = Schema.Struct({
   id: Schema.String,
   price_id: Schema.String,
@@ -60,9 +63,12 @@ const AttemptRow = Schema.Struct({
   ends_at_ms: Schema.NullOr(Schema.Finite),
   renewal_anchor_ms: Schema.NullOr(Schema.Finite),
 });
+
 const decode = <A, E>(schema: Schema.Codec<A, E>, value: unknown): A =>
   Schema.decodeUnknownSync(schema)(value);
+
 const instant = (ms: number): string => DateTime.formatIso(DateTime.makeUnsafe(ms));
+
 const unavailable = (): Unavailable =>
   Unavailable.make({
     error: {
@@ -78,6 +84,7 @@ export const projectSubscriptionOffers = (rows: ReadonlyArray<unknown>): Subscri
     rows.map((raw) => {
       const row = decode(PriceRow, raw);
       const terms = decode(Schema.fromJsonString(Terms), row.terms_json);
+
       return {
         id: row.id,
         money: { amount: row.amount, currency: row.currency },
@@ -92,6 +99,7 @@ export const projectSubscriptionOffers = (rows: ReadonlyArray<unknown>): Subscri
 
 export const listSubscriptionOffersResponse = Effect.flatMap(SqlClient.SqlClient, (sql) => {
   const query = subscriptionOffersQuery();
+
   return sql.unsafe(query.sql, query.params);
 }).pipe(
   Effect.map((rows) => ({ data: projectSubscriptionOffers(rows), next: [] as const })),
@@ -113,6 +121,7 @@ export const readSubscriptionStatus = (
     const attemptsQuery = subscriptionAttemptsQuery({ userId, authority: Option.none() });
     const standing = yield* sql.unsafe(standingQuery.sql, standingQuery.params);
     const attempts = yield* sql.unsafe(attemptsQuery.sql, attemptsQuery.params);
+
     return {
       data: projectSubscriptionStatus({ standingRow: standing[0], attemptRows: attempts, now }),
       next: [] as const,
@@ -124,6 +133,7 @@ export const readSubscriptionStatus = (
 
 const projectAttempt = (raw: unknown): unknown => {
   const attempt = decode(AttemptRow, raw);
+
   const snapshot = {
     id: attempt.id,
     priceId: attempt.price_id,
@@ -134,7 +144,9 @@ const projectAttempt = (raw: unknown): unknown => {
     timeZone: attempt.time_zone,
     createdAt: instant(attempt.created_at_ms),
   };
+
   if (attempt.status === "pending") return { ...snapshot, status: "pending" };
+
   if (attempt.status === "failed") {
     return {
       ...snapshot,
@@ -142,6 +154,7 @@ const projectAttempt = (raw: unknown): unknown => {
       failedAt: instant(decode(Schema.Finite, attempt.finalized_at_ms)),
     };
   }
+
   return {
     ...snapshot,
     status: "succeeded",
@@ -178,6 +191,7 @@ export const projectSubscriptionStatus = ({
 }>): SubscriptionStatus => {
   decode(Schema.Finite, now);
   const row = decode(StandingRow, standingRow);
+
   const paidSubscription =
     row.price_id === null
       ? null
@@ -191,7 +205,9 @@ export const projectSubscriptionStatus = ({
           endsAt: instant(decode(Schema.Finite, row.ends_at_ms)),
           renewalAnchor: instant(decode(Schema.Finite, row.renewal_anchor_ms)),
         };
+
   const recentAttempts = attemptRows.map(projectAttempt);
+
   const data = decode(Schema.toCodecJson(SubscriptionStatus), {
     hasProGrant: row.has_pro_grant === 1,
     accessTier: row.has_pro_grant === 1 || hasPeriodAccess(row, now) ? "pro" : "free",
@@ -200,5 +216,6 @@ export const projectSubscriptionStatus = ({
     cancellation: projectCancellation(row),
     recentAttempts,
   });
+
   return data;
 };

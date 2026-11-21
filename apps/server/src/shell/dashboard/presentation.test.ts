@@ -9,10 +9,12 @@ import { type DashboardFacts, DashboardUnavailable, DashboardView } from "./cont
 import { renderDashboardView } from "./operations";
 
 const now = DateTime.makeUnsafe("2026-07-20T12:00:00.000Z");
+
 const category = Schema.decodeSync(Category)({
   id: "10000000-0000-4000-8000-000000000001",
   label: "Restaurantes",
 });
+
 const document = Schema.decodeSync(DashboardDocument)({
   title: "Tablero",
   layout: {
@@ -26,8 +28,10 @@ const document = Schema.decodeSync(DashboardDocument)({
     },
   },
 });
+
 const money = (amount: string, currency: "COP" | "USD"): Money =>
   Money.make({ amount: BigDecimal.fromStringUnsafe(amount), currency });
+
 const facts: DashboardFacts = {
   context: Schema.decodeSync(UserContext)({
     serviceMarket: "CO",
@@ -107,6 +111,7 @@ it.effect(
       const result = yield* Effect.exit(
         renderDashboardView({ document, facts: { ...facts, groups: new Map() }, now })
       );
+
       assert.deepStrictEqual(result, Exit.fail(new DashboardUnavailable()));
     })
 );
@@ -125,6 +130,7 @@ it.effect("refuses an invalid projected calendar bucket before publishing a view
         },
       },
     });
+
     const invalid = {
       ...facts,
       groups: new Map(
@@ -133,9 +139,11 @@ it.effect("refuses an invalid projected calendar bucket before publishing a view
         )
       ),
     };
+
     const result = yield* Effect.exit(
       renderDashboardView({ document: chart, facts: invalid, now })
     );
+
     assert.deepStrictEqual(result, Exit.fail(new DashboardUnavailable()));
   })
 );

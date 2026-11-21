@@ -11,18 +11,21 @@ export const useTheme = (): Readonly<{
   toggle: () => void;
 }> => {
   const theme = useSyncExternalStore(observeThemePreference, readThemePreference);
+
   const mounted = useCallback<RefCallback<HTMLDivElement>>(
     (element) => {
       if (element === null) return;
       const root = element.ownerDocument.documentElement;
       const previous = root.classList.contains("dark");
       root.classList.toggle("dark", theme === "dark");
+
       return (): void => {
         root.classList.toggle("dark", previous);
       };
     },
     [theme]
   );
+
   return {
     theme,
     mounted,

@@ -11,13 +11,16 @@ export default {
     Effect.runPromise(
       Effect.gen(function* () {
         if (isPerformanceEvidence(request)) return new Response(null, { status: 404 });
+
         const response = yield* Effect.tryPromise({
           try: () => ingress.fetch(request, environment),
           catch: () => new AcceptanceProofUnavailable(),
         });
+
         if (!response.ok || !isStorageCompatibility(request)) return response;
         const headers = new Headers(response.headers);
         headers.set("x-fidy-fixture-fallback-ingress", environment.CF_VERSION_METADATA?.id ?? "");
+
         return new Response(response.body, { status: response.status, headers });
       }).pipe(Effect.orElseSucceed(() => new Response(null, { status: 503 })))
     ),

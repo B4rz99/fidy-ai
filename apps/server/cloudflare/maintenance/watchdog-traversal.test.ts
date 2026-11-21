@@ -7,20 +7,26 @@ import { native, workerManifest } from "../user-store.test-fixture";
 
 const measureTick =
   Effect.runSync(Config.String("FIDY_MEASURE_WATCHDOG").pipe(Config.withDefault("0"))) === "1";
+
 const name = "core-maintenance-v1";
+
 const user = (number: number): string =>
   "22530000-0000-4000-8000-" + String(number).padStart(12, "0");
+
 const firstUsers = Array.from({ length: 256 }, (_, index) => user(index + 1));
+
 const Ledger = Schema.Struct({
   names: Schema.Array(Schema.String),
   peak: Schema.Int,
   aborted: Schema.Int,
   cancelled: Schema.Int,
 });
+
 const fleet = Effect.fn(function* () {
   const fs = yield* FileSystem.FileSystem;
   const location = yield* fs.makeTempDirectoryScoped({ prefix: "watchdog-fleet-" });
   const fixture = yield* workerManifest("./maintenance/watchdog.test-fixture.ts");
+
   return Effect.fnUntraced(function* (mode: string) {
     const runtime = yield* Effect.acquireRelease(
       Effect.sync(
@@ -64,14 +70,18 @@ const fleet = Effect.fn(function* () {
       ),
       (instance) => native(() => instance.dispose())
     );
+
     const namespace = yield* native(() =>
       runtime.getDurableObjectNamespace("MAINTENANCE", "watchdog")
     );
+
     const owner = (): ReturnType<typeof namespace.getByName> => namespace.getByName(name);
     yield* native(() => owner().fetch("https://store.invalid/release-readiness"));
+
     const storage = yield* native(() =>
       runtime.unsafeGetDurableObjectStorage("watchdog", "WatchdogFixture", { name })
     );
+
     return {
       exec: (
         ...args: Parameters<typeof storage.exec>
@@ -188,6 +198,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           "WITH RECURSIVE ids(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM ids WHERE i<1000) INSERT INTO lifetime_registry(user_id) SELECT printf('22530000-0000-4000-8000-%012d',i) FROM ids"
         );
         const start = yield* Clock.currentTimeMillis;
+
         for (let minute = 0; minute < 10; minute++) {
           yield* fixture.exec("UPDATE watchdog_progress SET minute=minute-1");
           const result = yield* Effect.exit(fixture.tick(start + minute * 60000));
@@ -225,6 +236,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const start = yield* Clock.currentTimeMillis;
         const windows: string[][] = [];
         let offset = 0;
+
         for (let minute = 0; minute < 10; minute++) {
           yield* fixture.exec("UPDATE watchdog_progress SET minute=minute-1");
           expect(yield* fixture.tick(start + minute * 60000)).toBe(204);
@@ -235,11 +247,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           expect(names.length).toBeLessThanOrEqual(259);
           expect(ledger.peak).toBe(5);
           windows.push(names.slice(3));
+
           if (windows.length >= 5) expect(new Set(windows.slice(-5).flat()).size).toBe(1000);
         }
       }),
     30000
   );
+
   if (measureTick) {
     test.effect(
       "bounds a tick under sustained slow reply cleanup",
@@ -254,9 +268,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           expect(yield* fixture.tick(start)).toBe(204);
           const elapsed = (yield* Clock.currentTimeMillis) - start;
           const ledger = yield* fixture.ledger;
+
           const counts = yield* fixture.exec(
             "SELECT admitted,attempted,observed,failed,unknown,repaired,wraps FROM watchdog_progress"
           );
+
           yield* Effect.logInfo({ elapsed, peak: ledger.peak, aborted: ledger.aborted, counts });
           const [result] = yield* fixture.exec("SELECT halt FROM watchdog_progress");
           expect(result?.["halt"]).toBe("deadline");

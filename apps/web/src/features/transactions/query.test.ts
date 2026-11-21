@@ -11,6 +11,7 @@ import { transactionHistory } from "./history";
 import { transactionFirstPage, transactionPageInitialValue } from "./query";
 
 afterEach(() => vi.unstubAllGlobals());
+
 it.live(
   "uses the handed-off page across asynchronous mount and equivalent period objects; another month and refresh read HTTP",
   () =>
@@ -18,22 +19,27 @@ it.live(
       const observedAt = yield* Clock.currentTimeMillis;
       vi.stubGlobal("window", Object.assign(new EventTarget(), { Uint8Array }));
       let reads = 0;
+
       const transport = Layer.succeed(
         HttpClient.HttpClient,
         HttpClient.make((request) => {
           reads += 1;
+
           return Effect.succeed(
             HttpClientResponse.fromWeb(request, Response.json({ data: [], next: [] }))
           );
         })
       );
+
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: transport,
       });
+
       const from = DateTime.makeUnsafe("2026-10-01T05:00:00Z");
       const to = DateTime.makeUnsafe("2026-11-01T05:00:00Z");
       const observation = { from, to, page: { data: [], next: [] } };
+
       const registry = AtomRegistry.make({
         initialValues: [
           transactionPageInitialValue({
@@ -43,21 +49,26 @@ it.live(
           }),
         ],
       });
+
       try {
         yield* Effect.sleep("5 millis");
+
         const period = {
           from: DateTime.makeUnsafe(DateTime.formatIso(from)),
           to: DateTime.makeUnsafe(DateTime.formatIso(to)),
           timeZone: "America/Bogota",
         };
+
         const query = transactionFirstPage({
           client,
           period,
         });
+
         const anotherActor = makeFidyClient({
           apiOrigin: "https://api.test.fidyapp.com",
           httpClient: transport,
         });
+
         expect(
           transactionFirstPage({
             client: anotherActor,
@@ -100,6 +111,7 @@ it.live(
       const target = "25000000-0000-4000-8000-000000000021";
       const reads: Array<string> = [];
       let failPage = false;
+
       const transport = Layer.succeed(
         HttpClient.HttpClient,
         HttpClient.make((request) => {
@@ -107,12 +119,15 @@ it.live(
             UrlParams.getFirst(request.urlParams, "cursor"),
             () => ""
           );
+
           const page = Number(cursor.slice(-2)) + 1;
           const id = `25000000-0000-4000-8000-${String(page).padStart(12, "0")}`;
           reads.push(id);
+
           if (failPage) {
             return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({})));
           }
+
           return Effect.succeed(
             HttpClientResponse.fromWeb(
               request,
@@ -146,11 +161,14 @@ it.live(
           );
         })
       );
+
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: transport,
       });
+
       const firstPage = transactionFirstPage({ client, period: { from, to } });
+
       const history = transactionHistory({
         initialPages: 1,
         apiClient: client,
@@ -158,13 +176,16 @@ it.live(
         period: { from, to },
         locate: Option.some(target),
       });
+
       const registry = AtomRegistry.make();
       const unmount = registry.mount(history.state);
+
       try {
         yield* Effect.tryPromise(() =>
           vi.waitFor(() => {
             const state = registry.get(history.state);
             expect(state.continuation).toBe("available");
+
             if (state.query._tag !== "Ready") throw new Error("History is not ready");
             expect(state.query.value.data).toHaveLength(20);
           })
@@ -174,6 +195,7 @@ it.live(
         yield* Effect.tryPromise(() =>
           vi.waitFor(() => {
             const state = registry.get(history.state);
+
             if (state.query._tag !== "Ready") throw new Error("History is not ready");
             expect(state.query.value.data.at(-1)?.id).toBe(target);
             expect(state.continuation).toBe("available");
@@ -209,6 +231,7 @@ it.live(
       let current = { id: addressed, occurredAt: "2026-09-30T12:00:00Z" };
       let failLookup = false;
       const requests: Array<string> = [];
+
       const row = (): Record<string, unknown> => ({
         ...current,
         categoryId: "24000000-0000-4000-8000-000000000242",
@@ -217,6 +240,7 @@ it.live(
         createdAt: "2026-11-02T12:00:00Z",
         revision: 1,
       });
+
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(
@@ -231,9 +255,11 @@ it.live(
                     () => "missing period"
                   )
             );
+
             if (lookup && failLookup) {
               return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({})));
             }
+
             return Effect.succeed(
               HttpClientResponse.fromWeb(
                 request,
@@ -255,6 +281,7 @@ it.live(
           })
         ),
       });
+
       const history = transactionRouteHistory({
         client,
         search: yield* Schema.decodeEffect(TransactionSearch)({ transaction: addressed }),
@@ -262,9 +289,11 @@ it.live(
         now: DateTime.makeUnsafe("2026-11-10T12:00:00Z"),
         initialPages: 1,
       });
+
       expect(requests).toEqual([]);
       const registry = AtomRegistry.make();
       const unmount = registry.mount(history.state);
+
       try {
         yield* Effect.tryPromise(() =>
           vi.waitFor(() => expect(registry.get(history.state).location).toBe("Located"))
@@ -292,6 +321,7 @@ it.live(
         );
         expect(registry.get(history.state).location).toBe("LookupFailed");
         const retained = registry.get(history.state).query;
+
         if (retained._tag !== "Ready") throw new Error("Missing retained history");
         expect(Option.isSome(retained.refreshFailure)).toBe(true);
         expect(retained.value.data[0]?.id).toBe(replacement);
@@ -315,18 +345,21 @@ it.live("reset history preserves the five-second mounted focus revalidation poli
     vi.stubGlobal("window", window);
     vi.stubGlobal("document", { visibilityState: "visible" });
     let reads = 0;
+
     const client = makeFidyClient({
       apiOrigin: "https://api.test.fidyapp.com",
       httpClient: Layer.succeed(
         HttpClient.HttpClient,
         HttpClient.make((request) => {
           reads += 1;
+
           return Effect.succeed(
             HttpClientResponse.fromWeb(request, Response.json({ data: [], next: [] }))
           );
         })
       ),
     });
+
     const history = transactionRouteHistory({
       client,
       search: { month: "2026-10" },
@@ -334,8 +367,10 @@ it.live("reset history preserves the five-second mounted focus revalidation poli
       now: DateTime.makeUnsafe("2026-11-10T12:00:00Z"),
       initialPages: 1,
     });
+
     const registry = AtomRegistry.make();
     const unmount = registry.mount(history.state);
+
     try {
       yield* Effect.tryPromise(() =>
         vi.waitFor(() => expect(registry.get(history.state).query._tag).toBe("Ready"))
@@ -375,19 +410,23 @@ it.live(
     Effect.gen(function* () {
       vi.stubGlobal("window", Object.assign(new EventTarget(), { Uint8Array }));
       let reads = 0;
+
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(
           HttpClient.HttpClient,
           HttpClient.make((request) => {
             reads += 1;
+
             return Effect.succeed(
               HttpClientResponse.fromWeb(request, Response.json({ data: [], next: [] }))
             );
           })
         ),
       });
+
       const registry = AtomRegistry.make();
+
       const query = transactionFirstPage({
         client,
         period: {
@@ -395,6 +434,7 @@ it.live(
           to: DateTime.makeUnsafe("2026-11-01T05:00:00Z"),
         },
       });
+
       try {
         yield* AtomRegistry.getResult(registry, query);
         expect(reads).toBe(1);
@@ -415,18 +455,21 @@ it.live(
     Effect.gen(function* () {
       vi.stubGlobal("window", Object.assign(new EventTarget(), { Uint8Array }));
       let reads = 0;
+
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(
           HttpClient.HttpClient,
           HttpClient.make((request) => {
             reads += 1;
+
             return Effect.succeed(
               HttpClientResponse.fromWeb(request, Response.json({ data: [], next: [] }))
             );
           })
         ),
       });
+
       const history = transactionRouteHistory({
         client,
         search: {},
@@ -434,8 +477,10 @@ it.live(
         now: DateTime.makeUnsafe("2026-11-10T12:00:00Z"),
         initialPages: 1,
       });
+
       const registry = AtomRegistry.make();
       const unmount = registry.mount(history.state);
+
       const ready = Effect.tryPromise(() =>
         vi.waitFor(() => {
           const result = registry.get(history.firstPage);
@@ -443,15 +488,18 @@ it.live(
           expect(result.waiting).toBe(false);
         })
       );
+
       try {
         yield* ready;
         expect(reads).toBe(1);
+
         for (const expected of [2, 4]) {
           const generation = registry.get(history.state).generation;
           registry.set(history.action, "refresh-pages");
           expect(registry.get(history.state).generation).toBe(generation + 1);
           expect(yield* readFreshQuery({ registry, query: history.firstPage })).toBe(true);
           expect(reads).toBe(expected);
+
           if (expected === 2) {
             registry.set(history.action, "reset");
             yield* ready;

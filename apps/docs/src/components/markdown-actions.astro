@@ -2,6 +2,7 @@
 import Icon from "./docs-icon.astro";
 
 const { id } = Astro.locals.starlightRoute;
+
 const markdownPath = `/${id || "index"}.md`;
 ---
 
@@ -16,15 +17,19 @@ const markdownPath = `/${id || "index"}.md`;
 </div>
 <script>
   const buttons = document.querySelectorAll<HTMLButtonElement>("[data-copy-markdown]");
+
   for (const button of buttons) {
     button.addEventListener("click", async () => {
       const path = button.dataset.copyMarkdown;
       const status = button.parentElement?.querySelector<HTMLElement>("[data-copy-status]");
+
       if (!path || !status) return;
       button.disabled = true;
       status.textContent = "";
+
       try {
         const response = await fetch(path, { credentials: "omit", redirect: "error" });
+
         if (!response.ok) throw new Error("Markdown unavailable");
         await navigator.clipboard.writeText(await response.text());
         status.dataset.copyState = "success";

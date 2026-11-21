@@ -31,6 +31,7 @@ export const appendSnapshotTimings = ({
   timings: CanonicalSnapshotTimings;
 }>): Response => {
   const total = Duration.toMillis(duration);
+
   const phases = {
     "canonical-total": total,
     "canonical-storage": timings.storage,
@@ -38,6 +39,7 @@ export const appendSnapshotTimings = ({
     "canonical-other": Math.max(0, total - timings.storage - timings.presentation),
     ...(Option.isSome(timings.sql) ? { "canonical-sql": timings.sql.value } : {}),
   };
+
   const headers = new Headers(response.headers);
   headers.append(
     "server-timing",
@@ -45,6 +47,7 @@ export const appendSnapshotTimings = ({
       .map(([name, elapsed]) => `${name};dur=${elapsed.toFixed(3)}`)
       .join(", ")
   );
+
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

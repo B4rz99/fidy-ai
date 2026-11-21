@@ -41,6 +41,7 @@ export const requestEmailReplacement = ({
   Effect.gen(function* () {
     const mutation = yield* EmailReplacementMutation;
     yield* mutation.request(caller.resolved.subjectUserId, input.payload.candidateEmail);
+
     return { data: { status: "pending" }, next: [] } as const;
   });
 
@@ -59,9 +60,11 @@ export const completeEmailReplacement = ({
 > =>
   Effect.gen(function* () {
     const mutation = yield* EmailReplacementMutation;
+
     if (!(yield* mutation.complete(caller.resolved.subjectUserId, input.payload))) {
       return yield* EmailReplacementInvalidApi.make({ error: emailReplacementInvalidBody.error });
     }
+
     return { data: { status: "replaced" }, next: [] } as const;
   });
 
@@ -94,6 +97,7 @@ type ReplacementOperation = keyof typeof emailReplacementOperations;
 
 export const permitsFreshBrowserReplacement = (operation: ReplacementOperation): boolean => {
   const { access } = getOperationPolicy(emailReplacementOperations[operation]);
+
   return (
     access._tag === "FreshWebSessionOnly" &&
     decideOperationAccess(access, { _tag: "WebSession", fresh: true })._tag === "Allowed"

@@ -21,19 +21,25 @@ import {
 
 const jsonBody = (response: Pick<Response, "json">): Effect.Effect<unknown> =>
   native(() => response.json());
+
 const userStoreBytes = Effect.fn(function* (runtime: Miniflare, userId: string) {
   const users = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
+
   const response = yield* native(() =>
     users.getByName(userId).fetch("https://fixture.invalid/database-size")
   );
+
   expect(response.status).toBe(200);
+
   return yield* Schema.decodeUnknownEffect(Schema.Int)(yield* native(() => response.json()));
 });
+
 const capturePayload = {
   money: { amount: "31.77", currency: "USD" },
   direction: "outflow",
   occurredAt: "2023-11-16T00:00:00.000Z",
 };
+
 const patCapture = (
   runtime: Miniflare,
   bearer: string,
@@ -51,15 +57,18 @@ const patCapture = (
       body: JSON.stringify(typeof call === "string" ? capturePayload : call.payload),
     })
   );
+
 const provisionPAT = Effect.fn(function* (
   owner: Effect.Success<ReturnType<typeof seed>>,
   subject: typeof alice,
   { id, shortId }: Readonly<{ id: string; shortId: string }>
 ) {
   const bearer = "fin_" + shortId + "_" + "x".repeat(43);
+
   const digest = yield* native(() =>
     crypto.subtle.digest("SHA-256", new TextEncoder().encode(bearer))
   );
+
   yield* owner.exec(
     "INSERT INTO pats(id,user_id,short_id,bearer_digest,recipient_label,scopes_json,lifetime_days,created_at_ms,issued_at_ms,expires_at_ms,request_id) VALUES (?,?,?,?,'agent',?,7,?,?,?,?)",
     id,
@@ -82,6 +91,7 @@ const provisionPAT = Effect.fn(function* (
       owner.now + 604800000
     )
   );
+
   return bearer;
 });
 
@@ -98,14 +108,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       expect(yield* owner.exec("SELECT count(*) AS calls FROM audit_entries")).toEqual([
         { calls: 0 },
       ]);
+
       const registry = yield* native(() =>
         runtime.unsafeGetDurableObjectStorage("core", "Maintenance", {
           name: "core-maintenance-v1",
         })
       );
+
       const entries = native(() =>
         registry.exec("SELECT user_id FROM lifetime_registry ORDER BY user_id")
       );
+
       expect(yield* entries).toEqual([{ user_id: alice.user }]);
       yield* owner.exec("DROP TRIGGER lose_ack");
       expect(yield* receivedStatus(history(runtime))).toBe(200);
@@ -129,16 +142,19 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const create = yield* nativeUserPlatform;
         const runtime = yield* create();
         const owner = yield* seed(runtime, alice);
+
         const token = yield* provisionPAT(owner, alice, {
           id: "10000000-0000-4000-8000-000000000091",
           shortId: "abcd1234",
         });
+
         yield* owner.exec(
           "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms) SELECT ?,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms+1 FROM transactions WHERE id=?",
           second,
           transaction
         );
         const pair = { firstTransactionId: transaction, secondTransactionId: second };
+
         const send = (path: string, key: string, body: unknown): ReturnType<typeof history> =>
           native(() =>
             nativeIngress(runtime)(
@@ -155,6 +171,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               }
             )
           );
+
         yield* owner.exec(
           "CREATE TRIGGER fail_link BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' BEGIN SELECT RAISE(IGNORE); END"
         );
@@ -168,10 +185,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const linked = yield* send("link", "lost-link", pair);
         expect(linked.status).toBe(200);
         const committed = yield* jsonBody(linked);
+
         const correction = {
           expectedRevision: 0,
           changes: { money: { amount: "9999999999999999.13", currency: "COP" }, notes: "exact" },
         };
+
         const concurrent = yield* Effect.all(
           [
             send(transaction, "lost-correction", correction),
@@ -179,6 +198,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           ],
           { concurrency: 2 }
         );
+
         expect(concurrent.map((response) => response.status)).toEqual([200, 200]);
         expect(yield* jsonBody(concurrent[0])).toEqual(yield* jsonBody(concurrent[1]));
         const restored = yield* send("unlink", "lost-unlink", pair);
@@ -206,6 +226,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const runtime = yield* create();
       const owner = yield* seed(runtime, alice);
       yield* seed(runtime, bob);
+
       const call = (path: string, method: string, body?: unknown): ReturnType<typeof history> =>
         native(() =>
           nativeIngress(runtime)(
@@ -222,6 +243,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }
           )
         );
+
       const money = { amount: "9007199254740993.15", currency: "USD" };
       const correction = { expectedRevision: 0, changes: { counterparty: "corrected" } };
       const corrected = yield* call(transaction, "PUT", correction);
@@ -305,14 +327,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const create = yield* nativeUserPlatform;
         const runtime = yield* create();
         const owner = yield* seed(runtime, alice);
+
         const bearer = yield* provisionPAT(owner, alice, {
           id: "20000000-0000-4000-8000-000000000001",
           shortId: "abcdefgh",
         });
+
         const [first, second] = yield* Effect.all(
           [patCapture(runtime, bearer, "overlap"), patCapture(runtime, bearer, "overlap")],
           { concurrency: 2 }
         );
+
         expect(first.status).toBe(201);
         expect(second.status).toBe(201);
         expect(yield* native(() => first.text())).toBe(yield* native(() => second.text()));
@@ -331,10 +356,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const create = yield* nativeCapacityPlatform;
         const runtime = yield* create(String(ceiling));
         const owner = yield* seed(runtime, alice);
+
         const bearer = yield* provisionPAT(owner, alice, {
           id: "20000000-0000-4000-8000-000000000001",
           shortId: "abcdefgh",
         });
+
         const initialBytes = yield* userStoreBytes(runtime, alice.user);
         expect(initialBytes).toBeLessThan(ceiling * 0.7);
         expect((yield* patCapture(runtime, bearer, "existing")).status).toBe(201);
@@ -343,21 +370,25 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(healthyBytes).toBeLessThan(ceiling * 0.7);
         const target = Math.ceil(ceiling * 0.85);
         const chunk = 256 * 1024;
+
         for (let remaining = target - healthyBytes; remaining > 0; remaining -= chunk) {
           yield* owner.exec(
             "INSERT INTO storage_pressure VALUES(zeroblob(?))",
             Math.min(chunk, remaining)
           );
         }
+
         const pressureBytes = yield* userStoreBytes(runtime, alice.user);
         expect(pressureBytes).toBeGreaterThanOrEqual(ceiling * 0.8);
         expect(pressureBytes).toBeLessThan(ceiling);
+
         const measured = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
           initialBytes,
           healthyBytes,
           pressureBytes,
           ceilingBytes: ceiling,
         });
+
         process.stdout.write(`TRANSACTION_CAPACITY ${measured}\n`);
         expect((yield* patCapture(runtime, bearer, "existing")).status).toBe(201);
         expect((yield* patCapture(runtime, bearer, "new")).status).toBe(503);
@@ -376,10 +407,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const create = yield* nativeUserPlatform;
         const runtime = yield* create();
         const owner = yield* seed(runtime, alice);
+
         const bearer = yield* provisionPAT(owner, alice, {
           id: "20000000-0000-4000-8000-000000000001",
           shortId: "abcdefgh",
         });
+
         const mixed = (binding: string): ReturnType<typeof history> =>
           native(() =>
             nativeIngress(runtime)(`https://${productionTopology.ingress.hostname}/transactions`, {
@@ -395,6 +428,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               body: JSON.stringify(capturePayload),
             })
           );
+
         expect(yield* receivedStatus(mixed(bob.session))).toBe(401);
         expect(yield* receivedStatus(mixed(alice.session))).toBe(201);
         expect(yield* receivedStatus(patCapture(runtime, "invalid", "key"))).toBe(401);
@@ -457,10 +491,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const pat = "20000000-0000-4000-8000-000000000001";
         const bearer = yield* provisionPAT(owner, alice, { id: pat, shortId: "abcdefgh" });
         expect((yield* patCapture(runtime, bearer, "safe-result")).status).toBe(201);
+
         const storage = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: alice.user })
         );
+
         const secretBody = '{"bearer":"one-time-fixture"}';
+
         const invalid = yield* Effect.result(
           Effect.tryPromise(() =>
             storage.exec(
@@ -469,6 +506,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             )
           )
         );
+
         expect(invalid._tag).toBe("Failure");
         yield* owner.exec(
           "UPDATE canonical_request_receipts SET operation='pats.createManualPAT',body=NULL"
@@ -497,10 +535,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const create = yield* nativeUserPlatform;
         const runtime = yield* create();
         const owner = yield* seed(runtime, alice);
+
         const bearer = yield* provisionPAT(owner, alice, {
           id: "20000000-0000-4000-8000-000000000001",
           shortId: "abcdefgh",
         });
+
         expect((yield* patCapture(runtime, bearer, "bad key")).status).toBe(400);
         expect(
           (yield* patCapture(runtime, bearer, {
@@ -547,10 +587,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const create = yield* nativeUserPlatform;
         const runtime = yield* create();
         const owner = yield* seed(runtime, alice);
+
         const bearer = yield* provisionPAT(owner, alice, {
           id: "20000000-0000-4000-8000-000000000001",
           shortId: "abcdefgh",
         });
+
         for (const table of [
           "source_attestations",
           "audit_entries",
@@ -579,6 +621,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           ]);
           yield* owner.exec("DROP TRIGGER fail_capture");
         }
+
         expect((yield* patCapture(runtime, bearer, "before-commit")).status).toBe(201);
         expect(
           yield* owner.exec("SELECT count(*) AS projected FROM transaction_projection_leaf")
@@ -594,10 +637,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const owner = yield* seed(runtime, alice);
         const pat = "20000000-0000-4000-8000-000000000001";
         const bearer = yield* provisionPAT(owner, alice, { id: pat, shortId: "abcdefgh" });
+
         const other = yield* provisionPAT(owner, alice, {
           id: "20000000-0000-4000-8000-000000000002",
           shortId: "ijklmno1",
         });
+
         const future = { ...capturePayload, occurredAt: "2099-12-31T00:00:00.000Z" };
         const key = "admitted-refusal";
         const refusal = yield* patCapture(runtime, bearer, { key, payload: future });
@@ -651,8 +696,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const runtime = yield* create();
         const first = yield* seed(runtime, alice);
         const second = yield* seed(runtime, bob);
+
         const patId = "20000000-0000-4000-8000-000000000001",
           otherId = "20000000-0000-4000-8000-000000000002";
+
         const credential = yield* provisionPAT(first, alice, { id: patId, shortId: "abcdefgh" });
         const foreign = yield* provisionPAT(second, bob, { id: otherId, shortId: "bcdefghi" });
         const key = "shared-key";
@@ -674,6 +721,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(stale.headers.get("fidy-canonical-remaining")).toBeNull();
         const bad = yield* patCapture(runtime, foreign.slice(0, -1) + "z", key);
         expect(bad.status).toBe(401);
+
         for (const owner of [first, second]) {
           expect(
             yield* owner.exec("SELECT count(*) AS charged FROM commercial_allowance_consumptions")
@@ -691,6 +739,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const create = yield* nativeUserPlatform;
         const pat = "20000000-0000-4000-8000-000000000001";
         const key = "capture-lost";
+
         const retained = yield* Effect.scoped(
           Effect.gen(function* () {
             const runtime = yield* create();
@@ -699,21 +748,27 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             const capture = yield* patCapture(runtime, bearer, key);
             expect(capture.status).toBe(201);
             const standing = capture.headers.get("fidy-canonical-remaining");
+
             const receipt = yield* owner.exec(
               "SELECT body,accepted_at_ms FROM canonical_request_receipts"
             );
+
             expect(receipt).toHaveLength(1);
+
             return { bearer, standing, receipt };
           })
         );
+
         const runtime = yield* create();
         const replay = yield* patCapture(runtime, retained.bearer, key);
         expect(replay.status).toBe(201);
         expect(replay.headers.get("fidy-canonical-remaining")).toBe(retained.standing);
         expect(yield* native(() => replay.text())).toBe(retained.receipt[0]?.body);
+
         const local = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: alice.user })
         );
+
         expect(
           yield* native(() =>
             local.exec("SELECT body,accepted_at_ms FROM canonical_request_receipts")
@@ -747,6 +802,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const create = yield* nativeUserPlatform;
         const runtime = yield* create();
         const { exec } = yield* seed(runtime, alice);
+
         const capture = yield* native(() =>
           nativeIngress(runtime)(`https://${productionTopology.ingress.hostname}/transactions`, {
             method: "POST",
@@ -763,6 +819,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }),
           })
         );
+
         expect(capture.status).toBe(201);
         const body = yield* native(() => capture.json());
         expect(body).toMatchObject({
@@ -804,9 +861,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           data: [{ id: second, money: { amount: "25", currency: "COP" } }],
           next: [{ tool: "transactions.listTransactions" }],
         });
+
         const cursor = encodeURIComponent(
           "2023-11-14T22:13:21.000Z|2023-11-14T22:13:20.000Z|" + second
         );
+
         const next = yield* history(runtime, alice, "?limit=1&cursor=" + cursor);
         expect(yield* native(() => next.json())).toMatchObject({
           data: [{ id: transaction, money: { amount: "9007199254740993.15", currency: "USD" } }],
@@ -863,6 +922,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           bobStore.now
         );
         expect((yield* history(runtime, bob)).status).toBe(401);
+
         for (const owner of [aliceStore, bobStore]) {
           expect(yield* owner.exec("SELECT COUNT(*) AS count FROM audit_entries")).toEqual([
             { count: 0 },
@@ -1009,6 +1069,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         yield* exec(
           "INSERT INTO transaction_projection_leaf(user_id,id,amount,currency,direction,category_id,counterparty,notes,occurred_at_ms,created_at_ms,revision) SELECT user_id,id,amount,currency,direction,category_id,counterparty,notes,occurred_at_ms,created_at_ms,revision FROM transaction_effective_source"
         );
+
         if (readiness === "absent") {
           yield* exec("DELETE FROM transaction_projection_state WHERE user_id=?", alice.user);
         } else {
@@ -1018,8 +1079,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             alice.user
           );
         }
+
         const query =
           "?currency=USD&direction=outflow&counterparty=shop&from=2023-01-01T00:00:00Z&to=2024-01-01T00:00:00Z&limit=100";
+
         const matched = yield* history(runtime, alice, query);
         expect(matched.status).toBe(200);
         expect(yield* jsonBody(matched)).toMatchObject({
@@ -1036,6 +1099,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         });
         expect((yield* history(runtime, alice, "?limit=invalid")).status).toBe(400);
         expect((yield* history(runtime, alice, "?limit=2&limit=3")).status).toBe(400);
+
         if (readiness === "ready") {
           yield* exec("UPDATE transaction_projection_leaf SET amount='invalid-money'");
           const malformed = yield* history(runtime);

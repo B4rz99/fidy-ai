@@ -2,13 +2,16 @@ import { Option, Schema } from "effect";
 import { type DashboardEdit, type Placement, Widget } from "../../../src/core/dashboard/contract";
 
 const quoted = Schema.encodeSync(Schema.fromJsonString(Schema.String));
+
 const widgetJson = Schema.encodeSync(Schema.fromJsonString(Schema.toCodecJson(Widget)));
 
 const describePlacement = (placement: Placement): string => {
   if (placement === "top") return "al inicio del Dashboard";
+
   if (placement === "bottom") return "al final del Dashboard";
   const side = placement.side === "before" ? "antes" : "después";
   const axis = placement.axis === "row" ? "en fila" : "en columna";
+
   return `${side} del widget ${placement.besideWidget}, ${axis}`;
 };
 
@@ -20,6 +23,7 @@ const describeSize = (size: Extract<DashboardEdit, { op: "resize-region" }>["siz
     "two-thirds": "2/3",
     "three-quarters": "3/4",
   } as const;
+
   return size.kind === "weight"
     ? `peso relativo ${size.weight}`
     : `proporción ${ratios[size.ratio]} respecto a sus regiones hermanas`;

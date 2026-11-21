@@ -9,15 +9,20 @@ const publicIdentity = {
   gitRevision: "a".repeat(40),
   contractDigest: "b".repeat(64),
 };
+
 const coreIdentity = { ...publicIdentity, workerVersionId: "22222222-2222-4222-8222-222222222222" };
+
 const proof = "c".repeat(64);
+
 const expected = { public: publicIdentity, core: coreIdentity, proof };
+
 const readinessBody = {
   status: "pending",
   public: publicIdentity,
   core: coreIdentity,
   manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
 };
+
 const readinessClient = (
   body: unknown,
   status = 200,
@@ -29,6 +34,7 @@ const readinessClient = (
     expect(request.headers["x-fidy-smoke-proof"]).toBe(proof);
     expect(request.headers["cloudflare-workers-version-overrides"]).toBeUndefined();
     const readOnly = request.method === "GET" && url.searchParams.get("readiness") === "1";
+
     return Effect.succeed(
       HttpClientResponse.fromWeb(
         request,
@@ -49,6 +55,7 @@ it.effect("captures stable identity without depending on synthetic publication a
       Effect.provideService(HttpClient.HttpClient, readinessClient(readinessBody)),
       Effect.exit
     );
+
     expect(Exit.isSuccess(outcome)).toBe(true);
   })
 );
@@ -84,7 +91,9 @@ for (const refusal of [
         Effect.provideService(HttpClient.HttpClient, readinessClient(refusal.body, refusal.status)),
         Effect.exit
       );
+
       expect(Exit.isFailure(outcome)).toBe(true);
+
       if (Exit.isFailure(outcome)) {
         expect(Cause.pretty(outcome.cause)).not.toContain("private-provider-detail");
         expect(Cause.pretty(outcome.cause)).not.toContain(proof);

@@ -22,6 +22,7 @@ it("reads inherited descriptive metadata through reflected annotations", () => {
   const endpoint = HttpApiEndpoint.get("inspectItems", "/items", {
     success: Schema.Void,
   }).annotateMerge(policy);
+
   const api = HttpApi.make("inherited-description-test").add(
     HttpApiGroup.make("testing")
       .add(endpoint)
@@ -60,6 +61,7 @@ it("keeps optional review paging and the existing UTF-16 search bounds", () => {
   const review = Schema.decodeSync(getCanonicalOperationInput("ingestion.listNeedsReviewItems"))({
     query: {},
   });
+
   expect(review.query).toEqual({
     offset: Option.none(),
     limit: Option.none(),
@@ -74,6 +76,7 @@ it("keeps optional review paging and the existing UTF-16 search bounds", () => {
 
 it("returns the same canonical input accepted by the published batch child schema", () => {
   const input = getCanonicalOperationInput("transactions.updateTransaction");
+
   const erased = Option.getOrThrow(
     Option.fromUndefinedOr(operationCatalog.byId.get("transactions.updateTransaction"))
   );
@@ -81,11 +84,13 @@ it("returns the same canonical input accepted by the published batch child schem
   const attempted = { params: { id: "not-a-transaction-id" }, payload: {} };
   const direct = Schema.decodeOption(input)(attempted);
   expect(Schema.decodeOption(erased.input)(attempted)).toEqual(direct);
+
   const batch = Schema.decodeOption(getAtomicBatchCallSchema())({
     callId: "00000000-0000-4000-8000-000000000001",
     operation: "transactions.updateTransaction",
     input: attempted,
   });
+
   expect(Option.isNone(direct)).toBe(true);
   expect(Option.isNone(batch)).toBe(true);
 });
@@ -94,13 +99,16 @@ it("decodes a batch child with the same normalization as its typed catalog input
   const input = getCanonicalOperationInput("memory.remember");
   const attempted = { payload: { text: "  Rent is due Friday.  " } };
   const direct = Schema.decodeOption(input)(attempted);
+
   const batch = Schema.decodeOption(getAtomicBatchCallSchema())({
     callId: "00000000-0000-4000-8000-000000000001",
     operation: "memory.remember",
     input: attempted,
   });
+
   expect(Option.isSome(direct)).toBe(true);
   expect(Option.isSome(batch)).toBe(true);
+
   if (Option.isSome(direct) && Option.isSome(batch)) {
     expect(batch.value.input).toEqual(direct.value);
     expect(direct.value.payload.text).toBe("Rent is due Friday.");
@@ -109,12 +117,14 @@ it("decodes a batch child with the same normalization as its typed catalog input
 
 it("a read-only capability exposes only queries and cannot name any mutation batch child", () => {
   const children = getAtomicBatchCallSchema();
+
   for (const operation of operationCatalog.operations) {
     if (
       !Option.exists(userOwnedAgentCapability(operation.policy.access), (scope) => scope === "read")
     ) {
       continue;
     }
+
     expect(operation.policy.kind, operation.id).toBe("query");
     expect(
       Option.isNone(
@@ -135,6 +145,7 @@ it("rejects an OpenAPI operation id that is not the group-qualified identifier",
   })
     .annotate(OpenApi.Identifier, "items.override")
     .annotateMerge(policy);
+
   const api = HttpApi.make("operation-id-test").add(HttpApiGroup.make("testing").add(endpoint));
 
   expect(() => makeOperationCatalog(api)).toThrow(

@@ -5,8 +5,11 @@ import { BackupRecoveryCode } from "~/core/recovery/contract";
 import { PolicyUrl } from "~/core/consent/contract";
 
 const maximumRevisionLength = 128;
+
 const invalidStatus = 400;
+
 const unavailableStatus = 503;
+
 export const providerPaths = {
   disclosure: "/web/providers/disclosure",
   start: "/web/providers/google/start",
@@ -14,24 +17,31 @@ export const providerPaths = {
   status: "/web/providers/google/status",
   complete: "/web/providers/google/complete",
 } as const;
+
 export const microsoftProviderPaths = {
   start: "/web/providers/microsoft/start",
   callback: "/providers/microsoft/callback",
   status: "/web/providers/microsoft/status",
   complete: "/web/providers/microsoft/complete",
 } as const;
+
 export type AuthenticationProvider = "google" | "microsoft";
+
 export const ProviderBrowserProof = Schema.Struct({
   pairingId: BrowserLoginPairingId,
   privateVerifier: BrowserLoginPrivateVerifier,
 });
+
 export const ProviderHandoffReference = Schema.String.check(
   Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u)
 );
+
 export const ProviderHandoffSearch = Schema.Struct({
   handoff: Schema.optionalKey(ProviderHandoffReference),
 });
+
 export const fidyWhatsAppUrl = "https://wa.me/12056871742";
+
 export const ProviderAssociationReview = Schema.Struct({
   confirmationText: Schema.String,
   status: Schema.Literal("awaiting_association"),
@@ -39,10 +49,12 @@ export const ProviderAssociationReview = Schema.Struct({
   accountLabel: Schema.String,
   whatsappPhone: Schema.NullOr(Schema.String),
 });
+
 export const ProviderCompletionProof = Schema.Struct({
   ...ProviderBrowserProof.fields,
   associationCode: Schema.optionalKey(ProviderHandoffReference),
 });
+
 export const ProviderAuthenticationStatus = Schema.Union([
   ProviderAssociationReview,
   Schema.Struct({ status: Schema.Literals(["pending", "verified", "rejected"]) }),
@@ -51,12 +63,14 @@ export const ProviderAuthenticationStatus = Schema.Union([
     associationCode: ProviderHandoffReference,
   }),
 ]);
+
 export const StartProviderAuthentication = Schema.Struct({
   ...ProviderBrowserProof.fields,
   intent: Schema.Literals(["signup", "login"]),
   consentRevision: Schema.String.check(Schema.isMaxLength(maximumRevisionLength)),
   handoffReference: Schema.optionalKey(ProviderHandoffReference),
 });
+
 export const ProviderCompletion = Schema.Union([
   Schema.Struct({
     status: Schema.Literal("created"),
@@ -68,12 +82,15 @@ export const ProviderCompletion = Schema.Union([
     whatsappReturnUrl: Schema.optionalKey(Schema.Literal(fidyWhatsAppUrl)),
   }),
 ]);
+
 export const WebSignupDisclosure = Schema.Struct({
   revision: Schema.String,
   text: Schema.String,
   policy: Schema.Struct({ publicUrl: PolicyUrl }),
 });
+
 const Refusal = Schema.Struct({ status: Schema.Literals(["invalid", "unavailable"]) });
+
 export const ProviderAuthenticationGroup = HttpApiGroup.make("providerAuthentication")
   .add(
     HttpApiEndpoint.get("disclosure", providerPaths.disclosure, {

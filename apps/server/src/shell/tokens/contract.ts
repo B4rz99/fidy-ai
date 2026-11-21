@@ -175,6 +175,7 @@ export const PATActivity = Schema.Struct({
   pat: PATActivityMetadata,
   ...PATActivityHistory.fields,
 }).annotate({ identifier: "PATActivity" });
+
 export type PATActivity = typeof PATActivity.Type;
 
 export const PATActivityParams = Schema.Struct({ shortId: TokenShortId });
@@ -255,7 +256,9 @@ const createManualPAT = HttpApiEndpoint.post("createManualPAT", "/pats", {
   );
 
 export const patPairingInspectOperation = CanonicalOperationId.make("pats.inspectPATPairing");
+
 export const patPairingApproveOperation = CanonicalOperationId.make("pats.approvePATPairing");
+
 export const patPairingGenericMessage =
   "This PAT pairing is invalid or no longer available. Start a new request." as const;
 
@@ -379,6 +382,7 @@ const unavailableError = {
   code: "rate_limited",
   message: "PAT pairing is temporarily unavailable. Try again later.",
 } as const;
+
 const UnavailableError = Schema.Struct({
   code: Schema.Literal(unavailableError.code),
   message: Schema.Literal(unavailableError.message),
@@ -388,24 +392,29 @@ export class PATPairingRateLimitedApi extends Schema.Error<
   PATPairingRateLimitedApi,
   Brand.Brand<"PATPairingRateLimitedApi">
 >("PATPairingRateLimitedApi")({ error: UnavailableError }, { httpApiStatus: 429 }) {}
+
 export class PATPairingUnavailableApi extends Schema.Error<
   PATPairingUnavailableApi,
   Brand.Brand<"PATPairingUnavailableApi">
 >("PATPairingUnavailableApi")({ error: UnavailableError }, { httpApiStatus: 503 }) {}
+
 export const patPairingUnavailableBody = { error: unavailableError } as const;
 
 const invalidError = {
   code: "pairing_invalid",
   message: "This PAT pairing is no longer valid. Start a new request.",
 } as const;
+
 const InvalidError = Schema.Struct({
   code: Schema.Literal(invalidError.code),
   message: Schema.Literal(invalidError.message),
 });
+
 export class PATPairingInvalidApi extends Schema.Error<
   PATPairingInvalidApi,
   Brand.Brand<"PATPairingInvalidApi">
 >("PATPairingInvalidApi")({ error: InvalidError }, { httpApiStatus: 400 }) {}
+
 export const patPairingInvalidBody = { error: invalidError } as const;
 
 export class PATPairingPollingRateLimitedApi extends Schema.Error<
@@ -422,6 +431,7 @@ export class PATPairingPollingRateLimitedApi extends Schema.Error<
 ) {}
 
 const maximumMalformedClaimValueBytes = 256;
+
 const boundedClaimValue = Schema.Unknown.check(
   Schema.makeFilter<unknown>(
     (value) =>
@@ -434,6 +444,7 @@ export const ClaimPATPairingPayload = Schema.Struct({
   pairingId: Schema.optional(boundedClaimValue),
   privateDeviceCode: Schema.optional(boundedClaimValue),
 });
+
 export type ClaimPATPairingPayload = typeof ClaimPATPairingPayload.Type;
 
 export const PATPairingDirectGroup = HttpApiGroup.make("patPairing")

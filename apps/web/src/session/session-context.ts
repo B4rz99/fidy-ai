@@ -15,8 +15,10 @@ export const SessionContext = createContext<Option.Option<SessionContextValue>>(
 
 export const useSession = (): SessionContextValue => {
   const session = useContext(SessionContext);
+
   if (Option.isNone(session)) {
     throw new Error("useSession must be used within SessionRegistryProvider");
   }
+
   return session.value;
 };

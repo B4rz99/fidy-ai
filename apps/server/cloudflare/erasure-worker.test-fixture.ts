@@ -6,9 +6,11 @@ import {
 } from "./core-worker";
 
 export { default } from "./core-worker";
+
 export * from "./core-worker";
 
 type UserEnvironment = ConstructorParameters<typeof NativeUser>[1];
+
 const marker = "private-fixture";
 
 const heldBucket = (bucket: R2Bucket, storage: DurableObjectStorage): R2Bucket =>
@@ -29,13 +31,17 @@ const heldBucket = (bucket: R2Bucket, storage: DurableObjectStorage): R2Bucket =
                 }),
                 Effect.timeoutOption("30 seconds")
               );
+
               if (Option.isNone(released)) return yield* Effect.die("Fixture release timed out");
+
               return yield* Effect.tryPromise(() => target.put(...args));
             })
           );
       }
+
       const value: unknown = Reflect.get(target, property);
       const bound: unknown = typeof value === "function" ? value.bind(target) : value;
+
       return bound;
     },
   });
@@ -50,11 +56,14 @@ export class UserStore extends NativeUser {
   }
   override fetch(request: Request): Promise<Response> {
     const store = this.ctx.storage;
+
     switch (request.url) {
       case "https://fixture.invalid/user-alarm": {
         const original = Date.now;
         const instant = request.headers.get("fixture-clock");
+
         if (instant !== null) Date.now = (): number => Number(instant);
+
         return super
           .alarm()
           .then(
@@ -65,6 +74,7 @@ export class UserStore extends NativeUser {
             Date.now = original;
           });
       }
+
       case "https://fixture.invalid/hold-sample":
         return store.put("hold-sample", true).then(() => new Response(null, { status: 204 }));
       case "https://fixture.invalid/release-sample":
@@ -88,9 +98,11 @@ export class UserStore extends NativeUser {
 export class Erasure extends NativeErasure {
   override fetch(request: Request): Promise<Response> {
     const instant = request.headers.get("fixture-erasure-clock");
+
     if (instant === null) return super.fetch(request);
     const original = Date.now;
     Date.now = (): number => Number(instant);
+
     return (
       request.url === "https://fixture.invalid/case-alarm"
         ? super.alarm().then(() => new Response(null, { status: 204 }))
@@ -104,9 +116,11 @@ export class Erasure extends NativeErasure {
 export class Directory extends NativeDirectory {
   override fetch(request: Request): Promise<Response> {
     const instant = request.headers.get("fixture-erasure-clock");
+
     if (instant === null) return super.fetch(request);
     const original = Date.now;
     Date.now = (): number => Number(instant);
+
     return (
       request.url === "https://fixture.invalid/directory-alarm"
         ? super.alarm().then(() => new Response(null, { status: 204 }))

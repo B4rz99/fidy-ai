@@ -19,9 +19,11 @@ export const RecurringWorkspaceQuery = Schema.Struct({
   view: Schema.optionalKey(Schema.Literal("compact")),
   ...RecurringFilters.fields,
 });
+
 const LinkedTransaction = Transaction.mapFields(
   Struct.pick(["id", "money", "counterparty", "direction", "categoryId", "notes", "occurredAt"])
 );
+
 export const RecurringWorkspace = Schema.Struct({
   document: RecurringDocument,
   month: RecurringMonth,
@@ -35,11 +37,14 @@ export const RecurringWorkspace = Schema.Struct({
   matches: Schema.Array(Schema.Struct({ item: RecurringOccurrence, fact: RecurringMatchFact })),
   matchesComplete: Schema.Boolean,
 });
+
 const RecurringCommandRequest = Schema.Struct({
   ...RecurringCommand.fields,
   view: Schema.optionalKey(Schema.Literal("compact")),
 });
+
 export const ApplyRecurringCanonicalInput = Schema.Struct({ payload: RecurringCommandRequest });
+
 export const RecurringPlansGroup = HttpApiGroup.make("recurringPlans")
   .add(
     HttpApiEndpoint.get("getRecurringWorkspace", "/recurring-plans", {

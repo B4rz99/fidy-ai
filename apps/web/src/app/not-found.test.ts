@@ -13,6 +13,7 @@ import { makeHostedTurnClient } from "@/transport/hosted-turn-client";
 import { createWebRouter } from "./routes";
 
 const reactWork = (work: () => void): Promise<void> => Promise.resolve(act(work));
+
 const missingPage = (
   authentication: BrowserAuthentication,
   path: string
@@ -28,14 +29,18 @@ const missingPage = (
     addEventListener: (): void => undefined,
     removeEventListener: (): void => undefined,
   }));
+
   const http = HttpClient.make((request) =>
     Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 503 })))
   );
+
   const options = {
     apiOrigin: "https://api.test.fidyapp.com",
     httpClient: Layer.succeed(HttpClient.HttpClient, http),
   };
+
   const registry = AtomRegistry.make();
+
   const router = createWebRouter({
     apiClient: makeFidyClient(options),
     webAuthClient: makeWebAuthClient(options),
@@ -44,9 +49,11 @@ const missingPage = (
     registry,
     history: Option.some(createMemoryHistory({ initialEntries: [path] })),
   });
+
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
+
   return {
     router,
     container,
@@ -93,6 +100,7 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const page = missingPage("signed-in", "/app/this-page-does-not-exist");
+
         try {
           yield* Effect.tryPromise(page.render);
           yield* Effect.tryPromise(() =>
@@ -122,6 +130,7 @@ it.each([
     Effect.runPromise(
       Effect.gen(function* () {
         const page = missingPage(authentication, path);
+
         try {
           yield* Effect.tryPromise(page.render);
           yield* Effect.tryPromise(() =>

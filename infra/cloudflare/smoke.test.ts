@@ -13,20 +13,25 @@ import publicWorker from "../../apps/server/cloudflare/public-worker";
 import { smokeEnvironment } from "./incomplete-platform-fixture";
 
 const revision = "0123456789abcdef0123456789abcdef01234567";
+
 const digest = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+
 const version = "dc8dcd28-271b-4367-9840-6c244f84cb40";
+
 const candidate = { gitRevision: revision, contractDigest: digest, workerVersionId: version };
 
 describe("production smoke identity", () => {
   it.effect("pins Core for proof-admitted edge probes without forwarding smoke authority", () =>
     Effect.gen(function* () {
       const override = `fidy-public="${version}", fidy-core="${version}"`;
+
       const environment = {
         BROWSER_ORIGIN: "https://app.fidyapp.com",
         CORE: {
           fetch: (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
             const request = new Request(input, init);
             expect(request.headers.get("x-fidy-smoke-proof")).toBeNull();
+
             return Promise.resolve(
               Response.json(
                 {},
@@ -46,6 +51,7 @@ describe("production smoke identity", () => {
         RELEASE_GIT_SHA: revision,
         CF_VERSION_METADATA: { id: version },
       };
+
       for (const proof of ["", "invalid", "a".repeat(64)]) {
         const response = yield* Effect.tryPromise(() =>
           publicWorker.fetch(
@@ -59,6 +65,7 @@ describe("production smoke identity", () => {
             environment
           )
         );
+
         expect(response.status).toBe(proof === "a".repeat(64) ? 200 : 503);
       }
     })
@@ -96,11 +103,13 @@ describe("production smoke ingress", () => {
   it.effect("isolates ordinary requests before Core during deleted-resource recovery", () =>
     Effect.gen(function* () {
       let coreCalls = 0;
+
       const environment = {
         BROWSER_ORIGIN: "https://app.fidyapp.com",
         CORE: {
           fetch: (): Promise<Response> => {
             coreCalls++;
+
             return Promise.resolve(
               Response.json({
                 status: "passed",
@@ -118,6 +127,7 @@ describe("production smoke ingress", () => {
         SMOKE_PROOF: "a".repeat(64),
         CF_VERSION_METADATA: { id: version },
       };
+
       for (const path of ["/web/providers/disclosure", "/providers/google/callback", "/mcp"]) {
         const response = yield* Effect.tryPromise(() =>
           publicWorker.fetch(
@@ -127,19 +137,24 @@ describe("production smoke ingress", () => {
             environment
           )
         );
+
         expect(response.status).toBe(503);
         expect(response.headers.get("cache-control")).toBe("no-store");
         expect(response.headers.get("x-fidy-recovery-isolation")).toBe("isolated");
       }
+
       expect(coreCalls).toBe(0);
+
       const unauthorized = yield* Effect.tryPromise(() =>
         publicWorker.fetch(
           new Request("https://api.fidyapp.com/internal/release-smoke"),
           environment
         )
       );
+
       expect(unauthorized.status).toBe(503);
       expect(coreCalls).toBe(0);
+
       const authorized = yield* Effect.tryPromise(() =>
         publicWorker.fetch(
           new Request("https://api.fidyapp.com/internal/release-smoke", {
@@ -148,6 +163,7 @@ describe("production smoke ingress", () => {
           environment
         )
       );
+
       expect(authorized.status).toBe(200);
       expect(coreCalls).toBe(1);
     })
@@ -157,11 +173,13 @@ describe("production smoke ingress", () => {
     () =>
       Effect.gen(function* () {
         let coreCalls = 0;
+
         const environment = {
           BROWSER_ORIGIN: "https://app.fidyapp.com",
           CORE: {
             fetch: (): Promise<Response> => {
               coreCalls++;
+
               return Promise.resolve(
                 Response.json({
                   status: "passed",
@@ -178,6 +196,7 @@ describe("production smoke ingress", () => {
           SMOKE_PROOF: "a".repeat(64),
           CF_VERSION_METADATA: { id: version, tag: "", timestamp: "" },
         };
+
         const requests = [new Headers(), new Headers({ "x-fidy-smoke-proof": "invalid" })].map(
           (headers) =>
             publicWorker.fetch(
@@ -188,14 +207,18 @@ describe("production smoke ingress", () => {
               environment
             )
         );
+
         const refusals = yield* Effect.tryPromise(() => Promise.all(requests));
+
         for (const response of refusals) {
           expect(response.status).toBe(404);
           expect(response.headers.get("cache-control")).toBe("no-store");
           expect(response.headers.get("x-fidy-smoke-failure")).toBeNull();
           expect(response.headers.get("x-fidy-smoke-core-version")).toBeNull();
         }
+
         expect(coreCalls).toBe(0);
+
         const authorized = yield* Effect.tryPromise(() =>
           publicWorker.fetch(
             new Request("https://api.fidyapp.com/internal/release-smoke", {
@@ -209,12 +232,14 @@ describe("production smoke ingress", () => {
             environment
           )
         );
+
         expect(authorized.status).toBe(200);
         expect(coreCalls).toBe(1);
         expect(yield* Effect.tryPromise(() => authorized.json())).toMatchObject({
           public: candidate,
           core: candidate,
         });
+
         const failed = yield* Effect.tryPromise(() =>
           publicWorker.fetch(
             new Request("https://api.fidyapp.com/internal/release-smoke", {
@@ -224,9 +249,11 @@ describe("production smoke ingress", () => {
             { ...environment, CORE: { fetch: () => Promise.reject(Error("secret-provider-body")) } }
           )
         );
+
         expect(failed.status).toBe(503);
         expect(failed.headers.get("x-fidy-smoke-failure")).toBe("public_forwarding");
         expect(yield* Effect.tryPromise(() => failed.text())).not.toContain("secret-provider-body");
+
         for (const [stage, equality, expectedEquality, observedVersion, expectedVersion] of [
           ["identity", "011", "011", version, version],
           ["identity", "secret-provider-body", null, "secret-provider-body", null],
@@ -258,6 +285,7 @@ describe("production smoke ingress", () => {
               }
             )
           );
+
           expect(sanitized.status).toBe(503);
           expect(sanitized.headers.get("x-fidy-smoke-failure")).toBe(
             stage === "schema" || stage === "identity" ? stage : "core_response"
@@ -277,6 +305,7 @@ describe("production smoke ingress", () => {
       Effect.gen(function* () {
         const overrides = `fidy-public="${version}", fidy-core="${version}"`;
         const coreEnvironment = smokeEnvironment();
+
         const environment = {
           BROWSER_ORIGIN: "https://app.fidyapp.com",
           CORE: {
@@ -289,6 +318,7 @@ describe("production smoke ingress", () => {
               expect(forwarded.headers.get("cloudflare-workers-version-overrides")).toBe(overrides);
               expect(forwarded.headers.get("x-fidy-smoke-proof")).toBe("a".repeat(64));
               expect(init?.signal).toBeInstanceOf(AbortSignal);
+
               return handleSmoke({
                 bankAuthentication: Option.none(),
                 request: forwarded,
@@ -303,6 +333,7 @@ describe("production smoke ingress", () => {
           SMOKE_PROOF: "a".repeat(64),
           CF_VERSION_METADATA: { id: version },
         };
+
         const body = yield* Schema.encodeEffect(Schema.fromJsonString(SmokeRequest))({
           protocolVersion: 1,
           probeId: "0".repeat(32),
@@ -311,6 +342,7 @@ describe("production smoke ingress", () => {
           expectedGitRevision: smokeDiagnosticRevision,
           expectedContractDigest: digest,
         });
+
         for (const method of ["GET", "POST"]) {
           const response = yield* Effect.tryPromise(() =>
             publicWorker.fetch(
@@ -325,7 +357,9 @@ describe("production smoke ingress", () => {
               environment
             )
           );
+
           expect(response.status).toBe(method === "GET" ? 200 : 503);
+
           if (method === "POST") {
             expect(response.headers.get("x-fidy-smoke-failure")).toBe("identity");
           }
@@ -361,6 +395,7 @@ describe("production smoke ingress", () => {
           }
         )
       );
+
       expect(response.status).toBe(200);
       expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
         core: { contractDigest: digest },

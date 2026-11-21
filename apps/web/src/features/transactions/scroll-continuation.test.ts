@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { observeContinuation } from "./scroll-continuation";
 
 afterEach(() => vi.unstubAllGlobals());
+
 const setup = (): Readonly<{
   deliver: (visible: ReadonlyArray<boolean>) => void;
   onMore: ReturnType<typeof vi.fn>;
@@ -14,6 +15,7 @@ const setup = (): Readonly<{
   const onMore = vi.fn();
   const disconnect = vi.fn();
   let deliver = (_visible: ReadonlyArray<boolean>): void => undefined;
+
   class Observer implements IntersectionObserver {
     readonly root = null;
     readonly rootMargin = "0px 0px 160px 0px";
@@ -45,8 +47,10 @@ const setup = (): Readonly<{
       return [];
     }
   }
+
   vi.stubGlobal("IntersectionObserver", Observer);
   const dispose = observeContinuation({ element, onMore });
+
   return { deliver: (visible) => deliver(visible), onMore, dispose, disconnect };
 };
 

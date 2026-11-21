@@ -13,6 +13,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const { owner, runtime, credential } = yield* nativeGrant,
           id = "30000000-0000-4000-8000-000000000041";
+
         yield* owner.exec(
           "INSERT INTO forwarded_email_receipts(id,user_id,received_at_ms,expires_at_ms) VALUES(?,?,?,?)",
           id,
@@ -29,12 +30,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           owner.now + 86400000
         );
         const protocol = protocolFor(runtime);
+
         const invoke = (revision: number, state?: string): ReturnType<typeof protocol> =>
           protocol(credential.access_token, "tools/call", {
             name: "ingestion.applyReviewEdit",
             args: { payload: { _tag: "Skip", items: [{ id, revision }] } },
             ...(state === undefined ? {} : { continuation: state }),
           });
+
         const form = Schema.Struct({
           result: Schema.Struct({
             requestState: Schema.String,
@@ -43,8 +46,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }),
           }),
         });
+
         const first = yield* invoke(0),
           snapshot = yield* Schema.decodeUnknownEffect(form)(yield* native(() => first.json()));
+
         expect(snapshot.result.inputRequests.review.params.message).toContain(id);
         yield* owner.exec(
           "UPDATE ingestion_review_items SET workspace_state='pending',workspace_revision=1,workspace_updated_at_ms=?,workspace_archive_row_ref='review:'||id WHERE id=?",
@@ -53,8 +58,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         );
         const stale = yield* invoke(0, snapshot.result.requestState);
         expect(yield* native(() => stale.json())).toMatchObject({ result: { isError: true } });
+
         const second = yield* invoke(1),
           fresh = yield* Schema.decodeUnknownEffect(form)(yield* native(() => second.json()));
+
         const submitted = yield* invoke(1, fresh.result.requestState);
         expect(yield* native(() => submitted.json())).toMatchObject({ result: { isError: false } });
         expect(
@@ -74,6 +81,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         second = "30000000-0000-4000-8000-000000000066",
         deadline = owner.now + 86400000,
         sha = "a".repeat(64);
+
       yield* owner.exec(
         "INSERT INTO statement_staging_objects(id,user_id,object_key,byte_length,sha256,status,created_at_ms,expires_at_ms,published_submission_id,source_format) VALUES(?,?,?,24,?,'published',?,?,?,'csv')",
         submission,
@@ -96,6 +104,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         deadline,
         deadline
       );
+
       for (const [index, id] of [first, second].entries()) {
         yield* owner.exec(
           "INSERT INTO ingestion_review_items(id,user_id,source_kind,statement_submission_id,record_number,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,original_evidence,issues_json,evidence_state) VALUES(?,?,'statement',?,?,'mapping-unavailable',?,?,'CO','es-CO','America/Bogota','csv','statement-v1','mechanical-v1','private-only','[]','retained')",
@@ -107,7 +116,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           deadline
         );
       }
+
       const protocol = protocolFor(runtime);
+
       const call = (state?: string): ReturnType<typeof protocol> =>
         protocol(credential.access_token, "tools/call", {
           name: "ingestion.resolveNeedsReviewItem",
@@ -123,6 +134,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           },
           ...(state === undefined ? {} : { continuation: state }),
         });
+
       const form = Schema.Struct({
         result: Schema.Struct({
           requestState: Schema.String,
@@ -131,10 +143,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           }),
         }),
       });
+
       const request = yield* call();
+
       const firstForm = yield* Schema.decodeUnknownEffect(form)(
         yield* native(() => request.json())
       );
+
       expect(firstForm.result.inputRequests.review.params.message).toContain(first);
       expect(firstForm.result.inputRequests.review.params.message).not.toContain("private-only");
       yield* owner.exec(

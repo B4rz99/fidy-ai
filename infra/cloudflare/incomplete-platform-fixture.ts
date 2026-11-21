@@ -1,6 +1,7 @@
 import type { SmokeEnvironment } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 
 const proofLength = 64;
+
 const unavailable = (): never => {
   throw new Error("Unexpected synthetic binding access");
 };
@@ -14,11 +15,13 @@ export const unavailableBucket: R2Bucket = {
   createMultipartUpload: unavailable,
   resumeMultipartUpload: unavailable,
 };
+
 export const unavailableQueue: Queue = {
   send: unavailable,
   sendBatch: unavailable,
   metrics: unavailable,
 };
+
 export const unavailableWorkflow: Workflow = {
   create: unavailable,
   get: unavailable,

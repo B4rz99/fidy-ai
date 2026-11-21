@@ -9,12 +9,14 @@ import { DateTime, Option, Schema } from "effect";
 
 const statusParameters = (url: URL): Option.Option<typeof BudgetStatusQueryParameters.Type> => {
   const keys = [...url.searchParams.keys()];
+
   if (
     keys.length !== new Set(keys).size ||
     keys.some((key) => !["categoryId", "currency", "timeZone", "month"].includes(key))
   ) {
     return Option.none();
   }
+
   return Schema.decodeUnknownOption(BudgetStatusQueryParameters)(
     Object.fromEntries(url.searchParams)
   );
@@ -30,13 +32,16 @@ export const budgetParameters = ({
   if (operation === "budgets.getBudget") {
     if (url.searchParams.size > 0) return Option.none();
     const id = Schema.decodeOption(BudgetId)(url.pathname.split("/").at(-1) ?? "");
+
     return Option.isSome(id) ? Option.some({ id, query: Option.none() }) : Option.none();
   }
+
   if (operation === "budgets.listBudgets") {
     return url.searchParams.size === 0
       ? Option.some({ id: Option.none(), query: Option.none() })
       : Option.none();
   }
+
   return Option.map(statusParameters(url), (query) => ({
     id: Option.none<BudgetId>(),
     query: Option.some(query),

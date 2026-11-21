@@ -3,6 +3,7 @@ import { useState } from "react";
 export const DashboardStory = (): React.JSX.Element => {
   const [recorded, setRecorded] = useState(false);
   const [instant, setInstant] = useState(false);
+
   return (
     <>
       {" "}

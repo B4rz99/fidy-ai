@@ -4,8 +4,11 @@ import { BillingEmail, PriceId } from "./contract";
 import { decideEnrollmentPreparation, decideEnrollmentSubmission } from "./operations";
 
 const weekly = PriceId.make("22700000-0000-4000-8000-000000000001");
+
 const monthly = PriceId.make("22700000-0000-4000-8000-000000000002");
+
 const now = DateTime.makeUnsafe("2026-04-01T12:00:00Z");
+
 const later = DateTime.makeUnsafe("2026-04-01T12:15:00Z");
 
 it("reuses canonical email normalization for billing", () => {
@@ -52,6 +55,7 @@ it("observes the same prepared Price and unresolved provider work", () => {
   expect(decideEnrollmentPreparation({ status: "prepared", priceId: weekly }, weekly)).toEqual({
     _tag: "Observe",
   });
+
   for (const status of ["creating", "verifying"] as const) {
     expect(decideEnrollmentPreparation({ status, priceId: weekly }, monthly)).toEqual({
       _tag: "Observe",
@@ -66,6 +70,7 @@ it("restarts after terminal enrollment outcomes", () => {
         _tag: "RestartRequired",
       });
     }
+
     expect(decideEnrollmentSubmission({ status, priceId: weekly }, now)).toEqual({
       _tag: "ReturnCurrentStatus",
     });

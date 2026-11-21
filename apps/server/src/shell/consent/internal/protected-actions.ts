@@ -22,19 +22,23 @@ export const consentConditions = ({
 }>): OwnedStatement => {
   const conditions: Array<string> = [];
   const params: Array<string> = [];
+
   if (requirement !== "unrevoked") {
     conditions.push(
       `EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records WHERE user_id = ${subjectExpression(subject)})`
     );
     params.push(...subjectBindings(subject));
   }
+
   if (requirement !== "granted") {
     conditions.push(
       `NOT EXISTS (SELECT 1 FROM (SELECT w.id,w.user_id,w.grant_record_id,w.session_id,w.occurred_at_ms FROM consent_history w WHERE w.record_type='processing_withdrawal' AND NOT EXISTS(SELECT 1 FROM consent_history n WHERE n.record_type='processing_renewal' AND n.withdrawal_id=w.id AND n.user_id=w.user_id)) AS consent_user_revocations WHERE user_id = ${subjectExpression(subject)})`
     );
     params.push(...subjectBindings(subject));
   }
+
   const erasure = erasureAdmissionCondition({ subject, admitted: requirement === "granted" });
+
   return {
     sql: [...conditions, erasure.sql].join(" AND "),
     params: [...params, ...erasure.params],

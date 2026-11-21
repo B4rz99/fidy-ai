@@ -11,6 +11,7 @@ export type CorrectionStatus =
   | "recovered";
 
 export type DeletionStatus = "idle" | "saving" | "rejected" | "uncertain";
+
 export type ReconciliationMode = Readonly<{
   _tag: "Reconciling";
   pair: OriginalTransactions;
@@ -30,15 +31,19 @@ export type ReconciliationMode = Readonly<{
       }>
     | Readonly<{ status: "separate"; original: Transaction }>
   );
+
 export const reconciliationFinished = (mode: ReconciliationMode): boolean =>
   ["success", "separate", "missing"].includes(mode.status);
+
 export const reconciliationLocked = (mode: ReconciliationMode): boolean =>
   mode.status !== "review" && !reconciliationFinished(mode);
+
 export type DetailMode =
   | Readonly<{ _tag: "Viewing" }>
   | Readonly<{ _tag: "Editing" }>
   | ReconciliationMode
   | Readonly<{ _tag: "Deleting"; status: DeletionStatus; original: Option.Option<Transaction> }>;
+
 export type TransactionPanel =
   | Readonly<{ _tag: "Summary" }>
   | Readonly<{

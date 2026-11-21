@@ -36,7 +36,9 @@ const policy = {
   sendUrl: "https://sandbox.wompi.co/synthetic/send",
   confirmUrl: "https://sandbox.wompi.co/synthetic/confirm",
 };
+
 type DisclosureContract = PreparedEnrollment["contracts"][keyof PreparedEnrollment["contracts"]];
+
 const contract = (kind: DisclosureContract["kind"]): DisclosureContract => ({
   kind,
   permalink: new URL("https://wompi.co/synthetic"),
@@ -45,6 +47,7 @@ const contract = (kind: DisclosureContract["kind"]): DisclosureContract => ({
   providerContentHash: "b".repeat(64),
   observedAt: DateTime.makeUnsafe(0),
 });
+
 const prepared = (now: number): PreparedEnrollment => ({
   status: "prepared",
   method: "daviplata",
@@ -81,7 +84,9 @@ const prepared = (now: number): PreparedEnrollment => ({
   expiresAt: DateTime.makeUnsafe(now + 60_000),
   daviplataOtpPolicy: policy,
 });
+
 const token = "daviplata_devtest_synthetic";
+
 const initial = (): Response =>
   Response.json({
     data: {
@@ -94,6 +99,7 @@ const initial = (): Response =>
       },
     },
   });
+
 const otpResponse = (
   status: "PENDING" | "APPROVED" | "DECLINED",
   bearer = `synthetic-${status}-bearer`
@@ -110,7 +116,9 @@ const otpResponse = (
       },
     },
   });
+
 const clients: Array<ReturnType<typeof makeSubscriptionEnrollmentClient>> = [];
+
 afterEach(() =>
   Effect.runPromise(
     Effect.forEach(clients.splice(0), (client) => Effect.tryPromise(() => client.dispose())).pipe(
@@ -133,7 +141,9 @@ it.each(["wrong-method", "reused-source"] as const)(
           ...prepared(yield* Clock.currentTimeMillis),
           ...(reason === "wrong-method" ? { method: "card" } : { paymentSourceMode: "reuse" }),
         };
+
         const payloads: Array<unknown> = [];
+
         const client = makeSubscriptionEnrollmentClient({
           apiOrigin: "https://api.test.fidyapp.com",
           httpClient: Layer.succeed(
@@ -141,10 +151,12 @@ it.each(["wrong-method", "reused-source"] as const)(
             submissionBoundary(enrollment, payloads)
           ),
         });
+
         const provider = providerFixture();
         vi.stubGlobal("fetch", provider);
         const documentNumber = Redacted.make("1122233");
         const productNumber = Redacted.make("3991111111");
+
         try {
           const result = yield* Effect.exit(
             Effect.tryPromise(() =>
@@ -159,6 +171,7 @@ it.each(["wrong-method", "reused-source"] as const)(
               )
             )
           );
+
           expect(result._tag).toBe("Failure");
           expect(() => Redacted.value(documentNumber)).toThrow();
           expect(() => Redacted.value(productNumber)).toThrow();
@@ -179,6 +192,7 @@ it.each(["missing-fields", "nequi-fields"] as const)(
       Effect.gen(function* () {
         const enrollment = prepared(yield* Clock.currentTimeMillis);
         const payloads: Array<unknown> = [];
+
         const client = makeSubscriptionEnrollmentClient({
           apiOrigin: "https://api.test.fidyapp.com",
           httpClient: Layer.succeed(
@@ -186,8 +200,10 @@ it.each(["missing-fields", "nequi-fields"] as const)(
             submissionBoundary(enrollment, payloads)
           ),
         });
+
         const provider = providerFixture();
         vi.stubGlobal("fetch", provider);
+
         try {
           const result = yield* Effect.exit(
             Effect.tryPromise(() =>
@@ -206,6 +222,7 @@ it.each(["missing-fields", "nequi-fields"] as const)(
               })
             )
           );
+
           expect(result._tag).toBe("Failure");
           expect(payloads).toEqual([]);
           expect(provider).not.toHaveBeenCalled();
@@ -237,13 +254,17 @@ const submissionBoundary = (
         Effect.gen(function* () {
           const text =
             request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "";
+
           payloads.push(yield* Schema.decodeEffect(UnknownJsonString)(text).pipe(Effect.orDie));
+
           return HttpClientResponse.fromWeb(request, yield* respond(payloads.length));
         })
       ),
     Effect.succeed
   );
+
 const mountedSignal = (): AbortSignal => new AbortController().signal;
+
 const providerFixture = (): Mock<WompiFetch> =>
   vi
     .fn((_url: RequestInfo | URL, _init?: RequestInit): Promise<Response> =>
@@ -259,11 +280,13 @@ type ChallengeFixture = Readonly<{
   controller: AbortController;
   start: () => Promise<DaviplataChallenge>;
 }>;
+
 const challengeFixture = (
   enrollment: PreparedEnrollment,
   respond?: (attempt: number) => Effect.Effect<Response>
 ): ChallengeFixture => {
   const payloads: Array<unknown> = [];
+
   const client = makeSubscriptionEnrollmentClient({
     apiOrigin: "https://api.test.fidyapp.com",
     httpClient: Layer.succeed(
@@ -271,10 +294,12 @@ const challengeFixture = (
       submissionBoundary(enrollment, payloads, respond)
     ),
   });
+
   clients.push(client);
   const provider = providerFixture();
   vi.stubGlobal("fetch", provider);
   const controller = new AbortController();
+
   return {
     payloads,
     provider,
@@ -297,6 +322,7 @@ it("serializes OTP confirmation and permits a resend after a retryable provider 
       const pending = Promise.withResolvers<Response>();
       input.provider.mockImplementationOnce(() => {
         started.resolve();
+
         return pending.promise;
       });
       const challenge = yield* Effect.tryPromise(input.start);
@@ -361,9 +387,11 @@ it.each(["completed", "cancelled"] as const)(
         const enrollment = prepared(yield* Clock.currentTimeMillis);
         const started = yield* Deferred.make<void>();
         const pending = yield* Deferred.make<Response>();
+
         const input = challengeFixture(enrollment, () =>
           Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(pending)))
         );
+
         const challenge = yield* Effect.tryPromise(input.start);
         const otp = Redacted.make("574829");
         const first = challenge.confirm(otp);
@@ -379,6 +407,7 @@ it.each(["completed", "cancelled"] as const)(
         expect(yield* Effect.tryPromise(() => challenge.resend())).toEqual({ status: "refused" });
         expect(input.payloads).toHaveLength(1);
         expect(input.provider).toHaveBeenCalledTimes(3);
+
         if (outcome === "cancelled") input.controller.abort();
         yield* Deferred.succeed(
           pending,
@@ -430,13 +459,16 @@ it("rejects duplicate authorization, never recovers an unapproved token, and rev
     Effect.gen(function* () {
       const enrollment = prepared(yield* Clock.currentTimeMillis);
       const payloads: Array<unknown> = [];
+
       const client = makeSubscriptionEnrollmentClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(HttpClient.HttpClient, submissionBoundary(enrollment, payloads)),
       });
+
       const provider = providerFixture();
       vi.stubGlobal("fetch", provider);
       const gateway = makeEnrollmentGateway(client);
+
       const challenge = yield* Effect.tryPromise(() =>
         gateway.startDaviplata(enrollment, "synthetic@example.invalid", {
           documentNumber: Redacted.make("1122233"),
@@ -444,11 +476,13 @@ it("rejects duplicate authorization, never recovers an unapproved token, and rev
           signal: mountedSignal(),
         })
       );
+
       expect(yield* Effect.tryPromise(() => challenge.retrySubmission())).toEqual({
         status: "refused",
       });
       const documentNumber = Redacted.make("1122233");
       const productNumber = Redacted.make("3991111111");
+
       const duplicate = yield* Effect.exit(
         Effect.tryPromise(() =>
           gateway.startDaviplata(enrollment, "synthetic@example.invalid", {
@@ -458,6 +492,7 @@ it("rejects duplicate authorization, never recovers an unapproved token, and rev
           })
         )
       );
+
       expect(duplicate._tag).toBe("Failure");
       expect(() => Redacted.value(documentNumber)).toThrow();
       expect(() => Redacted.value(productNumber)).toThrow();
@@ -494,18 +529,22 @@ it("submits only approved authority and reuses one PaymentRequestId after an amb
       const enrollment = prepared(yield* Clock.currentTimeMillis);
       const payloads: Array<unknown> = [];
       const http = submissionBoundary(enrollment, payloads);
+
       const client = makeSubscriptionEnrollmentClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(HttpClient.HttpClient, http),
       });
+
       const provider = vi
         .fn((_url: RequestInfo | URL, _init?: RequestInit) =>
           Promise.resolve(otpResponse("APPROVED"))
         )
         .mockResolvedValueOnce(initial())
         .mockResolvedValueOnce(otpResponse("PENDING"));
+
       vi.stubGlobal("fetch", provider);
       const gateway = makeEnrollmentGateway(client);
+
       const challenge = yield* Effect.tryPromise(() =>
         gateway.startDaviplata(enrollment, "synthetic@example.invalid", {
           documentNumber: Redacted.make("1122233"),
@@ -513,6 +552,7 @@ it("submits only approved authority and reuses one PaymentRequestId after an amb
           signal: new AbortController().signal,
         })
       );
+
       expect(yield* Effect.tryPromise(() => challenge.confirm(Redacted.make("574829")))).toEqual({
         status: "uncertain",
         retrySubmission: true,
@@ -528,12 +568,14 @@ it("submits only approved authority and reuses one PaymentRequestId after an amb
       expect(yield* Effect.tryPromise(() => challenge.retrySubmission())).toEqual({
         status: "refused",
       });
+
       const Payload = Schema.Struct({
         method: Schema.Literal("daviplata"),
         paymentSourceMode: Schema.Literal("create"),
         daviplataToken: Schema.String,
         paymentRequestId: Schema.String,
       });
+
       const first = yield* Schema.decodeUnknownEffect(Payload)(payloads[0]);
       const second = yield* Schema.decodeUnknownEffect(Payload)(payloads[1]);
       expect(first.paymentRequestId).toBe(second.paymentRequestId);
@@ -551,6 +593,7 @@ it.each(["caller", "form"] as const)(
   "aborts card tokenization and prevents Fidy submission when its %s cancels",
   (owner) => {
     const controller = new AbortController();
+
     return Effect.runPromise(
       Effect.gen(function* () {
         const started = Promise.withResolvers<void>();
@@ -560,18 +603,22 @@ it.each(["caller", "form"] as const)(
         vi.stubGlobal("fetch", (_url: RequestInfo | URL, options?: RequestInit) => {
           nativeSignal = Option.fromNullishOr(options?.signal);
           started.resolve();
+
           return pending.promise;
         });
+
         const client = makeSubscriptionEnrollmentClient({
           apiOrigin: "https://api.test.fidyapp.com",
           httpClient: Layer.succeed(
             HttpClient.HttpClient,
             HttpClient.make(() => {
               submissions += 1;
+
               return Effect.never;
             })
           ),
         });
+
         const request = makeEnrollmentGateway(client).submit(
           { ...prepared(yield* Clock.currentTimeMillis), method: "card" },
           "synthetic@example.invalid",
@@ -587,10 +634,12 @@ it.each(["caller", "form"] as const)(
             signal: owner === "caller" ? Option.some(controller.signal) : Option.none(),
           }
         );
+
         const outcome = request.then(
           () => "submitted",
           () => "interrupted"
         );
+
         try {
           yield* Effect.tryPromise(() => started.promise);
           controller.abort();
@@ -613,20 +662,27 @@ const reactAct = (work: () => void): Effect.Effect<void, Cause.UnknownError> =>
 
 it("admits card authorization only once even before the first provider response", () => {
   const controller = new AbortController();
+
   return Effect.runPromise(
     Effect.gen(function* () {
       const pending = Promise.withResolvers<Response>();
       const started = Promise.withResolvers<void>();
+
       const provider = vi.fn(() => {
         started.resolve();
+
         return pending.promise;
       });
+
       vi.stubGlobal("fetch", provider);
+
       const client = makeSubscriptionEnrollmentClient({
         apiOrigin: "https://api.test.fidyapp.com",
       });
+
       const gateway = makeEnrollmentGateway(client);
       const enrollment = { ...prepared(yield* Clock.currentTimeMillis), method: "card" as const };
+
       const options = {
         fields: Option.some({
           number: "4242424242424242",
@@ -638,14 +694,18 @@ it("admits card authorization only once even before the first provider response"
         }),
         signal: Option.some(controller.signal),
       };
+
       const first = gateway
         .submit(enrollment, enrollment.billingEmail, options)
         .catch(() => undefined);
+
       try {
         yield* Effect.tryPromise(() => started.promise);
+
         const second = gateway
           .submit(enrollment, enrollment.billingEmail, options)
           .catch(() => undefined);
+
         yield* Effect.yieldNow;
         expect(provider).toHaveBeenCalledTimes(1);
         controller.abort();
@@ -667,20 +727,25 @@ it.each(["expiry", "environment"] as const)(
         const started = Promise.withResolvers<void>();
         vi.stubGlobal("fetch", () => {
           started.resolve();
+
           return pending.promise;
         });
         let sends = 0;
+
         const client = makeSubscriptionEnrollmentClient({
           apiOrigin: "https://api.test.fidyapp.com",
           httpClient: Layer.succeed(
             HttpClient.HttpClient,
             HttpClient.make(() => {
               sends += 1;
+
               return Effect.die(new Error("Unexpected send"));
             })
           ),
         });
+
         const enrollment = { ...prepared(yield* Clock.currentTimeMillis), method: "card" as const };
+
         const request = makeEnrollmentGateway(client)
           .submit(enrollment, enrollment.billingEmail, {
             fields: Option.some({
@@ -694,13 +759,16 @@ it.each(["expiry", "environment"] as const)(
             signal: Option.none(),
           })
           .catch(() => undefined);
+
         try {
           yield* Effect.tryPromise(() => started.promise);
+
           if (change === "expiry") {
             vi.spyOn(Date, "now").mockReturnValue(enrollment.expiresAt.epochMilliseconds);
           } else {
             enrollment.wompiPublicKey = "pub_prod_synthetic";
           }
+
           pending.resolve(Response.json({ data: { id: "opaque-provider-id", brand: "VISA" } }));
           yield* Effect.tryPromise(() => request);
           expect(sends).toBe(0);
@@ -719,9 +787,11 @@ const fillCardInput = (
 ): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
     const input = container.querySelector(`#${id}`);
+
     if (!(input instanceof HTMLInputElement)) {
       throw new Error("Missing card input");
     }
+
     yield* reactAct(() => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, value);
       input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -730,11 +800,14 @@ const fillCardInput = (
 
 const expectBillingEmailFeedback = (container: HTMLElement, invalid: boolean): void => {
   const input = container.querySelector("#billing-email");
+
   if (input === null) {
     throw new Error("Missing billing email input");
   }
+
   expect(input.getAttribute("aria-invalid")).toBe(String(invalid));
   const feedback = container.querySelector("#billing-email-error");
+
   if (invalid) {
     expect(input.getAttribute("aria-describedby")).toBe("billing-email-error");
     expect(feedback?.textContent).toContain("nombre@dominio.com");
@@ -752,6 +825,7 @@ it("allows email correction before consuming the mounted card draft once and rev
       const root = createRoot(container);
       const enrollment = { ...prepared(yield* Clock.currentTimeMillis), method: "card" as const };
       const submit = vi.fn<ComponentProps<typeof PaymentDetails>["submit"]>();
+
       try {
         yield* reactAct(() =>
           root.render(
@@ -786,9 +860,11 @@ it("allows email correction before consuming the mounted card draft once and rev
             })
         );
         const form = container.querySelector("form");
+
         if (form === null) {
           throw new Error("Missing form");
         }
+
         yield* fillCardInput(container, "billing-email", "payer@localhost");
         yield* reactAct(() => {
           form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
@@ -806,9 +882,11 @@ it("allows email correction before consuming the mounted card draft once and rev
         });
         expect(submit).toHaveBeenCalledTimes(1);
         const fields = submit.mock.calls[0]?.[1];
+
         if (fields === undefined || "method" in fields) {
           throw new Error("Expected a card authorization submission");
         }
+
         expect(Option.getOrThrow(fields.signal).aborted).toBe(false);
         expect(container.querySelector<HTMLInputElement>("#card-number")?.value).toBe("");
         expect(container.querySelector<HTMLInputElement>("#card-cvc")?.value).toBe("");
@@ -831,6 +909,7 @@ it.each([false, true])(
         document.body.append(container);
         const root = createRoot(container);
         const enrollment = prepared(yield* Clock.currentTimeMillis);
+
         try {
           yield* reactAct(() =>
             root.render(
@@ -857,10 +936,12 @@ it.each([false, true])(
               ? "No pudimos confirmar el resultado. Consulta el estado"
               : "No pudimos preparar el formulario. Intenta de nuevo."
           );
+
           const actions = Array.from(
             container.querySelectorAll("button"),
             (button) => button.textContent
           );
+
           expect(actions.includes("Consultar estado")).toBe(needsRecovery);
         } finally {
           yield* reactAct(() => root.unmount());
@@ -876,26 +957,32 @@ it("cancels an approved mounted authorization and fences its late submission and
       const enrollment = prepared(yield* Clock.currentTimeMillis);
       const submitting = Promise.withResolvers<void>();
       const pending = Promise.withResolvers<Response>();
+
       const input = challengeFixture(enrollment, () => {
         submitting.resolve();
+
         return Effect.tryPromise(() => pending.promise).pipe(Effect.orDie);
       });
+
       const awaiting = Promise.withResolvers<void>();
       const stages: Array<string> = [];
       const submitted = vi.fn();
       const uncertain = vi.fn();
       const lock = vi.fn();
+
       const task = makeMountedDaviplata({
         enrollment,
         start: makeEnrollmentGateway(input.client).startDaviplata,
         publish: (stage) => {
           stages.push(stage);
+
           if (stage === "otp") awaiting.resolve();
         },
         lock,
         onSubmitted: submitted,
         onUncertain: uncertain,
       });
+
       const unmount = task.mount();
       task.begin({
         email: " SYNTHETIC@example.invalid ",
@@ -934,10 +1021,13 @@ for (const phase of ["idle", "submitting"] as const) {
       const clock = yield* Clock.Clock;
       const submitting = Promise.withResolvers<void>();
       const pending = Promise.withResolvers<Response>();
+
       const input = challengeFixture(enrollment, () => {
         submitting.resolve();
+
         return Effect.tryPromise(() => pending.promise).pipe(Effect.orDie);
       });
+
       const client = {
         ...input.client,
         execute: <A, E>(
@@ -949,13 +1039,17 @@ for (const phase of ["idle", "submitting"] as const) {
             options
           ),
       };
+
       const awaiting = Promise.withResolvers<void>();
+
       const publish = vi.fn((stage: string) => {
         if (stage === "otp") awaiting.resolve();
       });
+
       const submitted = vi.fn();
       const uncertain = vi.fn();
       const lock = vi.fn();
+
       const task = makeMountedDaviplata({
         enrollment,
         start: makeEnrollmentGateway(client).startDaviplata,
@@ -964,6 +1058,7 @@ for (const phase of ["idle", "submitting"] as const) {
         onSubmitted: submitted,
         onUncertain: uncertain,
       });
+
       const unmount = task.mount();
       task.begin({
         email: "synthetic@example.invalid",
@@ -972,10 +1067,12 @@ for (const phase of ["idle", "submitting"] as const) {
         productNumber: Redacted.make("3991111111"),
       });
       yield* Effect.tryPromise(() => awaiting.promise);
+
       if (phase === "submitting") {
         task.confirm(Redacted.make("574829"));
         yield* Effect.tryPromise(() => submitting.promise);
       }
+
       yield* TestClock.adjust("6 seconds");
       expect(publish).toHaveBeenLastCalledWith(phase === "idle" ? "refused" : "uncertain");
       expect(lock).toHaveBeenLastCalledWith(phase !== "idle");
@@ -1002,6 +1099,7 @@ it.each(["approved", "declined", "unknown"] as const)(
     Effect.runPromise(
       Effect.gen(function* () {
         const enrollment = prepared(yield* Clock.currentTimeMillis);
+
         const input = challengeFixture(enrollment, () =>
           Effect.succeed(
             Response.json({
@@ -1010,6 +1108,7 @@ it.each(["approved", "declined", "unknown"] as const)(
             })
           )
         );
+
         if (outcome === "unknown") {
           input.provider.mockRejectedValueOnce(new Error("Synthetic loss"));
         } else {
@@ -1017,14 +1116,18 @@ it.each(["approved", "declined", "unknown"] as const)(
             otpResponse(outcome === "approved" ? "APPROVED" : "DECLINED")
           );
         }
+
         const awaiting = Promise.withResolvers<void>();
         const settled = Promise.withResolvers<void>();
         const submitted = vi.fn(() => settled.resolve());
         const uncertain = vi.fn();
+
         const publish = vi.fn((stage: string) => {
           if (stage === "otp") awaiting.resolve();
+
           if (stage === "refused" || stage === "uncertain") settled.resolve();
         });
+
         const task = makeMountedDaviplata({
           enrollment,
           start: makeEnrollmentGateway(input.client).startDaviplata,
@@ -1033,6 +1136,7 @@ it.each(["approved", "declined", "unknown"] as const)(
           onSubmitted: submitted,
           onUncertain: uncertain,
         });
+
         const unmount = task.mount();
         task.begin({
           email: "synthetic@example.invalid",
@@ -1045,11 +1149,13 @@ it.each(["approved", "declined", "unknown"] as const)(
         yield* Effect.tryPromise(() => settled.promise);
         expect(submitted).toHaveBeenCalledTimes(outcome === "approved" ? 1 : 0);
         expect(uncertain).toHaveBeenCalledTimes(outcome === "unknown" ? 1 : 0);
+
         if (outcome !== "approved") {
           expect(publish).toHaveBeenLastCalledWith(
             outcome === "declined" ? "refused" : "uncertain"
           );
         }
+
         expect(input.payloads).toHaveLength(outcome === "approved" ? 1 : 0);
         unmount();
       })
@@ -1067,9 +1173,12 @@ for (const step of ["tokenization", "first-send"] as const) {
       const pending = Promise.withResolvers<Response>();
       input.provider.mockReset().mockImplementation(() => {
         started.resolve();
+
         return pending.promise;
       });
+
       if (step === "first-send") input.provider.mockResolvedValueOnce(initial());
+
       const client = {
         ...input.client,
         execute: <A, E>(
@@ -1081,9 +1190,11 @@ for (const step of ["tokenization", "first-send"] as const) {
             options
           ),
       };
+
       const published = vi.fn();
       const uncertain = vi.fn();
       const lock = vi.fn();
+
       const task = makeMountedDaviplata({
         enrollment,
         start: makeEnrollmentGateway(client).startDaviplata,
@@ -1092,13 +1203,16 @@ for (const step of ["tokenization", "first-send"] as const) {
         onSubmitted: vi.fn(),
         onUncertain: uncertain,
       });
+
       const unmount = task.mount();
+
       const fields = (): Parameters<typeof task.begin>[0] => ({
         email: "synthetic@example.invalid",
         decisions: { endUserPolicy: true, personalData: true },
         documentNumber: Redacted.make("1122233"),
         productNumber: Redacted.make("3991111111"),
       });
+
       task.begin(fields());
       yield* Effect.tryPromise(() => started.promise);
       yield* TestClock.adjust("6 seconds");
@@ -1127,7 +1241,9 @@ it("submits one borrowed Nequi approval and keeps source verification separate f
         ...prepared(yield* Clock.currentTimeMillis),
         method: "nequi",
       };
+
       const payloads: Array<unknown> = [];
+
       const client = makeSubscriptionEnrollmentClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(
@@ -1139,14 +1255,18 @@ it("submits one borrowed Nequi approval and keeps source verification separate f
           )
         ),
       });
+
       clients.push(client);
+
       const provider = vi.fn(() =>
         Promise.resolve(Response.json({ data: { id: "nequi_test_synthetic", status: "APPROVED" } }))
       );
+
       vi.stubGlobal("fetch", provider);
       const phoneNumber = Redacted.make("3991111111");
       const clearPhone = vi.fn();
       const awaiting = vi.fn();
+
       const result = yield* Effect.tryPromise(() =>
         makeEnrollmentGateway(client).submit(enrollment, "synthetic@example.invalid", {
           fields: Option.some({
@@ -1159,6 +1279,7 @@ it("submits one borrowed Nequi approval and keeps source verification separate f
           signal: Option.none(),
         })
       );
+
       expect(result.status).toBe("source-verifying");
       expect(payloads).toHaveLength(1);
       expect(payloads[0]).toMatchObject({
@@ -1180,11 +1301,14 @@ it("wipes Nequi fields even when cancellation prevents the client from starting 
         ...prepared(yield* Clock.currentTimeMillis),
         method: "nequi",
       };
+
       const payloads: Array<unknown> = [];
+
       const client = makeSubscriptionEnrollmentClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(HttpClient.HttpClient, submissionBoundary(enrollment, payloads)),
       });
+
       clients.push(client);
       const provider = vi.fn();
       vi.stubGlobal("fetch", provider);
@@ -1221,7 +1345,9 @@ it.each(["storage", "billing-email"] as const)(
           ...prepared(yield* Clock.currentTimeMillis),
           method: "nequi",
         };
+
         const payloads: Array<unknown> = [];
+
         const client = makeSubscriptionEnrollmentClient({
           apiOrigin: "https://api.test.fidyapp.com",
           httpClient: Layer.succeed(
@@ -1229,17 +1355,20 @@ it.each(["storage", "billing-email"] as const)(
             submissionBoundary(enrollment, payloads)
           ),
         });
+
         clients.push(client);
         const provider = vi.fn();
         vi.stubGlobal("fetch", provider);
         const phoneNumber = Redacted.make("3991111111");
         const clearPhone = vi.fn();
         const storage = vi.spyOn(Storage.prototype, "setItem");
+
         if (failure === "storage") {
           storage.mockImplementation(() => {
             throw new Error("storage unavailable");
           });
         }
+
         try {
           const result = yield* Effect.exit(
             Effect.tryPromise(() =>
@@ -1259,6 +1388,7 @@ it.each(["storage", "billing-email"] as const)(
               )
             )
           );
+
           expect(result._tag).toBe("Failure");
           expect(payloads).toEqual([]);
           expect(provider).not.toHaveBeenCalled();
@@ -1278,6 +1408,7 @@ it("opens current offers for review when the Price changes on an open form", () 
       const container = document.createElement("div");
       const root = createRoot(container);
       const enrollment = prepared(yield* Clock.currentTimeMillis);
+
       try {
         yield* reactAct(() =>
           root.render(

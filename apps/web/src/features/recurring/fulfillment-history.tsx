@@ -4,7 +4,9 @@ import { Button } from "@/ui/components/button";
 import { type Category, type Occurrence, type Save, type Workspace, money } from "./model";
 
 type Mark = Occurrence["fulfillments"][number];
+
 type Transaction = Workspace["linkedTransactions"][number];
+
 type Props = Readonly<{
   item: Occurrence;
   transactions: Workspace["linkedTransactions"];
@@ -13,6 +15,7 @@ type Props = Readonly<{
   save: Save;
   disabled: boolean;
 }>;
+
 export const FulfillmentHistory = ({
   heading,
   ...props
@@ -28,15 +31,18 @@ export const FulfillmentHistory = ({
     ))}
   </section>
 );
+
 const FulfillmentRecord = ({ mark, ...props }: Props & Readonly<{ mark: Mark }>): JSX.Element => {
   const transaction = Array.findFirst(
     props.transactions,
     (entry) => entry.id === mark.transactionId
   );
+
   const name = Option.match(transaction, {
     onNone: () => "Transacción no disponible",
     onSome: (entry) => Option.getOrElse(entry.counterparty, () => "Contraparte no identificada"),
   });
+
   return (
     <article
       data-recurring-slot="fulfillment"
@@ -53,6 +59,7 @@ const FulfillmentRecord = ({ mark, ...props }: Props & Readonly<{ mark: Mark }>)
     </article>
   );
 };
+
 const ManualMark = ({ mark }: Readonly<{ mark: Mark }>): JSX.Element => (
   <>
     <p>
@@ -64,6 +71,7 @@ const ManualMark = ({ mark }: Readonly<{ mark: Mark }>): JSX.Element => (
     </p>
   </>
 );
+
 const LinkedFacts = ({
   mark,
   transaction,
@@ -78,6 +86,7 @@ const LinkedFacts = ({
     name: string;
   }>): JSX.Element => {
   const invalid = invalidMarks.some((entry) => entry.id === mark.id);
+
   return (
     <>
       <div data-recurring-slot="fulfillment-identity">
@@ -113,6 +122,7 @@ const LinkedFacts = ({
     </>
   );
 };
+
 const TransactionFacts = ({
   transaction,
   timeZone,
@@ -123,6 +133,7 @@ const TransactionFacts = ({
   categories: ReadonlyArray<Category>;
 }>): JSX.Element => {
   const category = categories.find((entry) => entry.id === transaction.categoryId);
+
   return (
     <>
       <p className="text-sm text-muted-foreground">
@@ -153,6 +164,7 @@ const TransactionFacts = ({
     </>
   );
 };
+
 const FulfillmentAction = ({
   mark,
   name,
@@ -162,6 +174,7 @@ const FulfillmentAction = ({
   const [reviewing, setReviewing] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const linked = mark.transactionId !== undefined;
+
   return (
     <div className="grid gap-3">
       <Button

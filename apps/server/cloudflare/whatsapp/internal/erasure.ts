@@ -23,10 +23,12 @@ const recordProjection = ({
     kind === "voice-refusal" || kind === "delivery-status"
       ? "whatsapp_event_records"
       : "whatsapp_deliveries";
+
   const subject =
     kind === "delivery-status"
       ? "EXISTS(SELECT 1 FROM whatsapp_deliveries p WHERE p.kind='hosted' AND p.hosted_correlation_token=r.correlation_token AND p.user_id=?)"
       : "r.user_id=?";
+
   const owned = `r.kind='${kind}' AND ${subject}`;
 
   return {

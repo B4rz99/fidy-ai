@@ -4,6 +4,7 @@ import Icon from "./docs-icon.astro";
 import MarkdownActions from "./markdown-actions.astro";
 
 const { id, headings } = Astro.locals.starlightRoute;
+
 const operationHeadings = [
   { slug: "descripcion", text: "Descripción" },
   { slug: "acceso", text: "Acceso" },
@@ -12,22 +13,29 @@ const operationHeadings = [
   { slug: "cuerpo-http", text: "Cuerpo HTTP" },
   { slug: "respuestas-y-errores", text: "Respuestas y errores" },
 ];
+
 const catalogHeadings = [
   { slug: "operaciones", text: "Operaciones" },
   { slug: "por-dominio", text: "Por dominio" },
   { slug: "permisos-y-acceso", text: "Permisos y acceso" },
 ];
+
 const schemaHeadings = [
   { slug: "explorar-esquemas", text: "Explorar esquemas" },
   { slug: "propiedades", text: "Propiedades" },
   { slug: "json-completo", text: "JSON completo" },
 ];
+
 const selectLinks = (): ReadonlyArray<{ slug: string; text: string }> => {
   if (id.startsWith("reference/")) return operationHeadings;
+
   if (id === "reference") return catalogHeadings;
+
   if (id === "referencia/esquemas") return schemaHeadings;
+
   return headings.filter((heading) => heading.depth === 2);
 };
+
 const links = selectLinks();
 ---
 
@@ -90,51 +98,72 @@ const links = selectLinks();
 </div>
 <script>
   const mobileToc = document.querySelector<HTMLElement>("#docs-mobile-toc");
+
   mobileToc?.querySelectorAll("a").forEach((link) => {
     link.addEventListener("click", () => mobileToc.hidePopover());
   });
+
   window.addEventListener("pageshow", () => mobileToc?.hidePopover());
+
   const tocLinks = Array.from(
     document.querySelectorAll<HTMLAnchorElement>(".docs-toc a, .docs-mobile-toc a")
   );
+
   const tocTarget = (target: Element): string =>
     target.id.startsWith("dominio-") ? "por-dominio" : target.id;
+
   const updateCurrent = (id: string): void => {
     for (const link of tocLinks) {
       if (link.hash === `#${id}`) link.setAttribute("aria-current", "location");
       else link.removeAttribute("aria-current");
     }
   };
+
   const domainHeadings = document.querySelectorAll<HTMLElement>(
     '[data-docs-section="por-dominio"]'
   );
+
   const desktopHeaderHeight = 64;
+
   const mobileHeaderHeight = 108;
+
   const anchorSpacing = 24;
+
   const updateSection = (): void => {
     const firstLink = tocLinks[0];
+
     if (!firstLink) return;
+
     const headerHeight = window.matchMedia("(min-width: 800px)").matches
       ? desktopHeaderHeight
       : mobileHeaderHeight;
+
     const threshold = headerHeight + anchorSpacing + 1;
+
     const targets = tocLinks.flatMap((link) => {
       const target = document.getElementById(link.hash.slice(1));
+
       return target ? [target] : [];
     });
+
     let current = firstLink.hash.slice(1);
     let closest = Number.NEGATIVE_INFINITY;
+
     for (const target of [...targets, ...domainHeadings]) {
       if (target.getClientRects().length === 0) continue;
       const top = target.getBoundingClientRect().top;
+
       if (top <= threshold && top > closest) {
         closest = top;
         current = tocTarget(target);
       }
     }
+
     updateCurrent(current);
   };
+
   let updatePending = false;
+
   const scheduleUpdate = (): void => {
     if (updatePending) return;
     updatePending = true;
@@ -143,12 +172,20 @@ const links = selectLinks();
       updateSection();
     });
   };
+
   window.addEventListener("scroll", scheduleUpdate, { passive: true });
+
   window.addEventListener("resize", scheduleUpdate);
+
   window.addEventListener("pageshow", scheduleUpdate);
+
   window.addEventListener("hashchange", scheduleUpdate);
+
   document.addEventListener("input", scheduleUpdate);
+
   document.addEventListener("toggle", scheduleUpdate, true);
+
   document.fonts.addEventListener("loadingdone", scheduleUpdate);
+
   scheduleUpdate();
 </script>

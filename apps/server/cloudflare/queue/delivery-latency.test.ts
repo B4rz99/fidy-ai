@@ -4,6 +4,7 @@ import { expect, it } from "vitest";
 
 const measure =
   Effect.runSync(Config.String("INFRA_PERFORMANCE_MEASURE").pipe(Config.withDefault("0"))) === "1";
+
 const measurement = Schema.fromJsonString(
   Schema.Struct({
     batchTimeoutSeconds: Schema.Int,
@@ -63,6 +64,7 @@ it.skipIf(!measure)(
             ),
             (runtime) => Effect.tryPromise(() => runtime.dispose()).pipe(Effect.orDie)
           );
+
           const result = yield* Effect.tryPromise(() => runtime.getKVNamespace("RESULT"));
           const started = performance.now();
           expect(
@@ -71,19 +73,25 @@ it.skipIf(!measure)(
             )).status
           ).toBe(202);
           let deliveries = 0;
+
           for (let attempt = 0; attempt < 200; attempt++) {
             deliveries = (yield* Effect.tryPromise(() => result.list())).keys.length;
+
             if (deliveries === 1) break;
             yield* Effect.sleep(50);
           }
+
           const elapsedMs = performance.now() - started;
+
           const encoded = yield* Schema.encodeEffect(measurement)({
             batchTimeoutSeconds,
             elapsedMs,
             deliveries,
           });
+
           yield* Effect.sync(() => process.stdout.write(`INFRA_QUEUE_LATENCY ${encoded}\n`));
           expect(deliveries).toBe(1);
+
           if (batchTimeoutSeconds === 5) expect(elapsedMs).toBeGreaterThanOrEqual(4500);
           else expect(elapsedMs).toBeLessThan(2000);
         }

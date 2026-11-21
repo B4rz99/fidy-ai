@@ -5,5 +5,7 @@ import {
 } from "./native-provider.test-fixture";
 
 nativeProviderBrowserGuards("microsoft");
+
 nativeProviderRefusals("microsoft");
+
 nativeProviderRollback("microsoft");

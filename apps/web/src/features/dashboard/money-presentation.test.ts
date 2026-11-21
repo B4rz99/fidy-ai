@@ -56,9 +56,11 @@ describe("Dashboard exact Money presentation", () => {
 
   it("reads actual outflow-only chart rows without requiring an unused inflow field", () => {
     const amount = "1" + "0".repeat(400);
+
     const exact = Option.getOrThrow(
       exactChartAmount({ payload: { outflowExact: amount }, series: "outflow" })
     );
+
     expect(
       formatCurrencyAmount({ amount: exact, currency: "USD", locale: "es-CO" }).replace(
         /[^0-9]/gu,

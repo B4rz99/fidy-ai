@@ -3,32 +3,45 @@ import { listLaunchCategories } from "../../../apps/server/src/core/categories/o
 import type { Miniflare } from "miniflare";
 
 type Owner = Awaited<ReturnType<Miniflare["unsafeGetDurableObjectStorage"]>>;
+
 export const subject = "24000000-0000-4000-8000-000000000481";
+
 const epoch = Date.parse("2026-11-17T12:00:00Z");
+
 const currencies = ["COP", "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF"];
+
 const sizes = {
   production: { transactions: 8, plans: 2, revisions: 2, review: 4, currencies: 2 },
   small: { transactions: 500, plans: 10, revisions: 1, review: 50, currencies: 2 },
   extreme: { transactions: 100000, plans: 100, revisions: 100, review: 5000, currencies: 8 },
   breaking: { transactions: 1000000, plans: 100, revisions: 100, review: 5000, currencies: 8 },
 };
+
 type Size = typeof sizes.small;
+
 const chunk = 500;
+
 const idDigits = 12;
+
 const retentionDays = 90;
+
 const dayMs = 86400000;
+
 const digestCharacters = 64;
+
 const execute = (
   db: Owner,
   ...args: Parameters<Owner["exec"]>
 ): Effect.Effect<Awaited<ReturnType<Owner["exec"]>>, Cause.UnknownError> =>
   Effect.tryPromise(() => db.exec(...args));
+
 const everyHundred = 100;
 
 const transactions = Effect.fn(function* (db: Owner, size: Size) {
   const encodedCurrencies = yield* Schema.encodeEffect(
     Schema.fromJsonString(Schema.Array(Schema.String))
   )(currencies);
+
   for (let start = 0; start < size.transactions; start += chunk) {
     yield* execute(
       db,
@@ -48,6 +61,7 @@ const transactions = Effect.fn(function* (db: Owner, size: Size) {
       size.currencies
     );
   }
+
   yield* execute(
     db,
     `WITH RECURSIVE pairs(i) AS (
@@ -59,6 +73,7 @@ const transactions = Effect.fn(function* (db: Owner, size: Size) {
     subject,
     epoch
   );
+
   for (const member of ["first_transaction_id", "second_transaction_id"] as const) {
     yield* execute(
       db,
@@ -66,11 +81,13 @@ const transactions = Effect.fn(function* (db: Owner, size: Size) {
       FROM transaction_reconciliation_decisions d WHERE transactions.user_id=d.user_id AND transactions.id=d.${member}`
     );
   }
+
   yield* execute(
     db,
     `DELETE FROM transaction_projection_leaf WHERE id IN (SELECT second_transaction_id FROM transaction_reconciliation_decisions)`
   );
 });
+
 const planning = Effect.fn(function* (db: Owner, size: Size) {
   for (const [index, currency] of currencies.slice(0, size.currencies).entries()) {
     yield* execute(
@@ -83,11 +100,13 @@ const planning = Effect.fn(function* (db: Owner, size: Size) {
       epoch
     );
   }
+
   yield* execute(
     db,
     `INSERT INTO user_documents VALUES(?,'recurring-plan','{"excludedTransactionIds":[],"suggestions":[]}',1)`,
     subject
   );
+
   for (let index = 0; index < size.plans; index++) {
     const id = "83000000-0000-4000-8000-" + String(index).padStart(idDigits, "0");
     yield* execute(
@@ -112,6 +131,7 @@ const planning = Effect.fn(function* (db: Owner, size: Size) {
     );
   }
 });
+
 const reviews = Effect.fn(function* (db: Owner, size: Size) {
   const staging = "84000000-0000-4000-8000-000000000000";
   const submission = "85000000-0000-4000-8000-000000000000";
@@ -151,6 +171,7 @@ const reviews = Effect.fn(function* (db: Owner, size: Size) {
     epoch
   );
 });
+
 export const seed = Effect.fn(function* (db: Owner, dataset: string) {
   if (
     dataset !== "small" &&
@@ -160,6 +181,7 @@ export const seed = Effect.fn(function* (db: Owner, dataset: string) {
   ) {
     return yield* Effect.die("Unknown fixture size");
   }
+
   const size = sizes[dataset];
   const start = performance.now();
   yield* execute(
@@ -167,6 +189,7 @@ export const seed = Effect.fn(function* (db: Owner, dataset: string) {
     "UPDATE users SET trial_started_at_ms=created_at_ms,trial_ends_at_ms=created_at_ms+604800000 WHERE id=?",
     subject
   );
+
   for (const [position, category] of listLaunchCategories().entries()) {
     yield* execute(
       db,
@@ -176,6 +199,7 @@ export const seed = Effect.fn(function* (db: Owner, dataset: string) {
       position
     );
   }
+
   process.stdout.write("REFERENCE_STAGE transactions\n");
   yield* transactions(db, size);
   process.stdout.write("REFERENCE_STAGE planning\n");
@@ -183,6 +207,7 @@ export const seed = Effect.fn(function* (db: Owner, dataset: string) {
   process.stdout.write("REFERENCE_STAGE reviews\n");
   yield* reviews(db, size);
   process.stdout.write("REFERENCE_STAGE counts\n");
+
   const [counts] = yield* execute(
     db,
     `SELECT (SELECT count(*) FROM transactions) AS transactions,
@@ -193,7 +218,9 @@ export const seed = Effect.fn(function* (db: Owner, dataset: string) {
     (SELECT count(*) FROM recurring_plan_revisions) AS revisions,
     (SELECT count(*) FROM ingestion_review_items) AS review`
   );
+
   const links = Math.ceil(size.transactions / everyHundred);
+
   const verified = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       transactions: Schema.Literal(size.transactions),
@@ -205,5 +232,6 @@ export const seed = Effect.fn(function* (db: Owner, dataset: string) {
       review: Schema.Literal(size.review),
     })
   )(counts);
+
   return { dataset, seedEpochMs: epoch, ...verified, milliseconds: performance.now() - start };
 });

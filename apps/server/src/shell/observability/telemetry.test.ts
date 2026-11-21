@@ -42,6 +42,7 @@ it("round-trips strict W3C loopback trace coordinates without baggage", () => {
     sampled: false,
     capturedAtUnixMilliseconds: 123,
   });
+
   const traceparent = encodeTraceParent(context);
 
   expect(traceparent).toBe("00-0123456789abcdef0123456789abcdef-0123456789abcdef-00");
@@ -76,11 +77,13 @@ it.effect("disabled telemetry preserves every application outcome without observ
     const success = yield* telemetry.span(descriptor, Effect.succeed("completed"));
     const failure = yield* Effect.exit(telemetry.span(descriptor, Effect.fail("declined")));
     const defect = yield* Effect.exit(telemetry.span(descriptor, Effect.die("defect-sentinel")));
+
     const continued = yield* telemetry.continueSpan(
       { version: 1, traceId: "1".repeat(32), parentSpanId: "2".repeat(16) },
       descriptor,
       Effect.succeed("continued")
     );
+
     yield* telemetry.recordOutcome({
       outcome: "succeeded",
       error: Option.none(),
@@ -129,8 +132,10 @@ it.effect("proves only currently active in-process span coordinates", () =>
           state: {},
         }),
     });
+
     const services = yield* Layer.build(telemetryLayer(adapter));
     const telemetry = Context.get(services, Telemetry);
+
     const context = yield* telemetry.span(
       descriptor,
       Effect.gen(function* () {
@@ -138,6 +143,7 @@ it.effect("proves only currently active in-process span coordinates", () =>
         const active = Option.getOrThrow(captured);
         expect(yield* telemetry.isActiveSpan(active, "agent.hostedTurn")).toBe(true);
         expect(yield* telemetry.isActiveSpan(active, "agent.modelRound")).toBe(false);
+
         return active;
       })
     );
@@ -155,6 +161,7 @@ it.effect("a synchronous start defect runs application work unobserved", () =>
     });
 
     const services = yield* Layer.build(telemetryLayer(adapter));
+
     const result = yield* Context.get(services, Telemetry).span(
       makeSpanDescriptor(),
       Effect.succeed("application-result")
@@ -167,10 +174,12 @@ it.effect("a synchronous start defect runs application work unobserved", () =>
 it.effect("an unobserved root clears ambient context from its nested work", () =>
   Effect.gen(function* () {
     const parents: Array<Parameters<TelemetryAdapter["startSpan"]>[1]> = [];
+
     const adapter = makeTelemetryAdapter({
       startSpan: (_descriptor, parent) => {
         parents.push(parent);
         const index = parents.length;
+
         return Effect.succeed(
           index === 2
             ? Option.none()
@@ -183,6 +192,7 @@ it.effect("an unobserved root clears ambient context from its nested work", () =
         );
       },
     });
+
     const services = yield* Layer.build(telemetryLayer(adapter));
     const telemetry = Context.get(services, Telemetry);
 
@@ -208,11 +218,14 @@ it.effect("a malformed adapter span runs nested application work unobserved", ()
       sampled: true,
       state: {},
     };
+
     const adapter = makeTelemetryAdapter({
       startSpan: () => Effect.succeedSome(hostileSpan),
     });
+
     const services = yield* Layer.build(telemetryLayer(adapter));
     const telemetry = Context.get(services, Telemetry);
+
     const result = yield* telemetry.span(
       descriptor,
       telemetry.span(descriptor, Effect.succeed("application-result"))
@@ -252,8 +265,10 @@ it.effect("synchronous adapter defects never alter work or escape observation me
         throw new Error("model-usage-adapter-sentinel");
       },
     });
+
     const services = yield* Layer.build(telemetryLayer(adapter));
     const telemetry = Context.get(services, Telemetry);
+
     const failure = yield* Effect.exit(
       telemetry.span(
         descriptor,
@@ -285,6 +300,7 @@ it.effect("synchronous adapter defects never alter work or escape observation me
             error: "unexpected_defect",
             cause: new Error("application-defect-sentinel"),
           });
+
           return yield* Effect.fail("application-failure");
         })
       )

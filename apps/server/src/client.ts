@@ -2,9 +2,13 @@ export {
   makeTokenAuthorizationClientLive,
   TokenAuthorizationClientAnonymousLive,
 } from "~/shell/authorization/runtime";
+
 export { FidyApi, operationCatalog, type FidyApiGroups, type OperationId } from "~/shell/api";
+
 export { ConnectInstitutionResult } from "~/core/connections/contract";
+
 export { decideOperationAccess } from "~/shell/canonical-policy/operations";
+
 export {
   AtomicBatchCallId,
   AtomicBatchRejected,
@@ -14,6 +18,7 @@ export {
   getAtomicBatchInputSchema,
   projectAtomicBatchSchemas,
 } from "~/shell/operations/contract";
+
 export {
   HostedTurnApi,
   HostedTurnRequest,
@@ -24,6 +29,7 @@ export {
   HostedTurnProgressRequest,
   type HostedTurnApiGroups,
 } from "~/shell/agent/contract";
+
 export {
   OAuthConnectionId,
   OAuthConnectionList,
@@ -35,7 +41,9 @@ export {
   OAuthReview,
   OAuthReviewChoice,
 } from "~/shell/oauth-agents/contract";
+
 export { CanonicalAllowance, canonicalAllowanceHeaders } from "~/shell/quotas/contract";
+
 export {
   ConnectionBrowserApi,
   ConnectionAttemptReference,
@@ -44,8 +52,11 @@ export {
   ConnectionContinuationFailure,
   ConnectionContinuationReview,
 } from "~/shell/connections/contract";
+
 export { ResourceLimited } from "~/shell/public-http/contract";
+
 export { TelemetryTraceId } from "~/shell/observability/trace/contract";
+
 export {
   ActivePATList,
   ActivePATMetadata,
@@ -66,7 +77,9 @@ export {
   TokenShortId,
   recipientLabelLimit,
 } from "~/core/tokens/contract";
+
 export { PATId } from "~/core/tokens/contract";
+
 export {
   ApprovedPATPairing,
   ApprovePATPairingPayload,
@@ -80,6 +93,7 @@ export {
   StartedPATPairing,
   StartPATPairingPayload,
 } from "~/core/tokens/contract";
+
 export {
   PATPairingApi,
   ClaimPATPairingPayload,
@@ -88,11 +102,17 @@ export {
   PATPairingRateLimitedApi,
   PATPairingUnavailableApi,
 } from "~/shell/tokens/contract";
+
 export { buildPATDisclosure, getTokenShortId, patScopeCopy } from "~/core/tokens/operations";
+
 export { StagedStatementReference, SubmitForExtractionInput } from "~/core/ingestion/contract";
+
 export type { CanonicalInput } from "~/shell/canonical-operations/contract";
+
 export type { CanonicalSuccess } from "~/shell/canonical-operations/contract";
+
 export { DashboardView, DashboardWidgetView } from "~/shell/dashboard/contract";
+
 export {
   DashboardCatalogEntry,
   DashboardDocument,
@@ -103,6 +123,7 @@ export {
   SplitWeight,
   WidgetId,
 } from "~/core/dashboard/contract";
+
 export {
   ApprovedBrowserPairingEmailAuthentication,
   AuthenticatedBrowserLoginPairing,
@@ -114,19 +135,30 @@ export {
   WebAuthApi,
   type WebAuthApiGroups,
 } from "~/shell/web-authentication/contract";
+
 export { StartedBrowserLoginPairing } from "~/core/browser-login/contract";
+
 export { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/contract";
+
 export { CompleteEmailReplacementPayload } from "~/shell/web-authentication/contract";
+
 export { RequestEmailReplacementPayload } from "~/shell/email-authentication/contract";
+
 export {
   emailReplacementPath,
   emailReplacementCompletionPath,
 } from "~/shell/email-authentication/contract";
+
 export { BillingAttemptId, PaymentRequestId } from "~/core/subscription/contract";
+
 export { SubscriptionStatus, SubscriptionOffers } from "~/core/subscription/contract";
+
 export { PriceId } from "~/core/subscription/contract";
+
 export { IanaTimeZone } from "~/core/_shared/context";
+
 export { BackupRecoveryCode, RotatedBackupRecoveryCode } from "~/core/recovery/contract";
+
 export {
   BillingEmail,
   EnrollmentAvailability,
@@ -136,11 +168,13 @@ export {
   PaymentSubmission,
   PaymentEnrollmentId,
 } from "~/core/subscription/contract";
+
 export type {
   PaymentEnrollment as PaymentEnrollmentType,
   PaymentSubmission as PaymentSubmissionType,
   EnrollmentMethod,
 } from "~/core/subscription/contract";
+
 export {
   PaymentEnrollmentInvalidApi,
   PaymentEnrollmentUnavailableApi,
@@ -148,6 +182,7 @@ export {
   type SubscriptionEnrollmentApiGroups,
   type SubmitPaymentEnrollmentPayload,
 } from "~/shell/subscription/contract";
+
 export {
   BrowserLoginPairingInvalidApi,
   BrowserLoginPollingRateLimitedApi,
@@ -167,20 +202,24 @@ export type { AuthenticationProvider } from "~/shell/web-authentication/contract
 export { fidyWhatsAppUrl, ProviderHandoffSearch } from "~/shell/web-authentication/contract";
 
 export { BudgetMonth } from "~/core/budgets/contract";
+
 export { Currency, currencyMetadata } from "~/core/_shared/money";
 
 export { Transaction, TransactionId, TransactionQueryValues } from "~/core/transactions/contract";
 
 export { Category } from "~/core/categories/contract";
+
 export { User } from "~/core/identity/contract";
 
 export { ManualPATReauthenticationRequired } from "~/shell/tokens/contract";
 
 export { BrowserSessionBinding } from "~/shell/web-session/contract";
+
 export {
   browserSessionBindingHeader,
   browserSessionBindingPath,
 } from "~/shell/browser-transport/contract";
+
 export { Budget, BudgetStatusReport } from "~/core/budgets/contract";
 
 export type {

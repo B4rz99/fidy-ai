@@ -6,7 +6,9 @@ import { TestCrypto } from "~/shell/testing/crypto-harness";
 import { readWhatsAppStatementMedia } from "./operations";
 
 const bytes = new TextEncoder().encode("date,amount,currency\n2026-04-01,13000,COP");
+
 const sha256 = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
+
 const metadata = {
   id: "statement123",
   mime_type: "text/csv",
@@ -15,6 +17,7 @@ const metadata = {
   download_url: "https://api.kapso.ai/meta/whatsapp/media_download?token=signed-private-token",
   download_url_expires_at: "2026-04-03T12:14:00Z",
 };
+
 layer(TestCrypto)((it) => {
   it.effect("retrieves verified bytes when Kapso reports a numeric file size", () =>
     Effect.gen(function* () {
@@ -29,6 +32,7 @@ layer(TestCrypto)((it) => {
                 : bytes,
           }),
       };
+
       expect(yield* readWhatsAppStatementMedia({ ...input, outbound })).toEqual({
         bytes,
         sha256,
@@ -57,6 +61,7 @@ layer(TestCrypto)((it) => {
                 : { ...download, headers: {} }
             ),
         };
+
         expect(
           (yield* readWhatsAppStatementMedia({ ...input, outbound }).pipe(Effect.flip))._tag
         ).toBe("StatementMediaUnavailable");
@@ -76,6 +81,7 @@ layer(TestCrypto)((it) => {
                 : bytes,
           }),
       };
+
       expect(
         (yield* readWhatsAppStatementMedia({ ...input, outbound }).pipe(Effect.flip))._tag
       ).toBe("StatementMediaUnavailable");
@@ -93,9 +99,11 @@ layer(TestCrypto)((it) => {
     () =>
       Effect.gen(function* () {
         let calls = 0;
+
         const outbound: OutboundHttpService = {
           execute: (request) => {
             calls += 1;
+
             return Effect.succeed({
               status: 200,
               headers: {},
@@ -106,6 +114,7 @@ layer(TestCrypto)((it) => {
             });
           },
         };
+
         expect(yield* readWhatsAppStatementMedia({ ...input, outbound })).toEqual({
           bytes,
           sha256,
@@ -152,9 +161,11 @@ layer(TestCrypto)((it) => {
           { file_size: true },
         ]) {
           let calls = 0;
+
           const outbound: OutboundHttpService = {
             execute: () => {
               calls += 1;
+
               return Effect.succeed({
                 status: 200,
                 headers: {},
@@ -162,6 +173,7 @@ layer(TestCrypto)((it) => {
               });
             },
           };
+
           expect(
             (yield* readWhatsAppStatementMedia({ ...input, outbound }).pipe(Effect.flip))._tag
           ).toBe("StatementMediaUnavailable");

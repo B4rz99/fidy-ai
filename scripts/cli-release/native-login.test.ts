@@ -22,7 +22,9 @@ const transport = (runtime: Miniflare): HttpClient.HttpClient =>
   HttpClient.make((request, url) => {
     const body =
       request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : undefined;
+
     const headers = { ...request.headers, "cf-connecting-ip": "192.0.2.49" };
+
     return native(() =>
       runtime.dispatchFetch(url.href, {
         method: request.method,
@@ -48,6 +50,7 @@ const transport = (runtime: Miniflare): HttpClient.HttpClient =>
 
 const browserApproval = Effect.fnUntraced(function* (runtime: Miniflare, event: PublicProgress) {
   if (event._tag !== "ApprovalRequired") return;
+
   const post = (
     path: string,
     payload: unknown
@@ -65,11 +68,14 @@ const browserApproval = Effect.fnUntraced(function* (runtime: Miniflare, event: 
         body: JSON.stringify(payload),
       })
     );
+
   const inspect = yield* post("/pats/pairings/inspect", { publicCode: event.publicCode });
   expect(inspect.status).toBe(200);
+
   const { data } = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ data: Schema.Struct({ pairingId: Schema.String }) })
   )(yield* native(() => inspect.json())).pipe(Effect.orDie);
+
   const approved = yield* post("/pats/pairings/approve", data);
   expect(approved.status).toBe(200);
   yield* native(() => approved.text());
@@ -80,10 +86,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     Effect.gen(function* () {
       const create = yield* nativeUserPlatform,
         runtime = yield* create();
+
       yield* seed(runtime, alice);
+
       const httpClient = transport(runtime),
         pairing = yield* makePairingClient(httpClient);
+
       const saved: Credential[] = [];
+
       const store: CredentialStore = {
         load: Effect.sync(() => Option.fromUndefinedOr(saved[0])),
         clear: Effect.void,
@@ -92,6 +102,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             saved.push(credential);
           }),
       };
+
       yield* runCommand(
         ["login", "--recipient", "Terminal", "--scopes", "read", "--lifetime", "7", "--no-browser"],
         {
@@ -104,9 +115,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         }
       );
       const [credential] = saved;
+
       if (credential === undefined) return yield* Effect.die("Missing CLI credential");
       expect(credential.grant.pat.recipientLabel).toBe("Terminal");
       const output: string[] = [];
+
       const failed = yield* runOperationCommand(["categories", "listCategories"], {
         store,
         httpClient,
@@ -119,6 +132,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         stderr: () => Effect.void,
         json: true,
       });
+
       expect(failed).toBe(false);
       expect(output.join("")).toContain("Mercado");
       expect(output.join("")).not.toContain(Redacted.value(credential.bearer));

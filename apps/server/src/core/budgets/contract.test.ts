@@ -44,6 +44,7 @@ it("rejects crossing snapshots with mixed Currency or spending below the exact l
     serviceMarket: "CO",
     locale: "es-CO",
   } as const;
+
   const decode = Schema.decodeResult(BudgetCrossing);
   expect(Result.isSuccess(decode(crossing))).toBe(true);
   expect(Result.isFailure(decode({ ...crossing, spent: { amount: "80", currency: "USD" } }))).toBe(
@@ -67,6 +68,7 @@ it("rejects a zero cap at the nested Money amount field in every write input", (
     categoryId: budgetInput.categoryId,
     cap: { amount: "0", currency: "COP" },
   });
+
   const update = Schema.decodeResult(UpdateBudgetInput)({
     categoryId: budgetInput.categoryId,
     cap: { amount: "0", currency: "COP" },
@@ -99,11 +101,13 @@ it("rejects either incorrect calendar bound and reports the end path", () => {
 
 it("decodes exact Budget statuses and reports each Currency mismatch at its field", () => {
   const decode = Schema.decodeUnknownResult(BudgetStatus);
+
   const period = {
     from: "2026-07-01T05:00:00Z",
     to: "2026-08-01T05:00:00Z",
     timeZone: "America/Bogota",
   } as const;
+
   const under = {
     type: "under" as const,
     budget: budgetInput,
@@ -111,12 +115,14 @@ it("decodes exact Budget statuses and reports each Currency mismatch at its fiel
     remaining: { amount: "999990", currency: "COP" },
     period,
   };
+
   const reached = {
     type: "reached" as const,
     budget: budgetInput,
     spent: { amount: "1000000", currency: "COP" },
     period,
   };
+
   const over = {
     type: "over" as const,
     budget: budgetInput,
@@ -133,14 +139,17 @@ it("decodes exact Budget statuses and reports each Currency mismatch at its fiel
     ...under,
     spent: { amount: "10", currency: "USD" },
   });
+
   const remainingCurrencyMismatch = decode({
     ...under,
     remaining: { amount: "999990", currency: "USD" },
   });
+
   const overageCurrencyMismatch = decode({
     ...over,
     overBy: { amount: "1", currency: "USD" },
   });
+
   const contradictory = decode({
     ...under,
     remaining: { amount: "10", currency: "COP" },
@@ -256,6 +265,7 @@ it("rejects boxed status discriminants even when their text matches a Budget var
 
 it("accepts every reachable monthly threshold and rejects other values", () => {
   const decode = Schema.decodeUnknownResult(BudgetMonthLatch);
+
   const common = {
     budgetId: budgetInput.id,
     period: {
@@ -268,6 +278,7 @@ it("accepts every reachable monthly threshold and rejects other values", () => {
   for (const highestReached of [0, 80, 100]) {
     expect(Result.isSuccess(decode({ ...common, highestReached }))).toBe(true);
   }
+
   expect(Result.isFailure(decode({ ...common, highestReached: 81 }))).toBe(true);
 });
 
@@ -275,6 +286,7 @@ it("rejects mixed-Currency progress before comparing or subtracting its amounts"
   const decode = Schema.decodeUnknownResult(Schema.toCodecJson(BudgetProgress));
   const cap = { amount: "100", currency: "COP" };
   const sameSpent = { amount: "25", currency: "COP" };
+
   for (const progress of [
     {
       cap,
@@ -300,6 +312,7 @@ it("rejects mixed-Currency progress before comparing or subtracting its amounts"
 it("requires the full selected group and month when changing a Budget Group Currency", () => {
   const decode = Schema.decodeUnknownResult(UpdateBudgetInput);
   const base = { categoryId: budgetInput.categoryId, cap: budgetInput.cap };
+
   const grouped = {
     ...base,
     groupName: "Casa",
@@ -307,12 +320,15 @@ it("requires the full selected group and month when changing a Budget Group Curr
     groupCurrency: "COP",
     groupCategoryIds: [budgetInput.categoryId],
   };
+
   expect(Result.isSuccess(decode(base))).toBe(true);
   expect(Result.isSuccess(decode(grouped))).toBe(true);
+
   for (const key of ["groupName", "month", "groupCategoryIds"] as const) {
     const { [key]: _, ...incomplete } = grouped;
     expect(Result.isFailure(decode(incomplete))).toBe(true);
   }
+
   expect(
     Result.isFailure(
       decode({ ...grouped, groupCategoryIds: ["10000000-0000-4000-8000-000000000002"] })
@@ -330,9 +346,11 @@ it("requires the full selected group and month when changing a Budget Group Curr
 
 it("bounds monthly plan labels and requires visible text in a Budget Group name", () => {
   const decodeMonth = Schema.decodeUnknownResult(BudgetMonth);
+
   for (const value of ["2000-01", "9999-12", "2026-09", "2026-10"]) {
     expect(Result.isSuccess(decodeMonth(value))).toBe(true);
   }
+
   for (const value of [
     "1999-12",
     "2026-00",
@@ -345,10 +363,13 @@ it("bounds monthly plan labels and requires visible text in a Budget Group name"
   ]) {
     expect(Result.isFailure(decodeMonth(value))).toBe(true);
   }
+
   const decodeName = Schema.decodeUnknownResult(BudgetGroupName);
+
   for (const value of ["Casa", "Mi casa", "a".repeat(64)]) {
     expect(Result.isSuccess(decodeName(value))).toBe(true);
   }
+
   for (const value of ["", " ", "\n\t", "a".repeat(65)]) {
     expect(Result.isFailure(decodeName(value))).toBe(true);
   }
@@ -357,6 +378,7 @@ it("bounds monthly plan labels and requires visible text in a Budget Group name"
 it("preserves the exact remaining or overage Money in all valid Budget progress variants", () => {
   const codec = Schema.toCodecJson(BudgetProgress);
   const cap = { amount: "100", currency: "COP" };
+
   for (const value of [
     {
       cap,
@@ -382,6 +404,7 @@ it("reports missing collection context before a dependent group rename refusal",
     groupCategoryIds: [budgetInput.categoryId],
     month: "2026-10",
   });
+
   expect(Result.isFailure(decoded) ? String(decoded.failure) : "").toContain(
     "Group currency requires a selected collection, name, and month"
   );

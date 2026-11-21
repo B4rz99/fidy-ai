@@ -23,6 +23,7 @@ const category = {
   kind: "expense",
   isSystem: true,
 };
+
 type WireBudget = Readonly<{
   id: string;
   categoryId: string;
@@ -31,6 +32,7 @@ type WireBudget = Readonly<{
   createdAt: string;
   updatedAt: string;
 }>;
+
 const budget = (amount: string): WireBudget => ({
   id: "24000000-0000-4000-8000-000000000101",
   categoryId: category.id,
@@ -39,6 +41,7 @@ const budget = (amount: string): WireBudget => ({
   createdAt: "2026-11-01T05:00:00.000Z",
   updatedAt: "2026-11-01T05:00:00.000Z",
 });
+
 const profile = {
   id: "10000000-0000-4000-8000-000000000001",
   serviceMarket: "CO",
@@ -47,7 +50,9 @@ const profile = {
   createdAt: "2026-01-01T00:00:00.000Z",
   trialPeriod: { startedAt: "2026-01-01T00:00:00.000Z", endsAt: "2026-01-08T00:00:00.000Z" },
 };
+
 type TargetChange = "same" | "deleted" | "reassigned";
+
 const report = ({
   month,
   amount,
@@ -61,11 +66,13 @@ const report = ({
 }>): unknown => {
   const november = month === "2026-11";
   const from = DateTime.makeUnsafe(`${month}-01T05:00:00Z`);
+
   const period = {
     from: DateTime.formatIso(from),
     to: DateTime.formatIso(DateTime.add(from, { months: 1 })),
     timeZone: "America/Bogota",
   };
+
   const initialBudgets = november
     ? [
         budget(amount),
@@ -80,6 +87,7 @@ const report = ({
           : []),
       ]
     : [];
+
   const budgets = initialBudgets
     .filter((value) => targetChange !== "deleted" || value.categoryId !== category.id)
     .map((value) =>
@@ -87,6 +95,7 @@ const report = ({
         ? { ...value, groupName: "Otro grupo" }
         : value
     );
+
   return {
     period,
     initialized: true,
@@ -102,22 +111,31 @@ const report = ({
     cashFlow: { income: [], expenses: [] },
   };
 };
+
 const work = (run: () => void): Promise<void> => Promise.resolve(act(() => Promise.resolve(run())));
+
 const check = (run: () => void): Promise<void> => Promise.resolve(act(() => vi.waitFor(run)));
+
 const button = (container: HTMLElement, label: string): HTMLButtonElement => {
   const found = Array.from(container.querySelectorAll("button")).find(
     (item) => item.getAttribute("aria-label") === label || item.textContent === label
   );
+
   if (found === undefined) throw new Error(`Missing ${label}`);
+
   return found;
 };
+
 const input = (container: HTMLElement): HTMLInputElement => {
   const found = container.querySelector<HTMLInputElement>(
     'input[aria-label="Presupuesto de Restaurantes (COP)"]'
   );
+
   if (found === null) throw new Error(`Missing Budget input: ${container.innerHTML}`);
+
   return found;
 };
+
 type TestView = Readonly<{
   container: HTMLDivElement;
   settle: (outcome?: "saved" | "uncertain" | "failed", committed?: boolean) => Promise<void>;
@@ -125,6 +143,7 @@ type TestView = Readonly<{
   changeTarget: (change: TargetChange) => void;
   close: () => Promise<void>;
 }>;
+
 const setup = (secondCategory = false): Effect.Effect<TestView, Cause.UnknownError> =>
   Effect.gen(function* () {
     yield* Effect.tryPromise(() => import("./dev-preview"));
@@ -149,16 +168,20 @@ const setup = (secondCategory = false): Effect.Effect<TestView, Cause.UnknownErr
     const writes: unknown[] = [];
     let amount = "100000";
     let targetChange: TargetChange = "same";
+
     const http = HttpClient.make((request) => {
       if (request.method === "PUT") {
         if (request.body._tag === "Uint8Array") {
           writes.push(JSON.parse(new TextDecoder().decode(request.body.body)));
         }
+
         return Effect.map(Deferred.await(reply), (value) =>
           HttpClientResponse.fromWeb(request, value)
         );
       }
+
       let data: unknown = profile;
+
       if (request.url.includes("budget-status")) {
         data = report({
           month: Option.getOrElse(UrlParams.getFirst(request.urlParams, "month"), () => "2026-11"),
@@ -174,16 +197,21 @@ const setup = (secondCategory = false): Effect.Effect<TestView, Cause.UnknownErr
             : []),
         ];
       }
+
       const response = Effect.succeed(Response.json({ data, next: [] }));
+
       return Effect.map(response, (value) => HttpClientResponse.fromWeb(request, value));
     });
+
     const apiClient = makeFidyClient({
       apiOrigin: "https://api.test.fidyapp.com",
       httpClient: Layer.succeed(HttpClient.HttpClient, http),
     });
+
     const registry = AtomRegistry.make();
     const parent = createRootRoute();
     const screenProps = { children: null };
+
     const route = createRoute({
       getParentRoute: () => parent,
       path: "/app/budgets",
@@ -192,11 +220,13 @@ const setup = (secondCategory = false): Effect.Effect<TestView, Cause.UnknownErr
         month: typeof search.month === "string" ? search.month : "2026-11",
       }),
     });
+
     const router = createRouter({
       routeTree: parent.addChildren([route]),
       context: { apiClient },
       history: createMemoryHistory({ initialEntries: ["/app/budgets?month=2026-11"] }),
     });
+
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -212,6 +242,7 @@ const setup = (secondCategory = false): Effect.Effect<TestView, Cause.UnknownErr
         )
       )
     );
+
     return {
       container,
       writes,
@@ -222,9 +253,12 @@ const setup = (secondCategory = false): Effect.Effect<TestView, Cause.UnknownErr
         const written = Schema.decodeUnknownSync(
           Schema.Struct({ month: Schema.String, cap: Schema.Struct({ amount: Schema.String }) })
         )(writes.at(-1));
+
         if (committed && written.month === "2026-11") amount = written.cap.amount;
         let response = Response.json({ data: budget(written.cap.amount), next: [] });
+
         if (outcome === "uncertain") response = Response.json({});
+
         if (outcome === "failed") {
           response = Response.json(
             {
@@ -235,8 +269,10 @@ const setup = (secondCategory = false): Effect.Effect<TestView, Cause.UnknownErr
             { status: 400 }
           );
         }
+
         const waiting = reply;
         reply = Deferred.makeUnsafe<Response>();
+
         return Promise.resolve(
           act(() =>
             Effect.runPromiseWith(services)(Deferred.succeed(waiting, response)).then(
@@ -267,6 +303,7 @@ it.each([
     Effect.runPromise(
       Effect.gen(function* () {
         const view = yield* setup();
+
         try {
           yield* Effect.tryPromise(() =>
             check(() => expect(input(view.container).value).toBe("100000"))
@@ -307,6 +344,7 @@ it.each([false, true])(
     Effect.runPromise(
       Effect.gen(function* () {
         const view = yield* setup();
+
         try {
           yield* Effect.tryPromise(() =>
             check(() => expect(input(view.container).value).toBe("100000"))
@@ -335,11 +373,13 @@ it.each([false, true])(
           yield* Effect.tryPromise(() =>
             work(() => button(view.container, "Mes anterior").click())
           );
+
           if (!committed) {
             expect(view.container.textContent).toContain("noviembre de 2026");
             expect(view.writes).toHaveLength(2);
             yield* Effect.tryPromise(() => view.settle());
           }
+
           yield* Effect.tryPromise(() =>
             check(() => expect(view.container.textContent).toContain("octubre de 2026"))
           );
@@ -350,6 +390,7 @@ it.each([false, true])(
       })
     )
 );
+
 const editAmount = (container: HTMLElement, amount: string): Promise<void> =>
   work(() => {
     const field = input(container);
@@ -362,6 +403,7 @@ it("a refused inline save keeps its draft and a second month choice retries befo
   Effect.runPromise(
     Effect.gen(function* () {
       const view = yield* setup();
+
       try {
         yield* Effect.tryPromise(() =>
           check(() => expect(input(view.container).value).toBe("100000"))
@@ -392,6 +434,7 @@ it("an invalid inline amount does not leave a navigation action for a later unre
   Effect.runPromise(
     Effect.gen(function* () {
       const view = yield* setup();
+
       try {
         yield* Effect.tryPromise(() =>
           check(() => expect(input(view.container).value).toBe("100000"))
@@ -419,6 +462,7 @@ it("an unresolved inline Budget keeps its draft while other Category edits wait 
   Effect.runPromise(
     Effect.gen(function* () {
       const view = yield* setup(true);
+
       try {
         yield* Effect.tryPromise(() =>
           check(() => expect(input(view.container).value).toBe("100000"))
@@ -448,6 +492,7 @@ it.each(["deleted", "reassigned"] as const)(
     Effect.runPromise(
       Effect.gen(function* () {
         const view = yield* setup(true);
+
         try {
           yield* Effect.tryPromise(() =>
             check(() => expect(input(view.container).value).toBe("100000"))

@@ -8,14 +8,19 @@ import { native, nativeOAuthPlatform } from "../user-store.test-fixture";
 import type { Miniflare } from "miniflare";
 
 type NativeResponse = Effect.Effect<Awaited<ReturnType<Miniflare["dispatchFetch"]>>>;
+
 export const tokenPair = Schema.Struct({
   access_token: Schema.String,
   refresh_token: Schema.String,
 });
+
 const headers = { "content-type": "application/json", "cf-connecting-ip": "192.0.2.75" };
+
 const status = { created: 201, ok: 200, redirect: 302, invalid: 400 };
+
 const weekMs = 604800000,
   proofLength = 43;
+
 const publicClient = Effect.fn(function* (runtime: Miniflare, scopes: ReadonlyArray<string>) {
   const registration = yield* native(() =>
     runtime.dispatchFetch(oauthIssuer + oauthPaths.register, {
@@ -28,17 +33,22 @@ const publicClient = Effect.fn(function* (runtime: Miniflare, scopes: ReadonlyAr
       }),
     })
   );
+
   expect(registration.status).toBe(status.created);
+
   const { client_id } = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ client_id: Schema.String })
   )(yield* native(() => registration.json()));
+
   const authorize = new URL(oauthIssuer + oauthPaths.authorize);
   const verifier = "test-verifier-".repeat(4);
+
   const challenge = Base64Url.encode(
     new Uint8Array(
       yield* native(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)))
     )
   );
+
   authorize.search = new URLSearchParams({
     client_id,
     response_type: "code",
@@ -48,20 +58,26 @@ const publicClient = Effect.fn(function* (runtime: Miniflare, scopes: ReadonlyAr
     code_challenge: challenge,
     scope: scopes.join(" "),
   }).toString();
+
   const start = yield* native(() =>
     runtime.dispatchFetch(authorize.href, { headers, redirect: "manual" })
   );
+
   expect(start.status).toBe(status.redirect);
   expect(start.headers.get("location")).toMatch(/\/oauth\/review\/[\w-]+$/u);
   yield* native(() => start.text());
   authorize.searchParams.set("redirect_uri", "https://other.example/callback");
+
   const wrong = yield* native(() =>
     runtime.dispatchFetch(authorize.href, { headers, redirect: "manual" })
   );
+
   expect(wrong.status).toBe(status.invalid);
   yield* native(() => wrong.text());
+
   return { start, client_id, verifier };
 });
+
 const approved = Effect.fn(function* (
   runtime: Miniflare,
   start: Awaited<ReturnType<Miniflare["dispatchFetch"]>>,
@@ -75,6 +91,7 @@ const approved = Effect.fn(function* (
     alice.user,
     owner.now
   );
+
   const session = (path: string, subject: typeof alice, payload?: unknown): NativeResponse =>
     native(() =>
       runtime.dispatchFetch(oauthIssuer + path, {
@@ -88,12 +105,15 @@ const approved = Effect.fn(function* (
         ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
       })
     );
+
   const requestId = new URL(start.headers.get("location") ?? "").pathname.split("/").at(-1) ?? "";
   const review = yield* session(oauthPaths.review + "?requestId=" + requestId, alice);
   expect(review.status).toBe(status.ok);
+
   const { reviewedAt } = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ reviewedAt: Schema.DateTimeUtcFromString })
   )(yield* native(() => review.json()));
+
   const choice = {
     requestId,
     scopes,
@@ -101,25 +121,32 @@ const approved = Effect.fn(function* (
     reviewedAt: DateTime.formatIso(reviewedAt),
     expiresAt: DateTime.formatIso(DateTime.makeUnsafe(DateTime.toEpochMillis(reviewedAt) + weekMs)),
   };
+
   const foreign = yield* session(oauthPaths.connect, bob, choice);
   expect(foreign.status).toBe(status.invalid);
   yield* native(() => foreign.text());
   const connect = yield* session(oauthPaths.connect, alice, choice);
   expect(connect.status).toBe(status.ok);
+
   const { callback, connectionId } = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ callback: Schema.String, connectionId: Schema.String })
   )(yield* native(() => connect.json()));
+
   const code = new URL(callback).searchParams.get("code") ?? "";
+
   return { owner, session, connectionId, code };
 });
+
 export const nativeGrantWithScopes = Effect.fn(function* (
   scopes: ReadonlyArray<string>,
   platform: typeof nativeOAuthPlatform = nativeOAuthPlatform
 ) {
   const create = yield* platform,
     runtime = yield* create();
+
   const { start, client_id, verifier } = yield* publicClient(runtime, scopes);
   const { owner, session, code, connectionId } = yield* approved(runtime, start, scopes);
+
   const exchange = (fields: Record<string, string>): NativeResponse =>
     native(() =>
       runtime.dispatchFetch(oauthIssuer + oauthPaths.token, {
@@ -128,6 +155,7 @@ export const nativeGrantWithScopes = Effect.fn(function* (
         body: new URLSearchParams(fields).toString(),
       })
     );
+
   const fields = {
     client_id,
     resource: oauthResource,
@@ -136,6 +164,7 @@ export const nativeGrantWithScopes = Effect.fn(function* (
     redirect_uri: "https://client.example/callback",
     code_verifier: verifier,
   };
+
   const bad = yield* exchange({ ...fields, code_verifier: "z".repeat(proofLength) });
   expect(bad.status).toBe(status.invalid);
   yield* native(() => bad.text());
@@ -145,12 +174,16 @@ export const nativeGrantWithScopes = Effect.fn(function* (
   const credential = yield* Schema.decodeUnknownEffect(tokenPair)(
     yield* native(() => issued.json())
   );
+
   const lost = yield* exchange(fields);
   expect(lost.status).toBe(status.invalid);
   expect(yield* native(() => lost.text())).not.toContain(credential.access_token);
+
   return { runtime, owner, session, exchange, client_id, credential, connectionId };
 });
+
 export const nativeGrant = nativeGrantWithScopes(["read", "write"]);
+
 export const protocolFor =
   (
     runtime: Miniflare
@@ -165,6 +198,7 @@ export const protocolFor =
       continuation =
         input !== undefined && "continuation" in input ? input.continuation : undefined,
       retryKey = input !== undefined && "retryKey" in input ? input.retryKey : undefined;
+
     return native(() =>
       runtime.dispatchFetch(oauthResource, {
         method: "POST",

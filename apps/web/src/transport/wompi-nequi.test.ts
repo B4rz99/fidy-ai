@@ -4,12 +4,15 @@ import { NequiAuthorizationFailed, withApprovedNequiWithWompi } from "./wompi-ne
 
 it("refuses rejected authorization without waiting for provider cancellation", () => {
   let cancellations = 0;
+
   const body = new ReadableStream<Uint8Array>({
     cancel(): Promise<void> {
       cancellations++;
+
       return Promise.withResolvers<void>().promise;
     },
   });
+
   return expect(
     Effect.runPromise(
       withApprovedNequiWithWompi(
@@ -38,12 +41,14 @@ it("borrows only the approved Nequi token without retaining account evidence", (
     );
     expect(init?.credentials).toBe("omit");
     expect(init?.redirect).toBe("error");
+
     return Promise.resolve(
       Response.json({
         data: { id: "nequi_test_example", status: "APPROVED", phone_number: "3991111111" },
       })
     );
   });
+
   return Effect.runPromise(
     withApprovedNequiWithWompi(
       {
@@ -78,6 +83,7 @@ it("rejects mismatched, malformed and overflowing provider responses without ref
             (token) => Effect.succeed(Redacted.value(token))
           )
         );
+
         expect(Exit.isFailure(result)).toBe(true);
         expect(String(result)).not.toContain("CANARY-account");
       }

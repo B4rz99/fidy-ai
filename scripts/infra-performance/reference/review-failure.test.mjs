@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { freshPendingReview } from "./fresh-workspaces.mjs";
 
 const { chromium } = await import("@playwright/test");
+
 const browser = await chromium.launch({ executablePath: process.env.ASSESSMENT_CHROMIUM });
+
 const timeoutMs = 3000;
+
 try {
   const page = await browser.newPage();
   page.setDefaultTimeout(timeoutMs);
@@ -13,6 +16,7 @@ try {
   const path = "/ingestion/review-workspace";
   await page.route(origin + "/**", async (route) => {
     const url = new URL(route.request().url());
+
     if (url.pathname.startsWith("/app/")) {
       await route.fulfill({
         contentType: "text/html",

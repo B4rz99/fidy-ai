@@ -4,6 +4,7 @@ import type { CanonicalSuccess } from "@/transport/client";
 import { type Edit, type Occurrence, money } from "./model";
 
 export type PaymentAssociation = Readonly<{ replaces: string; settled: boolean }>;
+
 export const settlementOptions = [
   { value: "partial", label: "Parcial" },
   { value: "settled", label: "Pago o ingreso completo" },
@@ -24,11 +25,13 @@ export const replacementOptions = (
 
 export const defaultReplacement = (item: Occurrence): string => {
   const marks = manualMarks(item);
+
   return marks.length === 1 ? (marks[0]?.id ?? "") : "";
 };
 
 export const defaultAssociation = (item: Occurrence): PaymentAssociation => {
   const replaces = defaultReplacement(item);
+
   return {
     replaces,
     settled: manualMarks(item).find((mark) => mark.id === replaces)?.settled ?? false,
@@ -40,7 +43,9 @@ export const associationBlocked = ({
   replaces,
 }: Readonly<{ item: Occurrence; replaces: string }>): boolean => {
   const marks = manualMarks(item);
+
   if (marks.length > 1) return true;
+
   return replaces === "" ? marks.length > 0 : !marks.some((mark) => mark.id === replaces);
 };
 

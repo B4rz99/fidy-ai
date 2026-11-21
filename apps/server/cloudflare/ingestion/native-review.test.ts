@@ -48,6 +48,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           now + 60000
         )
       );
+
       const edit = (payload: unknown): Effect.Effect<Response> =>
         native(() =>
           journey.send(
@@ -63,6 +64,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             })
           )
         );
+
       expect(
         (yield* native(() => journey.browser(1, "/ingestion/review-workspace/" + id))).status
       ).toBe(404);
@@ -73,13 +75,16 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         data: [{ item: { id, status: "skipped" }, revision: 1 }],
       });
       expect((yield* edit(skip)).status).toBe(400);
+
       const history = yield* native(() =>
         journey.browser(0, "/ingestion/review-workspace?status=history&limit=1")
       );
+
       expect(yield* native(() => history.json())).toMatchObject({
         data: { pendingCount: 0, total: 1, selectedDetail: { revision: 1 } },
       });
       expect((yield* edit({ _tag: "Restore", items: [{ id, revision: 1 }] })).status).toBe(200);
+
       const command = {
         _tag: "Create",
         id,
@@ -90,6 +95,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           direction: "outflow",
         },
       };
+
       const created = yield* edit(command);
       expect(created.status).toBe(200);
       expect(yield* native(() => created.json())).toMatchObject({
@@ -97,14 +103,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       });
       expect((yield* edit(command)).status).toBe(400);
       const detail = yield* native(() => journey.browser(0, "/ingestion/review-workspace/" + id));
+
       const recovered = yield* Schema.decodeUnknownEffect(
         Schema.Struct({
           data: Schema.Struct({ item: Schema.Struct({ transactionId: Schema.String }) }),
         })
       )(yield* native(() => detail.json()));
+
       const transaction = yield* native(() =>
         journey.browser(0, "/transactions/" + recovered.data.item.transactionId)
       );
+
       expect(yield* native(() => transaction.json())).toMatchObject({
         data: { money: { amount: "8.5", currency: "USD" } },
       });

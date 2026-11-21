@@ -9,6 +9,7 @@ import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type { CategoryAuditOperation } from "../contract";
 
 const ruleColumns = `id,keyword,category_id AS "categoryId",created_at_ms AS "createdAt",updated_at_ms AS "updatedAt"`;
+
 const RuleRow = KeywordRule.mapFields((fields) => ({
   ...fields,
   keyword: fields.keyword.check(
@@ -19,6 +20,7 @@ const RuleRow = KeywordRule.mapFields((fields) => ({
   createdAt: Schema.DateTimeUtcFromMillis,
   updatedAt: Schema.DateTimeUtcFromMillis,
 }));
+
 const boundedRuleCount = maximumKeywordRulesPerUser + 1;
 
 export const keywordRulesQuery = ({ userId }: Readonly<{ userId: string }>): OwnedStatement => ({
@@ -47,6 +49,7 @@ const browserKeywordRuleAudit = (
   afterWrite: boolean
 ): OwnedStatement => {
   const authority = liveWebSessionAuthority({ subject, current });
+
   return recordAuthorizedCall({
     authority,
     id,

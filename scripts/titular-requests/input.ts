@@ -14,9 +14,11 @@ export const readPrivateJsonInput = (
     }).pipe(
       Stream.runForEach((chunk) => {
         bytes += chunk.byteLength;
+
         if (bytes > maximumInputBytes) {
           return Effect.fail(new RegisterFailure({ reason: "InvalidInput" }));
         }
+
         return Effect.try({
           try: () => {
             text += decoder.decode(chunk, { stream: true });
@@ -27,10 +29,12 @@ export const readPrivateJsonInput = (
       Effect.timeout("10 seconds"),
       Effect.mapError(() => new RegisterFailure({ reason: "InvalidInput" }))
     );
+
     const input = yield* Effect.try({
       try: () => text + decoder.decode(),
       catch: () => new RegisterFailure({ reason: "InvalidInput" }),
     });
+
     return yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(input).pipe(
       Effect.mapError(() => new RegisterFailure({ reason: "InvalidInput" }))
     );

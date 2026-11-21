@@ -6,11 +6,13 @@ export const InstitutionId = Schema.NonEmptyString.check(
 )
   .pipe(Schema.brand("InstitutionId"))
   .annotate({ identifier: "InstitutionId" });
+
 export type InstitutionId = typeof InstitutionId.Type;
 
 export const ConnectionId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("ConnectionId"))
   .annotate({ identifier: "ConnectionId" });
+
 export type ConnectionId = typeof ConnectionId.Type;
 
 export const ConnectionState = Schema.Literals([
@@ -19,6 +21,7 @@ export const ConnectionState = Schema.Literals([
   "Action required",
   "Ended",
 ]).annotate({ identifier: "ConnectionState" });
+
 export type ConnectionState = typeof ConnectionState.Type;
 
 export const Connection = Schema.Struct({
@@ -26,16 +29,19 @@ export const Connection = Schema.Struct({
   institutionId: InstitutionId,
   state: ConnectionState,
 }).annotate({ identifier: "Connection" });
+
 export type Connection = typeof Connection.Type;
 
 export const AccountId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("AccountId"))
   .annotate({ identifier: "AccountId" });
+
 export type AccountId = typeof AccountId.Type;
 
 export const Account = Schema.Struct({ id: AccountId, connectionId: ConnectionId }).annotate({
   identifier: "Account",
 });
+
 export type Account = typeof Account.Type;
 
 export const InstitutionSummary = Schema.Struct({
@@ -44,11 +50,13 @@ export const InstitutionSummary = Schema.Struct({
   availability: Schema.Literals(["available", "unavailable"]),
   connection: Schema.OptionFromNullOr(Connection.mapFields(Struct.pick(["id", "state"]))),
 }).annotate({ identifier: "InstitutionSummary" });
+
 export type InstitutionSummary = typeof InstitutionSummary.Type;
 
 export const ConnectInstitutionInput = Schema.Struct({ institutionId: InstitutionId }).annotate({
   identifier: "ConnectInstitutionInput",
 });
+
 export type ConnectInstitutionInput = typeof ConnectInstitutionInput.Type;
 
 export const BrowserContinuation = Schema.Struct({
@@ -69,4 +77,5 @@ export const ConnectInstitutionResult = Schema.Union([
     connection: Schema.Struct({ ...Connection.fields, state: Schema.Literal("Active") }),
   }),
 ]).annotate({ identifier: "ConnectInstitutionResult" });
+
 export type ConnectInstitutionResult = typeof ConnectInstitutionResult.Type;

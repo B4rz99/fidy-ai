@@ -17,7 +17,9 @@ const body = JSON.stringify({
   conversation: { business_scoped_user_id: "CO.13491208655302741918" },
   phone_number_id: "123456789012345",
 });
+
 const secret = "kapso-document-webhook-secret-32-characters";
+
 const decode = (raw = body): ReturnType<typeof authenticateWhatsAppInbound> =>
   authenticateWhatsAppInbound({
     rawBody: new TextEncoder().encode(raw),
@@ -45,12 +47,14 @@ it.effect("preserves absent document labels and refuses malformed direct media p
     const receipt = yield* decode(
       body.replace(',"filename":"estado.csv"', "").replace(',"caption":"Mi estado de cuenta"', "")
     );
+
     expect(receipt.events[0].content).toEqual({
       _tag: "Document",
       mediaId: "media_statement_123",
       fileName: Option.none(),
       caption: Option.none(),
     });
+
     for (const raw of [
       body.replace('"media_statement_123"', '""'),
       body.replace('"estado.csv"', "123"),

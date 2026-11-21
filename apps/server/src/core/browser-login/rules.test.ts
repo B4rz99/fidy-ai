@@ -17,10 +17,13 @@ import {
 } from "./operations";
 
 const decode = Schema.decodeUnknownOption(BrowserLoginPublicCodeInput);
+
 const decodeCode = Schema.decodeUnknownOption(BrowserLoginPublicCode);
+
 const decodeSymbols = Schema.decodeUnknownOption(BrowserLoginPublicCodeSymbols);
 
 const pendingProofAttemptedAt = DateTime.makeUnsafe("2026-01-01T00:00:00Z");
+
 const pendingProofExpiresAt = DateTime.add(pendingProofAttemptedAt, { minutes: 10 });
 
 it("accepts a matching verifier for a pending pairing", () => {
@@ -54,6 +57,7 @@ it("rejects unavailable and expired pairings while retaining a live wrong-verifi
     expiresAt: pendingProofExpiresAt,
     attemptedAt: pendingProofAttemptedAt,
   } as const;
+
   expect(decidePendingBrowserLoginProof({ ...input, lifecycle: "ready" })).toEqual({
     _tag: "Invalid",
   });
@@ -118,6 +122,7 @@ it("accepts each persisted browser-login pairing lifecycle value", () => {
   ] as const) {
     expect(Schema.is(BrowserLoginPairingLifecycle)(lifecycle)).toBe(true);
   }
+
   expect(Schema.is(BrowserLoginPairingLifecycle)("unknown")).toBe(false);
 });
 
@@ -186,6 +191,7 @@ it("expires an active pairing before evaluating its verifier", () => {
 
 it("rejects every non-active pairing lifecycle before redemption", () => {
   const expiresAt = DateTime.makeUnsafe("2026-03-01T12:10:00.000Z");
+
   const base = {
     verifierMatches: true,
     wrongVerifierAttempts: 0,

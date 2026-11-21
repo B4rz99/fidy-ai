@@ -24,6 +24,7 @@ it("rejects mailbox forms outside the bounded launch grammar", () => {
     `a@${"x".repeat(64)}.com`,
     `${"a".repeat(251)}@x.co`,
   ];
+
   for (const candidate of rejected) {
     expect(Result.isFailure(decodeEmail(candidate))).toBe(true);
   }
@@ -34,6 +35,7 @@ it("accepts only six unambiguous uppercase groups at the browser proof boundary"
   expect(decodeCode("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ")).toEqual(
     Result.succeed(EmailVerificationCode.make("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ"))
   );
+
   for (const input of [
     "abcd-EFGH-JKLM-NPQR-STUV-WXYZ",
     "ABCI-EFGH-JKLM-NPQR-STUV-WXYZ",
@@ -61,6 +63,7 @@ it("preserves allowed local-part punctuation and accepts one-character and maxim
   ]) {
     expect(decodeEmail(address)).toEqual(Result.succeed(EmailAddress.make(address)));
   }
+
   for (const address of [
     "",
     "@b.c",

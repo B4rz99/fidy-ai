@@ -11,32 +11,40 @@ const writeWorkbook = (book: WorkBook): Uint8Array => {
     ...book,
     SSF: { 0: "General" },
   };
+
   const buffer: unknown = XLSX.write(fresh, {
     type: "array",
     compression: true,
     bookSST: true,
   });
+
   if (!(buffer instanceof ArrayBuffer)) throw new Error("Expected workbook bytes");
+
   return new Uint8Array(buffer);
 };
+
 const workbook = (text: string): Uint8Array => {
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["h"], ["normal"]]), "Statement");
   const source = writeWorkbook(book);
+
   return modify(source, (entries) =>
     replacePart(entries, "xl/sharedStrings.xml", (xml) =>
       xml.replace("<t>normal</t>", `<t>${text}</t>`)
     )
   );
 };
+
 const modify = (
   source: Uint8Array,
   update: (entries: Record<string, Uint8Array>) => void
 ): Uint8Array => {
   const entries = unzipSync(source);
   update(entries);
+
   return zipSync(entries);
 };
+
 const replacePart = (
   entries: Record<string, Uint8Array>,
   name: string,
@@ -44,10 +52,12 @@ const replacePart = (
 ): void => {
   entries[name] = strToU8(update(strFromU8(entries[name] ?? new Uint8Array())));
 };
+
 const reject = (source: Uint8Array, reason = "resource-limit"): Effect.Effect<void> =>
   Effect.gen(function* () {
     const result = yield* Effect.result(parseStatementFile(source));
     expect(result._tag).toBe("Failure");
+
     if (result._tag === "Failure") expect(result.failure.safeReason).toBe(reason);
   });
 
@@ -58,6 +68,7 @@ it.effect("preserves ordinary core-property date typing", () =>
         '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dcterms:created xsi:type="dcterms:W3CDTF">2026-01-01T00:00:00Z</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">2026-01-02T00:00:00Z</dcterms:modified></cp:coreProperties>'
       );
     });
+
     const parsed = yield* parseStatementFile(source);
     expect(parsed.rows[0]?.fields[0]).toBe("normal");
   })
@@ -87,6 +98,7 @@ it.effect("refuses repeated same-cell comments before workbook construction", ()
       modify(workbook("normal"), (entries) => {
         const comments =
           '<comment ref="A2" authorId="0"><text><t>annotation</t></text></comment>'.repeat(1000);
+
         entries["xl/comments1.xml"] = strToU8(
           `<comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><authors><author>author</author></authors><commentList>${comments}</commentList></comments>`
         );
@@ -116,6 +128,7 @@ it.effect("refuses repeated external-link declarations before workbook construct
     modify(workbook("normal"), (entries) => {
       const override =
         '<Override PartName="/xl/externalLinks/externalLink1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.externalLink+xml"/>';
+
       replacePart(entries, "[Content_Types].xml", (xml) =>
         xml.replace("</Types>", `${override.repeat(1000)}</Types>`)
       );
@@ -145,6 +158,7 @@ it.effect("bounds optional sheet-metadata matching before workbook construction"
           )
         );
       });
+
       if (count === 32) {
         const parsed = yield* parseStatementFile(source);
         expect(parsed.rows[0]?.fields[0]).toBe("normal");
@@ -156,10 +170,12 @@ it.effect("bounds optional sheet-metadata matching before workbook construction"
 it.effect("admits the exact repeated-text work boundary and rejects its next byte", () =>
   Effect.gen(function* () {
     const length = statementParserLimits.maximumReferencedTextBytes - 3;
+
     for (const adjustment of [-1, 0]) {
       const parsed = yield* parseStatementFile(workbook("x".repeat(length + adjustment)));
       expect(parsed.rows[0]?.fields[0]?.length).toBe(length + adjustment);
     }
+
     yield* reject(workbook("x".repeat(length + 1)));
   })
 );
@@ -211,6 +227,7 @@ it.effect("rejects ambiguous shared-string indexing and namespace attributes", (
 it.effect("refuses foreign attribute aliases for shared values, styles and formulas", () =>
   Effect.gen(function* () {
     const source = workbook("x".repeat(140000));
+
     for (const attribute of ["T", "t_extra"]) {
       yield* reject(
         modify(source, (entries) =>
@@ -221,6 +238,7 @@ it.effect("refuses foreign attribute aliases for shared values, styles and formu
         "malformed-file"
       );
     }
+
     for (const attribute of ["S", "s_extra"]) {
       yield* reject(
         modify(source, (entries) =>
@@ -231,6 +249,7 @@ it.effect("refuses foreign attribute aliases for shared values, styles and formu
         "malformed-file"
       );
     }
+
     for (const attribute of ["T", "t_extra"]) {
       yield* reject(
         modify(source, (entries) =>
@@ -241,6 +260,7 @@ it.effect("refuses foreign attribute aliases for shared values, styles and formu
         "malformed-file"
       );
     }
+
     for (const attribute of ["NumFmtId", "numFmtId_extra", "FormatCode", "formatCode_extra"]) {
       yield* reject(
         modify(source, (entries) =>
@@ -265,12 +285,14 @@ it.effect("rejects binary workbook parts despite unrelated admitted XML", () =>
       XLSX.utils.aoa_to_sheet([["h"], ...Array.from({ length: 10 }, () => ["x".repeat(32700)])]),
       "Statement"
     );
+
     const buffer: unknown = XLSX.write(book, {
       type: "array",
       bookType: "xlsb",
       compression: true,
       bookSST: true,
     });
+
     if (!(buffer instanceof ArrayBuffer)) throw new Error("Expected workbook bytes");
     yield* reject(
       modify(new Uint8Array(buffer), (entries) => {
@@ -342,6 +364,7 @@ it.effect("rejects nested markup inside shared, inline and scalar text leaves", 
       ),
       "malformed-file"
     );
+
     for (const leaf of ["t", "v", "f"]) {
       yield* reject(
         modify(workbook("normal"), (entries) =>
@@ -367,6 +390,7 @@ it.effect("rejects text-prefix elements whose foreign string parsing retains raw
         )
       )
     );
+
     expect(rich.rows[0]?.fields[0]).toBe("normal");
     const markup = `<table><foo attr="${"x".repeat(16_384)}"/></table><t>x</t>`;
     yield* reject(
@@ -415,6 +439,7 @@ const withHyperlinks = (markup: string): Uint8Array =>
       xml.replace("</worksheet>", `<hyperlinks>${markup}</hyperlinks></worksheet>`)
     )
   );
+
 it.effect("bounds hyperlink destinations before foreign cell construction", () =>
   Effect.gen(function* () {
     expect(
@@ -469,25 +494,30 @@ it.effect("rejects repeated worksheet targets and excess workbook sheet referenc
       }),
       "malformed-file"
     );
+
     const sheetTags = Array.from(
       { length: 21 },
       (_, index) =>
         `<sheet name="Sheet${index}" sheetId="${index + 1}" r:id="${index === 0 ? "rId1" : `extra${index + 1}`}"/>`
     ).join("");
+
     const relationshipTags = Array.from(
       { length: 20 },
       (_, index) =>
         `<Relationship Id="extra${index + 2}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 2}.xml"/>`
     ).join("");
+
     yield* reject(
       modify(source, (entries) => {
         replacePart(entries, "xl/workbook.xml", (xml) =>
           xml.replace(/<sheets>[\s\S]*?<\/sheets>/u, `<sheets>${sheetTags}</sheets>`)
         );
+
         for (let index = 2; index <= 21; index += 1) {
           entries[`xl/worksheets/sheet${index}.xml`] =
             entries["xl/worksheets/sheet1.xml"] ?? new Uint8Array();
         }
+
         replacePart(entries, "xl/_rels/workbook.xml.rels", (xml) =>
           xml.replace("</Relationships>", relationshipTags + "</Relationships>")
         );
@@ -502,12 +532,15 @@ it.effect("counts actual expanded archive bytes at the boundary before workbook 
     const entries = unzipSync(source);
     const contentBytes = Object.values(entries).reduce((sum, entry) => sum + entry.length, 0);
     const padding = statementParserLimits.maximumExpandedBytes - contentBytes;
+
     for (const extra of [-1, 0]) {
       const archive = modify(source, (parts) => {
         parts["padding.bin"] = new Uint8Array(padding + extra);
       });
+
       expect((yield* parseStatementFile(archive)).rows).toHaveLength(1);
     }
+
     yield* reject(
       modify(source, (parts) => {
         parts["padding.bin"] = new Uint8Array(padding + 1);
@@ -520,16 +553,21 @@ it.effect("admits 100000 XLSX cells and rejects the first surplus cell", () =>
   Effect.gen(function* () {
     const columns = 200;
     const rows = 500;
+
     const columnNames = Array.from({ length: columns }, (_, column) =>
       XLSX.utils.encode_col(column)
     );
+
     const sheetData = Array.from({ length: rows }, (_, index) => {
       const row = index + 1;
+
       const cells = columnNames
         .map((column) => `<c r="${column}${row}" t="s"><v>1</v></c>`)
         .join("");
+
       return `<row r="${row}">${cells}</row>`;
     }).join("");
+
     const source = modify(workbook("normal"), (entries) =>
       replacePart(entries, "xl/worksheets/sheet1.xml", (xml) =>
         xml
@@ -537,6 +575,7 @@ it.effect("admits 100000 XLSX cells and rejects the first surplus cell", () =>
           .replace(/<sheetData>[\s\S]*?<\/sheetData>/u, `<sheetData>${sheetData}</sheetData>`)
       )
     );
+
     expect((yield* parseStatementFile(source)).rows).toHaveLength(rows - 1);
     yield* reject(
       modify(source, (entries) =>
@@ -569,6 +608,7 @@ it.effect(
           "malformed-file"
         );
       }
+
       yield* reject(
         modify(workbook("normal"), (entries) =>
           replacePart(entries, "xl/styles.xml", (xml) =>

@@ -153,10 +153,12 @@ const recordProjections: ReadonlyArray<ErasureProjection> = [
   },
 ].map((definition): ErasureProjection => {
   const { id, table, source, predicate, readPredicate, dependencies } = definition;
+
   const removal =
     definition.clearFields !== undefined
       ? `UPDATE ${table} AS r SET ${definition.clearFields.map((field) => `${field}=NULL`).join(",")}`
       : `DELETE FROM ${table} AS r`;
+
   return {
     id,
     dataClass: "schedules",

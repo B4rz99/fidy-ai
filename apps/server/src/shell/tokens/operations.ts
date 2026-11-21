@@ -35,9 +35,13 @@ import {
 } from "./contract";
 
 export const pairingMilliseconds = 600_000;
+
 export const maxPairingsPerWindow = 4000;
+
 export const maxActivePATs = 100;
+
 export const issuanceWindowMilliseconds = 600_000;
+
 export const maxIssuancesPerUserWindow = 20;
 
 type ManualPATInput = Readonly<{
@@ -76,6 +80,7 @@ export const issueManualPAT = ({
     subject: { _tag: "User", userId: session.user_id },
     requirement: "unrevoked",
   });
+
   return {
     sql: `${protectedIssue.sql}
       AND (SELECT count(*) FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?) < ?
@@ -99,6 +104,7 @@ export const approvePairingGrant = ({
   input,
 }: Readonly<{ session: FreshSessionSubject; input: ApprovalInput }>): OwnedStatement => {
   const live = liveSessionConditions({ session, current: input.current });
+
   return protectConsentStatement({
     statement: {
       sql: `UPDATE pat_pairings SET state = 'approved_awaiting_claim', user_id = ?, approved_at_ms = ?, pat_expires_at_ms = ?
@@ -136,6 +142,7 @@ export const claimPairingGrant = (
     subject: { _tag: "Owner", column: "pat_pairings.user_id" },
     requirement: "unrevoked",
   });
+
   return {
     sql: `${protectedClaim.sql}
       AND (SELECT count(*) FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?) < ?
@@ -157,6 +164,7 @@ export const recordLivePATUse = ({
   current,
 }: Readonly<{ subject: PATSubject; current: number }>): OwnedStatement => {
   const authority = livePATAuthority({ subject, current });
+
   return {
     sql: `UPDATE pats SET last_used_at_ms = ? WHERE ${authority.predicate}`,
     params: [current, ...authority.bindings],
@@ -374,6 +382,7 @@ export const livePATAuthority = ({
   current,
 }: Readonly<{ subject: PATSubject; current: number }>): PATAuthority => {
   const credential = livePATCredential({ subject, current });
+
   return {
     ...credential,
     predicate: `${credential.predicate}
@@ -414,6 +423,7 @@ export const preparePATMetadata = (
   >;
 }> => {
   const metadata = patMetadataQuery({ ...input, session: Option.none() });
+
   return {
     statement: {
       sql: `SELECT * FROM (${metadata.sql}) WHERE EXISTS (SELECT 1 FROM ${input.authority.table} WHERE ${input.authority.predicate})`,
@@ -425,6 +435,7 @@ export const preparePATMetadata = (
 
 export const patExpiryCompletion = (current: number): OwnedStatement => {
   const evidence = expiredPATConsentIdentities(current);
+
   return {
     sql: `INSERT INTO sql_assertions (scope, accepted) SELECT 'pat_atomic', CASE WHEN NOT EXISTS (
         SELECT 1 FROM (${evidence.sql}) r JOIN pats p ON p.id = r.id
@@ -437,6 +448,7 @@ export const patExpiryCompletion = (current: number): OwnedStatement => {
 
 export const pairingExpiryCompletion = (current: number): OwnedStatement => {
   const evidence = expiredPairingConsentIdentities(current);
+
   return {
     sql: `INSERT INTO sql_assertions (scope, accepted) SELECT 'pat_atomic', CASE WHEN NOT EXISTS (
         SELECT 1 FROM (${evidence.sql}) r JOIN pat_pairings p ON p.id = r.id
@@ -540,11 +552,15 @@ export const preparePATActivityMetadata = (
           })
         ).check(Schema.isMaxLength(1))
       )(raw);
+
       const row = rows[0];
+
       if (row === undefined) return Option.none();
+
       const scopes = yield* Schema.decodeEffect(
         Schema.fromJsonString(PATActivityMetadata.fields.scopes)
       )(row.scopes_json);
+
       return Option.some(
         yield* Schema.decodeEffect(Schema.toType(PATActivityMetadata))({
           shortId: row.short_id,

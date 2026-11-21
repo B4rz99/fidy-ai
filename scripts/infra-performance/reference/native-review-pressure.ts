@@ -2,9 +2,11 @@ import { Effect, Option, Schema } from "effect";
 import { canonicalRequestProtection as policy } from "../../../apps/server/cloudflare/canonical-admission/contract";
 
 const reviewPaths = new Set(["/ingestion/review-workspace", "/ingestion/review-workspace/context"]);
+
 const snapshot = Schema.decodeUnknownOption(
   Schema.Struct({ pressure: Schema.Literals(["bucket", "leases", "both", "neither"]) })
 );
+
 const refused = 429;
 
 export const withReviewPressureSnapshot = Effect.fn(function* ({
@@ -25,6 +27,7 @@ export const withReviewPressureSnapshot = Effect.fn(function* ({
   ) {
     return response;
   }
+
   const rows = yield* Effect.tryPromise(() =>
     owner.exec(
       `WITH observed AS (
@@ -40,9 +43,12 @@ export const withReviewPressureSnapshot = Effect.fn(function* ({
       policy.concurrency
     )
   ).pipe(Effect.timeout("500 millis"), Effect.option);
+
   const sample = Option.flatMap(rows, (values) => snapshot(values[0]));
+
   if (Option.isSome(sample)) {
     response.headers.set("x-reference-review-pressure", sample.value.pressure);
   }
+
   return response;
 });

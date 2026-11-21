@@ -5,6 +5,7 @@ import { boundedJsonBody } from "../../http/operations";
 import { maximumTransactionInputBytes } from "../../canonical-work/operations";
 
 const Input = Schema.toCodecJson(TransactionPairInput);
+
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: maximumTransactionInputBytes,
   deadlineMilliseconds: 2000,

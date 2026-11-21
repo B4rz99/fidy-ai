@@ -14,11 +14,14 @@ import {
 } from "~/core/recovery/internal/model";
 
 const userId = UserId.make("f1d1a000-0000-4000-8000-000000000902");
+
 const caseId = SupportRecoveryCaseId.make("f1d1a000-0000-4000-8000-000000000903");
+
 const createdAt = DateTime.makeUnsafe("2026-08-23T12:00:00Z");
 
 it("models active and consumed BackupRecoveryCredential authority as exclusive states", () => {
   const raw = Redacted.make(BackupRecoveryCode.make("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2"));
+
   const active = BackupRecoveryCredential.make({
     _tag: "Active",
     userId,
@@ -26,6 +29,7 @@ it("models active and consumed BackupRecoveryCredential authority as exclusive s
     revision: 1,
     createdAt,
   });
+
   const consumed = BackupRecoveryCredential.make({
     _tag: "Consumed",
     userId,
@@ -37,6 +41,7 @@ it("models active and consumed BackupRecoveryCredential authority as exclusive s
 
   expect(Redacted.value(raw)).toBe("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2");
   expect(active._tag).toBe("Active");
+
   if (active._tag === "Active") expect(active.codeDigest).toHaveLength(32);
   expect(consumed).not.toHaveProperty("codeDigest");
   expect(() => BackupRecoveryDigest.make(new Uint8Array(31))).toThrow();
@@ -54,10 +59,12 @@ it("models active and consumed BackupRecoveryCredential authority as exclusive s
 
 it("models terminal SupportRecoveryCases and only closed metadata event combinations", () => {
   const pairingId = BrowserLoginPairingId.make("f1d1a000-0000-4000-8000-000000000904");
+
   const operatorId = SupportOperatorId.make({
     issuer: "https://fidy.cloudflareaccess.com",
     subject: "operator-42",
   });
+
   const supportCase = SupportRecoveryCase.make({
     id: caseId,
     userId,
@@ -68,6 +75,7 @@ it("models terminal SupportRecoveryCases and only closed metadata event combinat
     expiresAt: DateTime.add(createdAt, { minutes: 10 }),
     closedAt: DateTime.add(createdAt, { minutes: 10 }),
   });
+
   const event = SupportRecoveryCaseEvent.make({
     id: SupportRecoveryCaseEventId.make("f1d1a000-0000-4000-8000-000000000905"),
     caseId,
@@ -145,12 +153,15 @@ it("reports the time field that violates the Recovery lifecycle", () => {
     revision: 1,
     createdAt,
   };
+
   const invalidCredential = Schema.decodeUnknownResult(Schema.toType(BackupRecoveryCredential))(
     credential
   );
+
   expect(Result.isFailure(invalidCredential) ? String(invalidCredential.failure) : "").toContain(
     '["consumedAt"]'
   );
+
   const identity = {
     id: caseId,
     userId,
@@ -158,20 +169,24 @@ it("reports the time field that violates the Recovery lifecycle", () => {
     credentialRevision: 1,
     openedAt: createdAt,
   };
+
   const invalidExpiry = Schema.decodeResult(Schema.toType(SupportRecoveryCase))({
     ...identity,
     lifecycle: "open",
     expiresAt: createdAt,
   });
+
   expect(Result.isFailure(invalidExpiry) ? String(invalidExpiry.failure) : "").toContain(
     '["expiresAt"]'
   );
+
   const invalidClosure = Schema.decodeResult(Schema.toType(SupportRecoveryCase))({
     ...identity,
     lifecycle: "approved",
     expiresAt: DateTime.add(createdAt, { minutes: 5 }),
     closedAt: DateTime.subtract(createdAt, { milliseconds: 1 }),
   });
+
   expect(Result.isFailure(invalidClosure) ? String(invalidClosure.failure) : "").toContain(
     '["closedAt"]'
   );

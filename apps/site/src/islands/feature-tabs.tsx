@@ -6,6 +6,7 @@ import { mountPreview } from "./demo-motion";
 export const FeatureTabs = (): React.JSX.Element => {
   const [selected, setSelected] = useState(0);
   const [animate, setAnimate] = useState(true);
+
   return (
     <section className="section wrap product-features" id="funciones">
       {heading}
@@ -30,13 +31,16 @@ export const FeatureTabs = (): React.JSX.Element => {
             }}
             onKeyDown={(event) => {
               const next = nextFeature(event.key, index);
+
               if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return;
               event.preventDefault();
               setAnimate(false);
               setSelected(next);
+
               const target = event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(
                 `#feature-tab-${next}`
               );
+
               if (target != null) {
                 moveIndicator({ tab: target, instant: true });
                 target.focus();
@@ -66,9 +70,13 @@ export const FeatureTabs = (): React.JSX.Element => {
 
 const nextFeature = (key: string, index: number): number => {
   if (key === "ArrowRight") return (index + 1) % features.length;
+
   if (key === "ArrowLeft") return (index + features.length - 1) % features.length;
+
   if (key === "Home") return 0;
+
   if (key === "End") return features.length - 1;
+
   return index;
 };
 

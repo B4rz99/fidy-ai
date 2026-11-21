@@ -32,6 +32,7 @@ export const expiredReview = (): Response =>
     ),
     status: httpReviewExpired,
   });
+
 export const issuanceLimit = (): Response =>
   response({
     body: Schema.encodeSync(Schema.toCodecJson(ManualPATIssuanceRateLimited))(
@@ -42,6 +43,7 @@ export const issuanceLimit = (): Response =>
     ),
     status: httpTooManyRequests,
   });
+
 export const consumed = (): Response =>
   response({
     body: Schema.encodeSync(Schema.toCodecJson(ManualPATIssuanceConsumed))(
@@ -52,6 +54,7 @@ export const consumed = (): Response =>
     ),
     status: httpConflict,
   });
+
 type Issuance = Readonly<{
   input: CreateManualPATPayload;
   session: SessionRow;
@@ -61,8 +64,10 @@ type Issuance = Readonly<{
   shortId: string;
   bearer: string;
 }>;
+
 export const issuedResponse = (issue: Issuance): Response => {
   const { input, session, current, expires, patId, shortId, bearer } = issue;
+
   const pat = patFrom({
     id: patId,
     user_id: session.user_id,
@@ -75,7 +80,9 @@ export const issuedResponse = (issue: Issuance): Response => {
     last_used_at_ms: null,
     revoked_at_ms: null,
   });
+
   if (Option.isNone(pat)) return unavailable();
+
   return canonical(
     Schema.encodeSync(Schema.toCodecJson(IssuedManualPATResponse))({
       pat: { ...pat.value, idleExpiresAt: DateTime.makeUnsafe(expires) },
@@ -93,6 +100,7 @@ export const expiryFor = ({
 }): Option.Option<number> => {
   const maximum = current + grant.lifetimeDays * dayMilliseconds;
   const reviewed = DateTime.toEpochMillis(grant.reviewExpiresAt);
+
   return reviewed > current && reviewed <= maximum && reviewed >= maximum - pairingMilliseconds
     ? Option.some(maximum)
     : Option.none();

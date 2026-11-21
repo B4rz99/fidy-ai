@@ -4,6 +4,7 @@ import { UserId } from "./contract";
 import { isTrialPeriodActive, makeColombianUser } from "./operations";
 
 const userId = UserId.make("f1d1a000-0000-4000-8000-000000000001");
+
 const createdAt = DateTime.makeUnsafe("2026-07-28T00:00:00Z");
 
 it("creates a Colombian User with explicit independent context", () => {

@@ -18,6 +18,7 @@ it.each(["field", "inline"] as const)(
         const root = createRoot(container);
         const change = vi.fn();
         const label = vi.fn((name: string) => name);
+
         const render = (name: string): Promise<void> => {
           const options = [
             {
@@ -27,6 +28,7 @@ it.each(["field", "inline"] as const)(
               },
             },
           ];
+
           const props = {
             label: "Filtrar",
             disabled: false,
@@ -34,11 +36,13 @@ it.each(["field", "inline"] as const)(
             value: "actual",
             onChange: change,
           };
+
           const inlineProps = {
             ...props,
             children: "Categorías",
             getOptions: (): typeof options => options,
           };
+
           return reactWork(() =>
             root.render(
               kind === "field"
@@ -53,6 +57,7 @@ it.each(["field", "inline"] as const)(
             )
           );
         };
+
         try {
           yield* Effect.tryPromise(() => render("Anterior"));
           yield* Effect.tryPromise(() => render("Mercado"));
@@ -62,6 +67,7 @@ it.each(["field", "inline"] as const)(
           yield* Effect.tryPromise(() => reactWork(() => trigger?.click()));
           const option = document.querySelector('[role="menuitemradio"]');
           expect(option?.textContent).toBe("Mercado");
+
           if (!(option instanceof HTMLElement)) throw Error("Missing Category choice");
           yield* Effect.tryPromise(() => reactWork(() => option.click()));
           expect(change).toHaveBeenCalledExactlyOnceWith("nuevo");

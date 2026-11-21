@@ -58,6 +58,7 @@ export const verifyHostedInferenceConformanceChecks = (
         category: error.reason._tag,
       }))
     );
+
   return check("canonical_recurring_read", verifyRecurringPlanRead(inference)).pipe(
     Effect.andThen(check("canonical_query", verifyCanonicalQuery(inference))),
     Effect.andThen(check("canonical_mutation", verifyCanonicalMutation(inference))),

@@ -4,6 +4,7 @@ import { makeProviderTransport } from "./transport";
 import type { ProviderOidcHttpService } from "~/shell/outbound-http/contract";
 
 const maximumResponseBytes = 32768;
+
 const oidcDestinations = {
   google: {
     keys: "https://www.googleapis.com/oauth2/v3/certs",
@@ -26,6 +27,7 @@ export const oidcHttp = (
 ): ProviderOidcHttpService => {
   const http = makeProviderTransport(input.provider)(input.httpClient);
   const destinations = oidcDestinations[input.provider];
+
   return {
     execute: (request) => {
       const prepared =
@@ -44,6 +46,7 @@ export const oidcHttp = (
                 "application/x-www-form-urlencoded"
               ),
             });
+
       return http
         .execute(prepared, maximumResponseBytes)
         .pipe(

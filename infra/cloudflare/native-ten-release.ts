@@ -12,10 +12,12 @@ type Phase =
   | "ten-cleanup"
   | "ten-check"
   | "ten-logs";
+
 type Browser = FleetPilotBrowser & {
   read: () => Effect.Effect<void, Error>;
   beginRefusal: (record: ErasureProgress) => Effect.Effect<Effect.Effect<void, Error>, Error>;
 };
+
 type Release = {
   revision: string;
   verifierRevision: string;
@@ -29,13 +31,19 @@ type Release = {
   meter: (phase: Phase, ...args: string[]) => Effect.Effect<string, Error>;
   settle: () => Effect.Effect<void, Error>;
 };
+
 const maximumInventory = 36,
   activeOrdinal = 11,
   observationMs = 600_000;
+
 const objectId = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
+
 const user = Schema.String.check(Schema.isUUID());
+
 const ordinal = Schema.Literals(fleetOrdinals);
+
 const Mapping = Schema.fromJsonString(Schema.Array(Schema.Struct({ id: objectId, name: user })));
+
 const Store = Schema.Struct({
   at: Schema.Int,
   baseline: Schema.Array(Schema.Tuple([objectId, Schema.Boolean])),
@@ -56,10 +64,13 @@ const Store = Schema.Struct({
     })
   ),
 });
+
 type Source = { sourceRun: string; sourceVerifierRevision: string };
+
 const persist = Effect.fn(function* (release: Release, source: Source, state: TenState) {
   const fs = yield* FileSystem.FileSystem;
   const { revision, verifierRevision, coreVersion, publicVersion, userNamespace, path } = release;
+
   const data = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
     requestedPilotUsers: 10,
     revision,
@@ -70,6 +81,7 @@ const persist = Effect.fn(function* (release: Release, source: Source, state: Te
     ...source,
     ...state,
   });
+
   yield* fs.writeFileString(path + ".next", data);
   yield* fs.rename(path + ".next", path);
 });
@@ -77,6 +89,7 @@ const persist = Effect.fn(function* (release: Release, source: Source, state: Te
 export const prepareTen = Effect.fn(function* (release: Release) {
   const survivors = yield* release.survivors();
   const rows = yield* release.inventory();
+
   if (
     new Set(survivors).size !== 2 ||
     [...rows.values()].filter(Boolean).length !== 3 ||
@@ -86,6 +99,7 @@ export const prepareTen = Effect.fn(function* (release: Release) {
       Error("Expected the protected pre-fleet physical census and two stable Users")
     );
   }
+
   yield* persist(
     release,
     {
@@ -101,8 +115,10 @@ export const prepareTen = Effect.fn(function* (release: Release) {
     }
   );
 });
+
 const restore = Effect.fn(function* (release: Release, source: Source) {
   const fs = yield* FileSystem.FileSystem;
+
   const saved = yield* Schema.decodeEffect(
     Schema.fromJsonString(
       Schema.Struct({
@@ -118,6 +134,7 @@ const restore = Effect.fn(function* (release: Release, source: Source) {
       })
     )
   )(yield* fs.readFileString(release.path));
+
   if (
     saved.members.some((item, index) => item.ordinal !== fleetOrdinals[index]) ||
     new Map(saved.baseline).size !== saved.baseline.length ||
@@ -125,6 +142,7 @@ const restore = Effect.fn(function* (release: Release, source: Source) {
   ) {
     return yield* Effect.fail(Error("Archived fleet admission does not match the fixed cohort"));
   }
+
   const state: TenState = {
     at: saved.at,
     baseline: saved.baseline.map(([id, stored]) => [id, stored]),
@@ -137,14 +155,17 @@ const restore = Effect.fn(function* (release: Release, source: Source) {
       ...(reference === undefined ? {} : { reference }),
     })),
   };
+
   return state;
 });
+
 const holdWindows = Effect.fn(function* (
   release: Release,
   browser: Browser,
   tick: () => Effect.Effect<void, Error>
 ) {
   const started = yield* Clock.currentTimeMillis;
+
   while ((yield* Clock.currentTimeMillis) - started < observationMs) {
     yield* release.meter("ten-check");
     yield* browser.renew();
@@ -157,8 +178,10 @@ const holdWindows = Effect.fn(function* (
 const pacedBrowser = (): (<A>(flow: Effect.Effect<A, Error>) => Effect.Effect<A, Error>) => {
   let nextStart = 0;
   const cooldownMs = 12_000;
+
   return Effect.fn(function* <A>(flow: Effect.Effect<A, Error>) {
     yield* Effect.sleep(Math.max(0, nextStart - (yield* Clock.currentTimeMillis)));
+
     return yield* flow.pipe(
       Effect.ensuring(
         Effect.gen(function* () {
@@ -168,6 +191,7 @@ const pacedBrowser = (): (<A>(flow: Effect.Effect<A, Error>) => Effect.Effect<A,
     );
   });
 };
+
 const admitNext = Effect.fn(function* (release: Release, ordinal: FleetOrdinal) {
   const status = yield* release.meter("ten-signup", String(ordinal)).pipe(
     Effect.map((output) => output.trim()),
@@ -177,10 +201,12 @@ const admitNext = Effect.fn(function* (release: Release, ordinal: FleetOrdinal) 
     }),
     Effect.timeout("4 minutes")
   );
+
   if (status !== "admitted") {
     return yield* Effect.fail(Error("Next fleet enrollment is not admitted"));
   }
 });
+
 const tenSource = Effect.fn(function* (continued: boolean, release: Release) {
   return continued
     ? {
@@ -192,24 +218,33 @@ const tenSource = Effect.fn(function* (continued: boolean, release: Release) {
         sourceVerifierRevision: release.verifierRevision,
       };
 });
+
 export const executeTen = Effect.fn(function* (release: Release, continued: boolean) {
   const source = yield* tenSource(continued, release);
   const state = yield* restore(release, source);
+
   if (continued && state.members.length === 0) {
     for (const ordinal of fleetOrdinals) state.members.push({ ordinal, user: "", physical: "" });
   }
+
   const fs = yield* FileSystem.FileSystem;
+
   const save = (): Effect.Effect<void, Error> =>
     persist(release, source, state).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+
   yield* save();
+
   const journal = Effect.fn(function* (stage: string, member: FleetOrdinal) {
     state.events.push({ stage, ordinal: member, at: yield* Clock.currentTimeMillis });
     yield* save();
   });
+
   const active = release.browser(activeOrdinal);
   const paced = pacedBrowser();
+
   const browser = (id: FleetOrdinal): Browser =>
     id === activeOrdinal ? active : release.browser(id);
+
   const work = yield* Effect.exit(
     runTenFleet(
       state,
@@ -238,12 +273,16 @@ export const executeTen = Effect.fn(function* (release: Release, continued: bool
       continued ? "cleanup" : "measure"
     )
   );
+
   const logs = yield* Effect.exit(
     state.events.some((event) => event.stage === "observation-end")
       ? release.meter("ten-logs")
       : Effect.void
   );
+
   yield* release.settle();
+
   if (work._tag === "Failure") return yield* Effect.failCause(work.cause);
+
   if (logs._tag === "Failure") return yield* Effect.failCause(logs.cause);
 });

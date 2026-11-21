@@ -33,36 +33,46 @@ import {
 import { wompiCredentialPrefixes } from "../../../src/shell/secret-material/operations";
 
 const successfulStatusMinimum = 200;
+
 const successfulStatusMaximumExclusive = 300;
+
 const providerServerErrorStatusMinimum = 500;
+
 const maximumAcceptanceTokenCharacters = 4096;
 
 const PublicKey = Schema.String.check(Schema.isPattern(/^pub_(?:test|prod)_[A-Za-z0-9_-]{8,}$/u));
+
 const AcceptanceToken = Schema.String.check(
   Schema.isNonEmpty(),
   Schema.isMaxLength(maximumAcceptanceTokenCharacters)
 );
+
 const PresignedAcceptance = Schema.Struct({
   acceptance_token: AcceptanceToken,
   permalink: Schema.URLFromString,
 });
+
 const MerchantResponse = Schema.Struct({
   data: Schema.Struct({
     presigned_acceptance: PresignedAcceptance,
     presigned_personal_data_auth: PresignedAcceptance,
   }),
 });
+
 const AcceptanceClaims = Schema.Struct({
   permalink: Schema.URLFromString,
   file_hash: Schema.String.check(Schema.isPattern(/^[0-9a-f]{32,128}$/u)),
 });
+
 const decodeAcceptanceClaims = Schema.decodeUnknownResult(jsonStringSchema(AcceptanceClaims));
+
 const SourceResponse = Schema.Struct({
   data: Schema.Struct({
     id: WompiSourceId,
     status: Schema.Literals(["AVAILABLE", "DECLINED", "ERROR", "PENDING"]),
   }),
 });
+
 const SourceLookupResponse = Schema.Struct({
   data: Schema.Struct({
     id: WompiSourceId,
@@ -71,9 +81,13 @@ const SourceLookupResponse = Schema.Struct({
     customer_email: BillingEmail,
   }),
 });
+
 const decodeMerchant = Schema.decodeUnknownResult(MerchantResponse);
+
 const decodeSource = Schema.decodeUnknownResult(SourceResponse);
+
 const decodeSourceLookup = Schema.decodeUnknownResult(SourceLookupResponse);
+
 const decodeJson = Schema.decodeUnknownResult(UnknownJsonString);
 
 export type WompiContracts = Readonly<{
@@ -124,6 +138,7 @@ export type WompiEnrollmentClientService = Readonly<{
 
 const responseJson = Effect.fn(function* (response: OutboundHttpResponse) {
   const decoded = decodeJson(new TextDecoder().decode(response.body));
+
   return Result.isSuccess(decoded)
     ? decoded.success
     : yield* Effect.fail("response-malformed" as const);
@@ -131,9 +146,11 @@ const responseJson = Effect.fn(function* (response: OutboundHttpResponse) {
 
 const digestText = Effect.fn(function* (text: string) {
   const hashing = yield* Digest.Digest;
+
   const digest = yield* hashing
     .digest(Digest.sha256, new TextEncoder().encode(text))
     .pipe(Effect.orDie);
+
   return Hex.encode(digest);
 });
 
@@ -142,13 +159,17 @@ const acceptanceProviderContentHash = Effect.fn(function* (
   permalink: URL
 ) {
   const encodedClaims = acceptanceToken.split(".")[1];
+
   if (encodedClaims === undefined) return yield* Effect.fail("acceptance-claims" as const);
   const claimsText = Base64Url.decodeString(encodedClaims);
+
   if (Result.isFailure(claimsText)) return yield* Effect.fail("acceptance-claims" as const);
   const claims = decodeAcceptanceClaims(claimsText.success);
+
   if (Result.isFailure(claims) || claims.success.permalink.href !== permalink.href) {
     return yield* Effect.fail("acceptance-claims" as const);
   }
+
   return claims.success.file_hash;
 });
 
@@ -185,15 +206,18 @@ const SourceRequest = Schema.Struct({
   acceptance_token: Schema.String,
   accept_personal_auth: Schema.String,
 });
+
 const encodeSourceRequest = Schema.encodeSync(jsonStringSchema(SourceRequest));
 
 const parseSourceResult = (
   body: unknown
 ): Effect.Effect<WompiSourceResult, WompiSourceCreationFailed> => {
   const decoded = decodeSource(body);
+
   if (Result.isFailure(decoded)) {
     return Effect.fail(new WompiSourceCreationFailed({ certainty: "ambiguous" }));
   }
+
   switch (decoded.success.data.status) {
     case "AVAILABLE":
       return Effect.succeed<WompiSourceResult>({
@@ -287,6 +311,7 @@ const WalletApprovalResponse = Schema.Struct({
     status: Schema.Literals(["PENDING", "APPROVED", "DECLINED", "ERROR"]),
   }),
 });
+
 const makeVerifyWalletApproval =
   (
     outboundHttp: OutboundHttpService,
@@ -379,11 +404,13 @@ const makeCreatePaymentSource =
           const successful =
             response.status >= successfulStatusMinimum &&
             response.status < successfulStatusMaximumExclusive;
+
           if (successful) {
             return responseJson(response).pipe(
               Effect.mapError(() => new WompiSourceCreationFailed({ certainty: "ambiguous" }))
             );
           }
+
           return Effect.fail(
             new WompiSourceCreationFailed({
               certainty:
@@ -421,10 +448,12 @@ export class WompiEnrollmentClient extends Context.Service<
       const hashing = yield* Digest.Digest;
       const environment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
       const prefixes = wompiCredentialPrefixes(environment);
+
       const publicKey = yield* Config.schema(
         PublicKey.check(Schema.isStartingWith(prefixes.publicKey)),
         "WOMPI_PUBLIC_KEY"
       );
+
       return WompiEnrollmentClient.of({
         publicKey,
         verifyNequiApproval: makeVerifyWalletApproval(outboundHttp, "nequi"),

@@ -27,8 +27,11 @@ const DashboardRoutePresentation = lazyRouteComponent(
   () => import("./view"),
   "DashboardRouteContent"
 );
+
 const DashboardViewComponent = lazyRouteComponent(() => import("./view"), "DashboardViewComponent");
+
 DashboardRoutePresentation.preload?.()?.catch(() => undefined);
+
 DashboardViewComponent.preload?.()?.catch(() => undefined);
 
 export const DashboardFeature = ({
@@ -41,6 +44,7 @@ export const DashboardFeature = ({
   const phase = useAtomValue(dashboard.phase);
   const registry = useContext(RegistryContext);
   const refresh = (): DashboardReadAttempt => dashboard.refresh(registry);
+
   return (
     <Suspense fallback={<PendingRead label="Cargando tablero" />}>
       <DashboardRouteContent
@@ -76,6 +80,7 @@ const unavailableCatalogError: DashboardEditorError = {
   message: "Los demás controles siguen disponibles.",
   onRefresh: Option.none(),
 };
+
 const staleDashboardError: DashboardEditorError = {
   title: "El cambio se guardó, pero no pudimos actualizar el tablero",
   message: "Mostramos el último tablero disponible. Intenta actualizarlo de nuevo.",
@@ -88,7 +93,9 @@ const resolveEditorError = (
   dashboardFailed: boolean
 ): Option.Option<DashboardEditorError> => {
   if (Option.isSome(editError)) return editError;
+
   if (catalogFailed) return Option.some(unavailableCatalogError);
+
   return dashboardFailed ? Option.some(staleDashboardError) : Option.none();
 };
 
@@ -133,6 +140,7 @@ const CatalogQueryNotice = <E,>({
   state: CanonicalQueryState<Readonly<{ data: ReadonlyArray<unknown> }>, E>;
 }>): JSX.Element => {
   const failed = catalogUnavailable(state);
+
   return (
     <>
       {state._tag === "Initial" ? <PendingRead label="Cargando catálogo del tablero" /> : null}
@@ -177,9 +185,11 @@ const DashboardLoadNotice = ({
       return <></>;
     case "initializing":
       if (waiting) return <></>;
+
       return <p aria-live="polite">No pudimos inicializar el tablero.</p>;
     case "reading-initialized":
       if (waiting) return <></>;
+
       return <p aria-live="polite">El tablero se inicializó, pero no pudimos leerlo.</p>;
   }
 };
@@ -199,11 +209,13 @@ export const DashboardRouteContent = ({
   const catalogResult = useAtomValue(catalogAtom);
   const refreshCatalog = useAtomRefresh(catalogAtom);
   const dashboardState = presentCanonicalQuery(result);
+
   const { lifecycleRef, editError, refresh, ...editing } = useDashboardEditing({
     apiClient,
     onRefresh,
     dashboard: dashboardState,
   });
+
   if (dashboardState._tag !== "Ready") {
     return (
       <div className="contents" ref={lifecycleRef}>

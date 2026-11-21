@@ -9,6 +9,7 @@ it("captures a complete local day and schedules the following local morning", ()
     confirmedAt: DateTime.makeUnsafe("2026-10-07T04:59:59Z"),
     timeZone: IanaTimeZone.make("America/Bogota"),
   });
+
   expect(day.localDate).toBe("2026-10-06");
   expect(DateTime.formatIso(day.from)).toBe("2026-10-06T05:00:00.000Z");
   expect(DateTime.formatIso(day.toExclusive)).toBe("2026-10-07T05:00:00.000Z");
@@ -20,14 +21,17 @@ it("captures a complete local day and schedules the following local morning", ()
 it("distinguishes equal date labels after backward travel and preserves daylight-saving day length", () => {
   const confirmedAt = DateTime.makeUnsafe("2026-11-01T16:00:00Z");
   const east = captureConfirmationDay({ confirmedAt, timeZone: IanaTimeZone.make("Asia/Tokyo") });
+
   const west = captureConfirmationDay({
     confirmedAt,
     timeZone: IanaTimeZone.make("America/New_York"),
   });
+
   const earlier = captureConfirmationDay({
     confirmedAt: DateTime.makeUnsafe("2026-11-01T10:00:00Z"),
     timeZone: IanaTimeZone.make("Asia/Tokyo"),
   });
+
   expect(earlier.localDate).toBe(west.localDate);
   expect(DateTime.formatIso(earlier.from)).toBe("2026-10-31T15:00:00.000Z");
   expect(DateTime.formatIso(west.from)).toBe("2026-11-01T04:00:00.000Z");
@@ -43,6 +47,7 @@ it("rejects empty, duplicate, unordered and out-of-window digest items without l
     confirmedAt: DateTime.makeUnsafe("2026-10-06T18:00:00Z"),
     timeZone: IanaTimeZone.make("America/Bogota"),
   });
+
   const item = {
     confirmationId: "10000000-0000-4000-8000-000000000001",
     seriesId: "20000000-0000-4000-8000-000000000001",
@@ -51,10 +56,12 @@ it("rejects empty, duplicate, unordered and out-of-window digest items without l
     cadence: { kind: "monthly" },
     confirmedAt: "2026-10-06T18:00:00.000Z",
   };
+
   const codec = Schema.toCodecJson(RecurringDigestPayload);
   const confirmationDay = Schema.encodeSync(Schema.toCodecJson(ConfirmationDay))(day);
   const decoded = Schema.decodeSync(codec)({ confirmationDay, items: [item] });
   expect(Schema.encodeSync(codec)(decoded)).toEqual({ confirmationDay, items: [item] });
+
   for (const items of [
     [],
     [item, item],
@@ -76,8 +83,10 @@ it("rejects a captured ConfirmationDay with a changed date, midnight or closing 
     from: "2026-10-06T05:00:00Z",
     toExclusive: "2026-10-07T05:00:00Z",
   };
+
   const decode = Schema.decodeUnknownResult(Schema.toCodecJson(ConfirmationDay));
   expect(Result.isSuccess(decode(value))).toBe(true);
+
   for (const change of [
     { localDate: "2026-10-07" },
     { from: "2026-10-06T05:00:00.001Z" },
@@ -96,6 +105,7 @@ it("orders digest items by Currency, Counterparty and identity while retaining t
     from: "2026-10-06T05:00:00Z",
     toExclusive: "2026-10-07T05:00:00Z",
   };
+
   const first = {
     confirmationId: "10000000-0000-4000-8000-000000000001",
     seriesId: "20000000-0000-4000-8000-000000000001",
@@ -104,25 +114,30 @@ it("orders digest items by Currency, Counterparty and identity while retaining t
     cadence: { kind: "monthly" },
     confirmedAt: confirmationDay.from,
   };
+
   const second = {
     ...first,
     confirmationId: "10000000-0000-4000-8000-000000000002",
     confirmedAt: "2026-10-07T04:59:59.999Z",
   };
+
   const third = {
     ...first,
     confirmationId: "10000000-0000-4000-8000-000000000003",
     counterparty: "Netflix",
   };
+
   const fourth = {
     ...first,
     confirmationId: "10000000-0000-4000-8000-000000000004",
     money: { amount: "1", currency: "USD" },
   };
+
   const decode = Schema.decodeUnknownResult(Schema.toCodecJson(RecurringDigestPayload));
   expect(Result.isSuccess(decode({ confirmationDay, items: [first, second, third, fourth] }))).toBe(
     true
   );
+
   for (const items of [
     [second, first],
     [third, first],

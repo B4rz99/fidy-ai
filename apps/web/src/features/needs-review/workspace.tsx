@@ -32,6 +32,7 @@ export const NeedsReviewRoute = (): JSX.Element => {
   const search = useSearch({ from: "/authenticated/app/needs-review" });
   const filter = search.status ?? "pending";
   const page = search.offset ?? 0;
+
   return (
     <>
       <Toaster position="bottom-right" richColors dir="ltr" />
@@ -39,6 +40,7 @@ export const NeedsReviewRoute = (): JSX.Element => {
     </>
   );
 };
+
 const ReviewPageRepair = ({
   filter,
   page,
@@ -47,6 +49,7 @@ const ReviewPageRepair = ({
   page: number;
 }>): JSX.Element => {
   const client = useRouter().options.context.apiClient;
+
   const [query] = useState(
     () =>
       reviewWorkspaceQueries({
@@ -55,7 +58,9 @@ const ReviewPageRepair = ({
         page,
       }).source
   );
+
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
+
   return state._tag === "Ready" &&
     state.value.data.items.length === 0 &&
     page > 0 &&
@@ -65,6 +70,7 @@ const ReviewPageRepair = ({
     <></>
   );
 };
+
 export const NeedsReviewFeature = ({
   filter,
   page,
@@ -77,9 +83,11 @@ export const NeedsReviewFeature = ({
   children: ReactNode;
 }>): JSX.Element => {
   const router = useRouter();
+
   const select = (status: Filter, offset: number): void => {
     router.navigate({ to: "/app/needs-review", search: { status, offset } }).catch(() => {});
   };
+
   return (
     <ReviewWorkspaceLayout>
       <WorkspaceHeader title="Por revisar" context={null}>
@@ -104,6 +112,7 @@ export const NeedsReviewFeature = ({
     </ReviewWorkspaceLayout>
   );
 };
+
 const ReviewPanel = ({
   active,
   filter,
@@ -118,8 +127,11 @@ const ReviewPanel = ({
   children: ReactNode;
 }>): JSX.Element => {
   const [visited, setVisited] = useState(active);
+
   if (active && !visited) setVisited(true);
+
   if (!active && !visited) return <></>;
+
   return (
     <ReviewResources
       key={`${filter}:${page}`}
@@ -133,6 +145,7 @@ const ReviewPanel = ({
     </ReviewResources>
   );
 };
+
 const useReviewDecisions = ({
   client,
   query,
@@ -140,8 +153,10 @@ const useReviewDecisions = ({
   const [decisionAtom] = useState(() =>
     makeReviewDecisions({ client, query, created: () => toast.success("Transacción creada") })
   );
+
   return useAtomValue(decisionAtom);
 };
+
 const ReviewResources = ({
   active,
   filter,
@@ -158,6 +173,7 @@ const ReviewResources = ({
   children: ReactNode;
 }>): JSX.Element => {
   const apiClient = useRouter().options.context.apiClient;
+
   const [queries] = useState(() =>
     reviewWorkspaceQueries({
       client: apiClient,
@@ -165,11 +181,13 @@ const ReviewResources = ({
       page,
     })
   );
+
   const query = active ? queries.active : queries.source;
   const decisions = useReviewDecisions({ client: apiClient, query: queries.source });
   const [lifetime] = useState(() => decisionLifetime(decisions));
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   const waitingFreshness = state.waiting ? "refreshing" : "current";
+
   return (
     <div ref={lifetime} hidden={!active} data-review="panel">
       {state._tag !== "Ready" ? (
@@ -202,6 +220,7 @@ const ReviewResources = ({
     </div>
   );
 };
+
 const ReviewUnavailable = ({
   filter,
   select,
@@ -215,6 +234,7 @@ const ReviewUnavailable = ({
 }>): JSX.Element => {
   const sourceId = useId();
   const { source, setSource, search, setSearch } = useReviewFilters();
+
   return (
     <>
       <ReviewNavigation
@@ -244,6 +264,7 @@ const ReviewUnavailable = ({
     </>
   );
 };
+
 const ReviewReadFailure = ({
   refresh,
   waiting,
@@ -262,6 +283,7 @@ const ReviewReadFailure = ({
     />
   </div>
 );
+
 type ReadyInboxProps = Readonly<{
   children: ReactNode;
   filter: Filter;
@@ -274,7 +296,9 @@ type ReadyInboxProps = Readonly<{
   decisions: ReviewDecisions;
   workspaceQuery: ReviewWorkspaceQuery;
 }>;
+
 type ReviewScope = Readonly<{ filter: Filter; page: number }>;
+
 const useSelectionScope = (
   props: Pick<ReadyInboxProps, "filter" | "page" | "select">,
   control: InboxControl
@@ -286,16 +310,20 @@ const useSelectionScope = (
 }> => {
   const sourceId = useId();
   const [pending, setPending] = useState<Option.Option<ReviewScope>>(Option.none);
+
   const select = (filter: Filter, page: number): void => {
     const changed = filter !== props.filter || page !== props.page;
+
     const retainsPanel =
       (filter === "pending") !== (props.filter === "pending") &&
       props.page === 0 &&
       ["pending", "history"].includes(props.filter);
+
     if (control.checked.length > 0 && changed && !retainsPanel) {
       setPending(Option.some({ filter, page }));
     } else props.select(filter, page);
   };
+
   return {
     sourceId,
     select,
@@ -316,6 +344,7 @@ const useSelectionScope = (
     ),
   };
 };
+
 const ReadyInbox = ({
   active,
   ...props
@@ -324,9 +353,12 @@ const ReadyInbox = ({
     active: boolean;
   }>): JSX.Element => {
   const [displayed, setDisplayed] = useState(active);
+
   if (active && !displayed) setDisplayed(true);
+
   return displayed ? <ReadyInboxView {...props} /> : <></>;
 };
+
 const inboxCaughtUp = (
   view: Workspace,
   filters: Readonly<{ filter: Filter; source: string; search: string }>
@@ -335,6 +367,7 @@ const inboxCaughtUp = (
   filters.source === "all" &&
   filters.search === "" &&
   view.pendingCount === 0;
+
 const useReviewFilters = (): Readonly<{
   source: string;
   search: string;
@@ -343,8 +376,10 @@ const useReviewFilters = (): Readonly<{
 }> => {
   const [source, setSource] = useState("all");
   const [search, setSearch] = useState("");
+
   return { source, setSource, search, setSearch };
 };
+
 const ReadyInboxView = ({
   children,
   workspaceQuery,
@@ -362,6 +397,7 @@ const ReadyInboxView = ({
   const inbox = useInboxControl({ view, visibleItems: visible.items, decisions });
   const control = { ...inbox, locked: inbox.locked || freshness !== "current" };
   const scope = useSelectionScope({ filter, page, select }, control);
+
   return (
     <>
       {scope.confirmation}
@@ -405,6 +441,7 @@ const ReadyInboxView = ({
     </>
   );
 };
+
 const EmptyInbox = ({
   caughtUp,
   freshness,
@@ -427,6 +464,7 @@ const EmptyInbox = ({
       {null}
     </ReviewFullState>
   );
+
 type InboxWorkspaceProps = Readonly<{
   originalDeadlines: ReadonlyMap<string, Workspace["items"][number]["expiresAt"]>;
   unfilteredItems: ReadonlyArray<Workspace["items"][number]>;
@@ -441,6 +479,7 @@ type InboxWorkspaceProps = Readonly<{
   move: (offset: number) => void;
   pageLength: number;
 }>;
+
 const InboxWorkspace = ({
   originalDeadlines,
   unfilteredItems,
@@ -456,6 +495,7 @@ const InboxWorkspace = ({
   pageLength,
 }: InboxWorkspaceProps): JSX.Element => {
   const item = view.items.find(({ id }) => Option.contains(control.selected, id)) ?? view.items[0];
+
   if (item === undefined) {
     return (
       <>
@@ -466,6 +506,7 @@ const InboxWorkspace = ({
       </>
     );
   }
+
   return (
     <div data-review="grid">
       <Inbox
@@ -492,6 +533,7 @@ const InboxWorkspace = ({
     </div>
   );
 };
+
 const filterReviewPage = ({
   view,
   source,
@@ -528,6 +570,7 @@ const filterReviewPage = ({
         .includes(search.trim().toLocaleLowerCase("es-CO"))
   ),
 });
+
 const decisionLifetime =
   (decisions: ReviewDecisions): RefCallback<HTMLDivElement> =>
   (node) =>

@@ -13,19 +13,24 @@ import {
 } from "@/transport/client";
 
 type Client = Context.Service.Shape<WebAuthClient>;
+
 type Pairing = WebAuthSuccess<"browserLogin", "startPairing">;
+
 type AssociationReview = Extract<
   WebAuthSuccess<"providerAuthentication", "status">,
   { status: "awaiting_association" }
 >;
+
 type WhatsAppReturn = NonNullable<
   WebAuthSuccess<"providerAuthentication", "complete">["whatsappReturnUrl"]
 >;
+
 type CommandError =
   | Effect.Error<ReturnType<Client["browserLogin"]["startPairing"]>>
   | Effect.Error<ReturnType<Client["providerAuthentication"]["start"]>>
   | "rejected"
   | "cancelled";
+
 export type ProviderViewState =
   | Readonly<{ status: "editing" }>
   | Readonly<{ status: "waiting" }>
@@ -36,22 +41,27 @@ export type ProviderViewState =
   | Readonly<{ status: "uncertain" }>
   | Readonly<{ status: "refused" }>
   | Readonly<{ status: "cancelled" }>;
+
 type Submission = Readonly<{
   provider: AuthenticationProvider;
   intent: "signup" | "login";
   revision: string;
   popup: Window;
 }>;
+
 type RetryInput = Pick<Submission, "provider" | "intent" | "revision">;
+
 const providerClient = (
   client: Client,
   provider: AuthenticationProvider
 ): Pick<Client["providerAuthentication"], "start" | "status" | "complete"> => {
   const api = client.providerAuthentication;
+
   return provider === "google"
     ? api
     : { start: api.startMicrosoft, status: api.statusMicrosoft, complete: api.completeMicrosoft };
 };
+
 type ProviderPoll = (
   client: Client,
   input: Readonly<{
@@ -63,31 +73,40 @@ type ProviderPoll = (
   WebAuthSuccess<"providerAuthentication", "status">,
   Effect.Error<ReturnType<Client["providerAuthentication"]["status"]>>
 >;
+
 const makeProviderPoller = (): ProviderPoll => {
   const intervalMilliseconds = 1_000;
   let readyAt = 0;
+
   return (client, { provider, pairing, beforeRequest }): ReturnType<ProviderPoll> =>
     Effect.gen(function* () {
       const current = yield* Clock.currentTimeMillis;
+
       if (readyAt > current) yield* Effect.sleep(readyAt - current);
       readyAt = (yield* Clock.currentTimeMillis) + intervalMilliseconds;
+
       if (Option.isSome(beforeRequest)) beforeRequest.value();
       const result = yield* providerClient(client, provider).status({ payload: proof(pairing) });
       readyAt = (yield* Clock.currentTimeMillis) + intervalMilliseconds;
+
       return result;
     });
 };
+
 const withinPairingLifetime = <Value, Error>(
   pairing: Pairing,
   work: Effect.Effect<Value, Error>
 ): Effect.Effect<Value, Error | "rejected"> =>
   Effect.gen(function* () {
     const remaining = DateTime.toEpochMillis(pairing.expiresAt) - (yield* Clock.currentTimeMillis);
+
     if (remaining <= 0) return yield* Effect.fail("rejected" as const);
+
     return yield* work.pipe(
       Effect.timeoutOrElse({ duration: remaining, orElse: () => Effect.fail("rejected" as const) })
     );
   });
+
 const awaitProviderVerification = (
   client: Client,
   pairing: Pairing,
@@ -103,9 +122,11 @@ const awaitProviderVerification = (
     Effect.gen(function* () {
       for (;;) {
         let popupClosed = input.popup.closed;
+
         const observePopup = (): void => {
           popupClosed = input.popup.closed;
         };
+
         const result = yield* input
           .poll(client, {
             provider: input.provider,
@@ -118,12 +139,17 @@ const awaitProviderVerification = (
               () => Effect.fail(input.popup.closed ? ("cancelled" as const) : ("rejected" as const))
             )
           );
+
         if (result.status === "verified") return Option.none();
+
         if (result.status === "awaiting_association") return Option.some(result);
+
         if (result.status === "awaiting_confirmation") {
           input.setState({ status: "confirming", code: result.associationCode });
         }
+
         if (result.status === "rejected") return yield* Effect.fail("rejected");
+
         if (result.status === "pending" && popupClosed) return yield* Effect.fail("cancelled");
       }
     })
@@ -135,6 +161,7 @@ const proof = (
   pairingId: Pairing["pairingId"];
   privateVerifier: Redacted.Redacted.Value<Pairing["privateVerifier"]>;
 }> => ({ pairingId: pairing.pairingId, privateVerifier: Redacted.value(pairing.privateVerifier) });
+
 const redeem = (
   input: Readonly<{
     client: Client;
@@ -156,8 +183,11 @@ const redeem = (
   );
 
 type AttemptCommand = Readonly<{ generation: number }>;
+
 type AssociationCommand = AttemptCommand & Readonly<{ code: string }>;
+
 type AttemptBinding = Readonly<{ generation: number; phase: ActiveAttempt["phase"] }>;
+
 type ProviderController = Readonly<{
   start: Atom.AtomResultFn<AttemptCommand, void>;
   acknowledge: Atom.AtomResultFn<AttemptCommand, void>;
@@ -173,12 +203,14 @@ type ProviderController = Readonly<{
   attach: () => void;
   show: ControllerInput["setState"];
 }>;
+
 type ControllerInput = Readonly<{
   webAuthClient: WebAuthClient;
   setState: (state: ProviderViewState) => void;
   authenticated: (destination: Option.Option<WhatsAppReturn>) => void;
   handoffReference: Option.Option<string>;
 }>;
+
 type ActiveAttempt = {
   phase: ProviderViewState["status"] | "starting" | "disposed";
   submission: Option.Option<Submission>;
@@ -190,19 +222,23 @@ type ActiveAttempt = {
   provider: AuthenticationProvider;
   poll: ProviderPoll;
 };
+
 const closeProviderPopup = (popup: Window): void => {
   if (popup.closed) return;
   let location: string;
+
   try {
     location = popup.location.href;
   } catch (cause) {
     if (cause instanceof DOMException && cause.name === "SecurityError") return;
     throw cause;
   }
+
   if (location === "about:blank" || new URL(location).origin === window.location.origin) {
     popup.close();
   }
 };
+
 const retainedHandoffPairing = (
   input: ControllerInput,
   active: ActiveAttempt
@@ -210,6 +246,7 @@ const retainedHandoffPairing = (
   Option.isSome(input.handoffReference) && !active.completionRequested
     ? active.pairing
     : Option.none();
+
 const clearAttempt = (
   active: ActiveAttempt,
   pairing: Option.Option<Pairing> = Option.none()
@@ -222,6 +259,7 @@ const clearAttempt = (
   Option.map(active.popup, closeProviderPopup);
   active.popup = Option.none();
 };
+
 const navigateProviderPopup = (
   popup: Window,
   authorizationUrl: string
@@ -229,18 +267,23 @@ const navigateProviderPopup = (
   popup.closed
     ? Effect.fail("cancelled" as const)
     : Effect.sync(() => popup.location.replace(authorizationUrl));
+
 const failureState = (
   active: ActiveAttempt,
   cause: Cause.Cause<CommandError>
 ): ProviderViewState => {
   if (active.completionRequested) return { status: "uncertain" };
+
   const cancelled = Cause.findErrorOption(cause).pipe(
     Option.exists((error) => error === "cancelled")
   );
+
   return { status: cancelled ? "cancelled" : "refused" };
 };
+
 const requireCurrentAttempt = (active: ActiveAttempt, generation: number): Effect.Effect<void> =>
   active.generation === generation ? Effect.void : Effect.interrupt;
+
 const executeStart = (
   input: ControllerInput,
   active: ActiveAttempt
@@ -248,18 +291,23 @@ const executeStart = (
   Effect.gen(function* () {
     const staged = active.submission;
     active.submission = Option.none();
+
     if (Option.isNone(staged)) {
       return;
     }
+
     const current = active.generation;
     input.setState({ status: "waiting" });
     const client = yield* input.webAuthClient;
     yield* requireCurrentAttempt(active, current);
+
     const started = Option.isSome(active.pairing)
       ? active.pairing.value
       : yield* client.browserLogin.startPairing();
+
     yield* requireCurrentAttempt(active, current);
     active.pairing = Option.some(started);
+
     const authorization = yield* providerClient(client, staged.value.provider).start({
       payload: {
         ...proof(started),
@@ -271,8 +319,10 @@ const executeStart = (
         }),
       },
     });
+
     yield* requireCurrentAttempt(active, current);
     yield* navigateProviderPopup(staged.value.popup, authorization.authorizationUrl);
+
     const review = yield* awaitProviderVerification(client, started, {
       ...input,
       setState: (state) => {
@@ -282,19 +332,26 @@ const executeStart = (
       popup: staged.value.popup,
       poll: active.poll,
     });
+
     yield* requireCurrentAttempt(active, current);
     closeProviderPopup(staged.value.popup);
+
     if (Option.isSome(review)) {
       input.setState({ status: "associating", review: review.value });
+
       return;
     }
+
     yield* executeCompletion(input, active, Option.none());
   });
+
 const claimCompletion = (active: ActiveAttempt): boolean => {
   if (active.completionRequested) return false;
   active.completionRequested = true;
+
   return true;
 };
+
 const executeCompletion = (
   input: ControllerInput,
   active: ActiveAttempt,
@@ -302,13 +359,17 @@ const executeCompletion = (
 ): Effect.Effect<void, CommandError> =>
   Effect.gen(function* () {
     const pairing = active.pairing;
+
     if (Option.isNone(pairing) || active.completionRequested) return;
     const current = active.generation;
     input.setState({ status: "waiting" });
     const client = yield* input.webAuthClient;
+
     if (active.generation !== current) return;
+
     if (!claimCompletion(active)) return;
     const provider = active.provider;
+
     const result = yield* providerClient(client, provider).complete({
       payload: {
         ...proof(pairing.value),
@@ -318,8 +379,10 @@ const executeCompletion = (
         }),
       },
     });
+
     if (active.generation !== current) return;
     active.destination = Option.fromUndefinedOr(result.whatsappReturnUrl);
+
     if (result.status === "created") {
       input.setState({ status: "recovery", code: Redacted.value(result.backupRecoveryCode) });
     } else {
@@ -330,9 +393,11 @@ const executeCompletion = (
         destination: active.destination,
         isCurrent: () => active.generation === current,
       });
+
       if (active.generation === current) clearAttempt(active);
     }
   });
+
 const awaitChatApproval = (
   input: ControllerInput,
   active: ActiveAttempt,
@@ -340,10 +405,12 @@ const awaitChatApproval = (
 ): Effect.Effect<void, CommandError> =>
   Effect.gen(function* () {
     const pairing = active.pairing;
+
     if (Option.isNone(pairing)) return;
     const current = active.generation;
     input.setState({ status: "awaiting_chat" });
     const client = yield* input.webAuthClient;
+
     if (active.generation !== current) return;
     yield* withinPairingLifetime(
       pairing.value,
@@ -356,12 +423,16 @@ const awaitChatApproval = (
               beforeRequest: Option.none(),
             })
             .pipe(Effect.mapError(() => "rejected" as const));
+
           if (active.generation !== current) return;
+
           if (result.status === "verified") break;
+
           if (result.status !== "awaiting_association" || result.associationCode !== code) {
             return yield* Effect.fail("rejected" as const);
           }
         }
+
         if (active.generation === current) {
           yield* executeCompletion(input, active, Option.some(code));
         }
@@ -375,11 +446,14 @@ const executeAcknowledgement = (
 ): Effect.Effect<void, CommandError> =>
   Effect.gen(function* () {
     const pairing = active.pairing;
+
     if (Option.isNone(pairing)) {
       return;
     }
+
     const current = active.generation;
     const client = yield* input.webAuthClient;
+
     if (active.generation !== current) return;
     input.setState({ status: "waiting" });
     yield* redeem({
@@ -389,8 +463,10 @@ const executeAcknowledgement = (
       destination: active.destination,
       isCurrent: () => active.generation === current,
     });
+
     if (active.generation === current) clearAttempt(active);
   });
+
 const guardedCommand = <Value extends AttemptCommand>(
   input: ControllerInput,
   active: ActiveAttempt,
@@ -399,7 +475,9 @@ const guardedCommand = <Value extends AttemptCommand>(
   input.webAuthClient.runtime.fn<Value>()(
     (value) => {
       const current = value.generation;
+
       if (active.generation !== current) return Effect.void;
+
       return command(value).pipe(
         Effect.catchCause((cause) =>
           Cause.hasInterruptsOnly(cause) || active.generation !== current
@@ -414,6 +492,7 @@ const guardedCommand = <Value extends AttemptCommand>(
     },
     { concurrent: false }
   );
+
 const refuseExpiredAttempt = (input: ControllerInput, active: ActiveAttempt): boolean => {
   if (
     Option.isNone(active.pairing) ||
@@ -421,13 +500,17 @@ const refuseExpiredAttempt = (input: ControllerInput, active: ActiveAttempt): bo
   ) {
     return false;
   }
+
   const state: ProviderViewState = {
     status: active.completionRequested ? "uncertain" : "refused",
   };
+
   clearAttempt(active, retainedHandoffPairing(input, active));
   input.setState(state);
+
   return true;
 };
+
 const providerAdmission = (
   input: ControllerInput,
   active: ActiveAttempt
@@ -437,6 +520,7 @@ const providerAdmission = (
 > => {
   const matches = (binding: AttemptBinding): boolean =>
     active.generation === binding.generation && active.phase === binding.phase;
+
   return {
     binding: () => ({ generation: active.generation, phase: active.phase }),
     matches,
@@ -449,18 +533,23 @@ const providerAdmission = (
       ) {
         return Option.none();
       }
+
       input.setState({ status: "awaiting_chat" });
+
       return Option.some({ generation: active.generation, phase: active.phase });
     },
     reserveAcknowledgement: (binding) => {
       if (!matches(binding) || active.phase !== "recovery" || refuseExpiredAttempt(input, active)) {
         return false;
       }
+
       input.setState({ status: "waiting" });
+
       return true;
     },
     reserveStart: (binding) => {
       if (!matches(binding) || refuseExpiredAttempt(input, active)) return Option.none();
+
       if (
         active.phase !== "editing" &&
         active.phase !== "refused" &&
@@ -468,13 +557,16 @@ const providerAdmission = (
       ) {
         return Option.none();
       }
+
       clearAttempt(active, retainedHandoffPairing(input, active));
       active.completionRequested = false;
       active.phase = "starting";
+
       return Option.some({ generation: active.generation, phase: active.phase });
     },
   };
 };
+
 const makeProviderController = (originalInput: ControllerInput): ProviderController => {
   const active: ActiveAttempt = {
     phase: "editing",
@@ -487,6 +579,7 @@ const makeProviderController = (originalInput: ControllerInput): ProviderControl
     provider: "google",
     poll: makeProviderPoller(),
   };
+
   const input: ControllerInput = {
     ...originalInput,
     setState: (state) => {
@@ -494,7 +587,9 @@ const makeProviderController = (originalInput: ControllerInput): ProviderControl
       originalInput.setState(state);
     },
   };
+
   const admission = providerAdmission(input, active);
+
   return {
     ...admission,
     attach: () => {
@@ -513,6 +608,7 @@ const makeProviderController = (originalInput: ControllerInput): ProviderControl
       active.submission = Option.some(value);
       active.provider = value.provider;
       active.popup = Option.some(value.popup);
+
       return true;
     },
   };
@@ -529,6 +625,7 @@ type ProviderAuthentication = Readonly<{
   acknowledge: () => void;
   approve: () => void;
 }>;
+
 const startProvider = ({
   controller,
   runStart,
@@ -543,21 +640,30 @@ const startProvider = ({
 }> &
   Pick<Submission, "provider" | "intent" | "revision">): boolean => {
   const reservation = controller.reserveStart(binding);
+
   if (Option.isNone(reservation)) return false;
   const popup = window.open("about:blank", "_blank", "popup,width=500,height=700");
+
   if (popup === null) {
     if (!controller.matches(reservation.value)) return false;
     controller.show({ status: "refused" });
+
     return true;
   }
+
   popup.opener = null;
+
   if (!controller.stage({ provider, intent, revision, popup }, reservation.value)) {
     closeProviderPopup(popup);
+
     return false;
   }
+
   runStart({ generation: reservation.value.generation });
+
   return true;
 };
+
 type ProviderCommands = Readonly<{
   runStart: (value: AttemptCommand | typeof Atom.Interrupt) => void;
   runAcknowledgement: (value: AttemptCommand | typeof Atom.Interrupt) => void;
@@ -565,10 +671,12 @@ type ProviderCommands = Readonly<{
   clear: (restartable?: boolean) => void;
   mounted: RefCallback<HTMLElement>;
 }>;
+
 const useProviderCommands = (controller: ProviderController): ProviderCommands => {
   const runStart = useAtomSet(controller.start);
   const runAcknowledgement = useAtomSet(controller.acknowledge);
   const runApproval = useAtomSet(controller.approve);
+
   const clear = useCallback(
     (restartable = false): void => {
       controller.clear(restartable);
@@ -578,21 +686,26 @@ const useProviderCommands = (controller: ProviderController): ProviderCommands =
     },
     [controller, runStart, runAcknowledgement, runApproval]
   );
+
   const mounted = useCallback(
     (node: Parameters<RefCallback<HTMLElement>>[0]) => {
       if (node === null) return;
       controller.attach();
+
       return (): void => clear();
     },
     [clear, controller]
   );
+
   return { runStart, runAcknowledgement, runApproval, clear, mounted };
 };
+
 const openWhatsAppConfirmation = (text: string): void => {
   const destination = new URL(fidyWhatsAppUrl);
   destination.searchParams.set("text", text);
   window.open(destination.href, "_blank", "noopener,noreferrer");
 };
+
 const approveAssociation = ({
   controller,
   binding,
@@ -605,12 +718,15 @@ const approveAssociation = ({
   runApproval: ProviderCommands["runApproval"];
 }>): void => {
   const reservation = controller.reserveApproval(binding);
+
   if (Option.isNone(reservation)) return;
   openWhatsAppConfirmation(review.confirmationText);
+
   if (controller.matches(reservation.value)) {
     runApproval({ generation: reservation.value.generation, code: review.associationCode });
   }
 };
+
 const providerActions = ({
   controller,
   state,
@@ -629,11 +745,13 @@ const providerActions = ({
 }> &
   ProviderCommands): ProviderAuthentication => {
   const binding = controller.binding();
+
   const start: ProviderAuthentication["start"] = (provider, intent, revision) => {
     if (startProvider({ controller, runStart, binding, provider, intent, revision })) {
       setRetryInput(Option.some({ provider, intent, revision }));
     }
   };
+
   return {
     state,
     provider: Option.match(retryInput, {
@@ -670,6 +788,7 @@ const providerActions = ({
     },
   };
 };
+
 export const useProviderAuthentication = ({
   handoffReference,
 }: Readonly<{
@@ -679,6 +798,7 @@ export const useProviderAuthentication = ({
   const session = useSession();
   const [state, setState] = useState<ProviderViewState>({ status: "editing" });
   const [retryInput, setRetryInput] = useState<Option.Option<RetryInput>>(() => Option.none());
+
   const [controller] = useState(() =>
     makeProviderController({
       webAuthClient: router.options.context.webAuthClient,
@@ -692,8 +812,10 @@ export const useProviderAuthentication = ({
       },
     })
   );
+
   const { runStart, runAcknowledgement, runApproval, clear, mounted } =
     useProviderCommands(controller);
+
   return providerActions({
     controller,
     state,

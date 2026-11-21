@@ -10,7 +10,9 @@ import { ExactEquivalentIgnorer, sourceHash } from "./equivalents.mjs";
 import { schema } from "mutation-testing-report-schema";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
+
 const unobservedSourceLine = 5;
+
 /** @type {import("ajv").ValidateFunction<import("mutation-testing-report-schema/api").MutationTestResult>} */
 const validateReport = new Ajv({ formats: { uri: true } }).compile(schema);
 
@@ -73,34 +75,43 @@ describe("outer suite", () => {
 
 await test("mutation selection executes nested suites and detects module initialization changes", () => {
   const fixture = mkdtempSync(join(tmpdir(), "fidy-mutation-runner-"));
+
   try {
     writeFixture(fixture);
+
     const result = spawnSync(process.execPath, [join(here, "run.mjs")], {
       cwd: fixture,
       encoding: "utf8",
       timeout: 60_000,
     });
+
     assert.equal(result.status, 0, result.stdout + result.stderr);
+
     /** @type {unknown} */
     const report = JSON.parse(
       readFileSync(join(fixture, "reports/mutation/mutation.json"), "utf8")
     );
+
     assert.ok(validateReport(report), JSON.stringify(validateReport.errors));
+
     const mutants = report.files["subject.js"].mutants.filter(
       (mutant) => mutant.status !== "Ignored"
     );
+
     assert.ok(mutants.length > 0);
     assert.ok(mutants.some((mutant) => mutant.static));
     assert.ok(mutants.some((mutant) => mutant.location.start.line === unobservedSourceLine));
     assert.ok(
       mutants.some((mutant) => mutant.static && mutant.statusReason?.includes("Policy unavailable"))
     );
+
     for (const mutant of mutants) {
       assert.equal(
         mutant.status,
         mutant.location.start.line === unobservedSourceLine ? "Survived" : "Killed",
         JSON.stringify(mutant)
       );
+
       if (!mutant.static) assert.ok(mutant.testsCompleted > 0, JSON.stringify(mutant));
     }
   } finally {
@@ -159,12 +170,15 @@ await test("reviewed equivalents exclude only the exact replacement in unchanged
   const source = "export const before = (value: number) => value < 0;\n";
   const fileName = "/fixture/src/core/example.ts";
   const options = { plugins: null, excludedMutations: [], ignorers: [] };
+
   const baseline = await instrumenter.instrument(
     [{ name: fileName, content: source, mutate: true }],
     options
   );
+
   const selected = baseline.mutants.find((mutant) => mutant.replacement === "value <= 0");
   assert.ok(selected);
+
   const registry = {
     files: {
       "src/core/example.ts": {
@@ -189,11 +203,14 @@ await test("reviewed equivalents exclude only the exact replacement in unchanged
       },
     },
   };
+
   const ignorer = new ExactEquivalentIgnorer(registry);
+
   const result = await instrumenter.instrument(
     [{ name: fileName, content: source, mutate: true }],
     { ...options, ignorers: [ignorer] }
   );
+
   assert.equal(result.mutants.length, baseline.mutants.length);
   const ignored = result.mutants.filter((mutant) => mutant.status === "Ignored");
   assert.equal(ignored.length, 1);
@@ -206,15 +223,18 @@ await test("reviewed equivalents exclude only the exact replacement in unchanged
     )
   );
   assertOtherMutantsStayActive(registry, selected, source);
+
   const changed = await instrumenter.instrument(
     [{ name: fileName, content: source + "\n", mutate: true }],
     { ...options, ignorers: [ignorer] }
   );
+
   assert.equal(changed.mutants.filter((mutant) => mutant.status === "Ignored").length, 0);
 });
 
 const equivalentReportFixture = () => {
   const source = "x < 0 && y > 0";
+
   const entry = {
     location: { start: { line: 1, column: 1 }, end: { line: 1, column: source.length + 1 } },
     mutatorName: "ConditionalExpression",
@@ -222,9 +242,11 @@ const equivalentReportFixture = () => {
     original: source,
     reason: "Fixture-only exact-match control",
   };
+
   const registry = {
     files: { "src/core/example.ts": { sourceSha256: sourceHash(source), mutants: [entry] } },
   };
+
   /** @type {import("mutation-testing-report-schema/api").MutationTestResult} */
   const report = {
     schemaVersion: "3",
@@ -242,6 +264,7 @@ const equivalentReportFixture = () => {
       },
     },
   };
+
   return { source, registry, report };
 };
 
@@ -291,11 +314,13 @@ await test("full reports distinguish nested equivalents sharing a start position
   const name = "src/core/example.ts";
   const entry = registry.files[name].mutants[0];
   assert.ok(entry);
+
   const nested = {
     ...entry,
     original: "x < 0",
     location: { ...entry.location, end: { line: 1, column: 6 } },
   };
+
   registry.files[name].mutants.push(nested);
   const parent = report.files[name].mutants[0];
   assert.ok(parent);

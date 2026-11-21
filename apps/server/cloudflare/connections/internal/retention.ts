@@ -1,4 +1,5 @@
 const attemptRetentionMilliseconds = 86400000;
+
 const maximumRetentionRows = 128;
 
 export const retentionStatements = (

@@ -36,6 +36,7 @@ const ConsentedReviewCount = ({ children }: Readonly<{ children: ReactNode }>): 
   const client = useRouter().options.context.webAuthClient;
   const [query] = useState(() => transactionEntryConsent(client));
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
+
   return state._tag === "Ready" &&
     !state.waiting &&
     Option.isNone(state.refreshFailure) &&
@@ -65,11 +66,13 @@ export const SignedInNavigation = ({
   const transactions = pathname === "/app/transactions";
   const { sessionBinding } = useRouter().options.context;
   const signedIn = authentication !== "expired" && sessionBinding !== "none";
+
   const count = transactions ? (
     <ConsentedReviewCount>{reviewPendingCount}</ConsentedReviewCount>
   ) : (
     reviewPendingCount
   );
+
   return (
     <nav aria-label="Aplicación" className="application-navigation">
       {readOnly ? <ReadOnlyNotice /> : null}

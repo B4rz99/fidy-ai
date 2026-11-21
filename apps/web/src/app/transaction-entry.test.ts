@@ -13,6 +13,7 @@ import { initialApplicationValues } from "./initial-values";
 import { createWebRouter } from "./routes";
 
 const observedAt = Date.parse("2026-11-08T12:00:00Z");
+
 const profile = {
   data: {
     id: "10000000-0000-4000-8000-000000000001",
@@ -25,14 +26,17 @@ const profile = {
   next: [],
   categories: [],
 };
+
 const initial = Schema.decodeUnknownSync(BrowserSessionBindingSchema)({
   binding: "20000000-0000-4000-8000-000000000001",
   initial: { status: "Granted", withdrawal: null, profile },
 });
+
 const revoked = {
   status: "Revoked",
   withdrawal: { reference: "30000000-0000-4000-8000-000000000001", occurredAtMs: observedAt },
 };
+
 beforeAll(() =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -42,12 +46,14 @@ beforeAll(() =>
     })
   )
 );
+
 afterEach(() => vi.useRealTimers());
 
 type EntryControl = {
   consent: "Granted" | "Revoked" | "Unavailable";
   transactions: Option.Option<Deferred.Deferred<void>>;
 };
+
 type EntryFixture = Readonly<{
   router: ReturnType<typeof createWebRouter>;
   registry: AtomRegistry.AtomRegistry;
@@ -56,14 +62,17 @@ type EntryFixture = Readonly<{
   control: EntryControl;
   finishPreparation: () => Effect.Effect<void, Cause.UnknownError>;
 }>;
+
 const entryFixture = (age: Option.Option<number>): EntryFixture => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(observedAt + Option.getOrElse(age, () => 0));
   const requests: Array<Readonly<{ method: string; path: string; search: string }>> = [];
+
   const control: EntryControl = {
     consent: "Granted",
     transactions: Option.none(),
   };
+
   const http = HttpClient.make((request) => {
     const url = new URL(request.url);
     requests.push({
@@ -72,10 +81,12 @@ const entryFixture = (age: Option.Option<number>): EntryFixture => {
       search: UrlParams.toString(request.urlParams),
     });
     const consent = url.pathname === "/web/consent";
+
     return Effect.gen(function* () {
       if (url.pathname === "/transactions" && Option.isSome(control.transactions)) {
         yield* Deferred.await(control.transactions.value);
       }
+
       if (consent) {
         return HttpClientResponse.fromWeb(
           request,
@@ -85,18 +96,22 @@ const entryFixture = (age: Option.Option<number>): EntryFixture => {
           )
         );
       }
+
       return HttpClientResponse.fromWeb(
         request,
         Response.json(url.pathname === "/transactions" ? { data: [], next: [] } : profile)
       );
     });
   });
+
   const options = {
     apiOrigin: "https://api.test.fidyapp.com",
     httpClient: Layer.succeed(HttpClient.HttpClient, http),
   };
+
   const apiClient = makeFidyClient(options);
   const webAuthClient = makeWebAuthClient(options);
+
   const registry = AtomRegistry.make({
     initialValues: Option.isNone(age)
       ? []
@@ -110,6 +125,7 @@ const entryFixture = (age: Option.Option<number>): EntryFixture => {
           },
         }),
   });
+
   const router = createWebRouter({
     apiClient,
     webAuthClient,
@@ -118,6 +134,7 @@ const entryFixture = (age: Option.Option<number>): EntryFixture => {
     registry,
     history: Option.some(createMemoryHistory({ initialEntries: ["/app/transactions"] })),
   });
+
   const finishPreparation = (): Effect.Effect<void, Cause.UnknownError> =>
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
@@ -125,6 +142,7 @@ const entryFixture = (age: Option.Option<number>): EntryFixture => {
       );
       expect(router.state.matches.at(-1)?.status).toBe("success");
     });
+
   return { router, registry, webAuthClient, requests, control, finishPreparation };
 };
 
@@ -134,6 +152,7 @@ it.live.each([0, 399])(
     Effect.gen(function* () {
       const fixture = entryFixture(Option.some(age));
       const { router, registry, webAuthClient, control, requests, finishPreparation } = fixture;
+
       try {
         yield* Effect.tryPromise(() => router.load());
         yield* finishPreparation();
@@ -159,7 +178,9 @@ it.live.each([400, -1])(
       const { router, registry, control, requests, finishPreparation } = entryFixture(
         Option.some(age)
       );
+
       control.consent = "Revoked";
+
       try {
         yield* Effect.tryPromise(() => router.load());
         yield* finishPreparation();
@@ -175,6 +196,7 @@ it.live(
   () =>
     Effect.gen(function* () {
       const { router, registry, requests, finishPreparation } = entryFixture(Option.some(0));
+
       try {
         yield* Effect.tryPromise(() => router.load());
         yield* finishPreparation();
@@ -198,6 +220,7 @@ it.live(
     Effect.gen(function* () {
       const { router, registry, webAuthClient, control, requests, finishPreparation } =
         entryFixture(Option.none());
+
       try {
         yield* Effect.tryPromise(() => router.load());
         yield* finishPreparation();
@@ -223,6 +246,7 @@ it.live(
       const { router, registry, requests, finishPreparation } = entryFixture(Option.some(0));
       const { TransactionsPage } = yield* Effect.tryPromise(() => import("./transactions-page"));
       const cancelled = AbortSignal.abort();
+
       try {
         const retired = yield* Effect.tryPromise(() =>
           TransactionsPage.prepareEntry({
@@ -233,6 +257,7 @@ it.live(
             signal: cancelled,
           })
         );
+
         yield* Effect.tryPromise(() => Promise.resolve(retired?.preparation));
         expect(retired).toBeUndefined();
         expect(requests).toEqual([]);
@@ -252,14 +277,17 @@ it.live(
       const { router, registry, control, requests } = entryFixture(Option.some(0));
       const release = Deferred.makeUnsafe<void>();
       control.transactions = Option.some(release);
+
       try {
         yield* Effect.tryPromise(() => router.load());
         expect(router.state.matches.at(-1)?.status).toBe("success");
         const preparation = router.state.matches.at(-1)?.loaderData?.preparation;
         expect(preparation).toBeDefined();
+
         const expectOrdinaryRequest = (): void => {
           expect(requests.map((request) => request.path)).toEqual(["/transactions"]);
         };
+
         yield* Effect.tryPromise(() => vi.waitFor(expectOrdinaryRequest));
         yield* Effect.tryPromise(() => router.navigate({ to: "/settings/privacy" }));
         yield* Effect.tryPromise(() => Promise.resolve(preparation));

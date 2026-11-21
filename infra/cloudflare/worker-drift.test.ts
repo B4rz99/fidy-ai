@@ -20,11 +20,13 @@ describe("Worker drift field projection", () => {
   });
   it("identifies missing upload receipts without exporting their values", () => {
     const actual = { workerName: "worker", hash: { bundle: "digest" } };
+
     const expected = {
       ...actual,
       versionId: "private-version",
       deploymentId: "private-deployment",
     };
+
     expect(workerDriftFields({ expected, actual })).toEqual(["versionId", "deploymentId"]);
   });
 

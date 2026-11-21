@@ -7,19 +7,23 @@ import type { ForwardedEmailMessage, NativeEmailEnvironment } from "./contract";
 
 const rejectedStatus = 422,
   acceptedStatus = 204;
+
 export class PrivateEmailFixture extends WorkerEntrypoint<NativeEmailEnvironment> {
   override fetch(request: Request): Promise<Response> {
     const env = this.env;
+
     return Effect.runPromise(
       Effect.gen(function* () {
         const bytes = new Uint8Array(yield* Effect.tryPromise(() => request.arrayBuffer()));
         const refusals: string[] = [];
+
         const raw = new ReadableStream<Uint8Array>({
           start(controller): void {
             controller.enqueue(bytes);
             controller.close();
           },
         });
+
         const message: ForwardedEmailMessage = {
           from: "sender@example.com",
           to: request.headers.get("fidy-fixture-to") ?? "",
@@ -29,9 +33,11 @@ export class PrivateEmailFixture extends WorkerEntrypoint<NativeEmailEnvironment
             refusals.push(reason);
           },
         };
+
         if (new URL(request.url).pathname === "/production") {
           yield* Effect.tryPromise(() => deliveryWorker.email(message, env));
         } else yield* receiveForwardedEmail({ message, environment: env });
+
         return new Response(null, {
           status: refusals.length > 0 ? rejectedStatus : acceptedStatus,
         });

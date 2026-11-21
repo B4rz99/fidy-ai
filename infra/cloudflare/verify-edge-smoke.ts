@@ -11,8 +11,11 @@ import { productionTopology } from "../../apps/server/cloudflare/runtime/contrac
 import { oauthPaths } from "../../apps/server/src/shell/oauth-agents/contract";
 
 const apiOrigin = `https://${productionTopology.ingress.hostname}`;
+
 const healthyStatus = 200;
+
 const unauthorizedStatus = 401;
+
 const probes = [
   { method: "GET", path: "/health", expectedStatus: healthyStatus, headers: {} },
   { method: "GET", path: "/categories", expectedStatus: 401, headers: {} },
@@ -41,12 +44,15 @@ const probes = [
 ] as const;
 
 type EdgeResponse = Readonly<{ status: number; headers: Headers }>;
+
 type EdgeRequest = Readonly<{
   method: string;
   path: string;
   headers: Readonly<Record<string, string>>;
 }>;
+
 type Candidate = Readonly<{ proof: string; override: string; publicVersionId: string }>;
+
 class EdgeSmokeFailure extends Data.TaggedError("EdgeSmokeFailure")<{
   readonly path: string;
 }> {}
@@ -75,7 +81,9 @@ export const verifyEdgeSmoke = <E, R>({
                 "cloudflare-workers-version-overrides": candidate.value.override,
               },
         }).pipe(Effect.mapError(() => new EdgeSmokeFailure({ path: entry.path })));
+
         const status = entry.expectedStatus;
+
         if (
           !isExpectedResponse(response, status) ||
           !hasExpectedChallenge(response, entry.path, entry.expectedStatus) ||
@@ -86,6 +94,7 @@ export const verifyEdgeSmoke = <E, R>({
       }),
       { concurrency: 4, discard: true }
     );
+
     if (Option.isSome(candidate)) yield* verifyCandidateHealth(probe, candidate.value);
   });
 
@@ -117,6 +126,7 @@ const verifyCandidateHealth = <E, R>(
         "cloudflare-workers-version-overrides": candidate.override,
       },
     }).pipe(Effect.mapError(() => new EdgeSmokeFailure({ path: "/health" })));
+
     if (
       !isExpectedResponse(health, healthyStatus) ||
       health.headers.get("x-fidy-smoke-worker-version") !== candidate.publicVersionId
@@ -150,6 +160,7 @@ export const productionProbe = ({
 > =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
+
     const request =
       method === "GET"
         ? HttpClientRequest.get(`${apiOrigin}${path}`, { headers })
@@ -157,7 +168,9 @@ export const productionProbe = ({
             headers: { "content-type": "application/json", ...headers },
             body: HttpBody.text("{}", "application/json"),
           });
+
     const response = yield* HttpClient.withScope(client).execute(request);
+
     return { status: response.status, headers: new Headers(response.headers) };
   }).pipe(
     Effect.scoped,
@@ -170,6 +183,7 @@ if (import.meta.main) {
     Effect.scoped(
       Effect.gen(function* () {
         const services = yield* Layer.build(ReleaseHttpLive);
+
         return yield* verifyEdgeSmoke({
           probe: productionProbe,
           candidate: Option.none(),
@@ -183,6 +197,7 @@ if (import.meta.main) {
       })
     )
   );
+
   if (result._tag === "Failure") {
     await Bun.write(
       Bun.stderr,

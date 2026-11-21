@@ -17,6 +17,7 @@ type SelectionSummaryProps = Readonly<{
   clearFocusId: string;
   showClear: boolean;
 }>;
+
 export const SelectionSummary = ({
   items,
   label,
@@ -29,16 +30,20 @@ export const SelectionSummary = ({
   const [expanded, setExpanded] = useState(false);
   const listId = useId();
   const inspectButton = useRef<HTMLButtonElement>(null);
+
   const clear = (): void => {
     document.getElementById(clearFocusId)?.focus();
     onClear();
   };
+
   const remove = (id: string): void => {
     if (items.length > 1) inspectButton.current?.focus();
     else document.getElementById(clearFocusId)?.focus();
     onRemove(id);
   };
+
   const hidden = items.filter((item) => item.hidden).length;
+
   return (
     <div className="flex min-w-0 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">

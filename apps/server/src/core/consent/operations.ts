@@ -12,6 +12,7 @@ import type {
 import { acceptedReplies, declinedReplies, normalizeReply } from "~/core/consent/internal/replies";
 
 const patRevocationRevision = "pat-revocation-2026-09";
+
 const patRevocationDisclosures = {
   "user-revoke-one": {
     _tag: "AuthenticatedWeb",
@@ -52,8 +53,11 @@ export const decideConsentReply = (
   }
 
   const reply = normalizeReply(content.text);
+
   if (declinedReplies.has(reply)) return Effect.succeed({ _tag: "Declined" });
+
   if (acceptedReplies.has(reply)) return Effect.succeed({ _tag: "Accepted" });
+
   return Effect.succeed({ _tag: "Clarify" });
 };
 
@@ -97,12 +101,14 @@ export const classifyConsentIngressReplay = ({
   message: ConsentIngressMessage;
 }>): "new" | "replay" | "conflict" => {
   if (Option.isNone(exchange)) return "new";
+
   if (exchange.value.expiresAtMs <= message.receivedAtMs) {
     return exchange.value.initiatingMessageId === message.providerMessageId ||
       message.occurredAtMs < exchange.value.expiresAtMs
       ? "conflict"
       : "new";
   }
+
   return exchange.value.initiatingMessageId === message.providerMessageId &&
     exchange.value.initiatingBodySha256 === message.bodySha256
     ? "replay"

@@ -10,6 +10,7 @@ if (title === undefined || title.trim().length === 0) {
 }
 
 const convention = await loadCommitConvention();
+
 const errors = convention.validateHeader(title);
 
 if (errors.length > 0) {

@@ -6,6 +6,7 @@ import type { CoreQueueEnvironment } from "./contract";
 
 const unusedWorkflowOperation = (): Promise<never> =>
   Promise.reject(new Error("Unexpected Workflow operation"));
+
 const workflowInstance: WorkflowInstance = {
   id: "canary",
   pause: unusedWorkflowOperation,
@@ -23,6 +24,7 @@ it("inherits the Queue owner's Clock when validating a native canary handoff", (
     Effect.gen(function* () {
       const now = 100_000;
       const base = makeWorkerTelemetry(() => undefined);
+
       const queue = makeCoreQueue({
         ...base,
         observeWork: (observation, work) =>
@@ -40,7 +42,9 @@ it("inherits the Queue owner's Clock when validating a native canary handoff", (
             )
           ),
       });
+
       const created: unknown[] = [];
+
       const environment: CoreQueueEnvironment = {
         RELEASE_GIT_SHA: "test",
         USER_STORE: {
@@ -50,6 +54,7 @@ it("inherits the Queue owner's Clock when validating a native canary handoff", (
         OPERATIONAL_CANARY_WORKFLOW: {
           create: (input) => {
             created.push(input);
+
             return Promise.resolve(workflowInstance);
           },
           get: () => Promise.resolve(workflowInstance),
@@ -57,6 +62,7 @@ it("inherits the Queue owner's Clock when validating a native canary handoff", (
           deleteBatch: unusedWorkflowOperation,
         },
       };
+
       yield* Effect.tryPromise(() =>
         queue(
           {

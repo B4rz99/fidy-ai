@@ -10,6 +10,7 @@ type SendEvidence = Readonly<{
   certainty: "accepted" | "ambiguous" | "rejected";
   providerMessageId: Option.Option<WhatsAppProviderMessageId>;
 }>;
+
 export const sendEvidence = (
   sent: Exit.Exit<WhatsAppSentMessage, InsightTemplateUnavailable | WhatsAppSendFailed>
 ): SendEvidence => {
@@ -19,10 +20,12 @@ export const sendEvidence = (
       providerMessageId: Option.some(sent.value.messageEvidence.providerMessageId),
     };
   }
+
   const certainty = Option.match(Cause.findErrorOption(sent.cause), {
     onNone: () => "ambiguous" as const,
     onSome: (failure) =>
       failure._tag === "WhatsAppSendFailed" ? failure.deliveryCertainty : ("rejected" as const),
   });
+
   return { certainty, providerMessageId: Option.none() };
 };

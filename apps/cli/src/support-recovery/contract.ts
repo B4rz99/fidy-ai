@@ -7,7 +7,9 @@ export const RecoveryInput = Schema.Struct({
   pairingCode: StartedBrowserLoginPairing.fields.publicCode,
   backupRecoveryCode: Schema.RedactedFromValue(BackupRecoveryCode),
 });
+
 export type RecoveryInput = typeof RecoveryInput.Type;
+
 export type RecoveryOutcome = "approved" | "not_approved" | "unavailable" | "uncertain";
 
 export class RecoveryFailure extends Data.TaggedError("RecoveryFailure")<{

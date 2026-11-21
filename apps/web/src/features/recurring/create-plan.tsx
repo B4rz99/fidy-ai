@@ -17,6 +17,7 @@ type CreationDraft = Readonly<{
   initial: Partial<PlanInput> & Pick<PlanInput, "timeZone">;
   seriesId: Option.Option<string>;
 }>;
+
 type Props = CreationDraft &
   Readonly<{
     categories: ReadonlyArray<Category>;
@@ -24,13 +25,16 @@ type Props = CreationDraft &
     save: Save;
     created: (receipt: CreationReceipt) => void;
   }>;
+
 export const CreatePlan = (props: Props): JSX.Element => {
   const { initial, seriesId, categories, disabled, save, created } = props;
   const [draft, setDraft] = useState({ initial, transactionId: Option.none<string>() });
+
   const submit = (plan: PlanInput): void => {
     const id = RecurringPlanId.make(
       Effect.runSync(browserSecureRandom.uuidV4().pipe(Effect.orDie))
     );
+
     const source = draft.transactionId;
     save(
       {
@@ -44,6 +48,7 @@ export const CreatePlan = (props: Props): JSX.Element => {
         : undefined
     );
   };
+
   return (
     <>
       <div data-recurring-slot="create-source">

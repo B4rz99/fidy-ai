@@ -5,6 +5,7 @@ import { protectConsentStatement } from "../../../src/shell/consent/operations";
 
 export const sampleAuthority = Effect.fn(function* (userId: string) {
   const sql = yield* SqliteClient;
+
   const statement = protectConsentStatement({
     subject: { _tag: "User", userId: UserId.make(userId) },
     requirement: "granted",
@@ -13,5 +14,6 @@ export const sampleAuthority = Effect.fn(function* (userId: string) {
       params: [userId, userId],
     },
   });
+
   return (yield* sql.unsafe(statement.sql, statement.params)).length === 1;
 });

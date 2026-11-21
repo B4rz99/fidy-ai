@@ -14,7 +14,9 @@ import {
 } from "./contract";
 
 const expiry = DateTime.makeUnsafe("2026-09-01T12:10:00.000Z");
+
 const attemptedAt = DateTime.makeUnsafe("2026-09-01T12:00:05.000Z");
+
 const base = {
   lifecycle: "pending_approval",
   proofMatches: true,
@@ -24,6 +26,7 @@ const base = {
   expiresAt: expiry,
   attemptedAt,
 } as const;
+
 const decide = (input: Parameters<typeof decidePATPairingClaim>[0]): PATPairingClaimDecision =>
   Effect.runSync(decidePATPairingClaim(input));
 
@@ -53,6 +56,7 @@ it("covers every persisted lifecycle and rejects unknown values", () => {
   ] as const) {
     expect(Schema.is(PATPairingLifecycle)(lifecycle)).toBe(true);
   }
+
   expect(Schema.is(PATPairingLifecycle)("active")).toBe(false);
 });
 
@@ -88,6 +92,7 @@ it("distinguishes expiry work while making every terminal lifecycle invalid", ()
       attemptedAt: expiry,
     })
   ).toEqual({ _tag: "RevokeUnclaimed" });
+
   for (const lifecycle of ["claimed", "expired_unapproved", "revoked_unclaimed"] as const) {
     expect(decide({ ...base, lifecycle })).toEqual({ _tag: "Invalid" });
   }
@@ -117,6 +122,7 @@ it("round trips canonical pairing codes and bounds the private device proof to b
   const decode = Schema.decodeUnknownResult(PATPairingDeviceCode);
   const valid = `${"Az09_-".repeat(7)}A`;
   expect(Result.isSuccess(decode(valid))).toBe(true);
+
   for (const value of [valid.slice(1), `${valid}A`, `!${valid}`, `${valid}!`, "!".repeat(43)]) {
     expect(Result.isFailure(decode(value))).toBe(true);
   }

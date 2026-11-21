@@ -14,6 +14,7 @@ export const reviewPendingCountQuery: (client: FidyClient) => ReviewWorkspaceQue
       reactivityKeys: ["ingestion-review", reviewCountKey],
       timeToLive: "400 millis",
     });
+
     return observeReviewQuery(source);
   }
 );

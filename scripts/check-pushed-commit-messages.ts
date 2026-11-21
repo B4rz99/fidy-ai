@@ -3,6 +3,7 @@
 import { loadCommitConvention } from "./check-commit-message";
 
 const gitObjectNameLength = 40;
+
 const abbreviatedCommitLength = 12;
 
 const ZERO_SHA = "0".repeat(gitObjectNameLength);

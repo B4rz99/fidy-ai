@@ -15,6 +15,7 @@ describe("Schema Codecs contract", () => {
     const Boundary = jsonStringSchema(
       Schema.Struct({ money: Schema.Struct({ amount: Schema.BigDecimal }) })
     );
+
     const decoded = Schema.decodeSync(Boundary)('{"money":{"amount":"25000.50"}}');
 
     expect(BigDecimal.equals(decoded.money.amount, BigDecimal.fromStringUnsafe("25000.50"))).toBe(

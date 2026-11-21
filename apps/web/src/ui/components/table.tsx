@@ -3,12 +3,19 @@ import * as React from "react";
 import { cn } from "@/ui/class-names";
 
 type TableProps = React.ComponentProps<"table"> & VariantProps<typeof tableVariants>;
+
 type TableSectionProps = React.ComponentProps<"thead">;
+
 type TableBodyProps = React.ComponentProps<"tbody">;
+
 type TableFooterProps = React.ComponentProps<"tfoot">;
+
 type TableRowProps = React.ComponentProps<"tr"> & VariantProps<typeof tableRowVariants>;
+
 type TableHeadProps = React.ComponentProps<"th"> & VariantProps<typeof tableHeadVariants>;
+
 type TableCellProps = React.ComponentProps<"td"> & VariantProps<typeof tableCellVariants>;
+
 type TableCaptionProps = React.ComponentProps<"caption">;
 
 const tableVariants = cva("w-full caption-bottom text-sm", {
@@ -62,6 +69,7 @@ const tableRowVariants = cva(
     defaultVariants: { interaction: "default" },
   }
 );
+
 const TableRow = ({ className, interaction, ...props }: TableRowProps): React.JSX.Element => (
   <tr
     data-slot="table-row"

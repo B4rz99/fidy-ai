@@ -30,11 +30,15 @@ const makePublication = Effect.map(Clock.currentTimeMillis, (now) => ({
   },
   price,
 }));
+
 const pricingTestCeiling = 256 * 1024;
+
 const encode = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
+
 const platform = Effect.fnUntraced(function* (routeUsers: boolean = false) {
   const fs = yield* FileSystem.FileSystem;
   const directory = yield* fs.makeTempDirectoryScoped({ prefix: "fidy-pricing-" });
+
   const build = yield* Effect.tryPromise(() =>
     Bun.build({
       entrypoints: [new URL("./pricing.test-fixture.ts", import.meta.url).pathname],
@@ -42,11 +46,15 @@ const platform = Effect.fnUntraced(function* (routeUsers: boolean = false) {
       external: ["cloudflare:workers"],
     })
   );
+
   const output = build.outputs[0];
+
   if (!build.success || output === undefined) {
     return yield* Effect.die(new Error("Pricing fixture build failed"));
   }
+
   const contents = yield* Effect.tryPromise(() => output.text());
+
   const create = (): Miniflare =>
     new Miniflare({
       resourcePersistencePath: directory,
@@ -83,14 +91,17 @@ const platform = Effect.fnUntraced(function* (routeUsers: boolean = false) {
         },
       ],
     });
+
   let runtime = create();
   yield* Effect.addFinalizer(() => Effect.tryPromise(() => runtime.dispose()).pipe(Effect.orDie));
+
   const request = Effect.fnUntraced(function* (
     path: string,
     body?: unknown,
     name: string = "pricing"
   ) {
     const namespace = yield* Effect.tryPromise(() => runtime.getDurableObjectNamespace("PRICING"));
+
     const response = yield* Effect.tryPromise(() =>
       namespace.getByName(name).fetch(
         "https://pricing.internal/" + path,
@@ -103,7 +114,9 @@ const platform = Effect.fnUntraced(function* (routeUsers: boolean = false) {
             }
       )
     );
+
     const text = yield* Effect.tryPromise(() => response.text());
+
     return {
       status: response.status,
       body:
@@ -112,6 +125,7 @@ const platform = Effect.fnUntraced(function* (routeUsers: boolean = false) {
           : yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text),
     };
   });
+
   const restart = Effect.tryPromise(() => runtime.dispose()).pipe(
     Effect.tap(() =>
       Effect.sync(() => {
@@ -119,13 +133,17 @@ const platform = Effect.fnUntraced(function* (routeUsers: boolean = false) {
       })
     )
   );
+
   const check = Effect.gen(function* () {
     const namespace = yield* Effect.tryPromise(() => runtime.getDurableObjectNamespace("PRICING"));
+
     const reply = yield* Effect.tryPromise(() =>
       namespace.getByName("pricing").fetch(ownerCheckUrl, { method: "POST" })
     );
+
     return { status: reply.status, repaired: reply.headers.get("fidy-alarm-repaired") };
   });
+
   return { request, restart, check, publication: yield* makePublication };
 });
 
@@ -137,6 +155,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const { request, restart, check } = yield* platform(true);
         expect(yield* check).toEqual({ status: 204, repaired: "0" });
         const deadline = (yield* Clock.currentTimeMillis) + 3000;
+
         const registration = {
           userId: "12700000-0000-4000-8000-000000000001",
           operationId: "22700000-0000-4000-8000-000000000014",
@@ -148,6 +167,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           inputsDigest: "a".repeat(64),
           deadlineMs: deadline,
         };
+
         const priceId = "22700000-0000-4000-8000-000000000001";
         expect((yield* request("register", registration)).body).toMatchObject({
           ...registration,
@@ -167,6 +187,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           alarm: deadline,
           rows: [{ next_check_ms: deadline, outcome: null }],
         });
+
         const probe = yield* request("fixture/last-probe", undefined, registration.userId).pipe(
           Effect.repeat({
             until: (reply) => reply.body !== null,
@@ -174,8 +195,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           }),
           Effect.timeout("10 seconds")
         );
+
         expect(probe.body).toEqual(registration);
         yield* restart;
+
         const retained = yield* Schema.decodeUnknownEffect(
           Schema.Struct({
             alarm: Schema.Int,
@@ -189,6 +212,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             ),
           })
         )((yield* request("fixture/inspect-recovery")).body);
+
         expect(retained.rows).toHaveLength(1);
         expect(retained.rows[0]).toMatchObject({
           outcome: null,
@@ -216,6 +240,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const { request, publication } = yield* platform();
+
         const enrollment = {
           userId: "12700000-0000-4000-8000-000000000001",
           operationId: "22700000-0000-4000-8000-000000000018",
@@ -228,11 +253,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           billingPeriod: "weekly",
           deadlineMs: (yield* Clock.currentTimeMillis) + 60000,
         };
+
         const accepted = yield* request("register", enrollment);
         expect(accepted.status).toBe(200);
         const before = yield* request("offers");
         const filled = yield* request("fixture/restrict-growth", {});
         expect(filled.status).toBe(200);
+
         const measurement = yield* Schema.decodeUnknownEffect(
           Schema.Struct({
             healthyBytes: Schema.Int,
@@ -240,6 +267,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             ceilingBytes: Schema.Int,
           })
         )(filled.body);
+
         expect(measurement.ceilingBytes).toBe(pricingTestCeiling);
         expect(measurement.healthyBytes).toBeLessThan(pricingTestCeiling * 0.7);
         expect(measurement.pressureBytes).toBeGreaterThanOrEqual(pricingTestCeiling * 0.8);
@@ -287,6 +315,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const { request, restart, check, publication } = yield* platform();
+
         const next = {
           ...publication,
           publicationId: "22700000-0000-4000-8000-000000000098",
@@ -296,7 +325,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             money: { amount: "12900", currency: "COP" },
           },
         };
+
         yield* request("publish", publication);
+
         const first = {
           userId: "12700000-0000-4000-8000-000000000001",
           operationId: "22700000-0000-4000-8000-000000000014",
@@ -308,6 +339,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           inputsDigest: "a".repeat(64),
           deadlineMs: (yield* Clock.currentTimeMillis) + 60_000,
         };
+
         const registered = yield* request("register", first);
         expect(registered).toEqual({ status: 200, body: { ...first, price } });
         expect(yield* check).toEqual({ status: 503, repaired: null });
@@ -329,15 +361,18 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             .status
         ).toBe(409);
         expect((yield* request("register", { ...first, deadlineMs: 0 })).status).toBe(410);
+
         const other = {
           ...first,
           userId: "12700000-0000-4000-8000-000000000002",
           operationId: "22700000-0000-4000-8000-000000000015",
         };
+
         expect(yield* request("register", other)).toEqual({
           status: 200,
           body: { ...other, price: next.price },
         });
+
         const form = {
           ...other,
           operationId: "22700000-0000-4000-8000-000000000016",
@@ -347,6 +382,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             acceptedPriceId: price.id,
           },
         };
+
         expect((yield* request("register", form)).status).toBe(409);
         expect(
           (yield* request("register", {

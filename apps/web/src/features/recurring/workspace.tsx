@@ -43,10 +43,15 @@ import {
 } from "./model";
 
 const OccurrenceDetails = lazyRouteComponent(() => import("./details"), "OccurrenceDetails");
+
 const PlanLifecycle = lazyRouteComponent(() => import("./lifecycle"), "PlanLifecycle");
+
 const TransactionLink = lazyRouteComponent(() => import("./transaction-link"), "TransactionLink");
+
 const CreatePlan = lazyRouteComponent(() => import("./create-plan"), "CreatePlan");
+
 const CreationResult = lazyRouteComponent(() => import("./creation-result"), "CreationResult");
+
 const PlanForm = lazyRouteComponent(() => import("./plan-form"), "PlanForm");
 
 type Panel =
@@ -58,6 +63,7 @@ type Panel =
   | Readonly<{ kind: "occurrence" | "link"; planId: Occurrence["planId"]; date: string }>
   | (CreationReceipt & Readonly<{ kind: "created" }>)
   | Readonly<{ kind: "plan"; planId: Occurrence["planId"] }>;
+
 type Props = Readonly<{
   calendar: boolean;
   setCalendar: (value: boolean) => void;
@@ -78,6 +84,7 @@ type Props = Readonly<{
   revealEarlier: RefCallback<HTMLDetailsElement>;
   timeZone: PlanInput["timeZone"];
 }>;
+
 const selectedOccurrence = (
   view: Workspace,
   panel: Extract<Panel, { kind: "occurrence" | "link" }>
@@ -86,7 +93,9 @@ const selectedOccurrence = (
     [...view.occurrences, ...view.previous],
     (item) => item.planId === panel.planId && item.date === panel.date
   );
+
 type EditorProps = Pick<Props, "view" | "categories" | "disabled" | "save" | "statusFor">;
+
 type SheetProps = EditorProps &
   Pick<Props, "notice"> &
   Readonly<{
@@ -94,6 +103,7 @@ type SheetProps = EditorProps &
     setPanel: Dispatch<SetStateAction<Option.Option<Panel>>>;
     link: () => void;
   }>;
+
 const Editor = ({
   panel,
   view,
@@ -116,6 +126,7 @@ const Editor = ({
       <OccurrenceEditor panel={panel} {...{ view, categories, disabled, save, statusFor, link }} />
     );
   }
+
   if (panel.kind === "create") {
     return (
       <CreatePlan
@@ -127,6 +138,7 @@ const Editor = ({
       />
     );
   }
+
   if (panel.kind === "created") {
     return (
       <CreationResult
@@ -140,8 +152,10 @@ const Editor = ({
       />
     );
   }
+
   return <PlanEditor planId={panel.planId} {...{ view, categories, disabled, save, statusFor }} />;
 };
+
 const OccurrenceEditor = ({
   panel,
   view,
@@ -158,10 +172,12 @@ const OccurrenceEditor = ({
   const invalidIds = new Set(view.invalidFulfillmentIds);
   const item = selectedOccurrence(view, panel);
   const plan = view.document.plans.find((entry) => entry.id === panel.planId);
+
   const lifecycle =
     plan === undefined ? null : (
       <PlanLifecycle plan={plan} status={statusFor(plan)} save={save} disabled={disabled} />
     );
+
   if (Option.isNone(item) || plan === undefined) {
     return (
       <div className="grid gap-5">
@@ -170,6 +186,7 @@ const OccurrenceEditor = ({
       </div>
     );
   }
+
   return (
     <div className="grid gap-5">
       {lifecycle}
@@ -193,6 +210,7 @@ const OccurrenceEditor = ({
     </div>
   );
 };
+
 const PlanEditor = ({
   planId,
   view,
@@ -203,6 +221,7 @@ const PlanEditor = ({
 }: EditorProps & Readonly<{ planId: Plan["id"] }>): JSX.Element => {
   const plan = view.document.plans.find((entry) => entry.id === planId);
   const settings = plan === undefined ? undefined : currentPlan(plan);
+
   return plan === undefined || settings === undefined ? (
     <p>Plan no disponible.</p>
   ) : (
@@ -220,6 +239,7 @@ const PlanEditor = ({
     </div>
   );
 };
+
 const Matching = ({ view }: Pick<Props, "view">): JSX.Element => (
   <>
     {view.matchesComplete ? null : (
@@ -241,6 +261,7 @@ const Matching = ({ view }: Pick<Props, "view">): JSX.Element => (
     ))}
   </>
 );
+
 const Monthly = ({
   filters,
   applyFilters,
@@ -287,6 +308,7 @@ const Monthly = ({
     />
   </>
 );
+
 const PreviousItems = ({
   view,
   earlier,
@@ -339,6 +361,7 @@ const PreviousItems = ({
     </div>
   </details>
 );
+
 const useWorkspacePanel = (
   view: Workspace,
   filters: Filters,
@@ -350,28 +373,39 @@ const useWorkspacePanel = (
     filters,
     previous,
   });
+
   const [localPanel, setLocalPanel] = useState<Option.Option<Panel>>(() => Option.none());
   const panel = Option.orElse(localPanel, () => navigation.selection);
+
   const setPanel: Dispatch<SetStateAction<Option.Option<Panel>>> = (update) => {
     if (typeof update === "function") {
       setLocalPanel(update);
+
       if (Option.isSome(navigation.selection) && Option.isNone(update(navigation.selection))) {
         navigation.close();
       }
+
       return;
     }
+
     const next = update;
+
     if (Option.isSome(next) && next.value.kind === "occurrence") {
       setLocalPanel(Option.none());
       navigation.open(next.value);
+
       return;
     }
+
     setLocalPanel(next);
+
     if (Option.isSome(navigation.selection)) navigation.close();
   };
+
   const link = (): void => {
     if (Option.isNone(panel) || panel.value.kind !== "occurrence") return;
     const item = selectedOccurrence(view, panel.value);
+
     if (Option.isNone(item)) return;
     setLocalPanel(Option.none());
     navigation.link(item.value, {
@@ -380,12 +414,15 @@ const useWorkspacePanel = (
       direction: item.value.plan.kind === "income" ? "inflow" : "outflow",
     });
   };
+
   return { panel, setPanel, link, navigation };
 };
+
 export const RecurringWorkspace = (props: Props): JSX.Element => {
   const { view, disabled, filters, timeZone, calendar, setCalendar, tab, setTab } = props;
   const [filtersOpen, setFiltersOpen] = useState(Object.keys(filters).length > 0);
   const { panel, setPanel, navigation, link } = useWorkspacePanel(view, filters, props.previous);
+
   const save: Save = (edit, onSaved) =>
     props.save(edit, () => {
       if (onSaved !== undefined) onSaved();
@@ -393,9 +430,12 @@ export const RecurringWorkspace = (props: Props): JSX.Element => {
         setPanel((current) => (current === panel ? Option.none() : current));
       }
     });
+
   const editing = { ...props, save };
+
   const open = (item: Occurrence): void =>
     setPanel(Option.some({ kind: "occurrence", planId: item.planId, date: item.date }));
+
   const create = (): void =>
     setPanel(
       Option.some({
@@ -404,10 +444,13 @@ export const RecurringWorkspace = (props: Props): JSX.Element => {
         seriesId: Option.none(),
       })
     );
+
   if (Option.isSome(panel) && panel.value.kind === "link") {
     const selection = panel.value;
+
     return <LinkWorkspace {...editing} selection={selection} navigation={navigation} />;
   }
+
   return (
     <RecurringSurface>
       <RecurringToolbar
@@ -450,6 +493,7 @@ const LinkWorkspace = ({
   }>): JSX.Element => {
   const close = navigation.returnToOccurrence;
   const item = selectedOccurrence(props.view, selection);
+
   return Option.isSome(item) ? (
     <Suspense fallback={<PendingRead label="Cargando vinculación" />}>
       <TransactionLink
@@ -483,6 +527,7 @@ type WorkspaceBodyProps = Readonly<{
   setPanel: Dispatch<SetStateAction<Option.Option<Panel>>>;
   open: (item: Occurrence) => void;
 }>;
+
 const WorkspaceBody = ({
   props,
   create,
@@ -494,6 +539,7 @@ const WorkspaceBody = ({
   open,
 }: WorkspaceBodyProps): JSX.Element => {
   const { view, disabled, save, filters, timeZone } = props;
+
   return (
     <main data-recurring-slot="content">
       <WorkspaceSuggestions
@@ -553,15 +599,19 @@ const editorTitle = (panel: Option.Option<Panel>, view: Workspace): string =>
           )
         );
       }
+
       if (selected.kind === "create") {
         return "Nuevo recurrente";
       }
+
       if (selected.kind === "created") {
         return "Recurrente guardado";
       }
+
       return "Editar recurrente";
     },
   });
+
 const EditorSheet = ({
   notice,
   panel,
@@ -574,6 +624,7 @@ const EditorSheet = ({
   link,
 }: SheetProps): JSX.Element => {
   const { theme, toggle } = useTheme();
+
   const active = useRouterState({
     select: (state) => state.location.pathname === "/app/recurring",
   });
@@ -644,6 +695,7 @@ const MonthItems = ({
       </>
     );
   }
+
   return calendar ? (
     <MonthCalendar key={view.month} view={view} open={open} />
   ) : (
@@ -667,6 +719,7 @@ const WorkspaceSuggestions = ({
 }: Pick<Props, "view" | "save" | "disabled" | "timeZone"> &
   Readonly<{ setPanel: (panel: Option.Option<Panel>) => void }>): JSX.Element => {
   const [cursor, setCursor] = useState<Option.Option<string>>(() => Option.none());
+
   return (
     <>
       <Suggestions

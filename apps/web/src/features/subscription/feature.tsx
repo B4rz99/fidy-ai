@@ -55,31 +55,38 @@ export type SubscriptionOffersPageState =
     }>;
 
 const PaymentDetails = lazyRouteComponent(() => import("./payment-details"), "PaymentDetails");
+
 type SubscriptionStandingPresentation = Readonly<{
   state: StandingViewState;
   refresh: () => void;
   management: JSX.Element;
 }>;
+
 const hasNonTrialPro = (state: StandingViewState): boolean =>
   state._tag === "Ready" &&
   state.standing.accessTier === "pro" &&
   (state.standing.hasProGrant || Option.isSome(state.standing.paidSubscription));
+
 const showBillingManagement = (state: StandingViewState): boolean =>
   state._tag !== "Ready" ||
   !state.standing.hasProGrant ||
   Option.isSome(state.standing.paidSubscription);
+
 type ReadyOffersProps = Readonly<{
   standing: SubscriptionStandingPresentation;
   offers: SubscriptionOffers;
   gateway: Option.Option<EnrollmentGateway>;
 }>;
+
 type SubscriptionSelection = EnrollmentInteraction &
   Readonly<{
     presented: ReadonlyArray<SubscriptionOfferPresentation>;
     selectedOffer: Option.Option<SubscriptionOfferPresentation>;
   }>;
+
 const useSubscriptionSelection = ({ offers, gateway }: ReadyOffersProps): SubscriptionSelection => {
   const authorizationLock = DaviplataAuthorizationLock.use();
+
   const [atom] = useState(() =>
     makeEnrollmentInteraction({
       offers,
@@ -87,8 +94,10 @@ const useSubscriptionSelection = ({ offers, gateway }: ReadyOffersProps): Subscr
       authorizationLock,
     })
   );
+
   const interaction = useAtomValue(atom);
   const presented = offers.map(presentSubscriptionOffer);
+
   const selectedOffer = Option.orElse(
     Option.map(interaction.checkoutPrice, presentSubscriptionOffer),
     () =>
@@ -96,13 +105,16 @@ const useSubscriptionSelection = ({ offers, gateway }: ReadyOffersProps): Subscr
         EffectArray.findFirst(presented, (offer) => offer.id === id)
       )
   );
+
   const currentSelection = offers.some((offer) =>
     Option.contains(interaction.selectedId, offer.id)
   );
+
   const act = (action: () => void): void => {
     interaction.updateOffers(offers);
     action();
   };
+
   return {
     ...interaction,
     canContinue:
@@ -117,19 +129,24 @@ const useSubscriptionSelection = ({ offers, gateway }: ReadyOffersProps): Subscr
     selectedOffer,
     changeSelection: () => {
       const changed = interaction.changeSelection();
+
       if (changed) {
         requestAnimationFrame(() => document.getElementById("subscription-period-title")?.focus());
       }
+
       return changed;
     },
   };
 };
+
 const methodAvailabilityMessage = (
   selection: Pick<SubscriptionSelection, "methodsWaiting" | "methodsFailed">
 ): string => {
   if (selection.methodsFailed) return "No pudimos consultar los métodos de pago. Intenta de nuevo.";
+
   return "No hay métodos de pago disponibles en este momento.";
 };
+
 const OfferOverview = ({
   selection,
   terms,
@@ -177,6 +194,7 @@ const OfferOverview = ({
     </div>
   </>
 );
+
 const Checkout = ({
   selection,
   gateway,
@@ -221,15 +239,19 @@ const Checkout = ({
     })}
   </>
 );
+
 const useEnrollmentLifetime = (interaction: EnrollmentInteraction): RefCallback<HTMLDivElement> => {
   const [lifetimeRef] = useState<RefCallback<HTMLDivElement>>(
     () => (): ReturnType<RefCallback<HTMLDivElement>> => interaction.mount()
   );
+
   return lifetimeRef;
 };
+
 const showCheckout = (selection: EnrollmentInteraction, standing: StandingViewState): boolean =>
   selection.checkout &&
   (selection.disabled || standing._tag !== "Ready" || !standing.standing.hasProGrant);
+
 const ReadyOffersContent = (props: ReadyOffersProps): JSX.Element => {
   const selection = useSubscriptionSelection(props);
   const lifetimeRef = useEnrollmentLifetime(selection);
@@ -237,6 +259,7 @@ const ReadyOffersContent = (props: ReadyOffersProps): JSX.Element => {
   const paid = hasNonTrialPro(standing.state);
   const resolved = standing.state._tag === "Ready";
   const checkout = showCheckout(selection, standing.state);
+
   return (
     <div
       ref={lifetimeRef}
@@ -272,11 +295,13 @@ const ReadyOffersContent = (props: ReadyOffersProps): JSX.Element => {
     </div>
   );
 };
+
 const ReadyOffers = ({ offers, gateway, standing }: ReadyOffersProps): JSX.Element => (
   <DaviplataAuthorizationLock.Provider>
     <ReadyOffersContent gateway={gateway} offers={offers} standing={standing} />
   </DaviplataAuthorizationLock.Provider>
 );
+
 const AuthenticationRequired = (): JSX.Element => (
   <Alert>
     <AlertTitle>Inicia sesión para activar Pro</AlertTitle>
@@ -288,6 +313,7 @@ const AuthenticationRequired = (): JSX.Element => (
     </AlertDescription>
   </Alert>
 );
+
 const LoadFailure = ({
   boundaryFailure,
   onRetry,
@@ -306,6 +332,7 @@ const LoadFailure = ({
     waiting={waiting}
   />
 );
+
 const OffersRefreshFeedback = ({
   state,
 }: Readonly<{ state: SubscriptionOffersPageState }>): JSX.Element => (
@@ -327,6 +354,7 @@ const OffersRefreshFeedback = ({
     ) : null}
   </>
 );
+
 const SubscriptionOffersContent = ({
   state,
   gateway,
@@ -361,6 +389,7 @@ const SubscriptionOffersContent = ({
       );
   }
 };
+
 const StandingWithoutOffers = ({
   standing,
   children,
@@ -384,6 +413,7 @@ const StandingWithoutOffers = ({
     )}
   </div>
 );
+
 export const SubscriptionOffersView = ({
   state,
   gateway,
@@ -394,11 +424,13 @@ export const SubscriptionOffersView = ({
   standing: SubscriptionStandingPresentation;
 }>): JSX.Element => {
   const content = <SubscriptionOffersContent gateway={gateway} state={state} standing={standing} />;
+
   const hasOfferContent =
     state._tag === "Ready" ||
     state._tag === "Refreshing" ||
     state._tag === "RefreshFailure" ||
     state._tag === "AuthenticationRequired";
+
   return (
     <SubscriptionWorkspace>
       {hasOfferContent ? (
@@ -409,9 +441,11 @@ export const SubscriptionOffersView = ({
     </SubscriptionWorkspace>
   );
 };
+
 const subscriptionOffersQuery = Atom.family((client: FidyClient) =>
   client.query("subscription", "listSubscriptionOffers", {})
 );
+
 const useSubscriptionStanding = (): SubscriptionStandingPresentation => {
   const router = useRouter();
   const client = router.options.context.apiClient;
@@ -420,6 +454,7 @@ const useSubscriptionStanding = (): SubscriptionStandingPresentation => {
   const status = useAtomValue(query);
   const refresh = useAtomRefresh(query);
   const view = presentCanonicalQuery(status);
+
   return {
     state:
       view._tag === "Ready"
@@ -434,6 +469,7 @@ const useSubscriptionStanding = (): SubscriptionStandingPresentation => {
     management: <SubscriptionCancellationManagement command={cancellation} />,
   };
 };
+
 const readyOffersState = ({
   offers,
   refreshFailure,
@@ -453,17 +489,20 @@ const readyOffersState = ({
       waiting: refreshing,
     };
   }
+
   if (refreshing) {
     return {
       _tag: "Refreshing",
       offers,
     };
   }
+
   return {
     _tag: "Ready",
     offers,
   };
 };
+
 const AuthorizedSubscriptionOffers = (): JSX.Element => {
   const router = useRouter();
   const { authentication } = useSession();
@@ -473,6 +512,7 @@ const AuthorizedSubscriptionOffers = (): JSX.Element => {
   const offers = subscriptionOffersQuery(router.options.context.apiClient);
   const result = useAtomValue(offers);
   const refresh = useAtomRefresh(offers);
+
   if (authentication === "expired") {
     return (
       <SubscriptionOffersView
@@ -484,7 +524,9 @@ const AuthorizedSubscriptionOffers = (): JSX.Element => {
       />
     );
   }
+
   const queryState = presentCanonicalQuery(result);
+
   switch (queryState._tag) {
     case "Initial":
       return (
@@ -524,6 +566,7 @@ const AuthorizedSubscriptionOffers = (): JSX.Element => {
       );
   }
 };
+
 export const SubscriptionOffersFeature = (): JSX.Element => (
   <SubscriptionConsentBoundary>
     <AuthorizedSubscriptionOffers />

@@ -36,6 +36,7 @@ export const TransactionInspection = FinancialInspection.mapFields(
   }),
   { unsafePreserveChecks: true }
 ).annotate({ identifier: "TransactionInspection" });
+
 export type TransactionInspection = typeof TransactionInspection.Type;
 
 const read = operationPolicy({
@@ -44,12 +45,14 @@ const read = operationPolicy({
   agentConfirmation: "not-required",
   kind: "query",
 });
+
 const additiveWrite = operationPolicy({
   access: userOwnedAgentScoped("write"),
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "mutation",
 });
+
 const destructiveWrite = operationPolicy({
   access: userOwnedAgentScoped("write"),
   requiredTier: "free",
@@ -58,9 +61,11 @@ const destructiveWrite = operationPolicy({
 });
 
 const TransactionQueryParameters = TransactionQueryValues.mapFields(Struct.map(Schema.optionalKey));
+
 const UpdateTransactionParams = Schema.Struct({ id: TransactionId });
 
 export const maximumCorrectionRecords = 4096;
+
 export const UpdateTransactionsInput = Schema.Struct({
   transactions: Schema.NonEmptyArray(
     Schema.Struct({
@@ -75,6 +80,7 @@ export const UpdateTransactionsInput = Schema.Struct({
   ),
   changes: UpdateTransactionInput.fields.changes,
 }).annotate({ identifier: "UpdateTransactionsInput" });
+
 export const UpdateTransactionsResult = Schema.Struct({
   updated: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: maximumCorrectionRecords })),
 });

@@ -12,10 +12,13 @@ import { native } from "../user-store.test-fixture";
 const nativeStanding = Effect.gen(function* () {
   const owner = yield* nativeTransactionJourney;
   const now = yield* Clock.currentTimeMillis;
+
   const exec = (
     ...args: Parameters<typeof owner.exec>
   ): Effect.Effect<Awaited<ReturnType<typeof owner.exec>>> => native(() => owner.exec(...args));
+
   const users = yield* native(() => owner.runtime.getDurableObjectNamespace("USER_STORE", "core"));
+
   const record = (
     action: "grant" | "revoke",
     userId = alice.user
@@ -37,22 +40,30 @@ const nativeStanding = Effect.gen(function* () {
         })
         .then((response) => (response.ok ? response.json().then((value) => [value]) : []))
     );
+
   const standing = (index = 0): Effect.Effect<unknown> =>
     native(() => owner.browser(index, "/subscription/status").then((response) => response.json()));
+
   const paid = (): ReturnType<typeof exec> => {
     const selection = activeProUserCondition({ userId: alice.user, nowEpochMs: now });
+
     return exec("SELECT " + selection.sql + " AS pro", ...selection.params);
   };
+
   const account = (): ReturnType<typeof exec> =>
     exec(
       "SELECT (SELECT count(*) FROM subscriptions) AS subscriptions,(SELECT count(*) FROM billing_attempts) AS attempts"
     );
+
   const off = (): ReturnType<typeof exec> =>
     exec("UPDATE users SET trial_started_at_ms=?,trial_ends_at_ms=?", now - 604800001, now - 1);
+
   yield* off();
+
   const peer = yield* native(() =>
     owner.runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: bob.user })
   );
+
   yield* native(() =>
     peer.exec("UPDATE users SET trial_started_at_ms=?,trial_ends_at_ms=?", now - 604800001, now - 1)
   );
@@ -94,12 +105,14 @@ const nativeStanding = Effect.gen(function* () {
   yield* record("revoke");
   expect(yield* paid()).toEqual([{ pro: 1 }]);
   expect(yield* account()).toEqual(billing);
+
   const changed = yield* native(() =>
     owner.exec("UPDATE pro_grant_events SET operator='different-actor' WHERE sequence=1").then(
       () => true,
       () => false
     )
   );
+
   expect(changed).toBe(false);
   expect(yield* exec("SELECT action,operator FROM pro_grant_events ORDER BY sequence")).toEqual(
     ["grant", "revoke", "grant", "revoke", "grant", "revoke"].map((action) => ({
@@ -114,6 +127,7 @@ const nativeStanding = Effect.gen(function* () {
   expect(yield* exec("SELECT count(*) AS total FROM pro_grant_events")).toEqual([{ total: 6 }]);
   expect((yield* native(() => owner.browser(0, "/subscription/status"))).status).toBe(401);
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "uses ordered ManualProGrant events only for the selected live User and preserves independent Trial, paid terms and billing on revocation",

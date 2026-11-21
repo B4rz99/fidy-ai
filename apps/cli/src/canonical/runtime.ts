@@ -14,6 +14,7 @@ type CanonicalEndpoint = HttpApiEndpoint.ConstraintRequest & {
   readonly "~Error": Schema.ConstraintCodec<object, unknown>;
   readonly "~Middleware": HttpApiEndpoint.Middleware<HttpApiGroup.Endpoints<FidyApiGroups>>;
 };
+
 type CanonicalGroup = HttpApiGroup.Constraint & {
   readonly topLevel: false;
   readonly endpoints: Readonly<Record<string, CanonicalEndpoint>>;
@@ -23,6 +24,7 @@ export const makeCanonicalClient: CanonicalClientFactory = Effect.fn(function* (
   const authorization = yield* Layer.build(
     makeTokenAuthorizationClientLive(Redacted.value(options.credential.bearer))
   );
+
   const httpClient = makeProtectedClient({
     client: options.httpClient,
     allowQuery: true,
@@ -32,19 +34,25 @@ export const makeCanonicalClient: CanonicalClientFactory = Effect.fn(function* (
     captureAllowance: options.captureAllowance,
     captureTrace: options.captureTrace,
   });
+
   const client: Record<string, CanonicalClient[string]> = {};
+
   for (const group of Object.values(FidyApi.groups)) {
     const declaration: CanonicalGroup = group;
+
     const api = HttpApi.make(FidyApi.identifier)
       .add(declaration)
       .annotateMerge(FidyApi.annotations);
+
     const methods = yield* HttpApiClient.group(api, {
       group: group.identifier,
       httpClient,
       baseUrl: apiOrigin,
     }).pipe(Effect.provideContext(authorization));
+
     client[group.identifier] = methods;
   }
+
   return client;
 });
 
@@ -69,6 +77,7 @@ export const makeInputReader = (
       try: () => open(path),
       catch: () => new CliFailure({ reason: "InvalidInput" }),
     });
+
     const chunks: Array<Uint8Array> = [];
     let size = 0;
     yield* Effect.gen(function* () {
@@ -79,16 +88,21 @@ export const makeInputReader = (
         }),
         releaseInputReader
       );
+
       while (size <= maximumInputBytes) {
         const next = yield* Effect.tryPromise({
           try: () => reader.read(),
           catch: () => new CliFailure({ reason: "InvalidInput" }),
         });
+
         if (next.done) break;
+
         const bytes = yield* Schema.decodeUnknownEffect(Schema.Uint8Array)(next.value).pipe(
           Effect.mapError(() => new CliFailure({ reason: "InvalidInput" }))
         );
+
         size += bytes.byteLength;
+
         if (size <= maximumInputBytes && bytes.byteLength > 0) chunks.push(bytes);
       }
     }).pipe(
@@ -98,13 +112,16 @@ export const makeInputReader = (
         orElse: () => Effect.fail(new CliFailure({ reason: "InvalidInput" })),
       })
     );
+
     if (size > maximumInputBytes) return yield* new CliFailure({ reason: "InputTooLarge" });
     const bytes = new Uint8Array(size);
     let offset = 0;
+
     for (const chunk of chunks) {
       bytes.set(chunk, offset);
       offset += chunk.byteLength;
     }
+
     return yield* Effect.try({
       try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
       catch: () => new CliFailure({ reason: "InvalidInput" }),

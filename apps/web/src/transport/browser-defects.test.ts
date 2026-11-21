@@ -19,6 +19,7 @@ describe("browser defect diagnostics", () => {
 
   it("bounds page defect storms and tolerates a missing console sink", () => {
     const report = makeBrowserDefectReporter();
+
     for (let index = 0; index < 100; index++) report("render_uncaught");
     expect(diagnosticConsole.info).toHaveBeenCalledTimes(20);
     expect(diagnosticConsole.info).toHaveBeenLastCalledWith("fidy.browser.defect", {
@@ -37,21 +38,26 @@ describe("browser defect diagnostics", () => {
     () =>
       Effect.gen(function* () {
         vi.resetModules();
+
         const { installBrowserDefectListeners: install, reportBrowserDefect: report } =
           yield* Effect.tryPromise({
             try: () => import("./browser-defects"),
             catch: () => "test_module_unavailable" as const,
           });
+
         vi.mocked(diagnosticConsole.info).mockImplementation(() => {
           throw new Error("private-sink-failure");
         });
         let dispose = install(window);
+
         for (let index = 0; index < 10; index++) window.dispatchEvent(new Event("error"));
         dispose();
         dispose = install(window);
+
         for (let index = 0; index < 10; index++) {
           window.dispatchEvent(new Event("unhandledrejection"));
         }
+
         dispose();
         expect(diagnosticConsole.info).toHaveBeenCalledTimes(20);
         vi.mocked(diagnosticConsole.info).mockImplementation(() => {});
@@ -90,19 +96,24 @@ describe("browser defect diagnostics", () => {
   it.effect("reports schema rejection without schema input and preserves the exact failure", () =>
     Effect.gen(function* () {
       const sentinel = "private-schema-response";
+
       const response = Schema.decodeUnknownEffect(
         Schema.Struct({ status: Schema.Literal("ready") })
       )({ status: sentinel });
+
       const expected = yield* Effect.exit(response);
       expect(Exit.isFailure(expected)).toBe(true);
+
       if (!Exit.isFailure(expected)) return;
       const observed = yield* Effect.exit(observeBrowserDecode(Effect.failCause(expected.cause)));
       expect(Exit.isFailure(observed)).toBe(true);
+
       if (!Exit.isFailure(observed)) return;
       const originalError = Cause.findErrorOption(expected.cause);
       const observedError = Cause.findErrorOption(observed.cause);
       expect(originalError._tag).toBe("Some");
       expect(observedError._tag).toBe("Some");
+
       if (originalError._tag !== "Some" || observedError._tag !== "Some") return;
       expect(observedError.value).toBe(originalError.value);
       expect(diagnosticConsole.info).toHaveBeenCalledExactlyOnceWith("fidy.browser.defect", {

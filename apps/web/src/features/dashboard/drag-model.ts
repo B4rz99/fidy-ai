@@ -46,8 +46,10 @@ export const resolveDashboardDrop = ({
   ) {
     return Option.none();
   }
+
   const decodedSource = source.value;
   const decodedTarget = target.value;
+
   return Option.some(
     decodedSource.kind === "widget"
       ? existingWidgetGesture(decodedSource, decodedTarget)

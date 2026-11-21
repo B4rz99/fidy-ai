@@ -16,6 +16,7 @@ import { type Edit, type Plan, currentPlan, planStatus, planToday } from "./mode
 import { recurringWorkspaceQuery, useRecurringPlanning } from "./controller";
 
 const planId = RecurringPlanId.make("23200000-0000-4000-8000-000000000001");
+
 const document = {
   revision: 0,
   plans: [
@@ -43,6 +44,7 @@ const document = {
   excludedTransactionIds: [],
   suggestions: [],
 };
+
 const workspace = {
   document,
   month: "2026-10",
@@ -55,6 +57,7 @@ const workspace = {
   matches: [],
   matchesComplete: true,
 };
+
 const PlanningProbe = ({
   client,
   onSaved,
@@ -79,6 +82,7 @@ const PlanningProbe = ({
     profileWaiting: false,
     refreshProfile: () => undefined,
   });
+
   return createElement(
     "main",
     { ref: planning.mounted },
@@ -100,8 +104,11 @@ const PlanningProbe = ({
             edit,
             () => ({ kind: "lifecycle", planId, date: "2026-10-29", action: "pause" }) as const
           );
+
           planning.save(submitted, onSaved);
+
           if (duplicate) planning.save(submitted, onSaved);
+
           if (Option.isNone(edit)) Object.assign(submitted, { action: "stop" });
         },
       },
@@ -117,10 +124,12 @@ const PlanningProbe = ({
 };
 
 type Outcome = "confirmed" | "rejected" | "uncertain";
+
 const saveResponse = (outcome: Outcome): Response => {
   if (outcome === "confirmed") {
     return Response.json({ data: { ...document, revision: 1 }, next: [] });
   }
+
   if (outcome === "rejected") {
     return Response.json(
       {
@@ -131,6 +140,7 @@ const saveResponse = (outcome: Outcome): Response => {
       { status: 400 }
     );
   }
+
   return Response.json({});
 };
 
@@ -144,13 +154,16 @@ it.each(["confirmed", "rejected", "uncertain"] as const)(
         const reread = { current: Deferred.makeUnsafe<Response>() };
         const onSaved = vi.fn();
         const http = planningHttp(reply, reread);
+
         const client = makeFidyClient({
           apiOrigin: "https://api.test.fidyapp.com",
           httpClient: Layer.succeed(HttpClient.HttpClient, http),
         });
+
         const registry = AtomRegistry.make();
         const container = window.document.createElement("div");
         const root = createRoot(container);
+
         try {
           yield* Effect.tryPromise(() =>
             reactWork(() =>
@@ -172,6 +185,7 @@ it.each(["confirmed", "rejected", "uncertain"] as const)(
             )
           );
           const pause = container.querySelector("button");
+
           if (pause === null) throw new Error("Missing pause action");
           yield* Effect.tryPromise(() => reactAssertion(() => expect(pause.disabled).toBe(false)));
           yield* Effect.tryPromise(() => reactWork(() => pause.click()));
@@ -183,6 +197,7 @@ it.each(["confirmed", "rejected", "uncertain"] as const)(
             reactAssertion(() => expect(container.textContent).toContain(expected))
           );
           expect(onSaved).not.toHaveBeenCalled();
+
           if (outcome === "confirmed") {
             yield* Effect.tryPromise(() => failReread(reread.current));
             yield* Effect.tryPromise(() => reactAssertion(() => expect(pause.disabled).toBe(true)));
@@ -196,9 +211,11 @@ it.each(["confirmed", "rejected", "uncertain"] as const)(
               reactAssertion(() => expect(onSaved).toHaveBeenCalledOnce())
             );
           }
+
           if (outcome !== "confirmed") {
             expect(container.textContent).not.toContain("Internet QA:pause");
           }
+
           if (outcome === "uncertain") expect(pause.disabled).toBe(true);
         } finally {
           yield* Effect.tryPromise(() => reactWork(() => root.unmount()));
@@ -215,38 +232,49 @@ const planningHttp = (
   initial: unknown = workspace
 ): HttpClient.HttpClient => {
   let submitted = false;
+
   return HttpClient.make((request) => {
     if (request.method === "POST") submitted = true;
+
     const response = ((): Effect.Effect<Response> => {
       if (request.method === "POST") return Deferred.await(reply);
+
       if (request.url.endsWith("/categories")) {
         return Effect.succeed(Response.json({ data: [], next: [] }));
       }
+
       return submitted
         ? Deferred.await(reread.current)
         : Effect.succeed(Response.json({ data: initial, next: [] }));
     })();
+
     return Effect.map(response, (value) => HttpClientResponse.fromWeb(request, value));
   });
 };
+
 const recordedPlanningHttp = (
   reply: Deferred.Deferred<Response>,
   reread: { current: Deferred.Deferred<Response> }
 ): Readonly<{ http: HttpClient.HttpClient; requests: ReadonlyArray<string> }> => {
   const requests: string[] = [];
   const base = planningHttp(reply, reread);
+
   const http = HttpClient.make((request) => {
     if (request.method === "POST" && request.body._tag === "Uint8Array") {
       requests.push(new TextDecoder().decode(request.body.body));
     }
+
     return base.execute(request);
   });
+
   return { http, requests };
 };
+
 const failReread = (reply: Deferred.Deferred<Response>): Promise<void> =>
   Promise.resolve(
     act(() => Effect.runPromise(Deferred.succeed(reply, Response.json({}))).then(() => undefined))
   );
+
 const settleReread = (reply: Deferred.Deferred<Response>): Promise<void> =>
   Promise.resolve(
     act(() =>
@@ -264,8 +292,10 @@ const settleReread = (reply: Deferred.Deferred<Response>): Promise<void> =>
 
 const reactWork = (work: () => void): Promise<void> =>
   Promise.resolve(act(() => Promise.resolve(work())));
+
 const reactAssertion = (assertion: () => void): Promise<void> =>
   Promise.resolve(act(() => vi.waitFor(assertion)));
+
 const settleSave = (
   reply: Deferred.Deferred<Response>,
   outcome: Outcome,
@@ -279,8 +309,10 @@ it("retains equivalent mounted Recurring queries through collection and rerender
   Effect.runPromise(
     Effect.gen(function* () {
       let reads = 0;
+
       const http = HttpClient.make((request) => {
         reads += 1;
+
         return Effect.succeed(
           HttpClientResponse.fromWeb(
             request,
@@ -309,29 +341,38 @@ it("retains equivalent mounted Recurring queries through collection and rerender
           )
         );
       });
+
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(HttpClient.HttpClient, http),
       });
+
       const registry = AtomRegistry.make();
+
       const { source, view } = recurringWorkspaceQuery({
         apiClient: client,
         query: { month: "2026-10", view: "compact" },
       });
+
       const mounts = [registry.mount(view)];
+
       try {
         yield* AtomRegistry.getResult(registry, view);
         expect(reads).toBe(1);
+
         for (let turn = 0; turn < 5; turn += 1) {
           yield* Effect.sleep("20 millis");
           Bun.gc(true);
         }
+
         const now = yield* Clock.currentTimeMillis;
         vi.spyOn(Date, "now").mockReturnValue(now + 6000);
+
         const rerendered = recurringWorkspaceQuery({
           apiClient: client,
           query: { month: "2026-10", view: "compact" },
         });
+
         expect(rerendered.source).toBe(source);
         expect(rerendered.view).toBe(view);
         expect(
@@ -345,6 +386,7 @@ it("retains equivalent mounted Recurring queries through collection and rerender
         expect(reads).toBe(1);
       } finally {
         vi.restoreAllMocks();
+
         for (const unmount of mounts) unmount();
         registry.dispose();
       }
@@ -358,16 +400,20 @@ it("snapshots one exact edit before dispatch and contains a throwing visible cal
       const reply = Deferred.makeUnsafe<Response>();
       const reread = { current: Deferred.makeUnsafe<Response>() };
       const { http, requests } = recordedPlanningHttp(reply, reread);
+
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(HttpClient.HttpClient, http),
       });
+
       const registry = AtomRegistry.make();
       const container = window.document.createElement("div");
       const root = createRoot(container);
+
       const onSaved = vi.fn(() => {
         throw new Error("Broken presentation callback");
       });
+
       try {
         yield* Effect.tryPromise(() =>
           reactWork(() =>
@@ -389,6 +435,7 @@ it("snapshots one exact edit before dispatch and contains a throwing visible cal
           )
         );
         const pause = container.querySelector("button");
+
         if (pause === null) throw new Error("Missing pause action");
         yield* Effect.tryPromise(() => reactAssertion(() => expect(pause.disabled).toBe(false)));
         yield* Effect.tryPromise(() => reactWork(() => pause.click()));
@@ -424,19 +471,24 @@ it.each(["confirmed", "uncertain"] as const)(
         let submitted = false;
         let writes = 0;
         let categoryFailure = false;
+
         const http = HttpClient.make((request) => {
           if (request.method === "POST") {
             submitted = true;
             writes += 1;
           }
+
           const response = ((): Effect.Effect<Response> => {
             if (request.method === "POST") return Deferred.await(reply);
+
             if (request.url.endsWith("/categories")) {
               return Effect.succeed(Response.json(categoryFailure ? {} : { data: [], next: [] }));
             }
+
             if (submitted && new Map(request.urlParams).get("month") === "2026-10") {
               return Deferred.await(origin.current);
             }
+
             return Effect.succeed(
               Response.json({
                 data: {
@@ -447,16 +499,20 @@ it.each(["confirmed", "uncertain"] as const)(
               })
             );
           })();
+
           return Effect.map(response, (value) => HttpClientResponse.fromWeb(request, value));
         });
+
         const client = makeFidyClient({
           apiOrigin: "https://api.test.fidyapp.com",
           httpClient: Layer.succeed(HttpClient.HttpClient, http),
         });
+
         const registry = AtomRegistry.make();
         const container = window.document.createElement("div");
         const root = createRoot(container);
         const onSaved = vi.fn();
+
         const render = (month: string, profileStale = false): Promise<void> =>
           reactWork(() =>
             root.render(
@@ -475,11 +531,15 @@ it.each(["confirmed", "uncertain"] as const)(
               )
             )
           );
+
         const pause = (): HTMLButtonElement => {
           const button = container.querySelector("button");
+
           if (button === null) throw new Error("Missing pause action");
+
           return button;
         };
+
         try {
           yield* Effect.tryPromise(() => render("2026-10"));
           yield* Effect.tryPromise(() =>
@@ -497,6 +557,7 @@ it.each(["confirmed", "uncertain"] as const)(
           );
           expect(onSaved).not.toHaveBeenCalled();
           expect(writes).toBe(1);
+
           if (outcome === "confirmed") {
             yield* Effect.tryPromise(() =>
               reactWork(() => container.querySelectorAll("button")[1]?.click())
@@ -534,6 +595,7 @@ it.each(["confirmed", "uncertain"] as const)(
               reactAssertion(() => expect(pause().disabled).toBe(false))
             );
           }
+
           expect(writes).toBe(1);
         } finally {
           yield* Effect.tryPromise(() => reactWork(() => root.unmount()));
@@ -562,6 +624,7 @@ const ActionsProbe = ({
     profileWaiting: false,
     refreshProfile: () => undefined,
   });
+
   return createElement(
     "div",
     { ref: planning.mounted },
@@ -573,6 +636,7 @@ const ActionsProbe = ({
     })
   );
 };
+
 it("rejects obsolete save actions and fences acknowledged completion after disposal", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -581,20 +645,26 @@ it("rejects obsolete save actions and fences acknowledged completion after dispo
       const reread = { current: Deferred.makeUnsafe<Response>() };
       let writes = 0;
       const base = planningHttp(reply, reread);
+
       const http = HttpClient.make((request) => {
         if (request.method === "POST") writes += 1;
+
         return base.execute(request);
       });
+
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(HttpClient.HttpClient, http),
       });
+
       const registry = AtomRegistry.make();
       const root = createRoot(window.document.createElement("div"));
       let planning: Option.Option<ReturnType<typeof useRecurringPlanning>> = Option.none();
+
       const retain = (current: ReturnType<typeof useRecurringPlanning>): void => {
         planning = Option.some(current);
       };
+
       const render = (month: string, stale: boolean): Promise<void> =>
         reactWork(() =>
           root.render(
@@ -605,9 +675,11 @@ it("rejects obsolete save actions and fences acknowledged completion after dispo
             )
           )
         );
+
       const current = (): ReturnType<typeof useRecurringPlanning> => Option.getOrThrow(planning);
       const edit = { kind: "lifecycle", planId, date: "2026-10-29", action: "pause" } as const;
       const onSaved = vi.fn();
+
       try {
         yield* Effect.tryPromise(() => render("2026-10", false));
         yield* Effect.tryPromise(() =>
@@ -653,17 +725,22 @@ it("saves a Money-bearing edit with its exact reviewed facts and confirms its vi
       const reply = Deferred.makeUnsafe<Response>();
       const reread = { current: Deferred.makeUnsafe<Response>() };
       const { http, requests } = recordedPlanningHttp(reply, reread);
+
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(HttpClient.HttpClient, http),
       });
+
       const registry = AtomRegistry.make();
       const root = createRoot(window.document.createElement("div"));
       let planning: Option.Option<ReturnType<typeof useRecurringPlanning>> = Option.none();
+
       const retain = (current: ReturnType<typeof useRecurringPlanning>): void => {
         planning = Option.some(current);
       };
+
       const current = (): ReturnType<typeof useRecurringPlanning> => Option.getOrThrow(planning);
+
       const edit = yield* Schema.decodeEffect(Schema.toCodecJson(RecurringEdit))({
         kind: "edit",
         planId,
@@ -675,7 +752,9 @@ it("saves a Money-bearing edit with its exact reviewed facts and confirms its vi
           money: { amount: "12345.67", currency: "COP" },
         },
       });
+
       const onSaved = vi.fn();
+
       try {
         yield* Effect.tryPromise(() =>
           reactWork(() =>
@@ -692,6 +771,7 @@ it("saves a Money-bearing edit with its exact reviewed facts and confirms its vi
           reactAssertion(() => expect(current().disabled).toBe(false))
         );
         yield* Effect.tryPromise(() => reactWork(() => current().save(edit, onSaved)));
+
         if (edit.kind === "edit") Object.assign(edit.plan, { name: "Changed after save" });
         yield* Effect.tryPromise(() => reactAssertion(() => expect(requests).toHaveLength(1)));
         expect(
@@ -721,10 +801,12 @@ it("saves a Money-bearing edit with its exact reviewed facts and confirms its vi
 it("keeps future lifecycle boundaries and revisions out of today's plan standing in the effective zone", () => {
   vi.useFakeTimers();
   vi.setSystemTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-30T02:00:00Z")));
+
   try {
     const settings = Schema.decodeUnknownSync(RecurringPlanInput)(
       document.plans[0]?.revisions[0]?.plan
     );
+
     const plan: Plan = {
       id: planId,
       revisions: [
@@ -755,6 +837,7 @@ it("keeps future lifecycle boundaries and revisions out of today's plan standing
       pauses: [{ from: "2026-10-30" }],
       stoppedOn: "2026-11-02",
     };
+
     expect(planToday(plan)).toBe("2026-10-29");
     expect(planStatus(plan)).toBe("active");
     expect(currentPlan(plan).name).toBe("Internet QA");
@@ -793,10 +876,12 @@ it.each([
   ({ now, currentFrom, futureFrom, expectedDate }) => {
     vi.useFakeTimers();
     vi.setSystemTime(DateTime.toEpochMillis(DateTime.makeUnsafe(now)));
+
     try {
       const settings = Schema.decodeUnknownSync(RecurringPlanInput)(
         document.plans[0]?.revisions[0]?.plan
       );
+
       const plan: Plan = {
         id: planId,
         pauses: [],
@@ -813,6 +898,7 @@ it.each([
           { from: futureFrom, plan: { ...settings, name: "Future Bogota", firstDate: futureFrom } },
         ],
       };
+
       expect(planToday(plan)).toBe(expectedDate);
       expect(currentPlan(plan).name).toBe("Current Tokyo");
       expect(planStatus(plan)).toBe("active");
@@ -831,6 +917,7 @@ it.each(["scheduled", "paused"] as const)(
         vi.spyOn(Date, "now").mockReturnValue(
           DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-11T12:00:00Z"))
         );
+
         const settings = yield* Schema.decodeEffect(RecurringPlanInput)({
           name: "Reviewed plan",
           kind: "expense",
@@ -840,7 +927,9 @@ it.each(["scheduled", "paused"] as const)(
           firstDate: expected === "scheduled" ? "2026-12-01" : "2026-10-01",
           timeZone: "America/Bogota",
         });
+
         const closed = expected === "paused" ? [{ from: "2026-11-01", through: "2026-11-20" }] : [];
+
         const retained: Plan = {
           id: planId,
           pauses: [...closed, { from: "2026-11-11" }],
@@ -852,8 +941,10 @@ it.each(["scheduled", "paused"] as const)(
             },
           ],
         };
+
         const reply = Deferred.makeUnsafe<Response>();
         const reread = { current: Deferred.makeUnsafe<Response>() };
+
         const client = makeFidyClient({
           apiOrigin: "https://api.test.fidyapp.com",
           httpClient: Layer.succeed(
@@ -864,10 +955,12 @@ it.each(["scheduled", "paused"] as const)(
             })
           ),
         });
+
         const registry = AtomRegistry.make();
         const container = window.document.createElement("div");
         const root = createRoot(container);
         const onSaved = vi.fn();
+
         try {
           yield* Effect.tryPromise(() =>
             reactWork(() =>
@@ -894,6 +987,7 @@ it.each(["scheduled", "paused"] as const)(
             )
           );
           const button = container.querySelector("button");
+
           if (button === null) throw new Error("Missing lifecycle action");
           yield* Effect.tryPromise(() => reactAssertion(() => expect(button.disabled).toBe(false)));
           yield* Effect.tryPromise(() => reactWork(() => button.click()));

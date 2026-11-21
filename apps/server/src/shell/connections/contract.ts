@@ -25,6 +25,7 @@ const read = operationPolicy({
   agentConfirmation: "not-required",
   kind: "query",
 });
+
 const write = operationPolicy({
   access: userOwnedAgentScoped("write"),
   requiredTier: "free",
@@ -91,11 +92,13 @@ export const ConnectionAttemptReference = Schema.String.check(Schema.isUUID())
 export const ConnectionContinuationInput = Schema.Struct({ attempt: ConnectionAttemptReference });
 
 const maximumAuthorizationUrlLength = 4096;
+
 const AuthorizationUrl = Schema.String.check(
   Schema.isBetweenLength(1, maximumAuthorizationUrlLength),
   Schema.isPattern(/^https:\/\/auth1-api-open-finance-sandbox\.ambientesbc\.com\/auth\?[^#]*$/u),
   Schema.makeFilter((value) => {
     const query = new URL(value).searchParams;
+
     return (
       query.size === 4 &&
       query.get("response_type") === "code" &&
@@ -118,6 +121,7 @@ const continuationFields = {
   institutionName: Schema.Literal("Bancolombia"),
   expiresAt: UtcTimestamp,
 };
+
 export const ConnectionContinuationReview = Schema.Union([
   Schema.Struct({
     ...continuationFields,
@@ -142,6 +146,7 @@ export { connectionBrowserPaths };
 export const ConnectionContinuationFailure = Schema.Struct({
   error: Schema.Struct({ code: Schema.Literal("continuation_unavailable") }),
 });
+
 const browserFailureStatuses = {
   invalid: 400,
   unauthenticated: 401,
@@ -150,6 +155,7 @@ const browserFailureStatuses = {
   method: 405,
   unavailable: 503,
 } as const;
+
 const browserFailures = Object.values(browserFailureStatuses).map((status) =>
   ConnectionContinuationFailure.pipe(HttpApiSchema.status(status))
 );

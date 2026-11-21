@@ -42,6 +42,7 @@ export const sendClaimedProof = (
             })
           )
         );
+
         return yield* makeEmailDelivery({
           outboundHttp: makeResendOutboundHttp({
             apiKey: Redacted.make(input.environment.RESEND_API_KEY),
@@ -64,6 +65,7 @@ export const sendClaimedProof = (
     )
   ).then((outcome): ProviderCertainty => {
     if (Exit.isSuccess(outcome)) return "accepted";
+
     return outcome.cause.reasons.length > 0 &&
       outcome.cause.reasons.every(
         (reason) => Cause.isFailReason(reason) && reason.error.certainty === "rejected"

@@ -2,6 +2,7 @@ import { type Effect, Schema } from "effect";
 import { type ProactivityDeliveryWork, ProactivityWorkflowId } from "../contract";
 
 const weeklyIdentity = Schema.TemplateLiteralParser(ProactivityWorkflowId.members[0].parts);
+
 const categoryIdentity = Schema.TemplateLiteralParser(ProactivityWorkflowId.members[1].parts);
 
 export const proactivityWorkflowId = (

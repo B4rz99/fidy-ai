@@ -14,6 +14,7 @@ const initial = {
     "INSERT INTO retained VALUES (41)",
   ],
 };
+
 const second = {
   version: 2,
   id: "second",
@@ -22,6 +23,7 @@ const second = {
     "UPDATE retained SET label='preserved'",
   ],
 };
+
 const third = {
   version: 3,
   id: "third",
@@ -30,6 +32,7 @@ const third = {
     "INSERT INTO result SELECT id+1 FROM retained",
   ],
 };
+
 const histories = {
   inspect: [],
   oldest: [initial],
@@ -63,23 +66,30 @@ const observeStorage = (
           ) {
             throw Object.assign(new Error("synthetic busy storage"), { code: "SQLITE_BUSY" });
           }
+
           const cursor = target.exec(query, ...bindings);
           sample(target.databaseSize);
+
           return cursor;
         };
       }
+
       return Reflect.get(target, property, target);
     },
   });
+
   return new Proxy(storage, {
     get(target, property): unknown {
       if (property === "sql") return sql;
       const value: unknown = Reflect.get(target, property, target);
+
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
 };
+
 const connectionSchemaVersion = 20;
+
 const owners = {
   userOldest: { ...userStoreHistory, steps: userStoreHistory.steps.slice(0, 1) },
   userBeforeConnections: {
@@ -90,6 +100,7 @@ const owners = {
   maintenance: maintenanceStoreHistory,
   erasure: erasureStoreHistory,
 } as const;
+
 const selectedHistory = (mode: keyof typeof owners | keyof typeof histories): StoreHistory => {
   if (
     mode === "userOldest" ||
@@ -100,13 +111,16 @@ const selectedHistory = (mode: keyof typeof owners | keyof typeof histories): St
   ) {
     return owners[mode];
   }
+
   return { owner: "user", steps: histories[mode] };
 };
+
 type FixtureEnvironment = {
   MODE: keyof typeof owners | keyof typeof histories;
   RELEASE: string;
   NOW: string;
 };
+
 export class MigrationProbe extends DurableObject<FixtureEnvironment> {
   private readonly initialBytes: number;
   private peakBytes: number;
@@ -114,16 +128,21 @@ export class MigrationProbe extends DurableObject<FixtureEnvironment> {
     super(state, env);
     this.initialBytes = state.storage.sql.databaseSize;
     this.peakBytes = this.initialBytes;
+
     if (env.MODE === "inspect") return;
+
     const storage = observeStorage(state.storage, env.MODE, (size) => {
       this.peakBytes = Math.max(this.peakBytes, size);
     });
+
     const history = selectedHistory(env.MODE);
+
     const runtime = createStoreRuntime({
       storage,
       owner: history.owner,
       ceilingBytes: "1000000000",
     });
+
     state.waitUntil(
       state.blockConcurrencyWhile(() =>
         runtime.runPromise(
@@ -148,6 +167,7 @@ export class MigrationProbe extends DurableObject<FixtureEnvironment> {
   }
   override fetch(): Promise<Response> {
     const finalBytes = this.ctx.storage.sql.databaseSize;
+
     return Promise.resolve(
       Response.json({
         initialBytes: this.initialBytes,

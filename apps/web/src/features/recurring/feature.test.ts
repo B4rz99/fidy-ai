@@ -36,6 +36,7 @@ const plans = [
     },
   ] as const,
 }));
+
 const workspace = {
   document: {
     revision: 2,
@@ -63,36 +64,47 @@ const workspace = {
   matches: [],
   matchesComplete: true,
 };
+
 const reactWork = (work: () => void): Promise<void> =>
   Promise.resolve(act(() => Promise.resolve(work())));
+
 const reactAssertion = (assertion: () => void): Promise<void> =>
   vi.waitFor(() => reactWork(() => undefined).then(assertion));
+
 const button = (container: HTMLElement, label: string): HTMLButtonElement => {
   const found = Array.from(container.querySelectorAll("button")).find(
     (candidate) => candidate.textContent.trim() === label
   );
+
   if (found === undefined) {
     throw new Error(`Missing ${label}`);
   }
+
   return found;
 };
+
 const click = (container: HTMLElement, label: string): Promise<void> =>
   reactWork(() => button(container, label).click());
+
 const searchFor = (container: HTMLElement, search: string): Promise<void> =>
   reactWork(() => {
     const input = container.querySelector('input[name="search"]');
+
     if (!(input instanceof HTMLInputElement)) {
       throw new Error("Missing recurrentes search");
     }
+
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, search);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
+
 const Workspace = (): ReturnType<typeof createElement> => {
   const props = {
     month: Option.some("2026-10"),
     captureEditor: (): ReturnType<typeof createElement> => createElement("div"),
     children: null,
   };
+
   return createElement(RecurringFeature, props);
 };
 
@@ -108,11 +120,13 @@ const withWorkspace = (
         removeEventListener: (): void => undefined,
       }));
       vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+
       const http = HttpClient.make((request) => {
         const path = new URL(request.url).pathname;
         const params = new Map(request.urlParams);
         const search = Schema.decodeUnknownSync(Schema.String)(params.get("search") ?? "");
         const earlier = params.get("previousMonth") === "2026-08";
+
         const result =
           path === "/user"
             ? {
@@ -148,24 +162,31 @@ const withWorkspace = (
                 },
                 next: [],
               };
+
         if (request.method !== "GET" || !["/user", "/recurring-plans"].includes(path)) {
           return Effect.die(new Error("Unexpected recurring test request"));
         }
+
         return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(result)));
       });
+
       const apiClient = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(HttpClient.HttpClient, http),
       });
+
       const registry = AtomRegistry.make();
+
       const router = createRouter({
         routeTree: createRootRoute({ component: Workspace }),
         context: { apiClient, sessionBinding: "recurring-feature-test" },
         history: createMemoryHistory({ initialEntries: ["/app/recurring"] }),
       });
+
       const container = document.createElement("div");
       document.body.append(container);
       const root = createRoot(container);
+
       try {
         yield* Effect.tryPromise(() => router.load());
         yield* Effect.tryPromise(() =>
@@ -194,6 +215,7 @@ const withWorkspace = (
   );
 
 type WorkspaceCheck = Effect.Effect<void, Cause.UnknownError>;
+
 const checkFilters = (presentation: string, container: HTMLElement): WorkspaceCheck =>
   Effect.gen(function* () {
     yield* Effect.tryPromise(() => click(container, presentation));
@@ -213,6 +235,7 @@ const checkFilters = (presentation: string, container: HTMLElement): WorkspaceCh
       reactAssertion(() => {
         expect(container.textContent).toContain("Sin resultados para estos filtros");
         expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
+
         if (presentation === "Calendario") {
           expect(container.querySelector('[aria-label="2026-10-31"]')).not.toBeNull();
         }
@@ -237,9 +260,12 @@ const checkEarlierDisclosure = (container: HTMLElement): WorkspaceCheck =>
   Effect.gen(function* () {
     const panel = (): HTMLDetailsElement => {
       const element = container.querySelector('[data-recurring-slot="previous"]');
+
       if (!(element instanceof HTMLDetailsElement)) throw Error("Missing earlier-month section");
+
       return element;
     };
+
     expect(panel().open).toBe(false);
     yield* Effect.tryPromise(() => reactWork(() => panel().querySelector("summary")?.click()));
     expect(panel().open).toBe(true);

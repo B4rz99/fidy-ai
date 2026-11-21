@@ -6,6 +6,7 @@ import { WompiTransactionId } from "./wompi-model";
 import { type RefundSubmission } from "./wompi-refund-client";
 
 const maximumVerificationAttempts = 8;
+
 const RefundWork = Schema.Union([
   Schema.Struct({
     traceContext: Schema.optionalKey(Schema.Unknown),
@@ -23,6 +24,7 @@ const RefundWork = Schema.Union([
     ),
   }),
 ]);
+
 export const RefundSubmissionSnapshot = Schema.Struct({
   id: RefundAttemptId,
   kind: Schema.Literals(["refund", "card-void"]),
@@ -32,7 +34,9 @@ export const RefundSubmissionSnapshot = Schema.Struct({
   wompi_reference: Schema.String,
   wompi_source_id: Schema.Int,
 });
+
 export const isRefundWork = (body: unknown): boolean => Schema.is(RefundWork)(body);
+
 export const submission = (row: typeof RefundSubmissionSnapshot.Type): RefundSubmission => ({
   id: row.id,
   kind: row.kind,

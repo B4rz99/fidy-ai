@@ -172,6 +172,7 @@ it("supports the explicitly reusable grant and revocation shapes", () => {
       decisionMessage: makeEvidence("wamid.acceptance-801"),
     },
   };
+
   const events = [
     {
       _tag: "Granted",
@@ -213,6 +214,7 @@ it("requires outbound evidence only after disclosure delivery", () => {
     createdAt: "2026-08-01T12:00:00Z",
     expiresAt: "2026-08-02T12:00:00Z",
   };
+
   const awaitingDecision = {
     ...awaitingDelivery,
     _tag: "AwaitingDecision",
@@ -254,6 +256,7 @@ it("bounds native web onboarding grant references independently of the legal gra
   const decode = Schema.decodeUnknownResult(WebOnboardingConsentGrantId);
   const value = `${"Az09_-".repeat(7)}A`;
   expect(Result.isSuccess(decode(value))).toBe(true);
+
   for (const invalid of [value.slice(1), `${value}A`, `!${value}`, `${value}!`, "!".repeat(43)]) {
     expect(Result.isFailure(decode(invalid))).toBe(true);
   }

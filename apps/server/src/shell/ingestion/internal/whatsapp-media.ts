@@ -14,6 +14,7 @@ const Mime = Schema.Literals([
   "text/csv",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ]);
+
 const Metadata = Schema.Struct({
   id: Schema.String,
   mime_type: Mime,
@@ -25,14 +26,19 @@ const Metadata = Schema.Struct({
   download_url: Schema.String,
   download_url_expires_at: Schema.String,
 });
+
 const Media = Schema.Struct({
   bytes: Schema.Uint8Array,
   sha256: StatementContentDigest,
   mimeType: Mime,
 });
+
 const maximumSignedMediaTokenLength = 8192;
+
 const signedToken = Schema.NonEmptyString.check(Schema.isMaxLength(maximumSignedMediaTokenLength));
+
 const httpOK = 200;
+
 class StatementMediaUnavailable extends Data.TaggedError("StatementMediaUnavailable")<{}> {}
 
 const readSignedToken = (
@@ -40,6 +46,7 @@ const readSignedToken = (
 ): Effect.Effect<Redacted.Redacted<string>, StatementMediaUnavailable> =>
   Effect.gen(function* () {
     const url = yield* Effect.try(() => new URL(value));
+
     if (
       url.origin !== "https://api.kapso.ai" ||
       url.username !== "" ||
@@ -49,10 +56,13 @@ const readSignedToken = (
     ) {
       return yield* new StatementMediaUnavailable();
     }
+
     const token = Schema.decodeUnknownOption(signedToken)(url.searchParams.get("token"));
+
     if ([...url.searchParams.keys()].length !== 1 || Option.isNone(token)) {
       return yield* new StatementMediaUnavailable();
     }
+
     return Redacted.make(token.value);
   }).pipe(Effect.mapError(() => new StatementMediaUnavailable()));
 
@@ -73,12 +83,16 @@ export const readWhatsAppStatementMedia = ({
       mediaId,
       businessPhoneNumberId,
     });
+
     if (response.status !== httpOK) return yield* new StatementMediaUnavailable();
+
     const json = yield* Schema.decodeEffect(UnknownJsonString)(
       new TextDecoder().decode(response.body)
     );
+
     const metadata = yield* Schema.decodeUnknownEffect(Metadata)(json);
     const expiry = DateTime.make(metadata.download_url_expires_at);
+
     if (
       metadata.id !== mediaId ||
       Option.isNone(expiry) ||
@@ -86,15 +100,21 @@ export const readWhatsAppStatementMedia = ({
     ) {
       return yield* new StatementMediaUnavailable();
     }
+
     const token = yield* readSignedToken(metadata.download_url);
     const download = yield* outbound.execute({ _tag: "KapsoMediaDownload", token });
+
     if (download.status !== httpOK || download.body.length !== metadata.file_size) {
       return yield* new StatementMediaUnavailable();
     }
+
     const crypto = yield* Digest.Digest;
+
     const digest = yield* crypto
       .digest(Digest.sha256, download.body)
       .pipe(Effect.catchDefect(() => Effect.fail(new StatementMediaUnavailable())));
+
     if (Hex.encode(digest) !== metadata.sha256) return yield* new StatementMediaUnavailable();
+
     return { bytes: download.body, sha256: metadata.sha256, mimeType: metadata.mime_type };
   }).pipe(Effect.mapError(() => new StatementMediaUnavailable()));

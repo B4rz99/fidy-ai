@@ -12,7 +12,9 @@ import type {
 
 const isUserAgent = (caller: OperationAccessCaller): boolean =>
   caller._tag === "PAT" || caller._tag === "OAuthAgent";
+
 const allowed: OperationAccessDecision = { _tag: "Allowed" };
+
 const denied = (reason: OperationAccessDenial): OperationAccessDecision => ({
   _tag: "Denied",
   reason,
@@ -29,6 +31,7 @@ const decideAgentScope = (
   capabilities: ReadonlyArray<CanonicalCapability>
 ): OperationAccessDecision => {
   if (scope._tag === "Children") return allowed;
+
   return decidePatCapability(scope.capability, capabilities);
 };
 
@@ -37,6 +40,7 @@ const decideUserOwnedAgentScoped = (
   caller: OperationAccessCaller
 ): OperationAccessDecision => {
   if (caller._tag !== "PAT" && caller._tag !== "OAuthAgent") return allowed;
+
   return decideAgentScope(requirement.scope, caller.capabilities);
 };
 
@@ -45,6 +49,7 @@ const decideWebSession = (caller: OperationAccessCaller): OperationAccessDecisio
 
 const decideFreshWebSession = (caller: OperationAccessCaller): OperationAccessDecision => {
   if (caller._tag !== "WebSession") return denied("caller_ineligible");
+
   return caller.fresh ? allowed : denied("fresh_web_session_required");
 };
 
@@ -53,6 +58,7 @@ const decideHostedAuthority = (authorityRoot: CanonicalAuthorityRoot): Operation
 
 const decideVerifiedWhatsAppHosted = (caller: OperationAccessCaller): OperationAccessDecision => {
   if (caller._tag !== "HostedAgentSession") return denied("caller_ineligible");
+
   return decideHostedAuthority(caller.authorityRoot);
 };
 
@@ -92,8 +98,10 @@ export const isHostedVisible: {
 
 export const completesHostedTurn = (policy: OperationPolicyValue): boolean => {
   if (policy.kind !== "mutation") return false;
+
   if (policy.access._tag === "UserOwnedAgentScoped") {
     return policy.access.scope._tag === "Operation" && policy.access.scope.capability === "write";
   }
+
   return policy.access._tag !== "FreshWebSessionOnly" && policy.access._tag !== "WebSessionOnly";
 };

@@ -10,6 +10,7 @@ const burstLogs = (logs: ReadonlyArray<ReadonlyArray<unknown>>): ReadonlyArray<s
   logs
     .map((call) => Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(call))
     .filter((call) => call.includes("component=core-rejections"));
+
 const environment: CoreHttpEnvironment = {
   RELEASE_GIT_SHA: "0".repeat(40),
   CONTRACT_DIGEST: "0".repeat(64),
@@ -33,10 +34,12 @@ it.live("preserves actual Core callback refusals and never stores attacker reque
       Effect.sync(() => vi.spyOn(Date, "now").mockReturnValue(1_800_000)),
       (clock) => Effect.sync(() => clock.mockRestore())
     );
+
     const core = makeCoreHttp({
       telemetry: cloudflareWorkerTelemetry,
       institutions: registeredConnectionInstitutionIds,
     });
+
     const request = (): Request =>
       new Request("https://api.fidyapp.com/providers/kapso/callback?secret=private-query", {
         method: "POST",
@@ -48,14 +51,18 @@ it.live("preserves actual Core callback refusals and never stores attacker reque
         },
         body: '{"secret":"private-user-content"}',
       });
+
     let original = "";
+
     for (let count = 0; count < 101; count += 1) {
       const response = yield* Effect.tryPromise(() => core(request(), environment));
       expect(response.status).toBe(401);
       const body = yield* Effect.tryPromise(() => response.text());
+
       if (count === 0) original = body;
       expect(body).toBe(original);
     }
+
     const warnings = burstLogs(logs.mock.calls);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("severity=warning");
@@ -72,10 +79,12 @@ it.live(
         Effect.sync(() => vi.spyOn(Date, "now").mockReturnValue(1_800_000)),
         (clock) => Effect.sync(() => clock.mockRestore())
       );
+
       const core = makeCoreHttp({
         telemetry: cloudflareWorkerTelemetry,
         institutions: registeredConnectionInstitutionIds,
       });
+
       const send = (path: string): Promise<Response> =>
         core(
           new Request(`https://api.fidyapp.com${path}?private=callback`, {
@@ -90,17 +99,21 @@ it.live(
           }),
           environment
         );
+
       for (let index = 0; index < 100; index += 1) {
         const response = yield* Effect.tryPromise(() => send("/providers/kapso/callback-extra"));
         expect(response.status).toBe(404);
         yield* Effect.tryPromise(() => response.text());
       }
+
       expect(burstLogs(logs.mock.calls)).toEqual([]);
+
       for (let index = 0; index < 100; index += 1) {
         const response = yield* Effect.tryPromise(() => send("/providers/kapso/callback"));
         expect(response.status).toBe(422);
         yield* Effect.tryPromise(() => response.text());
       }
+
       const warnings = burstLogs(logs.mock.calls);
       expect(warnings).toHaveLength(1);
       expect(warnings[0]).not.toContain("private-");

@@ -1,9 +1,11 @@
 import { Schema } from "effect";
 
 export const ErasureReference = Schema.String.check(Schema.isUUID());
+
 export const ErasureRequest = Schema.Struct({
   confirm: Schema.Literal(true),
 });
+
 export type ErasureRequest = typeof ErasureRequest.Type;
 
 export const ErasureClass = Schema.Literals([
@@ -19,11 +21,17 @@ export const ErasureClass = Schema.Literals([
   "consent",
   "audit",
 ]);
+
 export type ErasureClass = typeof ErasureClass.Type;
+
 export const ErasureProvider = Schema.Literals(["Cloudflare", "Kapso", "Meta", "Resend", "Wompi"]);
+
 export type ErasureProvider = typeof ErasureProvider.Type;
+
 export const ErasureCustodian = ErasureProvider;
+
 const instant = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 253402300799999 }));
+
 export const ErasureCustodyEvidence = Schema.Struct({
   reference: ErasureReference,
   custodian: ErasureCustodian,
@@ -36,7 +44,9 @@ export const ErasureCustodyEvidence = Schema.Struct({
     }),
   ]),
 });
+
 export type ErasureCustodyEvidence = typeof ErasureCustodyEvidence.Type;
+
 export const ErasureReceipt = Schema.Struct({
   reference: ErasureReference,
   state: Schema.Literals(["Draining", "Sealing", "Erasing", "ExternalPending", "Complete"]),
@@ -48,6 +58,7 @@ export const ErasureReceipt = Schema.Struct({
     "none",
   ]),
 });
+
 export const ErasureOperatorReceipt = Schema.Struct({
   ...ErasureReceipt.fields,
   completed: Schema.Array(ErasureClass),

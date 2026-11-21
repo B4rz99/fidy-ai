@@ -31,15 +31,19 @@ const ReadOnlyNotice = (): JSX.Element => (
 export const PrivacyTransactions = (): JSX.Element => {
   const [date, setDate] = useState("");
   const router = useRouter();
+
   const [historyResource] = useState(() =>
     privacyTransactionHistory(router.options.context.webAuthClient)
   );
+
   const history = useAtomValue(historyResource.state);
   const dispatch = useAtomSet(historyResource.action);
   const state = history.query;
+
   if (state._tag === "Initial") {
     return <PrivacyPending />;
   }
+
   if (state._tag === "Failure" || Option.isSome(state.refreshFailure)) {
     return (
       <main className="p-5">
@@ -58,6 +62,7 @@ export const PrivacyTransactions = (): JSX.Element => {
       </main>
     );
   }
+
   return (
     <Suspense fallback={<PrivacyPending />}>
       <TransactionWorkspace

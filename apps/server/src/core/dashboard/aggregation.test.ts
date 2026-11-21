@@ -11,11 +11,15 @@ import {
 } from "./operations";
 
 const categoryId = CategoryId.make("10000000-0000-4000-8000-000000000001");
+
 const otherId = CategoryId.make("10000000-0000-4000-8000-000000000002");
+
 const cop = (amount: string): Money =>
   Money.make({ currency: "COP", amount: BigDecimal.make(BigInt(amount), 0) });
+
 const usd = (amount: string): Money =>
   Money.make({ currency: "USD", amount: BigDecimal.make(BigInt(amount), 0) });
+
 const ranges: ReadonlyArray<ProjectedRange> = [
   {
     key: "2026-07-01",
@@ -27,6 +31,7 @@ const ranges: ReadonlyArray<ProjectedRange> = [
     ],
   },
 ];
+
 const widgetId = "30000000-0000-4000-8000-000000000001";
 
 it("groups maintained bucket amounts and maxima by Category without mixing Currency", () => {
@@ -37,7 +42,9 @@ it("groups maintained bucket amounts and maxima by Category without mixing Curre
     period: "this-month",
     categories: [categoryId],
   });
+
   if (widget.type !== "spending-chart") throw new Error("Expected chart");
+
   const result = projectAggregateChart({
     widget,
     ranges,
@@ -46,16 +53,22 @@ it("groups maintained bucket amounts and maxima by Category without mixing Curre
         ? Option.some(Schema.decodeSync(Category)({ id: categoryId, label: "Restaurantes" }))
         : Option.none(),
   });
+
   expect(Option.isSome(result)).toBe(true);
+
   if (Option.isNone(result)) throw new Error("Expected chart buckets");
   const grouped: Array<ReadonlyArray<unknown>> = [];
+
   for (const bucket of result.value) {
     const amounts: Array<ReadonlyArray<string>> = [];
+
     for (const group of bucket.moneyGroups) {
       amounts.push([group.currency, BigDecimal.format(group.outflow.amount)]);
     }
+
     grouped.push([bucket.key.kind, ...amounts]);
   }
+
   expect(grouped).toEqual([["category", ["COP", "14"], ["USD", "3"]]]);
   expect(projectAggregateChart({ widget, ranges, lookupCategory: () => Option.none() })._tag).toBe(
     "None"
@@ -71,16 +84,21 @@ it("finalizes exact sum, maximum, and weighted average from projected contributi
     period: "this-month",
     categories: [categoryId],
   });
+
   if (metric.type !== "custom-metric") throw new Error("Expected metric");
+
   const amounts = (
     aggregation: "sum" | "maximum" | "average"
   ): ReadonlyArray<readonly [string, string]> => {
     const result: Array<readonly [string, string]> = [];
+
     for (const group of projectAggregateMetric({ ...metric, aggregation }, ranges)) {
       result.push([group.currency, BigDecimal.format(group.outflow.amount)]);
     }
+
     return result;
   };
+
   expect(amounts("sum")).toEqual([
     ["COP", "14"],
     ["USD", "3"],
@@ -93,12 +111,14 @@ it("finalizes exact sum, maximum, and weighted average from projected contributi
     ["COP", "4.67"],
     ["USD", "3"],
   ]);
+
   const budget = Schema.decodeSync(Widget)({
     id: widgetId,
     type: "budget-bar",
     categoryId,
     currency: "COP",
   });
+
   if (budget.type !== "budget-bar") throw new Error("Expected budget");
   expect(BigDecimal.format(projectAggregateBudgetSpent(budget, ranges).amount)).toBe("14");
 });
@@ -112,8 +132,10 @@ it("projects day and month chart buckets and omits empty ranges", () => {
       period: "this-month",
       categories: [categoryId],
     });
+
     if (widget.type !== "spending-chart") throw new Error("Expected chart");
     const key = groupBy === "day" ? "2026-07-01" : "2026-07";
+
     const buckets = Option.getOrThrow(
       projectAggregateChart({
         widget,
@@ -124,6 +146,7 @@ it("projects day and month chart buckets and omits empty ranges", () => {
         lookupCategory: () => Option.none(),
       })
     );
+
     expect(
       buckets.map(
         (
@@ -155,7 +178,9 @@ it("orders unfiltered category buckets by stable identity regardless of projecti
     groupBy: "category",
     period: "this-month",
   });
+
   if (widget.type !== "spending-chart") throw new Error("Expected chart");
+
   const buckets = Option.getOrThrow(
     projectAggregateChart({
       widget,
@@ -177,6 +202,7 @@ it("orders unfiltered category buckets by stable identity regardless of projecti
       lookupCategory: (id) => Option.some(Schema.decodeSync(Category)({ id, label: "Categoría" })),
     })
   );
+
   expect(
     buckets.map((bucket: Readonly<{ key: DashboardBucket }>) =>
       bucket.key.kind === "category" ? bucket.key.category.id : "unexpected"
@@ -191,7 +217,9 @@ it("ignores same-Category income when calculating Budget spend", () => {
     categoryId,
     currency: "COP",
   });
+
   if (widget.type !== "budget-bar") throw new Error("Expected Budget bar");
+
   const selected: ReadonlyArray<ProjectedRange> = [
     {
       key: "",
@@ -201,5 +229,6 @@ it("ignores same-Category income when calculating Budget spend", () => {
       ],
     },
   ];
+
   expect(BigDecimal.format(projectAggregateBudgetSpent(widget, selected).amount)).toBe("14");
 });

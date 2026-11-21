@@ -59,21 +59,29 @@ const DashboardDragHandle = lazyRouteComponent(
   () => import("./drag-adapter"),
   "DashboardDragHandle"
 );
+
 const DashboardDragProvider = lazyRouteComponent(
   () => import("./drag-adapter"),
   "DashboardDragProvider"
 );
+
 const DashboardDropZone = lazyRouteComponent(() => import("./drag-adapter"), "DashboardDropZone");
 
 type BudgetResult = Extract<DashboardWidgetView["result"], { readonly availability: unknown }>;
+
 type ListResult = Extract<DashboardWidgetView["result"], { readonly transactions: unknown }>;
+
 type MetricResult = Extract<DashboardWidgetView["result"], { readonly moneyGroups: unknown }>;
+
 type AvailableBudgetResult = Extract<BudgetResult, { readonly availability: "available" }>;
+
 type DashboardLocale = DashboardView["context"]["locale"];
+
 type DashboardTimeZone = DashboardView["context"]["timeZone"];
 
 const titleFor = (widget: DashboardWidget): string => {
   if (widget.title !== undefined) return widget.title;
+
   switch (widget.type) {
     case "spending-chart":
       return "Transacciones";
@@ -145,6 +153,7 @@ const BudgetBar = ({
       </Empty>
     );
   }
+
   return (
     <>
       <DashboardBudget
@@ -176,6 +185,7 @@ const TransactionList = ({
       new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric", timeZone }),
     [locale, timeZone]
   );
+
   if (data.transactions.length === 0) {
     return (
       <Empty className="border">
@@ -185,16 +195,21 @@ const TransactionList = ({
       </Empty>
     );
   }
+
   const formatRecentMoney =
     new Set(data.transactions.map((transaction) => transaction.money.currency)).size > 1
       ? formatMoneyWithCode
       : formatMoney;
+
   const groups: Array<{ date: string; rows: Array<DashboardRecentGroup["rows"][number]> }> = [];
+
   for (const transaction of data.transactions) {
     const date = dateFormatter.format(transaction.occurredAt.epochMilliseconds);
+
     const day = DateTime.formatIsoDate(
       DateTime.setZone(transaction.occurredAt, DateTime.zoneMakeNamedUnsafe(timeZone))
     );
+
     const row: DashboardRecentGroup["rows"][number] = {
       id: transaction.id,
       renderLink: (props) => (
@@ -210,10 +225,13 @@ const TransactionList = ({
       money: formatRecentMoney({ money: transaction.money, locale }),
       currency: transaction.money.currency,
     };
+
     const previous = groups.at(-1);
+
     if (previous?.date === date) previous.rows.push(row);
     else groups.push({ date, rows: [row] });
   }
+
   return <DashboardRecentList groups={groups} />;
 };
 
@@ -254,6 +272,7 @@ const RenderWidget = ({
 }>): JSX.Element => {
   const ChartPresentation = useContext(DashboardSpendingPresentation);
   let content: JSX.Element;
+
   if ("buckets" in result) {
     content = Option.match(ChartPresentation, {
       onSome: (render) => render({ data: result, locale: context.locale }),
@@ -275,6 +294,7 @@ const RenderWidget = ({
   } else {
     content = <CustomMetric data={result} locale={context.locale} />;
   }
+
   return (
     <WidgetFrame
       editing={editing}
@@ -300,13 +320,17 @@ const regionWidgetIds = (
 ): Extract<DashboardGesture, { readonly kind: "resize-region" }>["widgetIds"] => {
   const ids = collectWidgetViews(layout).map(({ widget }) => widget.id);
   const first = ids[0];
+
   if (first === undefined) throw new Error("A Dashboard region must contain a Widget");
+
   return [first, ...ids.slice(1)];
 };
 
 const regionLabel = (layout: DashboardLayout): string => {
   const first = collectWidgetViews(layout)[0];
+
   if (first === undefined) throw new Error("A Dashboard region must contain a Widget");
+
   return titleFor(first.widget);
 };
 
@@ -371,11 +395,14 @@ export const TitleEditor = ({
   onSave,
 }: TitleEditorProps): JSX.Element => {
   const [title, setTitle] = useState(initialTitle);
+
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const trimmedTitle = title.trim();
+
     if (!disabled && trimmedTitle.length > 0) onSave(trimmedTitle);
   };
+
   return (
     <form className="flex min-w-0 items-center gap-1" onSubmit={submit}>
       <Input
@@ -412,6 +439,7 @@ export const TitleEditor = ({
 };
 
 const widgetDropEdges = ["top", "right", "bottom", "left", "center"] as const;
+
 const widgetDropLabel: Record<(typeof widgetDropEdges)[number], string> = {
   top: "arriba de",
   right: "a la derecha de",
@@ -455,10 +483,12 @@ const EditableLeaf = ({ context, depth, editor, layout }: EditableLeafProps): JS
   const { widget } = layout.widget;
   const label = titleFor(widget);
   const [renaming, setRenaming] = useState(false);
+
   const saveTitle = (title: string): void => {
     editor.onGesture({ kind: "retitle-widget", title, widget });
     setRenaming(false);
   };
+
   return (
     <div
       className="relative flex min-h-0 min-w-0 flex-1 flex-col"
@@ -519,11 +549,13 @@ type ResizeBoundaryProps = Readonly<{
 type ResizeBoundaryEvent = PointerEvent<HTMLHRElement>;
 
 type ResizePreview = Readonly<{ adjacentWeight: number; weight: number }>;
+
 type ResizeElements = Readonly<{ adjacent: HTMLElement; child: HTMLElement }>;
 
 const resizeElements = (event: ResizeBoundaryEvent): Option.Option<ResizeElements> => {
   const child = event.currentTarget.previousElementSibling;
   const adjacent = event.currentTarget.nextElementSibling;
+
   return child instanceof HTMLElement && adjacent instanceof HTMLElement
     ? Option.some({ adjacent, child })
     : Option.none();
@@ -536,13 +568,16 @@ const previewResizeWeight = (
   const elements = resizeElements(event);
   const current = Option.fromUndefinedOr(siblings[childIndex]);
   const following = Option.fromUndefinedOr(siblings[childIndex + 1]);
+
   if (Option.isNone(elements) || Option.isNone(current) || Option.isNone(following)) {
     return Option.none();
   }
+
   const childBounds = elements.value.child.getBoundingClientRect();
   const adjacentBounds = elements.value.adjacent.getBoundingClientRect();
   const start = axis === "row" ? childBounds.left : childBounds.top;
   const end = axis === "row" ? adjacentBounds.right : adjacentBounds.bottom;
+
   const preview = dashboardResizePreview({
     coordinate: axis === "row" ? event.clientX : event.clientY,
     start,
@@ -552,10 +587,12 @@ const previewResizeWeight = (
     minimumWeight: minimumSplitWeight,
     maximumWeight: maximumSplitWeight,
   });
+
   if (preview._tag === "Unavailable") return Option.none();
   const { weight: nextWeight, adjacentWeight } = preview;
   elements.value.child.style.setProperty("--dashboard-weight", String(nextWeight));
   elements.value.adjacent.style.setProperty("--dashboard-weight", String(adjacentWeight));
+
   return Option.some({ adjacentWeight, weight: nextWeight });
 };
 
@@ -594,37 +631,47 @@ const useResizeBoundary = (props: ResizeBoundaryProps): ResizeBoundaryHandlers =
   const pointerId = useRef(noPointer);
   const weight = resizeWeightAt(props, props.childIndex);
   const adjacentWeight = resizeWeightAt(props, props.childIndex + 1);
+
   const onPointerDown = (event: ResizeBoundaryEvent): void => {
     pointerId.current = Option.some(event.pointerId);
     event.currentTarget.setPointerCapture(event.pointerId);
     previewResizeWeight(event, props);
   };
+
   const resetPointer = (event: ResizeBoundaryEvent): void => {
     pointerId.current = Option.none();
     restoreResizePreview(event, weight, adjacentWeight);
+
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
   };
+
   const onPointerCancel = (event: ResizeBoundaryEvent): void => {
     if (Option.contains(pointerId.current, event.pointerId)) resetPointer(event);
   };
+
   const onLostPointerCapture = (event: ResizeBoundaryEvent): void => {
     if (Option.contains(pointerId.current, event.pointerId)) resetPointer(event);
   };
+
   const onPointerMove = (event: ResizeBoundaryEvent): void => {
     if (!Option.contains(pointerId.current, event.pointerId)) return;
+
     if (event.buttons === 0) return resetPointer(event);
     previewResizeWeight(event, props);
   };
+
   const onPointerUp = (event: ResizeBoundaryEvent): void => {
     if (!Option.contains(pointerId.current, event.pointerId)) return;
     const nextWeight = previewResizeWeight(event, props);
     resetPointer(event);
+
     if (Option.isSome(nextWeight) && nextWeight.value.weight !== weight) {
       props.onResize(nextWeight.value.weight);
     }
   };
+
   return {
     onLostPointerCapture,
     onPointerCancel,
@@ -638,6 +685,7 @@ const useResizeBoundary = (props: ResizeBoundaryProps): ResizeBoundaryHandlers =
 const DashboardResizeBoundary = (props: ResizeBoundaryProps): JSX.Element => {
   const { axis, disabled, label } = props;
   const handlers = useResizeBoundary(props);
+
   const interactionProps = disabled
     ? {}
     : {
@@ -647,6 +695,7 @@ const DashboardResizeBoundary = (props: ResizeBoundaryProps): JSX.Element => {
         onPointerMove: handlers.onPointerMove,
         onPointerUp: handlers.onPointerUp,
       };
+
   return (
     <hr
       {...interactionProps}
@@ -698,7 +747,9 @@ const ResponsiveLayout = ({
       <EditableLeaf context={context} depth={depth} editor={editor.value} layout={layout} />
     );
   }
+
   const gapClassName = Option.isNone(editor) ? "gap-5.5" : "gap-0";
+
   return (
     <div
       className={`flex min-h-0 min-w-0 flex-1 ${gapClassName} ${responsiveSplitClass(layout.axis)}`}
@@ -795,6 +846,7 @@ const PlacementPreview = ({
       <RenderWidget editing view={layout.widget} context={context} titleEditor={Option.none()} />
     );
   }
+
   return (
     <div className={`flex min-h-0 min-w-0 flex-1 gap-4 ${responsiveSplitClass(layout.axis)}`}>
       {layout.children.map(({ node, weight }) => (
@@ -809,6 +861,7 @@ const PlacementPreview = ({
     </div>
   );
 };
+
 const placementKey = (layout: PlacementLayout): string =>
   layout.kind === "leaf"
     ? layout.widget.widget.id
@@ -887,10 +940,12 @@ const EditableDashboardTitle = ({
 }: Readonly<{ editor: DashboardEditor; title: string }>): JSX.Element => {
   const [renaming, setRenaming] = useState(false);
   const renameButton = useRef<HTMLButtonElement>(null);
+
   const cancel = (): void => {
     setRenaming(false);
     requestAnimationFrame(() => renameButton.current?.focus());
   };
+
   return (
     <div className="flex min-w-0 items-center gap-2">
       {renaming ? (
@@ -903,6 +958,7 @@ const EditableDashboardTitle = ({
             if (nextTitle !== title) {
               editor.onGesture({ kind: "retitle-dashboard", title: nextTitle });
             }
+
             setRenaming(false);
           }}
         />
@@ -938,6 +994,7 @@ export const DashboardViewComponent = ({
   const activeEditor = Option.filter(editor, () => editing);
   const pending = Option.flatMap(activeEditor, (current) => current.pendingPlacement);
   const editorError = Option.flatMap(editor, (current) => current.error);
+
   const content = (
     <main className="dashboard-surface">
       <header className="dashboard-header">
@@ -970,6 +1027,7 @@ export const DashboardViewComponent = ({
       <DashboardCanvas editor={activeEditor} preview={pending} view={view} />
     </main>
   );
+
   return Option.isNone(activeEditor) ? (
     content
   ) : (
@@ -1010,6 +1068,7 @@ export const DashboardRouteContent = ({
   result: AsyncResult.AsyncResult<Readonly<{ data: DashboardView }>, unknown>;
 }>): JSX.Element => {
   const state = presentCanonicalQuery(result);
+
   switch (state._tag) {
     case "Initial":
       return <PendingRead label="Cargando tablero" />;

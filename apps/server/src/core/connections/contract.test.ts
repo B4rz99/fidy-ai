@@ -9,9 +9,11 @@ import {
 
 it("bounds institution identities to a leading lowercase letter and a short ASCII slug", () => {
   const decode = Schema.decodeUnknownResult(InstitutionId);
+
   for (const value of ["a", "z", "bank-09", "a".repeat(64)]) {
     expect(Result.isSuccess(decode(value))).toBe(true);
   }
+
   for (const value of [
     "",
     "a".repeat(65),
@@ -33,6 +35,7 @@ it("accepts only the fixed first-party connection continuation URL", () => {
   const url = `https://app.fidyapp.com/connections/continue?attempt=${reference}`;
   const value = { url, expiresAt: "2026-10-22T12:00:00Z" };
   expect(Result.isSuccess(decode(value))).toBe(true);
+
   for (const candidate of [
     url.replace("https:", "http:"),
     url.replace("app.fidyapp.com", "appXfidyappYcom"),
@@ -51,12 +54,14 @@ it("accepts only the fixed first-party connection continuation URL", () => {
 
 it("retains the caller's current Connection projection through discovery and browser handoff", () => {
   const id = "10000000-0000-4000-8000-000000000001";
+
   for (const connection of [null, { id, state: "Active" }]) {
     const value = { id: "bank", displayName: "Banco", availability: "available", connection };
     expect(
       Schema.encodeSync(InstitutionSummary)(Schema.decodeUnknownSync(InstitutionSummary)(value))
     ).toEqual(value);
   }
+
   for (const value of [
     { type: "already_connected", connection: { id, institutionId: "bank", state: "Active" } },
     {
@@ -78,12 +83,14 @@ it("retains the caller's current Connection projection through discovery and bro
 
 it("keeps the current Connection identity and state in institution discovery", () => {
   const id = "10000000-0000-4000-8000-000000000001";
+
   const decoded = Schema.decodeUnknownSync(InstitutionSummary)({
     id: "bank",
     displayName: "Banco",
     availability: "available",
     connection: { id, state: "Active", institutionId: "hidden" },
   });
+
   expect(Schema.encodeSync(InstitutionSummary)(decoded)).toEqual({
     id: "bank",
     displayName: "Banco",

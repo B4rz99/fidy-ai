@@ -14,6 +14,7 @@ import {
 import { native } from "../user-store.test-fixture";
 
 const statusBody = (response: Response): Effect.Effect<unknown> => native(() => response.json());
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "withdraws one User's live Consent once and renews only its exact reviewed disclosure with fresh browser proof",
@@ -22,9 +23,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const journey = yield* nativeTransactionJourney;
         const grant = "80000000-0000-4000-8000-000000000001";
         const disclosure = webSignupDisclosure();
+
         const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(
           disclosure
         );
+
         for (const user of [alice, bob]) {
           yield* native(() =>
             journey
@@ -37,7 +40,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               )
           );
         }
+
         const call = nativeBrowserWrite(journey);
+
         const receipts = yield* Effect.forEach(
           [0, 1],
           () =>
@@ -51,8 +56,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             ),
           { concurrency: 2 }
         );
+
         expect(receipts[0]).toEqual(receipts[1]);
         const receipt = receipts[0];
+
         if (receipt?.status !== "Revoked") throw new Error("Missing withdrawal receipt");
         expect(
           yield* native(() =>
@@ -63,12 +70,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         ).toEqual([{ n: 1 }]);
         expect((yield* native(() => journey.browser(0))).status).toBe(401);
         expect((yield* native(() => journey.browser(1))).status).toBe(200);
+
         const body = {
           confirm: true,
           withdrawalReference: receipt.withdrawal.reference,
           authorizationReference: grant,
           disclosureSha256: disclosure.contentSha256,
         };
+
         expect(
           (yield* call(bob, { path: "/web/consent/renew", method: "POST", body })).status
         ).toBe(403);
@@ -79,8 +88,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             body: { ...body, disclosureSha256: "0".repeat(64) },
           })).status
         ).toBe(403);
+
         const restore = (): Effect.Effect<Response> =>
           call(alice, { path: "/web/consent/renew", method: "POST", body });
+
         const accepted = yield* restore();
         expect(accepted.status).toBe(200);
         const replay = yield* restore();

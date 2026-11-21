@@ -6,8 +6,10 @@ import { Config, Data, Effect, FileSystem, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 class FixtureFailure extends Data.TaggedError("FixtureFailure")<{ cause: unknown }> {}
+
 const wait = <A>(run: () => Promise<A>): Effect.Effect<A, FixtureFailure> =>
   Effect.tryPromise({ try: run, catch: (cause) => new FixtureFailure({ cause }) });
+
 const conforming = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))({
   modelApprovalRevision: "openai-gpt-6-luna-v1",
   outcome: "conforming",
@@ -21,6 +23,7 @@ const workerReady = (path: string): Promise<void> =>
   );
 
 type Scenario = "readiness-headers" | "post-headers" | "post-body" | "healthy" | "refused";
+
 const strictReport = {
   category: "InvalidOutput",
   allowQuotaDeferral: false,
@@ -29,7 +32,9 @@ const strictReport = {
   prerequisiteFailure: false,
   trailingJson: "",
 };
+
 type Report = typeof strictReport;
+
 type ScriptResult = {
   report: Report;
   result: number;
@@ -39,18 +44,24 @@ type ScriptResult = {
   posts: number;
   directory: string;
 };
+
 const failureDiagnostic = (check: string, report: Report): string => {
   if (report.revision !== strictReport.revision || report.trailingJson !== "") {
     return "OpenAI conformance failed: check=internal category=UnexpectedFailure\n";
   }
+
   return `OpenAI conformance failed: check=${check} category=${report.category}\n`;
 };
+
 const assertDiagnostic = (scenario: Scenario, result: ScriptResult, check?: string): void => {
   const { report, diagnostic, output } = result;
+
   if (scenario === "readiness-headers") expect(diagnostic).toContain("readiness request timed out");
+
   if (scenario === "post-headers" || scenario === "post-body") {
     expect(diagnostic).toBe("OpenAI conformance request failed.\n");
   }
+
   if (check !== undefined) {
     expect(diagnostic).toBe(
       report.deferred
@@ -60,6 +71,7 @@ const assertDiagnostic = (scenario: Scenario, result: ScriptResult, check?: stri
     expect(output + diagnostic).not.toContain("fixture-private-content");
   }
 };
+
 const assertOutcome = Effect.fn(function* (
   scenario: Scenario,
   result: ScriptResult,
@@ -68,14 +80,17 @@ const assertOutcome = Effect.fn(function* (
   const fs = yield* FileSystem.FileSystem;
   const { report, directory } = result;
   expect(yield* fs.readDirectory(`${directory}/tmp`)).toEqual([]);
+
   if (report.prerequisiteFailure) {
     expect(result.result).toBe(23);
     expect(result.gets).toBe(0);
     expect(result.posts).toBe(0);
     expect(result.output + result.diagnostic).toBe("");
     expect(yield* fs.exists(`${directory}/worker.settled.ready`)).toBe(false);
+
     return;
   }
+
   const passed = scenario === "healthy" && check === undefined;
   expect(result.result).toBe(passed || report.deferred ? 0 : 1);
   expect(result.gets).toBe(1);
@@ -84,6 +99,7 @@ const assertOutcome = Effect.fn(function* (
   assertDiagnostic(scenario, result, check);
   expect(yield* fs.exists(`${directory}/worker.settled`)).toBe(true);
 });
+
 const exercise = Effect.fn(function* (
   scenario: Scenario,
   check?: string,
@@ -91,15 +107,19 @@ const exercise = Effect.fn(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Config.String("PATH");
+
   const directory = yield* Effect.acquireRelease(
     fs.makeTempDirectory({ prefix: "fidy-curl-" }),
     (directory) => fs.remove(directory, { recursive: true, force: true }).pipe(Effect.orDie)
   );
+
   yield* fs.makeDirectory(`${directory}/bin`);
   yield* fs.makeDirectory(`${directory}/tmp`);
+
   const source = yield* fs.readFileString(
     new URL("./scripts/check-openai-conformance.sh", import.meta.url).pathname
   );
+
   yield* fs.makeDirectory(`${directory}/infra/cloudflare/scripts`, { recursive: true });
   yield* fs.makeDirectory(`${directory}/scripts/cli-release`, { recursive: true });
   yield* fs.copyFile(
@@ -115,9 +135,11 @@ const exercise = Effect.fn(function* (
     `${directory}/bin/wrangler`,
     `#!/bin/sh\nexec '${process.execPath}' '${directory}/worker.js'\n`
   );
+
   const marker = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.String))(
     `${directory}/worker.settled`
   );
+
   yield* fs.writeFileString(
     `${directory}/worker.js`,
     `
@@ -134,9 +156,11 @@ const exercise = Effect.fn(function* (
   let gets = 0;
   let posts = 0;
   const held = Promise.withResolvers<Response>();
+
   const body = new ReadableStream<Uint8Array>({
     start: (controller): void => controller.enqueue(new TextEncoder().encode(conforming)),
   });
+
   const server = yield* Effect.acquireRelease(
     Effect.sync(() =>
       Bun.serve({
@@ -146,14 +170,18 @@ const exercise = Effect.fn(function* (
         fetch: (request): Response | Promise<Response> => {
           if (request.method === "GET") {
             gets += 1;
+
             return workerReady(`${directory}/worker.settled.ready`).then(() =>
               scenario === "readiness-headers" ? held.promise : new Response(null, { status: 404 })
             );
           }
+
           posts += 1;
+
           if (scenario === "post-headers") {
             return held.promise;
           }
+
           if (scenario === "post-body") {
             return new Response(body, {
               headers: {
@@ -161,6 +189,7 @@ const exercise = Effect.fn(function* (
               },
             });
           }
+
           return new Response(
             check === undefined
               ? conforming
@@ -182,6 +211,7 @@ const exercise = Effect.fn(function* (
         yield* wait(() => server.stop(true));
       }).pipe(Effect.orDie)
   );
+
   const owned = yield* Effect.acquireRelease(
     Effect.sync(() => {
       const child = Bun.spawn(
@@ -204,6 +234,7 @@ const exercise = Effect.fn(function* (
           stderr: "pipe",
         }
       );
+
       return {
         child,
         stdout: new Response(child.stdout).text(),
@@ -219,6 +250,7 @@ const exercise = Effect.fn(function* (
         yield* wait(() => Promise.all([stdout, stderr]));
       }).pipe(Effect.orDie)
   );
+
   const { child, stdout, stderr } = owned;
 
   const result = yield* wait(() => child.exited).pipe(Effect.timeout("20 seconds"));
@@ -254,6 +286,7 @@ describe.concurrent("native conformance lifecycle", () => {
         25_000
       );
     }
+
     for (const check of [
       "canonical_correction",
       "canonical_deletion",
@@ -266,9 +299,11 @@ describe.concurrent("native conformance lifecycle", () => {
         exercise("refused", check)
       );
     }
+
     it.effect("keeps standalone live verification strict when provider quota is exhausted", () =>
       exercise("refused", "canonical_query", { ...strictReport, category: "ProviderQuotaExceeded" })
     );
+
     for (const check of ["canonical_query", "structured_es_co"]) {
       it.effect(`allows a release to defer quota-exhausted ${check} verification explicitly`, () =>
         exercise("refused", check, {
@@ -279,6 +314,7 @@ describe.concurrent("native conformance lifecycle", () => {
         })
       );
     }
+
     for (const check of ["configuration", "internal"]) {
       it.effect(`refuses a quota report from ${check}`, () =>
         exercise("refused", check, {
@@ -288,6 +324,7 @@ describe.concurrent("native conformance lifecycle", () => {
         })
       );
     }
+
     it.effect("refuses quota reports with an unexpected approval revision", () =>
       exercise("refused", "canonical_query", {
         ...strictReport,
@@ -303,6 +340,7 @@ describe.concurrent("native conformance lifecycle", () => {
         allowQuotaDeferral: true,
       })
     );
+
     for (const trailingJson of ["{}", "not-json"]) {
       it.effect(`refuses a quota report followed by ${trailingJson}`, () =>
         exercise("refused", "canonical_query", {
@@ -313,6 +351,7 @@ describe.concurrent("native conformance lifecycle", () => {
         })
       );
     }
+
     it.effect("does not defer a failed deterministic prerequisite or start live inference", () =>
       exercise("refused", "canonical_query", {
         ...strictReport,
@@ -346,6 +385,7 @@ describe.concurrent("native conformance lifecycle", () => {
               stderr: "pipe",
             }
           );
+
           const result = yield* Effect.all(
             {
               status: child.exitCode,
@@ -354,6 +394,7 @@ describe.concurrent("native conformance lifecycle", () => {
             },
             { concurrency: "unbounded" }
           );
+
           expect(result.status, timeout).toBe(1);
           expect(result.stderr).toBe(
             "OpenAI conformance timeout must be an integer from 1 to 180 seconds.\n"

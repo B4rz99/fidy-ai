@@ -7,6 +7,7 @@ export type CaptureHistoryVersion = Readonly<{
   timeZone: string;
   generation: number;
 }>;
+
 export type ManualCapture = TransactionCaptureTask &
   Readonly<{
     check: Option.Option<CaptureHistoryVersion>;

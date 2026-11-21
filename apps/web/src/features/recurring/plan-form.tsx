@@ -9,19 +9,24 @@ import type { Category, PlanInput } from "./model";
 
 const value = (form: FormData, key: string): string => {
   const entry = form.get(key);
+
   return typeof entry === "string" ? entry.trim() : "";
 };
+
 const day = (text: string): number | "last" =>
   text === "último" || text === "last" ? "last" : Number(text);
+
 const parsePlan = (form: FormData, timeZone: PlanInput["timeZone"]): Option.Option<PlanInput> => {
   const currency = value(form, "currency").toUpperCase();
   const amountMode = value(form, "amountMode");
   const frequency = value(form, "frequency");
+
   const optional = Object.fromEntries(
     ["endDate", "counterparty", "categoryId"].flatMap((key) =>
       value(form, key) === "" ? [] : [[key, value(form, key)]]
     )
   );
+
   return Schema.decodeOption(Schema.toCodecJson(RecurringPlanInput))({
     name: value(form, "name"),
     kind: value(form, "kind"),
@@ -38,6 +43,7 @@ const parsePlan = (form: FormData, timeZone: PlanInput["timeZone"]): Option.Opti
       : {}),
   });
 };
+
 export const PlanForm = ({
   initial,
   categories,
@@ -51,12 +57,15 @@ export const PlanForm = ({
 }>): JSX.Element => {
   const [amountMode, setAmountMode] = useState(initial.amountMode ?? "unknown");
   const [invalid, setInvalid] = useState(false);
+
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const parsed = parsePlan(new FormData(event.currentTarget), initial.timeZone);
     setInvalid(Option.isNone(parsed));
+
     if (Option.isSome(parsed)) onSubmit(parsed.value);
   };
+
   return (
     <form onSubmit={submit} data-recurring-slot="plan-form" className="grid gap-4">
       <fieldset disabled={disabled} className="grid gap-4">
@@ -98,6 +107,7 @@ const AmountFields = ({
         ]}
         onChange={(value) => {
           const parsed = Schema.decodeUnknownOption(RecurringPlanInput.fields.amountMode)(value);
+
           if (Option.isSome(parsed)) setAmountMode(parsed.value);
         }}
       />

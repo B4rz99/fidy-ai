@@ -13,8 +13,10 @@ const defaults = {
   backfill: false,
   day: "15",
 };
+
 const fact = (month: number, overrides: Readonly<Partial<typeof defaults>> = {}): RecurringFact => {
   const input = { ...defaults, ...overrides };
+
   return {
     id: TransactionId.make(`10000000-0000-4000-8000-${String(month).padStart(12, "0")}`),
     money: Schema.decodeSync(Schema.toCodecJson(Money))(input),
@@ -25,6 +27,7 @@ const fact = (month: number, overrides: Readonly<Partial<typeof defaults>> = {})
     backfill: input.backfill,
   };
 };
+
 const zone = IanaTimeZone.make("America/Bogota");
 
 it.each([
@@ -57,6 +60,7 @@ it("clamps a month-end anchor through February without treating monthly cadence 
     ],
     timeZone: zone,
   });
+
   expect(proposals).toHaveLength(1);
   expect(
     DateTime.formatIso(Option.getOrThrow(Option.fromUndefinedOr(proposals[0])).lastOccurredAt)
@@ -81,6 +85,7 @@ it("keeps the first Money reference fixed instead of compounding small price cha
     ],
     timeZone: zone,
   });
+
   expect(proposals).toHaveLength(1);
   expect(
     Schema.encodeSync(Schema.toCodecJson(Money))(
@@ -111,6 +116,7 @@ it("retains the original confirmation evidence while a resumed charge updates la
     facts: [fact(1), fact(2), fact(3), fact(6, { amount: "31000" })],
     timeZone: zone,
   });
+
   expect(proposals).toHaveLength(1);
   expect(
     DateTime.formatIso(Option.getOrThrow(Option.fromUndefinedOr(proposals[0])).lastOccurredAt)
@@ -122,6 +128,7 @@ it("confirms three calendar-month charges and exposes the latest exact Money", (
     amount: "31500",
     counterparty: "  NETFLIX  ",
   });
+
   const proposals = detectMonthlySeries({ facts: [fact(1), fact(2), latest], timeZone: zone });
   expect(proposals).toHaveLength(1);
   expect(
@@ -140,10 +147,12 @@ it("rejects overlapping amount bands before greedily assigning their shared midd
     ...fact(1, { amount: "110" }),
     id: TransactionId.make("90000000-0000-4000-8000-000000000011"),
   };
+
   const secondMarch = {
     ...fact(3, { amount: "110" }),
     id: TransactionId.make("90000000-0000-4000-8000-000000000013"),
   };
+
   expect(
     detectMonthlySeries({
       facts: [
@@ -163,10 +172,12 @@ it("rejects two calendar anchors that share one charge inside both drift allowan
     ...fact(1, { day: "18" }),
     id: TransactionId.make("90000000-0000-4000-8000-000000000021"),
   };
+
   const secondMarch = {
     ...fact(3, { day: "18" }),
     id: TransactionId.make("90000000-0000-4000-8000-000000000023"),
   };
+
   expect(
     detectMonthlySeries({
       facts: [fact(1, { day: "12" }), secondJanuary, fact(2), fact(3, { day: "12" }), secondMarch],
@@ -180,11 +191,13 @@ it("ignores ambiguous later months while extending to the latest unique charge a
     ...fact(6),
     id: TransactionId.make("90000000-0000-4000-8000-000000000031"),
   };
+
   const nextYear = {
     ...fact(1),
     id: TransactionId.make("90000000-0000-4000-8000-000000000032"),
     occurredAt: DateTime.makeUnsafe("2027-01-15T12:00:00.000Z"),
   };
+
   const facts = [fact(1), fact(2), fact(3), fact(6), duplicate];
   const ambiguous = detectMonthlySeries({ facts, timeZone: zone });
   expect(ambiguous).toHaveLength(1);
@@ -208,10 +221,12 @@ it("includes the three-day drift boundary and preserves backfill from any confir
       fact(2, { day: "18", backfill: month === 2 }),
       fact(3, { backfill: month === 3 }),
     ];
+
     const proposals = detectMonthlySeries({ facts, timeZone: zone });
     expect(proposals).toHaveLength(1);
     expect(proposals[0]?.backfill).toBe(true);
   }
+
   expect(
     detectMonthlySeries({ facts: [fact(1), fact(2), fact(3)], timeZone: zone })[0]?.backfill
   ).toBe(false);
@@ -230,14 +245,17 @@ it("confirms across a year boundary regardless of input order and preserves the 
 
 it("keeps equal-Money recurring charges for distinct explicit Counterparties independent", () => {
   const netflix = [fact(1), fact(2), fact(3)];
+
   const spotify = [1, 2, 3, 6].map((month) => ({
     ...fact(month, { counterparty: "Spotify" }),
     id: TransactionId.make(`90000000-0000-4000-8000-${String(month).padStart(12, "0")}`),
   }));
+
   const proposals = detectMonthlySeries({
     facts: [...netflix, ...spotify].toReversed(),
     timeZone: zone,
   });
+
   expect(proposals).toHaveLength(2);
   expect(
     proposals.find((proposal) => proposal.counterparty === "Netflix")?.latestTransactionId
@@ -253,11 +271,13 @@ it("keeps distinct non-overlapping Money bands for the same Counterparty as sepa
     fact(2, { amount: "100" }),
     fact(3, { amount: "100" }),
   ];
+
   const higher = [
     fact(4, { amount: "200" }),
     fact(5, { amount: "200" }),
     fact(6, { amount: "200" }),
   ];
+
   const proposals = detectMonthlySeries({ facts: [...lower, ...higher], timeZone: zone });
   expect(proposals).toHaveLength(2);
   expect(proposals.map((proposal) => proposal.supportingTransactionIds)).toEqual([
@@ -273,6 +293,7 @@ it("freezes the first confirming triple, reference Money and backfill status whe
     fact(3, { amount: "31000" }),
     fact(4, { amount: "31200" }),
   ];
+
   const proposals = detectMonthlySeries({ facts, timeZone: zone });
   expect(proposals).toHaveLength(1);
   expect(proposals[0]?.supportingTransactionIds).toEqual([fact(1).id, fact(2).id, fact(3).id]);
@@ -293,6 +314,7 @@ it("validates unique supporting Transaction identities before retaining a recurr
     latestTransactionId: fact(3).id,
     backfill: false,
   };
+
   expect(Result.isSuccess(Schema.decodeUnknownResult(RecurringProposal)(proposal))).toBe(true);
   expect(
     Result.isFailure(
@@ -310,6 +332,7 @@ it("validates unique supporting Transaction identities before retaining a recurr
       })
     )
   ).toBe(true);
+
   const page = {
     series: [
       {
@@ -325,6 +348,7 @@ it("validates unique supporting Transaction identities before retaining a recurr
     ],
     evaluation: { kind: "updating" },
   };
+
   expect(
     Schema.encodeSync(RecurringSeriesPage)(Schema.decodeUnknownSync(RecurringSeriesPage)(page))
   ).toEqual(page);
@@ -335,6 +359,7 @@ it("rejects a competing first-month anchor even when its asymmetric Money band c
     ...fact(1, { amount: "105.01" }),
     id: TransactionId.make("90000000-0000-4000-8000-000000000041"),
   };
+
   expect(
     detectMonthlySeries({
       facts: [
@@ -355,6 +380,7 @@ it("rejects competing first-month anchors at asymmetric Money boundaries", () =>
     { month: 3, id: 3, amount: "100", day: 15, name: "Netflix" },
     { month: 4, id: 5, amount: "105", day: 18, name: "Netflix" },
   ];
+
   const facts = charges.map((charge: Readonly<(typeof charges)[number]>) => ({
     ...fact(charge.month, {
       amount: charge.amount,
@@ -363,6 +389,7 @@ it("rejects competing first-month anchors at asymmetric Money boundaries", () =>
     }),
     id: TransactionId.make(`10000000-0000-4000-8000-${String(charge.id).padStart(12, "0")}`),
   }));
+
   const proposals = detectMonthlySeries({ facts, timeZone: zone });
   expect(
     proposals.map((proposal) => ({
@@ -384,6 +411,7 @@ it("retains a later independent triple after earlier shared evidence is rejected
     { month: 5, id: 5, amount: "100", day: 15, name: "Netflix" },
     { month: 6, id: 6, amount: "100", day: 12, name: "Netflix" },
   ];
+
   const facts = charges.map((charge: Readonly<(typeof charges)[number]>) => ({
     ...fact(charge.month, {
       amount: charge.amount,
@@ -392,6 +420,7 @@ it("retains a later independent triple after earlier shared evidence is rejected
     }),
     id: TransactionId.make(`10000000-0000-4000-8000-${String(charge.id).padStart(12, "0")}`),
   }));
+
   const proposals = detectMonthlySeries({ facts, timeZone: zone });
   expect(
     proposals.map((proposal) => ({
@@ -419,6 +448,7 @@ it("requires mutual comparability before treating overlapping triples as one pat
     { month: 3, id: 3, amount: "105.01", day: 15, name: "Netflix" },
     { month: 6, id: 7, amount: "103", day: 18, name: "Netflix" },
   ];
+
   const facts = charges.map((charge: Readonly<(typeof charges)[number]>) => ({
     ...fact(charge.month, {
       amount: charge.amount,
@@ -427,6 +457,7 @@ it("requires mutual comparability before treating overlapping triples as one pat
     }),
     id: TransactionId.make(`10000000-0000-4000-8000-${String(charge.id).padStart(12, "0")}`),
   }));
+
   const proposals = detectMonthlySeries({ facts, timeZone: zone });
   expect(
     proposals.map((proposal) => ({
@@ -448,6 +479,7 @@ it("keeps the original calendar anchor when a later triple resumes", () => {
     { month: 6, id: 8, amount: "100", day: 15, name: "Netflix" },
     { month: 7, id: 9, amount: "100", day: 15, name: "Netflix" },
   ];
+
   const facts = charges.map((charge: Readonly<(typeof charges)[number]>) => ({
     ...fact(charge.month, {
       amount: charge.amount,
@@ -456,6 +488,7 @@ it("keeps the original calendar anchor when a later triple resumes", () => {
     }),
     id: TransactionId.make(`10000000-0000-4000-8000-${String(charge.id).padStart(12, "0")}`),
   }));
+
   const proposals = detectMonthlySeries({ facts, timeZone: zone });
   expect(
     proposals.map((proposal) => ({
@@ -486,6 +519,7 @@ it("does not reset retained evidence when exactly one historical proposal matche
     { month: 7, id: 9, amount: "100", day: 15, name: "Netflix" },
     { month: 8, id: 10, amount: "100", day: 18, name: "Netflix" },
   ];
+
   const facts = charges.map((charge: Readonly<(typeof charges)[number]>) => ({
     ...fact(charge.month, {
       amount: charge.amount,
@@ -494,6 +528,7 @@ it("does not reset retained evidence when exactly one historical proposal matche
     }),
     id: TransactionId.make(`10000000-0000-4000-8000-${String(charge.id).padStart(12, "0")}`),
   }));
+
   const proposals = detectMonthlySeries({ facts, timeZone: zone });
   expect(
     proposals.map((proposal) => ({
@@ -522,6 +557,7 @@ it("permits already-assigned evidence only within the same historical proposal",
     { month: 11, id: 13, amount: "103", day: 15, name: "Netflix" },
     { month: 11, id: 14, amount: "110", day: 15, name: "Netflix" },
   ];
+
   const facts = charges.map((charge: Readonly<(typeof charges)[number]>) => ({
     ...fact(charge.month, {
       amount: charge.amount,
@@ -530,6 +566,7 @@ it("permits already-assigned evidence only within the same historical proposal",
     }),
     id: TransactionId.make(`10000000-0000-4000-8000-${String(charge.id).padStart(12, "0")}`),
   }));
+
   const proposals = detectMonthlySeries({ facts, timeZone: zone });
   expect(
     proposals.map((proposal) => ({
@@ -559,6 +596,7 @@ it("does not extend a proposal with a charge eligible for two Money bands", () =
     { month: 7, id: 6, amount: "103", day: 15, name: "Netflix" },
     { month: 8, id: 8, amount: "105", day: 12, name: "Netflix" },
   ];
+
   const facts = charges.map((charge: Readonly<(typeof charges)[number]>) => ({
     ...fact(charge.month, {
       amount: charge.amount,
@@ -567,6 +605,7 @@ it("does not extend a proposal with a charge eligible for two Money bands", () =
     }),
     id: TransactionId.make(`10000000-0000-4000-8000-${String(charge.id).padStart(12, "0")}`),
   }));
+
   const proposals = detectMonthlySeries({ facts, timeZone: zone });
   expect(
     proposals.map((proposal) => ({
@@ -603,6 +642,7 @@ it("keeps historical proposals unchanged when all later charges are ambiguous", 
     { month: 8, id: 10, amount: "110", day: 15, name: "Netflix" },
     { month: 1, id: 1, amount: "103", day: 15, name: "Netflix" },
   ];
+
   const facts = charges.map((charge: Readonly<(typeof charges)[number]>) => ({
     ...fact(charge.month, {
       amount: charge.amount,
@@ -611,6 +651,7 @@ it("keeps historical proposals unchanged when all later charges are ambiguous", 
     }),
     id: TransactionId.make(`10000000-0000-4000-8000-${String(charge.id).padStart(12, "0")}`),
   }));
+
   const proposals = detectMonthlySeries({ facts, timeZone: zone });
   expect(
     proposals.map((proposal) => ({
@@ -644,6 +685,7 @@ it("excludes charges with no explicit Counterparty", () => {
     { month: 5, id: 7, amount: "110", day: 15, name: "" },
     { month: 4, id: 6, amount: "115", day: 18, name: "" },
   ];
+
   const facts = charges.map((charge: Readonly<(typeof charges)[number]>) => ({
     ...fact(charge.month, {
       amount: charge.amount,
@@ -652,6 +694,7 @@ it("excludes charges with no explicit Counterparty", () => {
     }),
     id: TransactionId.make(`10000000-0000-4000-8000-${String(charge.id).padStart(12, "0")}`),
   }));
+
   const proposals = detectMonthlySeries({ facts, timeZone: zone });
   expect(
     proposals.map((proposal) => ({
@@ -669,6 +712,7 @@ it("orders recurring evidence by occurrence time when Transaction identities sor
     ...fact(month),
     id: TransactionId.make(`10000000-0000-4000-8000-${String(10 - month).padStart(12, "0")}`),
   }));
+
   expect(
     detectMonthlySeries({ facts: facts.toReversed(), timeZone: zone })[0]?.supportingTransactionIds
   ).toEqual(facts.slice(0, 3).map((entry: RecurringFact) => entry.id));
@@ -680,6 +724,7 @@ it("does not assign a later triple to either of two compatible historical propos
     ...[5, 6, 7].map((month) => fact(month, { amount: "110" })),
     ...[9, 10, 11].map((month) => fact(month, { amount: "105" })),
   ];
+
   expect(
     detectMonthlySeries({ facts, timeZone: zone }).map((proposal) => proposal.latestTransactionId)
   ).toEqual([fact(3).id, fact(7).id]);

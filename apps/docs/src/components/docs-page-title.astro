@@ -3,8 +3,11 @@ import { pageGroup } from "../lib/navigation";
 import MarkdownActions from "./markdown-actions.astro";
 
 const { id, entry } = Astro.locals.starlightRoute;
+
 const operation = id.startsWith("reference/");
+
 const [domain, operationName] = entry.data.title.split(".");
+
 const words = operationName?.match(/[A-Z]?[a-z]+|[A-Z]+(?![a-z])|[0-9]+/gu) ?? [];
 ---
 

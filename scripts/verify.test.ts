@@ -5,6 +5,7 @@ import { Data, Effect } from "effect";
 class FixtureUnavailable extends Data.TaggedError("FixtureUnavailable") {}
 
 const fixtures: Array<string> = [];
+
 afterEach(() => {
   for (const fixture of fixtures.splice(0)) Bun.spawnSync(["rm", "-rf", fixture]);
 });
@@ -39,8 +40,10 @@ done
       catch: () => new FixtureUnavailable(),
     });
     expect(Bun.spawnSync(["chmod", "+x", `${directory}/bun`]).exitCode).toBe(0);
+
     for (const failure of ["", "cli", "core"]) {
       Bun.spawnSync(["rm", "-f", `${directory}/cli`, `${directory}/core`]);
+
       const result = Bun.spawnSync(
         [
           process.execPath,
@@ -57,7 +60,9 @@ done
           },
         }
       );
+
       expect(result.exitCode).toBe(failure === "" ? 0 : 1);
+
       if (failure === "") {
         expect(new TextDecoder().decode(result.stdout).match(/^CHECK /gmu)).toHaveLength(9);
       } else {
@@ -115,6 +120,7 @@ fi
         catch: () => new FixtureUnavailable(),
       });
       expect(Bun.spawnSync(["chmod", "+x", `${directory}/bun`]).exitCode).toBe(0);
+
       for (const failure of ["", "rules", "compiler", "suppressions", "types"] as const) {
         Bun.spawnSync([
           "rm",
@@ -125,6 +131,7 @@ fi
           `${directory}/suppressions`,
           `${directory}/types`,
         ]);
+
         const result = Bun.spawnSync(
           [
             process.execPath,
@@ -141,7 +148,9 @@ fi
             },
           }
         );
+
         expect(result.exitCode).toBe(failure === "" ? 0 : 1);
+
         if (failure !== "") {
           const labels = {
             rules: "Lint rule regressions",
@@ -149,6 +158,7 @@ fi
             compiler: "oxlint type-aware",
             suppressions: "Lint suppressions",
           };
+
           expect(new TextDecoder().decode(result.stderr)).toContain(labels[failure]);
         }
       }

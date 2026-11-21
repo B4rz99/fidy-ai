@@ -58,13 +58,16 @@ export const prepareSubscriptionStatus = (
     (Readonly<{ userId: UserId }> | Readonly<{ users: OwnedStatement }>)
 ): PreparedSubscriptionRead => {
   Schema.decodeSync(Schema.Finite)(input.current);
+
   const users =
     "users" in input ? input.users : { sql: "SELECT ? AS userId", params: [input.userId] };
+
   const owner: OwnedStatement = {
     sql: `WITH candidates(userId) AS MATERIALIZED (SELECT DISTINCT userId FROM (${users.sql}))
       SELECT userId FROM candidates WHERE (SELECT COUNT(*) FROM candidates)=1`,
     params: users.params,
   };
+
   return {
     statements: [
       subscriptionStandingQuery({ users: owner, authority: Option.some(input.authority) }),

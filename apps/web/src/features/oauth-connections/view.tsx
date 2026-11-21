@@ -23,6 +23,7 @@ type ReviewProps = Readonly<{
   toggle: (scope: PATScope, checked: boolean) => void;
   select: (days: PATLifetimeDays) => void;
 }>;
+
 const PermissionChoices = (
   input: Readonly<{
     permissions: OAuthReview["permissions"];
@@ -53,6 +54,7 @@ const PermissionChoices = (
     ))}
   </fieldset>
 );
+
 const DurationChoices = (
   input: Readonly<{
     days: PATLifetimeDays;
@@ -75,6 +77,7 @@ const DurationChoices = (
     ))}
   </fieldset>
 );
+
 const ReviewActions = ({
   scopes,
   connect,
@@ -111,6 +114,7 @@ export const OAuthReviewView = ({
   select,
 }: ReviewProps): JSX.Element => {
   const expiration = DateTime.addDuration(review.reviewedAt, Duration.days(days));
+
   return (
     <div className="settings-columns">
       <div className="settings-main">

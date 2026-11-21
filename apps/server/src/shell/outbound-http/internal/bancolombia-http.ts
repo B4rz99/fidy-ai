@@ -4,22 +4,28 @@ import type { BancolombiaSandboxHttpService } from "~/shell/outbound-http/contra
 import { makeProviderTransport } from "./transport";
 
 const issuer = "https://auth1-api-open-finance-sandbox.ambientesbc.com";
+
 const token = "https://as1-api-open-finance-sandbox.ambientesbc.com/token";
+
 const maximumBytes = 65536;
+
 const par = "https://as1-api-open-finance-sandbox.ambientesbc.com/par";
 
 type BankRequest = Parameters<BancolombiaSandboxHttpService["execute"]>[0];
+
 type ActivationRequest = Extract<
   BankRequest,
   {
     _tag: "BankSigningKeys" | "ExchangeBankCode" | "ReadBankConsent" | "ReadBankAccounts";
   }
 >;
+
 const isActivationRequest = (request: BankRequest): request is ActivationRequest =>
   request._tag === "BankSigningKeys" ||
   request._tag === "ExchangeBankCode" ||
   request._tag === "ReadBankConsent" ||
   request._tag === "ReadBankAccounts";
+
 const prepareActivationRequest = (
   request: ActivationRequest
 ): HttpClientRequest.HttpClientRequest => {
@@ -68,9 +74,12 @@ const prepareActivationRequest = (
       );
   }
 };
+
 type TokenRequest = Extract<BankRequest, { _tag: "RevokeBankToken" | "InspectBankToken" }>;
+
 const isTokenRequest = (request: BankRequest): request is TokenRequest =>
   request._tag === "RevokeBankToken" || request._tag === "InspectBankToken";
+
 const prepareTokenRequest = (request: TokenRequest): HttpClientRequest.HttpClientRequest =>
   HttpClientRequest.post(
     request._tag === "RevokeBankToken"
@@ -88,9 +97,12 @@ const prepareTokenRequest = (request: TokenRequest): HttpClientRequest.HttpClien
       ),
     }
   );
+
 const prepareRequest = (request: BankRequest): HttpClientRequest.HttpClientRequest => {
   if (isTokenRequest(request)) return prepareTokenRequest(request);
+
   if (isActivationRequest(request)) return prepareActivationRequest(request);
+
   switch (request._tag) {
     case "Discovery":
       return HttpClientRequest.get(`${issuer}/.well-known/openid-configuration`);
@@ -145,9 +157,11 @@ export const bancolombiaSandboxHttp = (
   client: HttpClient.HttpClient
 ): BancolombiaSandboxHttpService => {
   const http = makeProviderTransport("bancolombia")(client);
+
   return {
     execute: (request) => {
       const prepared = prepareRequest(request);
+
       return http
         .execute(HttpClientRequest.setHeader(prepared, "accept", "application/json"), maximumBytes)
         .pipe(

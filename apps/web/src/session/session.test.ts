@@ -10,11 +10,13 @@ import { SessionRegistryProvider } from "./session";
 import { type SessionContextValue, useSession } from "./session-context";
 
 type Owner = Readonly<{ registry: AtomRegistry.AtomRegistry; session: SessionContextValue }>;
+
 const SessionProbe = ({
   attach,
 }: Readonly<{ attach: (owner: Owner) => void }>): React.JSX.Element => {
   const registry = useContext(RegistryContext);
   const session = useSession();
+
   return createElement("span", { ref: () => attach({ registry, session }) });
 };
 
@@ -31,12 +33,14 @@ it.each([false, true])(
         const registries = new Set<AtomRegistry.AtomRegistry>();
         const held = Deferred.makeUnsafe<void>();
         let reads = 0;
+
         const query = makeFreshQuery({
           runtime: Atom.runtime(Layer.empty),
           load: Effect.sync(() => {
             reads += 1;
           }).pipe(Effect.andThen(Deferred.await(held))),
         });
+
         try {
           const element = createElement(
             SessionRegistryProvider,
@@ -48,11 +52,14 @@ it.each([false, true])(
               },
             })
           );
+
           yield* Effect.tryPromise(() => reactWork(() => root.render(element)));
           const previous = Option.getOrThrow(owner);
+
           const recovery = yield* (
             pending ? readFreshQuery({ registry: previous.registry, query }) : Effect.succeed(false)
           ).pipe(Effect.forkChild);
+
           if (pending) yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(1)));
           yield* Effect.tryPromise(() => reactWork(previous.session.replaceAuthenticationLifetime));
           yield* Deferred.succeed(held, undefined);
@@ -64,6 +71,7 @@ it.each([false, true])(
           expect(reads).toBe(pending ? 2 : 1);
         } finally {
           yield* Effect.tryPromise(() => reactWork(() => root.unmount()));
+
           for (const registry of registries) registry.dispose();
           vi.unstubAllGlobals();
         }

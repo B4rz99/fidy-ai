@@ -7,6 +7,7 @@ import { makeFidyClient } from "@/transport/client";
 import { type TransactionCaptureTask, makeTransactionCapture } from "./capture-task";
 
 const categoryId = "24000000-0000-4000-8000-000000000242";
+
 const transaction = {
   id: "25000000-0000-4000-8000-000000000001",
   categoryId,
@@ -18,7 +19,9 @@ const transaction = {
   createdAt: "2026-10-23T12:00:00.000Z",
   revision: 1,
 };
+
 const cleanup: Array<() => void> = [];
+
 afterEach(() => {
   cleanup
     .splice(0)
@@ -26,22 +29,26 @@ afterEach(() => {
     .forEach((dispose) => dispose());
   vi.useRealTimers();
 });
+
 type Fixture = Readonly<{
   behavior: { delay: number; status: number; body: string };
   dispose: () => void;
   requests: Array<string>;
   view: () => TransactionCaptureTask;
 }>;
+
 const fixture = (): Fixture => {
   vi.useFakeTimers();
   const requests: Array<string> = [];
   const behavior = { delay: 0, status: 201, body: JSON.stringify({ data: transaction, next: [] }) };
+
   const client = makeFidyClient({
     apiOrigin: "https://api.test.fidyapp.com",
     httpClient: Layer.succeed(
       HttpClient.HttpClient,
       HttpClient.make((request) => {
         requests.push(request.method);
+
         return Effect.sleep(behavior.delay).pipe(
           Effect.as(
             HttpClientResponse.fromWeb(
@@ -56,6 +63,7 @@ const fixture = (): Fixture => {
       })
     ),
   });
+
   const resource = makeTransactionCapture({
     client,
     timeZone: "America/Bogota",
@@ -69,10 +77,12 @@ const fixture = (): Fixture => {
       occurredOn: "2026-10-23",
     },
   });
+
   const registry = AtomRegistry.make();
   cleanup.push(() => registry.dispose(), registry.mount(resource));
   const dispose = registry.get(resource).mount();
   cleanup.push(dispose);
+
   return {
     behavior,
     dispose,
@@ -80,6 +90,7 @@ const fixture = (): Fixture => {
     view: (): TransactionCaptureTask => registry.get(resource),
   };
 };
+
 it.effect(
   "keeps the committed Transaction and create lock when its presentation callback throws",
   () =>
@@ -154,6 +165,7 @@ it.effect(
       expect(harness.requests).toEqual(["POST"]);
     })
 );
+
 it.effect(
   "rejects invalid Money and local days before reserving a create, then admits one synchronous submission",
   () =>
@@ -179,6 +191,7 @@ it.effect(
       );
     })
 );
+
 it.effect("retains the correctable draft after a canonical nonadmission refusal", () =>
   Effect.gen(function* () {
     const harness = fixture();
@@ -205,6 +218,7 @@ it.effect("retains the correctable draft after a canonical nonadmission refusal"
     expect(Option.isSome(harness.view().created)).toBe(true);
   })
 );
+
 it.effect(
   "keeps malformed acknowledged outcomes locked with the original draft and no automatic replay",
   () =>

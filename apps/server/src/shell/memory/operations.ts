@@ -15,6 +15,7 @@ import { admitMemory } from "~/core/memory/operations";
 import { HostedInference } from "~/shell/hosted-inference/operations";
 
 const MemoryProjection = Memory.mapFields(Struct.pick(["id", "text"]));
+
 const encodeMemoryProjection = Schema.encodeSync(jsonStringSchema(MemoryProjection));
 
 const projectMemoryAggregate = (memories: ReadonlyArray<Memory>): string =>
@@ -22,9 +23,13 @@ const projectMemoryAggregate = (memories: ReadonlyArray<Memory>): string =>
 
 const compareRecallOrder = (left: Memory, right: Memory): number => {
   const instant = DateTime.toEpochMillis(left.createdAt) - DateTime.toEpochMillis(right.createdAt);
+
   if (instant !== 0) return instant;
+
   if (left.id < right.id) return -1;
+
   if (left.id > right.id) return 1;
+
   return 0;
 };
 
@@ -35,6 +40,7 @@ const countAndAdmitFinalAggregate = Effect.fn("countAndAdmitFinalAggregate")(fun
   const inference = yield* HostedInference;
   const finalRecallOrder = [...final].sort(compareRecallOrder);
   const tokens = yield* inference.countText(projectMemoryAggregate(finalRecallOrder));
+
   return yield* admitMemory({ candidate, aggregateTokens: tokens });
 });
 
@@ -50,6 +56,7 @@ export const countAndAdmitMemoryRevision = Effect.fn("countAndAdmitMemoryRevisio
   candidate: Memory
 ) {
   const final = current.map((memory) => (memory.id === candidate.id ? candidate : memory));
+
   return yield* countAndAdmitFinalAggregate(final, candidate);
 });
 
@@ -92,6 +99,7 @@ export const recordBrowserMemoryWork = ({
   }>;
 }>): OwnedStatement => {
   const authority = liveWebSessionAuthority({ subject, current: input.current });
+
   return recordAuthorizedCall({
     authority,
     id: input.id,

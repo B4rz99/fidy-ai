@@ -3,6 +3,7 @@ import { Data, Effect } from "effect";
 type Storage = Pick<DurableObjectStorage, "getAlarm" | "setAlarm" | "deleteAlarm">;
 
 type AlarmAbsent = Readonly<{ _tag: "AlarmAbsent" }>;
+
 type ClearUnconfirmed = Readonly<{ _tag: "ClearUnconfirmed" }>;
 
 class RecoveryAlarmUnavailable extends Data.TaggedError("RecoveryAlarmUnavailable") {}
@@ -19,14 +20,17 @@ export const makeUserRecoveryAlarm = (
   let pending: Promise<void> = Promise.resolve();
   let retired = false;
   const isRetired = (): boolean => retired;
+
   const enqueue = <A>(run: () => Promise<A>): Promise<A> => {
     const result = pending.then(run);
     pending = result.then(
       () => undefined,
       () => undefined
     );
+
     return result;
   };
+
   return {
     schedule: (dueAtMs) =>
       enqueue(() =>
@@ -34,6 +38,7 @@ export const makeUserRecoveryAlarm = (
           Effect.gen(function* () {
             if (isRetired()) return;
             const existing = yield* nativeAlarm(() => storage.getAlarm());
+
             if (!isRetired() && (existing === null || dueAtMs < existing)) {
               yield* nativeAlarm(() => storage.setAlarm(dueAtMs));
             }
@@ -42,14 +47,17 @@ export const makeUserRecoveryAlarm = (
       ),
     retireAndClear: () => {
       retired = true;
+
       return enqueue(() =>
         Effect.runPromise(
           Effect.gen(function* () {
             yield* nativeAlarm(() => storage.deleteAlarm());
+
             const result: AlarmAbsent | ClearUnconfirmed =
               (yield* nativeAlarm(() => storage.getAlarm())) === null
                 ? { _tag: "AlarmAbsent" }
                 : { _tag: "ClearUnconfirmed" };
+
             return result;
           })
         )

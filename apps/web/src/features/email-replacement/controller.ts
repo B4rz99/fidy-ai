@@ -12,9 +12,11 @@ export const useEmailReplacement = (): ReplacementActions &
   const { apiClient, webAuthClient, sessionBinding: binding } = useRouter().options.context;
   const uncertain = useAtomValue(incompleteReplacement);
   const onUncertain = useAtomSet(incompleteReplacement);
+
   const [state, setState] = useState<EmailReplacementViewState>(
     uncertain ? { _tag: "Uncertain" } : { _tag: "Editing", feedback: "none" }
   );
+
   const [interaction] = useState(() =>
     makeReplacement({
       apiClient,
@@ -25,13 +27,17 @@ export const useEmailReplacement = (): ReplacementActions &
       binding,
     })
   );
+
   const dispatch = useAtomSet(interaction.atom);
+
   const lifecycleRef = useCallback<RefCallback<HTMLElement>>(
     (node) => {
       if (node === null) return;
+
       return interaction.mount(dispatch);
     },
     [interaction, dispatch]
   );
+
   return { state, lifecycleRef, ...interaction.actions(dispatch) };
 };

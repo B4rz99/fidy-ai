@@ -6,7 +6,9 @@ import { type CommandDependencies, PublicOutput } from "./contract";
 import { failures, messages } from "./internal/presentation";
 
 const maximumArguments = 9;
+
 const maximumArgumentCharacters = 256;
+
 const Arguments = Schema.Array(
   Schema.String.check(Schema.isMaxLength(maximumArgumentCharacters))
 ).check(Schema.isMaxLength(maximumArguments));
@@ -17,14 +19,18 @@ const loginInput = Effect.fn(function* (
 ) {
   if (args.length === 1) {
     const recipientLabel = yield* dependencies.readLine("Destinatario exacto: ");
+
     const scopes = (yield* dependencies.readLine(
       `Permisos (${PATScope.literals.join(", ")}; separados por coma): `
     )).split(",");
+
     const lifetimeDays = Number(
       yield* dependencies.readLine(`Duración fija en días (${patLifetimeDayOptions.join(", ")}): `)
     );
+
     return { recipientLabel, scopes, lifetimeDays };
   }
+
   if (
     args.length !== flagArgumentCount ||
     args[1] !== "--recipient" ||
@@ -33,23 +39,28 @@ const loginInput = Effect.fn(function* (
   ) {
     return yield* new CliFailure({ reason: "InvalidInput" });
   }
+
   return { recipientLabel: args[2], scopes: args[4]?.split(","), lifetimeDays: Number(args[6]) };
 });
+
 const flagArgumentCount = 7;
 
 const showStatus = Effect.fn(function* (dependencies: CommandDependencies) {
   const local = yield* dependencies.store.load;
   const now = yield* DateTime.now;
+
   if (Option.isNone(local)) {
     return yield* dependencies.emit({
       _tag: "LocalStatus",
       availability: "absent",
     });
   }
+
   const availability =
     local.value.grant.pat.expiresAt.epochMilliseconds <= now.epochMilliseconds
       ? "expired"
       : "available";
+
   yield* dependencies.emit({
     _tag: "LocalStatus",
     availability,
@@ -58,19 +69,23 @@ const showStatus = Effect.fn(function* (dependencies: CommandDependencies) {
 });
 
 const ignoreBrowser = (_url: string): Effect.Effect<void> => Effect.void;
+
 const runLogin = Effect.fn(function* (
   args: ReadonlyArray<string>,
   dependencies: CommandDependencies,
   openApproval: (url: string) => Effect.Effect<void>
 ) {
   const noBrowser = args.includes("--no-browser");
+
   if (args.filter((argument) => argument === "--no-browser").length > 1) {
     return yield* new CliFailure({ reason: "InvalidInput" });
   }
+
   const request = yield* loginInput(
     args.filter((argument) => argument !== "--no-browser"),
     dependencies
   );
+
   const grant = yield* login(
     request,
     (event) =>
@@ -85,6 +100,7 @@ const runLogin = Effect.fn(function* (
         ),
     dependencies
   );
+
   return yield* dependencies.emit({ _tag: "LoggedIn", grant });
 });
 
@@ -96,19 +112,25 @@ export const runCommand = Effect.fn(function* (
   const args = yield* Schema.decodeUnknownEffect(Arguments)(input).pipe(
     Effect.mapError(() => new CliFailure({ reason: "InvalidInput" }))
   );
+
   switch (args[0]) {
     case "login": {
       return yield* runLogin(args, dependencies, openApproval);
     }
+
     case "status": {
       if (args.length !== 1) return yield* new CliFailure({ reason: "InvalidInput" });
+
       return yield* showStatus(dependencies);
     }
+
     case "logout": {
       if (args.length !== 1) return yield* new CliFailure({ reason: "InvalidInput" });
       yield* dependencies.store.clear;
+
       return yield* dependencies.emit({ _tag: "LoggedOut" });
     }
+
     case undefined:
     default:
       return yield* new CliFailure({ reason: "InvalidInput" });
@@ -116,7 +138,9 @@ export const runCommand = Effect.fn(function* (
 });
 
 const outputCodec = Schema.fromJsonString(Schema.toCodecJson(PublicOutput));
+
 const hexadecimalRadix = 16;
+
 const escapeTerminalControls = (text: string): string =>
   text.replace(
     /[\u007f-\u009f\u2028-\u202e\u2066-\u2069]/gu,
@@ -125,6 +149,7 @@ const escapeTerminalControls = (text: string): string =>
 
 export const formatOutput = Effect.fn(function* (output: PublicOutput, json: boolean) {
   const text = escapeTerminalControls(yield* Schema.encodeEffect(outputCodec)(output));
+
   return json ? `${text}\n` : `${messages[output._tag]}\n${text}\n`;
 });
 
@@ -133,6 +158,7 @@ export const formatFailure = ({
   json,
 }: Readonly<{ reason: CliFailure["reason"]; json: boolean }>): string => {
   const message = failures[reason];
+
   return json
     ? Schema.encodeSync(
         Schema.fromJsonString(Schema.Struct({ code: Schema.String, message: Schema.String }))
@@ -150,11 +176,14 @@ export const formatCommandFailure = ({
   const failure = Cause.findErrorOption(cause).pipe(
     Option.filter((error): error is CliFailure => error instanceof CliFailure)
   );
+
   const interrupted =
     Cause.hasInterrupts(cause) || Option.exists(failure, (error) => error.reason === "Cancelled");
+
   const reason = Option.match(failure, {
     onNone: (): CliFailure["reason"] => (interrupted ? "Cancelled" : "TransportUnavailable"),
     onSome: (error) => error.reason,
   });
+
   return { message: formatFailure({ reason, json }), interrupted };
 };

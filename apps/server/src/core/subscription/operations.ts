@@ -7,10 +7,13 @@ export const refundMinorUnits = (money: ReadonlyMoney): Option.Option<number> =>
   if (money.currency !== "COP" || BigDecimal.Order(money.amount, BigDecimal.make(0n, 0)) <= 0) {
     return Option.none();
   }
+
   const [whole = "0", fraction = ""] = encodeMoneyAmount(money.amount).split(".");
   const providerFractionDigits = 2;
+
   if (fraction.length > providerFractionDigits) return Option.none();
   const cents = BigInt(whole) * 100n + BigInt(fraction.padEnd(providerFractionDigits, "0"));
+
   return cents <= BigInt(Number.MAX_SAFE_INTEGER) ? Option.some(Number(cents)) : Option.none();
 };
 
@@ -35,6 +38,7 @@ export const paidPeriodFor: {
   (billingPeriod: BillingPeriod, timeZone: IanaTimeZone, finalizedAt: DateTime.Utc) => {
     const zonedStart = DateTime.setZone(finalizedAt, DateTime.zoneMakeNamedUnsafe(timeZone));
     let zonedEnd: DateTime.Zoned;
+
     if (billingPeriod === "weekly") {
       zonedEnd = DateTime.add(zonedStart, { weeks: 1 });
     } else if (billingPeriod === "monthly") {
@@ -42,7 +46,9 @@ export const paidPeriodFor: {
     } else {
       zonedEnd = DateTime.add(zonedStart, { years: 1 });
     }
+
     const endsAt = DateTime.toUtc(zonedEnd);
+
     return Effect.succeed({ startsAt: finalizedAt, endsAt, renewalAnchor: endsAt });
   }
 );
@@ -58,19 +64,23 @@ export const renewalPeriod = (
   if (input.billingPeriod === "weekly") {
     return paidPeriodFor("weekly", input.timeZone, input.previousEndsAt);
   }
+
   const zone = DateTime.zoneMakeNamedUnsafe(input.timeZone);
   const original = DateTime.setZone(input.originalStartsAt, zone);
   const start = DateTime.toParts(original);
   const boundary = DateTime.toParts(DateTime.setZone(input.previousEndsAt, zone));
   const years = boundary.year - start.year;
   const monthsPerYear = 12;
+
   const end = DateTime.add(
     original,
     input.billingPeriod === "monthly"
       ? { months: years * monthsPerYear + boundary.month - start.month + 1 }
       : { years: years + 1 }
   );
+
   const endsAt = DateTime.toUtc(end);
+
   return Effect.succeed({ startsAt: input.previousEndsAt, endsAt, renewalAnchor: endsAt });
 };
 
@@ -98,6 +108,7 @@ export const decideEnrollmentSubmission: {
     now: DateTime.Utc
   ): Readonly<{ _tag: "BeginSubmission" | "RecordExpiration" | "ReturnCurrentStatus" }> => {
     if (checkpoint.status !== "prepared") return { _tag: "ReturnCurrentStatus" };
+
     return DateTime.Order(now, checkpoint.expiresAt) < 0
       ? { _tag: "BeginSubmission" }
       : { _tag: "RecordExpiration" };
@@ -127,9 +138,13 @@ export const decideEnrollmentPreparation: {
     if (checkpoint.status === "refused" || checkpoint.status === "expired") {
       return { _tag: "RestartRequired" };
     }
+
     if (checkpoint.priceId === requestedPriceId) return { _tag: "Observe" };
+
     if (checkpoint.status === "prepared") return { _tag: "ReplaceIntent" };
+
     if (checkpoint.status === "available") return { _tag: "ReauthorizeSource" };
+
     return { _tag: "Observe" };
   }
 );

@@ -48,18 +48,23 @@ const validBudgetCurrencies = Schema.makeFilter<typeof AvailableBudgetResultShap
   if (data.cap.currency !== data.currency) {
     return { path: ["cap", "currency"], issue: "Expected the Budget Currency" };
   }
+
   if (data.spent.currency !== data.currency) {
     return { path: ["spent", "currency"], issue: "Expected the Budget Currency" };
   }
+
   if (data.status.type === "under" && data.status.remaining.currency !== data.currency) {
     return { path: ["status", "remaining", "currency"], issue: "Expected the Budget Currency" };
   }
+
   if (data.status.type === "over" && data.status.overBy.currency !== data.currency) {
     return { path: ["status", "overBy", "currency"], issue: "Expected the Budget Currency" };
   }
+
   if (!Schema.is(BudgetProgress)(data)) {
     return { path: ["status", "type"], issue: "Expected exact Budget progress" };
   }
+
   return undefined;
 });
 
@@ -100,6 +105,7 @@ export const DashboardWidgetView = Schema.Union([
   Schema.Struct({ widget: TransactionListWidget, result: TransactionListResult }),
   Schema.Struct({ widget: CustomMetricWidget, result: CustomMetricResult }),
 ]).annotate({ identifier: "DashboardWidgetView" });
+
 export type DashboardWidgetView = typeof DashboardWidgetView.Type;
 
 const DashboardViewLayout = makeLayoutNodeSchema({
@@ -117,6 +123,7 @@ export const DashboardView = Schema.Struct({
   context: DashboardViewContext,
   layout: DashboardViewLayout,
 }).annotate({ identifier: "DashboardView" });
+
 export type DashboardView = typeof DashboardView.Type;
 
 const DashboardEditFailures = [NotFound, ValidationFailed] as const;
@@ -137,6 +144,7 @@ export class DashboardUninitialized extends Schema.Error<
 ) {}
 
 export const GetDashboardCanonicalInput = Schema.Struct({});
+
 export const GetDashboardViewCanonicalInput = Schema.Struct({});
 
 export const DashboardGroup = HttpApiGroup.make("dashboard")

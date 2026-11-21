@@ -21,7 +21,9 @@ const canonicalListing = Effect.fn(function* (runtime: Miniflare, path: string) 
       },
     })
   );
+
   expect(response.status).toBe(200);
+
   return yield* native(() => response.json());
 });
 
@@ -58,11 +60,13 @@ const assertRenewalTerms = Effect.fn(function* (
       "SELECT amount,period_starts_at_ms FROM billing_attempts WHERE previous_paid_attempt_id IS NOT NULL"
     )
   ).toEqual([{ amount: "33900", period_starts_at_ms: boundary }]);
+
   const newest = {
     ...later,
     id: "22480000-0000-4000-8000-000000000010",
     money: { amount: "35900", currency: "COP" },
   };
+
   expect(
     (yield* native(() =>
       pricing.getByName("pricing").fetch("https://pricing.internal/publish", {
@@ -103,6 +107,7 @@ const assertRenewalTerms = Effect.fn(function* (
 });
 
 const sourceVerifying = Schema.is(Schema.Struct({ status: Schema.Literal("source-verifying") }));
+
 const awaitSubmission = (
   submit: Effect.Effect<MiniflareResponse>
 ): Effect.Effect<unknown, "source-verifying"> =>
@@ -136,23 +141,30 @@ const recoverEnrollment = Effect.fn(function* (
       }
     )
   );
+
   expect(yield* native(() => returned.json())).toEqual(report);
+
   const reopened = yield* native(() =>
     restarted.unsafeGetDurableObjectStorage("core", "UserStore", { name: alice.user })
   );
+
   const exec = (
     ...args: Parameters<typeof reopened.exec>
   ): ReturnType<Effect.Success<ReturnType<typeof seed>>["exec"]> =>
     native(() => reopened.exec(...args));
+
   const db = yield* native(() =>
     restarted.unsafeGetDurableObjectStorage("wompi-fixture", "ProviderState", { name: "provider" })
   );
+
   const users = yield* native(() => restarted.getDurableObjectNamespace("USER_STORE", "core"));
+
   const work = {
     _tag: "CollectUserBillingAttempt",
     userId: alice.user,
     attemptId: operationId,
   };
+
   expect(
     (yield* native(() =>
       users
@@ -163,6 +175,7 @@ const recoverEnrollment = Effect.fn(function* (
   expect(yield* native(() => db.exec("SELECT count(*) AS n FROM charge_posts"))).toEqual([
     { n: 1 },
   ]);
+
   return exec;
 });
 
@@ -179,6 +192,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           alice.user,
           owner.now
         );
+
         const response = yield* native(() =>
           runtime.dispatchFetch(
             "https://" +
@@ -193,8 +207,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }
           )
         );
+
         expect(response.status).toBe(200);
         expect(yield* native(() => response.json())).toEqual({ enabledMethods: ["card", "nequi"] });
+
         const prepared = yield* native(() =>
           runtime.dispatchFetch(
             "https://" +
@@ -215,7 +231,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }
           )
         );
+
         expect(prepared.status).toBe(200);
+
         const form = yield* Schema.decodeUnknownEffect(
           Schema.Struct({
             enrollmentId: Schema.String,
@@ -224,6 +242,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             paymentSourceMode: Schema.String,
           })
         )(yield* native(() => prepared.json()));
+
         expect(form).toMatchObject({
           status: "prepared",
           price: { money: { amount: "28900", currency: "COP" } },
@@ -271,11 +290,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           },
           next: [],
         });
+
         const replacement = {
           ...form.price,
           id: "22480000-0000-4000-8000-000000000002",
           money: { amount: "31900", currency: "COP" },
         };
+
         const publish = yield* native(() =>
           pricing.getByName("pricing").fetch("https://pricing.internal/publish", {
             method: "POST",
@@ -291,7 +312,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }),
           })
         );
+
         expect(publish.status).toBe(200);
+
         const submit = {
           method: "card",
           paymentSourceMode: "create",
@@ -305,6 +328,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             authorizedRecurringCharges: true,
           },
         };
+
         const send = (path: string, body: unknown): Effect.Effect<MiniflareResponse> =>
           native(() =>
             runtime.dispatchFetch(
@@ -324,6 +348,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               }
             )
           );
+
         const refused = yield* send("submit", submit);
         expect(yield* native(() => refused.json())).toEqual({
           status: "refused",
@@ -332,43 +357,53 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         });
         expect(yield* owner.exec("SELECT COUNT(*) AS n FROM billing_attempts")).toEqual([{ n: 0 }]);
         const fresh = yield* send("prepare", { priceId: replacement.id, method: "card" });
+
         const next = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ enrollmentId: Schema.String })
         )(yield* native(() => fresh.json()));
+
         const provider = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("wompi-fixture", "ProviderState", {
             name: "provider",
           })
         );
+
         yield* native(() =>
           provider.exec(
             "CREATE TABLE charge_posts(reference TEXT,amount INTEGER,currency TEXT,source INTEGER); CREATE TABLE charge_control(released INTEGER,reference TEXT,amount INTEGER,source INTEGER); INSERT INTO charge_control(released) VALUES(1)"
           )
         );
+
         const submission = {
           ...submit,
           enrollmentId: next.enrollmentId,
           paymentRequestId: "22480000-0000-4000-8000-000000000005",
         };
+
         yield* owner.exec(
           "CREATE TRIGGER discard_registration BEFORE UPDATE OF terms ON billing_admissions WHEN OLD.terms IS NULL BEGIN SELECT RAISE(ABORT,'lost_price_reply'); END"
         );
         expect((yield* send("submit", submission)).status).toBe(503);
+
         const [saved] = yield* owner.exec(
           "SELECT request FROM billing_admissions WHERE subject_id=?",
           next.enrollmentId
         );
+
         const registeredRequest = yield* Schema.decodeUnknownEffect(Schema.String)(saved?.request);
+
         const register = yield* Schema.decodeEffect(
           Schema.fromJsonString(
             Schema.Struct({ deadlineMs: Schema.Int, operationId: Schema.String })
           )
         )(registeredRequest);
+
         const later = {
           ...replacement,
           id: "22480000-0000-4000-8000-000000000009",
           money: { amount: "33900", currency: "COP" },
         };
+
         const published = yield* native(() =>
           pricing.getByName("pricing").fetch("https://pricing.internal/publish", {
             method: "POST",
@@ -384,7 +419,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }),
           })
         );
+
         expect(published.status).toBe(200);
+
         const original = yield* native(() =>
           pricing.getByName("pricing").fetch("https://pricing.internal/register", {
             method: "POST",
@@ -392,6 +429,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             body: registeredRequest,
           })
         );
+
         expect(yield* native(() => original.json())).toMatchObject({
           price: { id: replacement.id },
           deadlineMs: register.deadlineMs,
@@ -445,12 +483,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           (yield* send("submit", { ...submission, billingEmail: "another@example.com" })).status
         ).toBe(400);
         expect(yield* other.exec("SELECT count(*) AS n FROM billing_attempts")).toEqual([{ n: 0 }]);
+
         const terminal = yield* native(() =>
           stores.getByName(alice.user).fetch("https://user.invalid/billing/registration-cancel", {
             method: "POST",
             body: registeredRequest,
           })
         );
+
         expect(yield* native(() => terminal.json())).toMatchObject({
           outcome: "committed",
           request: { deadlineMs: register.deadlineMs },
@@ -480,11 +520,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
         yield* native(() => runtime.dispose());
         const restarted = yield* create();
+
         const exec = yield* recoverEnrollment(restarted, {
           submission,
           report,
           operationId: register.operationId,
         });
+
         yield* assertRenewalTerms(restarted, { ...owner, exec }, later);
       })
   );
@@ -499,14 +541,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const runtime = yield* create();
         const owner = yield* seed(runtime, alice);
         const stores = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
+
         const headers = {
           origin: browserOrigins.production,
           "content-type": "application/json",
           "Fidy-Session-Binding": alice.session,
           cookie: "__Host-fidy_session=" + alice.bearer,
         };
+
         const api = "https://" + productionTopology.ingress.hostname;
         const prefix = "/web/subscription/payment-enrollments/";
+
         const send = (
           path: string,
           method: string,
@@ -519,14 +564,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               ...(body === undefined ? {} : { body: JSON.stringify(body) }),
             })
           );
+
         expect((yield* send(prefix + "availability", "GET")).status).toBe(401);
         yield* owner.exec(
           "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms) VALUES('grant',?,'processing_grant',?)",
           alice.user,
           owner.now
         );
+
         for (const endpoint of Object.values(SubscriptionEnrollmentGroup.endpoints)) {
           const path = endpoint.path.replace(/:[^/]+/u, "10000000-0000-4000-8000-000000000001");
+
           const preflight = yield* native(() =>
             runtime.dispatchFetch(api + path, {
               method: "OPTIONS",
@@ -537,32 +585,39 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               },
             })
           );
+
           expect(preflight.status).toBe(204);
           expect(preflight.headers.get("access-control-allow-origin")).toBe(
             browserOrigins.production
           );
           expect((yield* send(path, endpoint.method === "GET" ? "POST" : "GET")).status).toBe(405);
+
           for (const missing of ["cookie", "origin", "binding"]) {
             const modified = new Headers(headers);
             modified.delete(missing === "binding" ? "Fidy-Session-Binding" : missing);
             modified.set("authorization", "Bearer unrelated");
+
             const denied = yield* native(() =>
               runtime.dispatchFetch(api + path, {
                 method: endpoint.method,
                 headers: Object.fromEntries(modified),
               })
             );
+
             expect(denied.status).toBe(missing === "origin" ? 403 : 401);
           }
         }
+
         const prepare = (): Effect.Effect<MiniflareResponse> =>
           send(prefix + "prepare", "POST", {
             priceId: "22700000-0000-4000-8000-000000000002",
             method: "nequi",
           });
+
         const formId = Schema.decodeUnknownEffect(Schema.Struct({ enrollmentId: Schema.String }));
         const opened = yield* prepare();
         const first = yield* formId(yield* native(() => opened.json()));
+
         const submit = (
           enrollmentId: string,
           token: string,
@@ -581,30 +636,37 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               authorizedRecurringCharges: true,
             },
           });
+
         const request = "22480000-0000-4000-8000-000000000061";
         expect((yield* submit(first.enrollmentId, "nequi_test_pending", request)).status).toBe(400);
+
         const [row] = yield* owner.exec(
           "SELECT request FROM billing_admissions WHERE subject_id=?",
           first.enrollmentId
         );
+
         const pendingRequest = yield* Schema.decodeUnknownEffect(Schema.String)(row?.request);
         yield* owner.exec(
           "CREATE TRIGGER ignore_fence BEFORE UPDATE OF outcome ON billing_admissions WHEN NEW.outcome='cancelled' BEGIN SELECT RAISE(IGNORE); END"
         );
+
         const uncertain = yield* native(() =>
           stores.getByName(alice.user).fetch("https://user.invalid/billing/registration-cancel", {
             method: "POST",
             body: pendingRequest,
           })
         );
+
         expect(uncertain.status).toBe(503);
         yield* owner.exec("DROP TRIGGER ignore_fence");
+
         const cancel = yield* native(() =>
           stores.getByName(alice.user).fetch("https://user.invalid/billing/registration-cancel", {
             method: "POST",
             body: pendingRequest,
           })
         );
+
         expect(yield* native(() => cancel.json())).toMatchObject({ outcome: "cancelled" });
         const late = yield* submit(first.enrollmentId, "nequi_test_pending", request);
         expect(yield* native(() => late.json())).toMatchObject({ status: "refused" });
@@ -615,11 +677,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           owner.now,
           expired.enrollmentId
         );
+
         const after = yield* submit(
           expired.enrollmentId,
           "nequi_test_approved",
           "22480000-0000-4000-8000-000000000062"
         );
+
         expect(yield* native(() => after.json())).toMatchObject({
           status: "refused",
           reason: "expired",
@@ -634,18 +698,22 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         });
         const third = yield* prepare();
         const active = yield* formId(yield* native(() => third.json()));
+
         const approve = yield* awaitSubmission(
           submit(active.enrollmentId, "nequi_test_approved", "22480000-0000-4000-8000-000000000063")
         );
+
         expect(approve).toMatchObject({ status: "payment-pending" });
         yield* owner.exec(
           "UPDATE web_sessions SET created_at_ms=created_at_ms-600001,fresh_until_ms=fresh_until_ms-600001,hard_expires_at_ms=hard_expires_at_ms-600001"
         );
         expect((yield* send(prefix + "availability", "GET")).status).toBe(401);
         yield* owner.exec("UPDATE web_sessions SET revoked_at_ms=?", owner.now);
+
         const previous = yield* owner.exec(
           "SELECT count(*) AS n FROM audit_entries WHERE operation='subscription.getSubscriptionStatus'"
         );
+
         expect((yield* send("/subscription/status", "GET")).status).toBe(401);
         expect(
           yield* owner.exec(
@@ -668,6 +736,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const create = yield* nativeBillingPlatform;
         const payments = environment === "sandbox" ? "test" : "prod";
         const endpoint = "https://" + environment + ".wompi.co/v1/daviplata/authorization";
+
         const runtime = yield* create("1000000000", [], {
           WOMPI_ENVIRONMENT: environment,
           WOMPI_DAVIPLATA_ACTIVATED: activation,
@@ -677,12 +746,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           WOMPI_DAVIPLATA_OTP_SEND_URL: endpoint,
           WOMPI_DAVIPLATA_OTP_CONFIRM_URL: endpoint,
         });
+
         const owner = yield* seed(runtime, alice);
         yield* owner.exec(
           "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms) VALUES('grant',?,'processing_grant',?)",
           alice.user,
           owner.now
         );
+
         const reply = yield* native(() =>
           runtime.dispatchFetch(
             "https://" +
@@ -697,6 +768,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }
           )
         );
+
         expect(reply.headers.get("cache-control")).toBe("no-store");
         expect(yield* native(() => reply.json())).toEqual({
           enabledMethods: enabled ? ["card", "nequi", "daviplata"] : ["card", "nequi"],

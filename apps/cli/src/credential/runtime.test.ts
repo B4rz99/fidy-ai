@@ -17,7 +17,9 @@ import { CliFailure, type Credential, type NativeSecrets, apiOrigin } from "./co
 import { makeCredentialStore } from "./runtime";
 
 const secretLength = 43;
+
 const bearer = `fin_abcd1234_${"s".repeat(secretLength)}`;
+
 const issued = Schema.decodeSync(Schema.toCodecJson(IssuedPAT))({
   bearer,
   pat: {
@@ -33,10 +35,12 @@ const issued = Schema.decodeSync(Schema.toCodecJson(IssuedPAT))({
     expiresAt: "2026-10-08T00:00:00.000Z",
   },
 });
+
 const credential: Credential = {
   grant: { origin: apiOrigin, pat: issued.pat },
   bearer: issued.bearer,
 };
+
 const nativeFixture = (): Readonly<{
   native: NativeSecrets;
   values: Map<string, string>;
@@ -44,6 +48,7 @@ const nativeFixture = (): Readonly<{
 }> => {
   const values = new Map<string, string>();
   const calls: Array<string> = [];
+
   return {
     values,
     calls,
@@ -51,6 +56,7 @@ const nativeFixture = (): Readonly<{
       get: (name) =>
         Effect.sync(() => {
           calls.push(`get:${name}`);
+
           return Option.map(Option.fromUndefinedOr(values.get(name)), Redacted.make);
         }),
       set: (name, value) =>
@@ -69,6 +75,7 @@ const nativeFixture = (): Readonly<{
 
 layer(BunServices.layer)((it) => {
   const unsafePaths = ["linked directory", "linked metadata", "nonregular metadata"] as const;
+
   for (const unsafePath of unsafePaths) {
     it.effect(
       `refuses ${unsafePath} before accessing native credentials or changing link targets`,
@@ -80,16 +87,19 @@ layer(BunServices.layer)((it) => {
           const target = `${root}/target`;
           yield* fs.makeDirectory(target, { mode: 0o700 });
           yield* fs.writeFileString(`${target}/sentinel`, "untouched", { mode: 0o600 });
+
           if (unsafePath === "linked directory") {
             yield* fs.symlink(target, directory);
           } else {
             yield* fs.makeDirectory(directory, { mode: 0o700 });
+
             if (unsafePath === "linked metadata") {
               yield* fs.symlink(`${target}/sentinel`, `${directory}/grant.json`);
             } else {
               yield* fs.makeDirectory(`${directory}/grant.json`, { mode: 0o700 });
             }
           }
+
           const fixture = nativeFixture();
           fixture.values.set("login", bearer);
           const { store } = yield* makeCredentialStore(directory, fixture.native);
@@ -182,6 +192,7 @@ layer(BunServices.layer)((it) => {
         const fs = yield* FileSystem.FileSystem;
         const directory = yield* fs.makeTempDirectoryScoped();
         const fixture = nativeFixture();
+
         const broken: NativeSecrets = {
           ...fixture.native,
           set: (name, value) =>
@@ -189,6 +200,7 @@ layer(BunServices.layer)((it) => {
               .set(name, value)
               .pipe(Effect.andThen(Effect.fail(new CliFailure({ reason: "StorageUnavailable" })))),
         };
+
         const store = yield* makeCredentialStore(directory, broken);
         expect(Exit.isFailure(yield* Effect.exit(store.store.save(credential)))).toBe(true);
         expect(yield* fs.exists(`${directory}/grant.json`)).toBe(false);
@@ -205,6 +217,7 @@ layer(BunServices.layer)((it) => {
         const fs = yield* FileSystem.FileSystem;
         const directory = yield* fs.makeTempDirectoryScoped();
         const fixture = nativeFixture();
+
         const unavailable = new PlatformError.PlatformError(
           new PlatformError.SystemError({
             _tag: "PermissionDenied",
@@ -212,14 +225,17 @@ layer(BunServices.layer)((it) => {
             method: "open",
           })
         );
+
         const failingFs: FileSystem.FileSystem = {
           ...fs,
           open: (path, options) =>
             options?.flag === "wx" ? Effect.fail(unavailable) : fs.open(path, options),
         };
+
         const first = yield* makeCredentialStore(directory, fixture.native).pipe(
           Effect.provideService(FileSystem.FileSystem, failingFs)
         );
+
         expect(Exit.isFailure(yield* Effect.exit(first.store.save(credential)))).toBe(true);
         expect(fixture.values.get("login") === bearer).toBe(true);
         expect(yield* fs.exists(`${directory}/grant.json`)).toBe(false);
@@ -240,6 +256,7 @@ layer(BunServices.layer)((it) => {
         const fixture = nativeFixture();
         const saving = yield* Deferred.make<void>();
         const release = yield* Deferred.make<void>();
+
         const delayed: NativeSecrets = {
           ...fixture.native,
           set: (name, value) =>
@@ -250,6 +267,7 @@ layer(BunServices.layer)((it) => {
                 Effect.andThen(Deferred.await(release))
               ),
         };
+
         const first = yield* makeCredentialStore(directory, delayed);
         const second = yield* makeCredentialStore(directory, fixture.native);
         const fiber = yield* first.store.save(credential).pipe(Effect.forkChild);

@@ -7,6 +7,7 @@ import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 
 export const TransactionDestinationRecovery = (): JSX.Element => {
   const search = useSearch({ from: "/independent-application/app/transactions" });
+
   return search.date === undefined ? (
     <Button
       variant="outline"
@@ -32,10 +33,12 @@ export const TransactionDestinationFailure = ({
   refresh: () => void;
 }>): JSX.Element => {
   const failure = state._tag === "Failure" ? Option.some(state.failure) : state.refreshFailure;
+
   const unavailable = Option.exists(
     failure,
     (error) => error._tag === "DeclaredFailure" && Predicate.isTagged(error.error, "NotFound")
   );
+
   return (
     <main className="p-5">
       <h1 className="mb-6 text-3xl font-semibold">Transacciones</h1>

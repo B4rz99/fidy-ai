@@ -6,13 +6,16 @@ import { browserLoginPairingInvalidBody } from "../../../src/shell/browser-login
 
 export const digestVerifier = (value: string): Effect.Effect<string, PlatformError.PlatformError> =>
   digestBytes(new TextEncoder().encode(value)).pipe(Effect.map(Hex.encode));
+
 export const invalidPairing = (): Response =>
   Response.json(browserLoginPairingInvalidBody, {
     status: 400,
     headers: { "cache-control": "no-store" },
   });
+
 export const invalidProvider = (): Response =>
   Response.json({ status: "invalid" }, { status: 400, headers: { "cache-control": "no-store" } });
+
 export const unavailable = (): Response =>
   Response.json(
     { status: "unavailable" },

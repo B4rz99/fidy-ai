@@ -39,6 +39,7 @@ export const ChoiceDropdown = ({
     triggerLabel,
     () => options.find((option) => option.value === value)?.label ?? ""
   );
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

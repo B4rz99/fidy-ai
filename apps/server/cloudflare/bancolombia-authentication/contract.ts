@@ -32,6 +32,7 @@ export type BancolombiaSandboxEnvironment = Partial<
 >;
 
 const maximumConsentLength = 128;
+
 export const BancolombiaAuthorizationInput = Schema.Struct({
   consentId: Schema.String.check(
     Schema.isBetweenLength(1, maximumConsentLength),
@@ -41,10 +42,13 @@ export const BancolombiaAuthorizationInput = Schema.Struct({
   challenge: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/u)),
   expiresAtMilliseconds: Schema.Int,
 });
+
 export type BancolombiaAuthorizationInput = typeof BancolombiaAuthorizationInput.Type;
 
 const maximumNameLength = 140;
+
 const maximumAdmissionMilliseconds = 3600000;
+
 export const BancolombiaConsentProfile = Schema.Struct({
   contract: Schema.Literal("bancolombia-sandbox-consent-2026-10-27"),
   userId: UserId,
@@ -66,6 +70,7 @@ export const BancolombiaConsentProfile = Schema.Struct({
   }),
   intent: ConnectionConsentIntent,
 });
+
 export type BancolombiaConsentProfile = typeof BancolombiaConsentProfile.Type;
 
 export type BancolombiaBankGrant = Readonly<{

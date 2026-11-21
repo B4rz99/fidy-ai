@@ -7,6 +7,7 @@ it("accepts five groups of five unambiguous base32 symbols and rejects altered g
   const valid = "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2";
   expect(Result.isSuccess(decode(valid))).toBe(true);
   expect(Result.isSuccess(decode("23456-789AB-CDEFG-HJKLM-NPQRS"))).toBe(true);
+
   for (const value of [
     "",
     `x${valid}`,

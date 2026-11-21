@@ -100,10 +100,12 @@ const interruptibleWork = (
 ): Effect.Effect<never> =>
   Effect.callback<never>(() => {
     onStarted();
+
     return Effect.sync(onInterrupted);
   });
 
 const policyTestOrigin = "https://api.test.fidyapp.com";
+
 const makePolicyTestClient = (
   httpClient: Layer.Layer<HttpClient.HttpClient>,
   boundary: BrowserHttpBoundary = "canonical"
@@ -117,10 +119,14 @@ const boundaryExitKind = (
   exit: Exit.Exit<unknown, unknown>
 ): "http-defect" | "interrupted" | "schema-defect" | "typed-failure" => {
   if (Exit.isSuccess(exit)) throw new Error("Expected a boundary failure");
+
   if (Cause.hasInterrupts(exit.cause)) return "interrupted";
   const defect = Cause.findDefect(exit.cause);
+
   if (Result.isFailure(defect)) return "typed-failure";
+
   if (HttpClientError.isHttpClientError(defect.success)) return "http-defect";
+
   if (Schema.isSchemaError(defect.success)) return "schema-defect";
   throw new Error("Expected an HTTP or Schema boundary defect");
 };
@@ -151,15 +157,19 @@ describe("subscription enrollment transport", () => {
       const started = Deferred.makeUnsafe<void>();
       const context = yield* Effect.context<never>();
       let interrupted = 0;
+
       const client = makeSubscriptionEnrollmentClient({
         apiOrigin: "https://api.test.fidyapp.com",
       });
+
       const onStarted = (): void => {
         Effect.runSyncWith(context)(Deferred.succeed(started, undefined));
       };
+
       const onInterrupted = (): void => {
         interrupted += 1;
       };
+
       const request = client.execute(() => interruptibleWork(onStarted, onInterrupted));
 
       yield* Deferred.await(started);
@@ -180,14 +190,17 @@ describe("browser HTTP policy", () => {
       let active = 0;
       let peak = 0;
       let attempts = 0;
+
       const acquire = Effect.sync(() => {
         active++;
         attempts++;
         peak = Math.max(peak, active);
       });
+
       const release = Effect.sync(() => {
         active--;
       });
+
       const respond = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
         return yield* Effect.acquireUseRelease(
           acquire,
@@ -195,14 +208,17 @@ describe("browser HTTP policy", () => {
           Function.constant(release)
         );
       });
+
       const client = yield* makePolicyTestClient(
         Layer.succeed(HttpClient.HttpClient, makeHttpClient(respond))
       );
+
       const burst = yield* Effect.forEach(
         Array.from({ length: 8 }),
         () => client.get(`${policyTestOrigin}/categories`),
         { concurrency: "unbounded" }
       ).pipe(Effect.forkChild);
+
       yield* TestClock.adjust("500 millis");
       expect(peak).toBe(2);
       yield* TestClock.adjust("4 seconds");
@@ -217,15 +233,20 @@ describe("browser HTTP policy", () => {
       const hold = yield* Deferred.make<void>();
       const ready = yield* Deferred.make<void>();
       let attempts = 0;
+
       const respond = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
         attempts++;
+
         if (attempts === 2) yield* Deferred.succeed(ready, undefined);
         yield* Deferred.await(hold);
+
         return responseJson(request, {});
       });
+
       const client = yield* makePolicyTestClient(
         Layer.succeed(HttpClient.HttpClient, makeHttpClient(respond))
       );
+
       const first = yield* Effect.forkChild(client.get(`${policyTestOrigin}/categories`));
       const second = yield* Effect.forkChild(client.get(`${policyTestOrigin}/categories`));
       yield* Deferred.await(ready);
@@ -245,12 +266,16 @@ describe("browser HTTP policy", () => {
     Effect.gen(function* () {
       const preparing = Deferred.makeUnsafe<void>();
       let interrupted = false;
+
       const markInterrupted = (): void => {
         interrupted = true;
       };
+
       let attempts = 0;
+
       const base = makeHttpClient((request) => {
         attempts++;
+
         return Effect.succeed(responseJson(request, {}));
       }).pipe(
         HttpClient.mapRequestEffect((request) =>
@@ -261,10 +286,13 @@ describe("browser HTTP policy", () => {
           )
         )
       );
+
       const client = yield* makePolicyTestClient(Layer.succeed(HttpClient.HttpClient, base));
+
       const work = yield* Effect.forkChild(
         client.get(`${policyTestOrigin}/categories`).pipe(Effect.exit)
       );
+
       yield* Deferred.await(preparing);
       yield* TestClock.adjust("15 seconds");
       expect(interrupted).toBe(true);
@@ -286,9 +314,11 @@ describe("browser HTTP policy", () => {
         const prepared = Deferred.makeUnsafe<void>();
         const transferring = Deferred.makeUnsafe<void>();
         let interrupted = false;
+
         const markInterrupted = (): void => {
           interrupted = true;
         };
+
         const base = makeHttpClient(() =>
           Deferred.succeed(transferring, undefined).pipe(
             Effect.andThen(Effect.never),
@@ -302,13 +332,16 @@ describe("browser HTTP policy", () => {
             )
           )
         );
+
         const client = yield* makePolicyTestClient(
           Layer.succeed(HttpClient.HttpClient, base),
           boundary
         );
+
         const work = yield* Effect.forkChild(
           client.get(`${policyTestOrigin}${path}`).pipe(Effect.exit)
         );
+
         yield* Deferred.await(preparing);
         yield* TestClock.adjust("2 seconds");
         yield* Deferred.succeed(prepared, undefined);
@@ -325,21 +358,26 @@ describe("browser HTTP policy", () => {
   it.effect("counts transfer queue time inside the original canonical deadline", () =>
     Effect.gen(function* () {
       let attempts = 0;
+
       const stalled = Effect.suspend(() => {
         attempts++;
+
         return Effect.never;
       });
+
       const client = yield* makePolicyTestClient(
         Layer.succeed(
           HttpClient.HttpClient,
           makeHttpClient(() => stalled)
         )
       );
+
       const burst = yield* Effect.forEach(
         Array.from({ length: 3 }),
         () => client.get(`${policyTestOrigin}/categories`).pipe(Effect.exit),
         { concurrency: "unbounded" }
       ).pipe(Effect.forkChild);
+
       yield* TestClock.adjust("15 seconds");
       const results = yield* Fiber.join(burst);
       expect(results.every(Exit.isFailure)).toBe(true);
@@ -351,6 +389,7 @@ describe("browser HTTP policy", () => {
     Effect.gen(function* () {
       const bodies: ReadableStream<Uint8Array>[] = [];
       const controllers: ReadableStreamDefaultController<Uint8Array>[] = [];
+
       for (let index = 0; index < 8; index++) {
         bodies.push(
           new ReadableStream({
@@ -360,27 +399,34 @@ describe("browser HTTP policy", () => {
           })
         );
       }
+
       let attempts = 0;
+
       const respond = (
         request: HttpClientRequest.HttpClientRequest
       ): Effect.Effect<HttpClientResponse.HttpClientResponse> =>
         Effect.succeed(HttpClientResponse.fromWeb(request, new Response(bodies[attempts++])));
+
       const client = yield* makePolicyTestClient(
         Layer.succeed(HttpClient.HttpClient, makeHttpClient(respond))
       );
+
       const burst = yield* Effect.forEach(
         Array.from({ length: 8 }),
         () => client.get(`${policyTestOrigin}/categories`),
         { concurrency: "unbounded" }
       ).pipe(Effect.forkChild);
+
       for (let wave = 0; wave < 4; wave++) {
         yield* TestClock.adjust("1 millis");
         expect(attempts).toBe((wave + 1) * 2);
+
         for (const controller of controllers.slice(wave * 2, wave * 2 + 2)) {
           controller.enqueue(new TextEncoder().encode("{}"));
           controller.close();
         }
       }
+
       expect(yield* Fiber.join(burst)).toHaveLength(8);
     })
   );
@@ -388,10 +434,12 @@ describe("browser HTTP policy", () => {
   it.effect("leaves capacity available while refused requests wait to retry", () =>
     Effect.gen(function* () {
       let attempts = 0;
+
       const respond = (
         request: HttpClientRequest.HttpClientRequest
       ): Effect.Effect<HttpClientResponse.HttpClientResponse> => {
         attempts++;
+
         return Effect.succeed(
           HttpClientResponse.fromWeb(
             request,
@@ -404,9 +452,11 @@ describe("browser HTTP policy", () => {
           )
         );
       };
+
       const client = yield* makePolicyTestClient(
         Layer.succeed(HttpClient.HttpClient, makeHttpClient(respond))
       );
+
       const first = yield* Effect.forkChild(client.get(`${policyTestOrigin}/refused`));
       const second = yield* Effect.forkChild(client.get(`${policyTestOrigin}/refused`));
       yield* TestClock.adjust("1 millis");
@@ -429,9 +479,11 @@ describe("browser HTTP policy", () => {
       ] as const) {
         const started = Deferred.makeUnsafe<void>();
         let attempts = 0;
+
         const respond = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
           attempts++;
           yield* Deferred.succeed(started, undefined);
+
           return HttpClientResponse.fromWeb(
             request,
             Response.json(
@@ -442,14 +494,18 @@ describe("browser HTTP policy", () => {
             )
           );
         });
+
         const base = makeHttpClient(respond);
+
         const client = yield* makePolicyTestClient(
           Layer.succeed(HttpClient.HttpClient, base),
           boundary
         );
+
         const work = yield* Effect.forkChild(
           client.execute(HttpClientRequest.make(method)(`${policyTestOrigin}${path}`))
         );
+
         yield* Deferred.await(started);
         yield* TestClock.adjust("1 second");
         const result = yield* Fiber.join(work);
@@ -467,26 +523,32 @@ describe("browser HTTP policy", () => {
         let attempts = 0;
         const started = Deferred.makeUnsafe<void>();
         const body = { error: { code: "rate_limited", message: "Retry later." }, next: [] };
+
         const respond = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
           attempts++;
           yield* Deferred.succeed(started, undefined);
+
           if (attempts % 2 === 1) {
             return yield* new HttpClientError.HttpClientError({
               reason: new HttpClientError.TransportError({ request }),
             });
           }
+
           return HttpClientResponse.fromWeb(
             request,
             Response.json(body, { status: 429, headers: { "retry-after": "1" } })
           );
         });
+
         const base = makeHttpClient(respond);
         const client = yield* makePolicyTestClient(Layer.succeed(HttpClient.HttpClient, base));
         const work = yield* Effect.forkChild(client.get(`${policyTestOrigin}/dashboard/view`));
         yield* Deferred.await(started);
+
         for (let index = 0; index < 6; index++) {
           yield* TestClock.adjust("1 second");
         }
+
         const result = yield* Fiber.join(work);
         expect(result.status).toBe(429);
         expect(yield* result.json).toEqual(body);
@@ -499,9 +561,11 @@ describe("browser HTTP policy", () => {
       for (const interrupted of [false, true]) {
         let attempts = 0;
         const started = Deferred.makeUnsafe<void>();
+
         const respond = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
           attempts++;
           yield* Deferred.succeed(started, undefined);
+
           return HttpClientResponse.fromWeb(
             request,
             Response.json(
@@ -510,13 +574,17 @@ describe("browser HTTP policy", () => {
             )
           );
         });
+
         const client = yield* makePolicyTestClient(
           Layer.succeed(HttpClient.HttpClient, makeHttpClient(respond))
         );
+
         const work = yield* Effect.forkChild(
           client.post(`${policyTestOrigin}/dashboard/initialize`)
         );
+
         yield* Deferred.await(started);
+
         if (interrupted) {
           yield* Fiber.interrupt(work);
           yield* TestClock.adjust("15 seconds");
@@ -543,11 +611,14 @@ describe("browser HTTP policy", () => {
           { boundary: "web-auth", status: 429, code: "rate_limited", retry: "1" },
           { boundary: "enrollment", status: 429, code: "rate_limited", retry: "1" },
         ] as const;
+
         for (const entry of cases) {
           let attempts = 0;
           const body = { error: { code: entry.code, message: "Retry later." }, next: [] };
+
           const base = makeHttpClient((request) => {
             attempts++;
+
             return Effect.succeed(
               HttpClientResponse.fromWeb(
                 request,
@@ -558,10 +629,12 @@ describe("browser HTTP policy", () => {
               )
             );
           });
+
           const client = yield* makePolicyTestClient(
             Layer.succeed(HttpClient.HttpClient, base),
             entry.boundary
           );
+
           const result = yield* client.post(`${policyTestOrigin}/work`);
           expect(yield* result.json).toEqual(body);
           expect(attempts).toBe(1);
@@ -593,10 +666,13 @@ describe("browser HTTP policy", () => {
   it.effect("refuses cross-origin destinations before sending a credentialed request", () =>
     Effect.gen(function* () {
       let executions = 0;
+
       const httpClient = makeHttpClient((request) => {
         executions++;
+
         return Effect.succeed(responseJson(request, { ok: true }));
       });
+
       const client = yield* makePolicyTestClient(
         Layer.succeed(HttpClient.HttpClient, httpClient),
         "web-auth"
@@ -621,10 +697,13 @@ describe("browser HTTP policy", () => {
   it.effect("refuses invalid destinations before invoking the browser transport", () =>
     Effect.gen(function* () {
       let executions = 0;
+
       const httpClient = makeHttpClient((request) => {
         executions++;
+
         return Effect.succeed(responseJson(request, { ok: true }));
       });
+
       const client = yield* makePolicyTestClient(
         Layer.succeed(HttpClient.HttpClient, httpClient),
         "web-auth"
@@ -650,12 +729,15 @@ describe("browser HTTP policy", () => {
     Effect.gen(function* () {
       let executions = 0;
       let aborted = false;
+
       const markAborted = (): void => {
         aborted = true;
       };
+
       const httpClient = HttpClient.make((request, _url, signal) => {
         executions++;
         signal.addEventListener("abort", markAborted, { once: true });
+
         return Effect.succeed(
           HttpClientResponse.fromWeb(
             request,
@@ -666,6 +748,7 @@ describe("browser HTTP policy", () => {
           )
         );
       });
+
       const client = yield* makePolicyTestClient(Layer.succeed(HttpClient.HttpClient, httpClient));
 
       const exit = yield* client.get("https://api.test.fidyapp.com/redirect").pipe(Effect.exit);
@@ -693,6 +776,7 @@ describe("browser HTTP policy", () => {
   it.effect("stops consuming a response after the boundary byte cap", () =>
     Effect.gen(function* () {
       const oversized = new Uint8Array(64 * 1024 + 1);
+
       const httpClient = makeHttpClient((request) =>
         Effect.succeed(
           HttpClientResponse.fromWeb(
@@ -701,6 +785,7 @@ describe("browser HTTP policy", () => {
           )
         )
       );
+
       const client = yield* makePolicyTestClient(
         Layer.succeed(HttpClient.HttpClient, httpClient),
         "web-auth"
@@ -742,6 +827,7 @@ describe("browser HTTP policy", () => {
           )
         )
       );
+
       const client = yield* makePolicyTestClient(
         Layer.succeed(HttpClient.HttpClient, httpClient),
         "web-auth"
@@ -771,10 +857,12 @@ describe("browser HTTP policy", () => {
   it.effect("keeps credentials out of transport failure diagnostics", () =>
     Effect.gen(function* () {
       const secret = "secret-proof-value";
+
       const httpClient = makeHttpClient((request) => {
         const credentialed = request.pipe(
           HttpClientRequest.setHeader("authorization", `Bearer ${secret}`)
         );
+
         return Effect.fail(
           new HttpClientError.HttpClientError({
             reason: new HttpClientError.TransportError({
@@ -785,6 +873,7 @@ describe("browser HTTP policy", () => {
           })
         );
       });
+
       const client = yield* makePolicyTestClient(
         Layer.succeed(HttpClient.HttpClient, httpClient),
         "enrollment"
@@ -816,6 +905,7 @@ describe("browser HTTP policy", () => {
           })
         )
       );
+
       const client = yield* makePolicyTestClient(Layer.succeed(HttpClient.HttpClient, httpClient));
 
       const exit = yield* client.post("https://api.test.fidyapp.com/write").pipe(Effect.exit);
@@ -835,14 +925,17 @@ describe("browser HTTP policy", () => {
   it.effect("retries one transport failure only for safe request methods", () =>
     Effect.gen(function* () {
       const executions: Array<string> = [];
+
       const httpClient = makeHttpClient((request) => {
         executions.push(request.method);
+
         return Effect.fail(
           new HttpClientError.HttpClientError({
             reason: new HttpClientError.TransportError({ request }),
           })
         );
       });
+
       const client = yield* makePolicyTestClient(Layer.succeed(HttpClient.HttpClient, httpClient));
 
       yield* client.get("https://api.test.fidyapp.com/read").pipe(Effect.exit);
@@ -856,9 +949,11 @@ describe("browser HTTP policy", () => {
   it.effect("uses credentialed manual no-store Fetch requests at every browser boundary", () =>
     Effect.gen(function* () {
       const requestOptions: Array<RequestInit> = [];
+
       const fakeFetch: typeof globalThis.fetch = Object.assign(
         (_input: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
           requestOptions.push(init ?? {});
+
           return Promise.resolve(
             new Response("{}", { headers: { "content-type": "application/json" } })
           );
@@ -874,6 +969,7 @@ describe("browser HTTP policy", () => {
       }
 
       expect(requestOptions).toHaveLength(3);
+
       for (const options of requestOptions) {
         expect(options).toMatchObject({
           credentials: "include",
@@ -892,8 +988,10 @@ describe("canonical browser transport", () => {
   it.effect("keeps the typed Atom client while substituting only HttpClient", () =>
     Effect.gen(function* () {
       const requests: string[] = [];
+
       const httpClient = makeHttpClient((request) => {
         requests.push(request.url);
+
         return Effect.succeed(
           responseJson(request, {
             data: { url: "https://upgrade.fidyapp.com" },
@@ -901,13 +999,16 @@ describe("canonical browser transport", () => {
           })
         );
       });
+
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
       });
+
       const atom = client.query("subscription", "getUpgradeUrl", {
         serializationKey: "upgrade",
       });
+
       const registry = AtomRegistry.make();
       const unmount = registry.mount(atom);
 
@@ -934,6 +1035,7 @@ describe("canonical browser transport", () => {
           )
         ),
       });
+
       const malformedAtom = malformedClient.query("subscription", "getUpgradeUrl", {});
       const malformedRegistry = AtomRegistry.make();
       const unmountMalformed = malformedRegistry.mount(malformedAtom);
@@ -951,6 +1053,7 @@ describe("canonical browser transport", () => {
           )
         ),
       });
+
       const transportAtom = transportClient.query("subscription", "getUpgradeUrl", {});
       const transportRegistry = AtomRegistry.make();
       const unmountTransport = transportRegistry.mount(transportAtom);
@@ -959,11 +1062,14 @@ describe("canonical browser transport", () => {
         const malformedExit = yield* Effect.exit(
           AtomRegistry.getResult(malformedRegistry, malformedAtom)
         );
+
         const transportExit = yield* Effect.exit(
           AtomRegistry.getResult(transportRegistry, transportAtom)
         );
+
         expect(Exit.isFailure(malformedExit)).toBe(true);
         expect(Exit.isFailure(transportExit)).toBe(true);
+
         if (Exit.isFailure(malformedExit) && Exit.isFailure(transportExit)) {
           expect(boundaryExitKind(malformedExit)).toBe("schema-defect");
           expect(boundaryExitKind(transportExit)).toBe("http-defect");
@@ -991,10 +1097,12 @@ describe("canonical browser transport", () => {
           )
         )
       );
+
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
       });
+
       const atom = client.query("identity", "getCurrentUser", {});
       const registry = AtomRegistry.make();
       const unmount = registry.mount(atom);
@@ -1012,13 +1120,16 @@ describe("canonical browser transport", () => {
   it.effect("decodes a one-time PAT disclosure into redacted shared client state", () =>
     Effect.gen(function* () {
       const rawBearer = "fin_created1_abcdefghijklmnopqrstuvwxyz0123456789ABCD";
+
       const httpClient = makeHttpClient((request) =>
         Effect.succeed(responseJson(request, manualPATDisclosureBody(rawBearer)))
       );
+
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
       });
+
       const mutation = client.mutation("pats", "createManualPAT", {});
       const registry = AtomRegistry.make();
       const unmount = registry.mount(mutation);
@@ -1041,9 +1152,11 @@ describe("canonical browser transport", () => {
         expect(response.data.pat.shortId).toBe("created1");
         expect(Redacted.value(response.data.bearer)).toBe(rawBearer);
         expect(Redacted.isRedacted(response.data.bearer)).toBe(true);
+
         const serialized = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
           registry.get(mutation)
         );
+
         expect(serialized).not.toContain(rawBearer);
       } finally {
         unmount();
@@ -1055,14 +1168,18 @@ describe("canonical browser transport", () => {
   it.effect("submits one staged statement reference and decodes visible queued status", () =>
     Effect.gen(function* () {
       const requests: Array<Readonly<{ body: string; url: string }>> = [];
+
       const httpClient = makeHttpClient((request) => {
         requests.push({ body: requestBodyText(request), url: request.url });
+
         return Effect.succeed(responseJson(request, queuedStatementSubmissionBody(), 202));
       });
+
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
       });
+
       const payload = yield* Schema.decodeEffect(SubmitForExtractionInput)({
         idempotencyKey: "20000000-0000-4000-8000-000000000201",
         reference: {
@@ -1071,6 +1188,7 @@ describe("canonical browser transport", () => {
           stagingId: "30000000-0000-4000-8000-000000000301",
         },
       });
+
       const mutation = client.mutation("ingestion", "submitForExtraction", {});
       const registry = AtomRegistry.make();
       const unmount = registry.mount(mutation);
@@ -1116,24 +1234,29 @@ describe("canonical browser transport", () => {
           to: Option.Option<string>;
         }>
       > = [];
+
       const httpClient = makeHttpClient((request) => {
         requests.push({
           url: request.url,
           from: UrlParams.getFirst(request.urlParams, "from"),
           to: UrlParams.getFirst(request.urlParams, "to"),
         });
+
         return Effect.succeed(responseJson(request, { data: [], next: [] }));
       });
+
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
       });
+
       const atom = client.query("transactions", "listTransactions", {
         query: {
           from: DateTime.makeUnsafe("2026-03-01T05:00:00Z"),
           to: DateTime.makeUnsafe("2026-04-01T04:00:00Z"),
         },
       });
+
       const registry = AtomRegistry.make();
       const unmount = registry.mount(atom);
 
@@ -1158,18 +1281,24 @@ describe("canonical browser transport", () => {
       const refreshResponse = yield* Deferred.make<HttpClientResponse.HttpClientResponse>();
       let requestCount = 0;
       let pendingRequest = Option.none<HttpClientRequest.HttpClientRequest>();
+
       const httpClient = makeHttpClient((request) => {
         requestCount += 1;
+
         if (requestCount === 1 || requestCount === 3) {
           return Effect.succeed(responseJson(request, { data: [], next: [] }));
         }
+
         pendingRequest = Option.some(request);
+
         return Deferred.await(refreshResponse);
       });
+
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
       });
+
       const atom = client.query("transactions", "listTransactions", { query: {} });
       const registry = AtomRegistry.make();
       const unmount = registry.mount(atom);
@@ -1187,6 +1316,7 @@ describe("canonical browser transport", () => {
           _tag: "Ready",
           waiting: true,
         });
+
         const failedRefresh = yield* Effect.forkChild(
           Effect.result(AtomRegistry.getResult(registry, atom)),
           { startImmediately: true }
@@ -1237,24 +1367,30 @@ describe("canonical browser transport", () => {
         const recovery = yield* Deferred.make<HttpClientResponse.HttpClientResponse>();
         let requests = 0;
         let pendingRequest = Option.none<HttpClientRequest.HttpClientRequest>();
+
         const client = makeWebAuthClient({
           apiOrigin: policyTestOrigin,
           httpClient: Layer.succeed(
             HttpClient.HttpClient,
             makeHttpClient((request) => {
               requests++;
+
               if (requests === 1) return Effect.succeed(responseJson(request, {}, 503));
               pendingRequest = Option.some(request);
+
               return Deferred.await(recovery);
             })
           ),
         });
+
         const atom = client.query("processingConsent", "status", {
           timeToLive: "0 seconds",
           reactivityKeys: ["processing-consent"],
         });
+
         const registry = AtomRegistry.make();
         const unmount = registry.mount(atom);
+
         try {
           yield* Effect.exit(AtomRegistry.getResult(registry, atom));
           expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
@@ -1304,10 +1440,12 @@ describe("canonical browser transport", () => {
           )
         )
       );
+
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
       });
+
       const atom = client.query("transactions", "listTransactions", { query: {} });
       const registry = AtomRegistry.make();
       const unmount = registry.mount(atom);
@@ -1331,10 +1469,12 @@ describe("canonical browser transport", () => {
   ] as const)("classifies a real initial %s without exposing its Cause", ([_label, request, tag]) =>
     Effect.gen(function* () {
       const httpClient = makeHttpClient(() => request);
+
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
       });
+
       const atom = client.query("transactions", "listTransactions", { query: {} });
       const registry = AtomRegistry.make();
       const unmount = registry.mount(atom);
@@ -1360,10 +1500,12 @@ describe("canonical browser transport", () => {
         const httpClient = makeHttpClient((request) =>
           Effect.succeed(responseJson(request, { data: [], next: [] }))
         );
+
         const client = makeFidyClient({
           apiOrigin: "https://api.test.fidyapp.com",
           httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
         });
+
         const atom = client.query("transactions", "listTransactions", { query: {} });
         const priorRegistry = AtomRegistry.make();
         const priorUnmount = priorRegistry.mount(atom);
@@ -1383,6 +1525,7 @@ describe("canonical browser transport", () => {
   it.effect("notifies the authentication lifetime when the canonical API rejects the session", () =>
     Effect.gen(function* () {
       let expirations = 0;
+
       const httpClient = makeHttpClient((request) =>
         Effect.succeed(
           responseJson(
@@ -1395,11 +1538,13 @@ describe("canonical browser transport", () => {
           )
         )
       );
+
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
         observer: { onAuthenticationExpired: () => expirations++ },
       });
+
       const atom = client.query("identity", "getCurrentUser", {});
       const registry = AtomRegistry.make();
       const unmount = registry.mount(atom);
@@ -1419,18 +1564,23 @@ describe("native browser response lifetime", () => {
   it.effect("keeps the standalone hosted channel bound across propose, progress and delivery", () =>
     Effect.gen(function* () {
       const binding = "10000000-0000-4000-8000-000000000001";
+
       const { turnId } = yield* Schema.decodeEffect(HostedTurnProgressRequest)({
         turnId: "20000000-0000-4000-8000-000000000001",
       });
+
       const first = yield* Schema.decodeEffect(HostedTurnRequest)({ text: "Consulta local" });
       const second = yield* Schema.decodeEffect(HostedTurnRequest)({ text: "Otra consulta" });
       const signal = yield* Effect.abortSignal;
       const receipt = "a".repeat(64);
+
       const requests: Array<
         Readonly<{ path: string; method: string; binding: string; body: unknown }>
       > = [];
+
       let refused = false;
       let rechecks = 0;
+
       const client = makeHostedTurnClient({
         apiOrigin: policyTestOrigin,
         session: {
@@ -1450,17 +1600,22 @@ describe("native browser response lifetime", () => {
               binding: request.headers["fidy-session-binding"] ?? "",
               body: JSON.parse(requestBodyText(request)),
             });
+
             if (refused) {
               return Effect.succeed(responseJson(request, { status: "unauthenticated" }, 401));
             }
+
             if (path.endsWith("/delivery")) {
               return Effect.succeed(responseJson(request, { status: "completed" }, 200));
             }
+
             return Effect.succeed(responseJson(request, { status: "processing", turnId }, 202));
           })
         ),
       });
+
       const registry = AtomRegistry.make();
+
       try {
         const context = yield* Layer.build(registry.get(client.runtime.layer)).pipe(Effect.scoped);
         const api = Context.get(context, client);
@@ -1498,30 +1653,37 @@ describe("native browser response lifetime", () => {
   it.effect("owns response cleanup for each request's replacement native transport", () =>
     Effect.gen(function* () {
       let unexpectedRequests = 0;
+
       const client = yield* makePolicyTestClient(FetchHttpClient.layer, "web-auth").pipe(
         Effect.provideService(
           FetchHttpClient.Fetch,
           Object.assign(() => {
             unexpectedRequests++;
+
             return Promise.reject(new Error("stale build transport"));
           }, globalThis.fetch)
         )
       );
+
       for (const payload of ["first request", "second request"]) {
         let cancellations = 0;
+
         const body = new ReadableStream<Uint8Array>({
           start(controller): void {
             controller.enqueue(new Uint8Array(65_537));
           },
           cancel(): Promise<void> {
             cancellations++;
+
             return Promise.withResolvers<void>().promise;
           },
         });
+
         const replacementFetch = Object.assign(
           () => Promise.resolve(new Response(body)),
           globalThis.fetch
         );
+
         const exit = yield* client
           .post(`${policyTestOrigin}/work`, {
             body: yield* HttpClientRequest.bodyJson(HttpClientRequest.post("/"), { payload }).pipe(
@@ -1529,26 +1691,32 @@ describe("native browser response lifetime", () => {
             ),
           })
           .pipe(Effect.provideService(FetchHttpClient.Fetch, replacementFetch), Effect.exit);
+
         expect(Exit.isFailure(exit)).toBe(true);
         expect(cancellations).toBe(1);
         expect(body.locked).toBe(false);
       }
+
       expect(unexpectedRequests).toBe(0);
     })
   );
   it.effect("decodes native no-content logout while releasing its empty browser body stream", () =>
     Effect.gen(function* () {
       let cancellations = 0;
+
       const body = new ReadableStream<Uint8Array>({
         cancel(): Promise<void> {
           cancellations++;
+
           return Promise.withResolvers<void>().promise;
         },
       });
+
       const response = new Response(null, { status: 204 });
       Object.defineProperty(response, "body", { value: body });
       const client = makeWebAuthClient({ apiOrigin: policyTestOrigin });
       const registry = AtomRegistry.make();
+
       try {
         const context = yield* Layer.build(registry.get(client.runtime.layer)).pipe(
           Effect.provideService(
@@ -1557,9 +1725,11 @@ describe("native browser response lifetime", () => {
           ),
           Effect.scoped
         );
+
         const result = yield* client
           .use((transport) => transport.browserLogin.logout())
           .pipe(Effect.provide(context));
+
         expect(result).toBeUndefined();
         expect(cancellations).toBe(1);
         expect(body.locked).toBe(false);
@@ -1579,6 +1749,7 @@ describe("native browser response lifetime", () => {
           )
         )
       );
+
       const response = yield* client.post(`${policyTestOrigin}/work`);
       expect(response.status).toBe(204);
     })
@@ -1588,21 +1759,26 @@ describe("native browser response lifetime", () => {
       const started = Deferred.makeUnsafe<void>();
       const cancelled = Deferred.makeUnsafe<void>();
       const pendingResponse = Promise.withResolvers<Response>();
+
       const body = new ReadableStream<Uint8Array>({
         cancel(): Promise<void> {
           Deferred.doneUnsafe(cancelled, Effect.void);
+
           return Promise.reject(new Error("private cancellation failure"));
         },
       });
+
       const client = yield* makePolicyTestClient(FetchHttpClient.layer, "web-auth").pipe(
         Effect.provideService(
           FetchHttpClient.Fetch,
           Object.assign(() => {
             Deferred.doneUnsafe(started, Effect.void);
+
             return pendingResponse.promise;
           }, globalThis.fetch)
         )
       );
+
       const fiber = yield* Effect.forkChild(client.post(`${policyTestOrigin}/work`));
       yield* Deferred.await(started);
       yield* Fiber.interrupt(fiber);
@@ -1617,21 +1793,25 @@ describe("native browser response lifetime", () => {
   it.effect("refuses malformed native body chunks and releases their reader", () =>
     Effect.gen(function* () {
       let cancellations = 0;
+
       const body = new ReadableStream<string>({
         start(controller): void {
           controller.enqueue("private malformed native chunk");
         },
         cancel(): Promise<void> {
           cancellations++;
+
           return Promise.withResolvers<void>().promise;
         },
       });
+
       const client = yield* makePolicyTestClient(FetchHttpClient.layer, "web-auth").pipe(
         Effect.provideService(
           FetchHttpClient.Fetch,
           Object.assign(() => Promise.resolve(new Response(body)), globalThis.fetch)
         )
       );
+
       const exit = yield* client.post(`${policyTestOrigin}/work`).pipe(Effect.exit);
       expect(Exit.isFailure(exit)).toBe(true);
       expect(cancellations).toBe(1);
@@ -1639,6 +1819,7 @@ describe("native browser response lifetime", () => {
       expect(String(exit)).not.toContain("private malformed native chunk");
     })
   );
+
   for (const mode of [
     "overflow",
     "declared-overflow",
@@ -1649,43 +1830,53 @@ describe("native browser response lifetime", () => {
     it.effect(`releases the native reader for ${mode} without waiting for cancellation`, () =>
       Effect.gen(function* () {
         let cancellations = 0;
+
         const body = new ReadableStream<Uint8Array>({
           start(controller): void {
             if (mode === "overflow") controller.enqueue(new Uint8Array(65_537));
+
             if (mode === "success") {
               controller.enqueue(new Uint8Array());
               controller.enqueue(new TextEncoder().encode("{}"));
               controller.close();
             }
+
             if (mode === "read-error") controller.error(new Error("private body error"));
           },
           cancel(): Promise<void> {
             cancellations++;
+
             return Promise.withResolvers<void>().promise;
           },
         });
+
         const response = new Response(body, {
           status: mode === "redirect" ? 302 : 200,
           headers: mode === "declared-overflow" ? { "content-length": "65537" } : {},
         });
+
         const client = yield* makePolicyTestClient(FetchHttpClient.layer, "web-auth").pipe(
           Effect.provideService(
             FetchHttpClient.Fetch,
             Object.assign(() => Promise.resolve(response), globalThis.fetch)
           )
         );
+
         const exit = yield* client.post(`${policyTestOrigin}/work`).pipe(Effect.exit);
         expect(Exit.isSuccess(exit)).toBe(mode === "success");
         expect(body.locked).toBe(false);
+
         if (mode !== "success" && mode !== "read-error") expect(cancellations).toBe(1);
       })
     );
   }
+
   for (const mode of ["timeout", "interruption"] as const) {
     it.effect(`settles ${mode} while native cancellation remains pending`, () =>
       Effect.gen(function* () {
         const started = Deferred.makeUnsafe<void>();
         let cancellations = 0;
+
         const body = new ReadableStream<Uint8Array>(
           {
             pull(): void {
@@ -1693,19 +1884,23 @@ describe("native browser response lifetime", () => {
             },
             cancel(): Promise<void> {
               cancellations++;
+
               return Promise.withResolvers<void>().promise;
             },
           },
           { highWaterMark: 0 }
         );
+
         const client = yield* makePolicyTestClient(FetchHttpClient.layer, "web-auth").pipe(
           Effect.provideService(
             FetchHttpClient.Fetch,
             Object.assign(() => Promise.resolve(new Response(body)), globalThis.fetch)
           )
         );
+
         const fiber = yield* Effect.forkChild(client.post(`${policyTestOrigin}/work`));
         yield* Deferred.await(started);
+
         if (mode === "timeout") yield* TestClock.adjust("10 seconds");
         else yield* Fiber.interrupt(fiber);
         const exit = yield* Fiber.await(fiber);
@@ -1719,6 +1914,7 @@ describe("native browser response lifetime", () => {
 
 it.effect("fails an outstanding response read on abort even when native cancel throws", () => {
   const abort = new AbortController();
+
   return Effect.gen(function* () {
     const body = new ReadableStream<Uint8Array>();
     const getReader = body.getReader.bind(body);
@@ -1730,13 +1926,16 @@ it.effect("fails an outstanding response read on abort even when native cancel t
           cancellations++;
           throw new Error("private cleanup reason");
         };
+
         return reader;
       },
     });
+
     const response = ownNativeResponse({
       response: new Response(body),
       signal: Option.some(abort.signal),
     });
+
     const read = Option.getOrThrow(Option.fromNullishOr(response.body)).getReader().read();
     const failed = expect(read).rejects.toThrow("Response body aborted");
     abort.abort("private abort reason");
@@ -1753,6 +1952,7 @@ for (const cleanup of ["throw", "reject", "pending"] as const) {
   for (const late of ["chunk", "eof", "error"] as const) {
     it.effect(`keeps abort final after late ${late} with ${cleanup} cleanup`, () => {
       const abort = new AbortController();
+
       return Effect.gen(function* () {
         const end = { done: true as const, value: undefined };
         const nativeRead = Promise.withResolvers<typeof end | { done: false; value: Uint8Array }>();
@@ -1766,28 +1966,36 @@ for (const cleanup of ["throw", "reject", "pending"] as const) {
             const reader = acquire();
             reader.read = (): typeof nativeRead.promise => {
               started.resolve();
+
               return nativeRead.promise;
             };
+
             reader.cancel = (): Promise<void> => {
               cancellations++;
               abort.abort();
+
               if (cleanup === "throw") throw new Error("private cancel failure");
+
               return cleanup === "reject"
                 ? Promise.reject(new Error("private cancel failure"))
                 : Promise.withResolvers<void>().promise;
             };
+
             const release = reader.releaseLock.bind(reader);
             reader.releaseLock = (): void => {
               releases++;
               release();
             };
+
             return reader;
           },
         });
+
         const response = ownNativeResponse({
           response: new Response(body),
           signal: Option.some(abort.signal),
         });
+
         const reader = Option.getOrThrow(Option.fromNullishOr(response.body)).getReader();
         const pending = reader.read();
         const failed = expect(pending).rejects.toThrow("Response body aborted");
@@ -1800,6 +2008,7 @@ for (const cleanup of ["throw", "reject", "pending"] as const) {
           try: () => failed,
           catch: (error: unknown) => ({ _tag: "NativeLifetimeTestFailed" as const, cause: error }),
         });
+
         if (late === "error") nativeRead.reject(new Error("private late error"));
         else {
           nativeRead.resolve(
@@ -1808,6 +2017,7 @@ for (const cleanup of ["throw", "reject", "pending"] as const) {
               : { done: false, value: new Uint8Array([1]) }
           );
         }
+
         yield* Effect.tryPromise({
           try: () => expect(reader.read()).rejects.toThrow("Response body aborted"),
           catch: (error: unknown) => ({ _tag: "NativeLifetimeTestFailed" as const, cause: error }),

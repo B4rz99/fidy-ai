@@ -7,11 +7,14 @@ export const pendingCursor = (
   url: URL
 ): Option.Option<Readonly<{ scheduledAt: Option.Option<number>; id: string }>> => {
   const raw = url.searchParams.get("cursor");
+
   if (raw === null) return Option.some({ scheduledAt: Option.none(), id: "" });
   const [scheduledAt, id] = raw.split("|");
+
   const timestamp = Schema.decodeUnknownOption(Schema.toCodecJson(InsightEvent.fields.scheduledAt))(
     scheduledAt
   );
+
   if (
     raw.split("|").length !== 2 ||
     Option.isNone(timestamp) ||
@@ -19,5 +22,6 @@ export const pendingCursor = (
   ) {
     return Option.none();
   }
+
   return Option.some({ scheduledAt: Option.some(timestamp.value.epochMilliseconds), id: id ?? "" });
 };

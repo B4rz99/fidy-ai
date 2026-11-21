@@ -17,11 +17,13 @@ export const buildProactivityTemplateSender = (
   const configuration = Schema.decodeUnknownOption(ProactivityTemplateConfiguration)(
     input.configuration
   );
+
   return {
     prepare: (parameter) =>
       Effect.gen(function* () {
         if (Option.isNone(configuration)) return yield* new InsightTemplateUnavailable();
         const content = yield* Schema.decodeUnknownEffect(TranscriptText)(parameter);
+
         return yield* Schema.decodeEffect(PreparedProactivityTemplate)({
           name: configuration.value.name,
           language: configuration.value.language,
@@ -32,9 +34,11 @@ export const buildProactivityTemplateSender = (
     send: (request) =>
       Effect.gen(function* () {
         const template = yield* Schema.decodeEffect(PreparedProactivityTemplate)(request.template);
+
         if (Option.isNone(configuration) || template.name !== configuration.value.name) {
           return yield* new InsightTemplateUnavailable();
         }
+
         const body = yield* Schema.encodeEffect(UnknownJsonString)({
           messaging_product: "whatsapp",
           recipient_type: "individual",
@@ -49,6 +53,7 @@ export const buildProactivityTemplateSender = (
             ],
           },
         });
+
         return yield* sendKapsoMessage({
           outboundHttp: input.outboundHttp,
           businessPhoneNumberId: request.businessPhoneNumberId,

@@ -19,6 +19,7 @@ export const registryBody = (
 ): R2ObjectBody => {
   const { object, value } = input;
   const response = new Response(value);
+
   return {
     key: object.key,
     version: object.version,

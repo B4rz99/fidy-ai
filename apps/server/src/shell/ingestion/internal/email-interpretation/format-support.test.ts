@@ -21,11 +21,14 @@ const context = Schema.decodeSync(CapturedInterpretationContext)({
   locale: "es-CO",
   timeZone: "America/Bogota",
 });
+
 const hints = Schema.decodeSync(AccountHints)({});
+
 const defaultRule = {
   currency: Currency.make("COP"),
   basis: "format-cop-default-v1",
 } as const;
+
 const document = (rows: EmailDocument["rows"], text = ""): EmailDocument => ({ rows, text });
 
 it("exercises strict shared field, Currency, amount, date, and privacy rejection seams", () => {
@@ -91,6 +94,7 @@ it("exercises strict shared field, Currency, amount, date, and privacy rejection
     accountHints: hints,
     currencyDefault: defaultRule,
   });
+
   expect(Option.isSome(valid)).toBe(true);
   expect(
     makeInterpretation({
@@ -149,6 +153,7 @@ it("requires every format-owned structural field after routing nomination", () =
     ["no. de autorización", "654321"],
     ["comercio", "tienda ficticia"],
   ];
+
   expect(Option.isNone(rappicardPurchase.interpret(document(rappiRows, "other"), context))).toBe(
     true
   );
@@ -207,6 +212,7 @@ it("requires every format-owned structural field after routing nomination", () =
     ["hora", "10:15"],
     ["establecimiento", "comercio"],
   ];
+
   expect(Option.isNone(bbvaPse.interpret(document([], "pago pse"), context))).toBe(true);
   expect(
     Option.isNone(

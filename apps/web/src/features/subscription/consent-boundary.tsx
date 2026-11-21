@@ -38,6 +38,7 @@ const ConsentResult = ({
   if (status._tag === "Initial" || status.waiting) {
     return <PendingRead label="Cargando ofertas" />;
   }
+
   if (status._tag === "Failure" || Option.isSome(status.refreshFailure)) {
     return (
       <Alert>
@@ -50,7 +51,9 @@ const ConsentResult = ({
       </Alert>
     );
   }
+
   if (status.value.status === "Granted") return <>{children}</>;
+
   return <ConsentRequired revoked={status.value.status === "Revoked"} />;
 };
 
@@ -58,15 +61,18 @@ export const SubscriptionConsentBoundary = ({
   children,
 }: Readonly<{ children: ReactNode }>): JSX.Element => {
   const { webAuthClient: client, sessionBinding } = useRouter().options.context;
+
   const [query] = useState(() =>
     client.query("processingConsent", "status", {
       timeToLive: "0 seconds",
       reactivityKeys: ["processing-consent"],
     })
   );
+
   const status = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
   const { authentication } = useSession();
+
   if (authentication === "expired" || (status._tag === "Failure" && sessionBinding === "none")) {
     return (
       <Alert>
@@ -79,6 +85,7 @@ export const SubscriptionConsentBoundary = ({
       </Alert>
     );
   }
+
   return (
     <ConsentResult status={status} refresh={refresh}>
       {children}

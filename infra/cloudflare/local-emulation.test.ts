@@ -11,8 +11,11 @@ import { expect } from "vitest";
 import { localCanonicalReadBearer } from "../../apps/server/cloudflare/runtime/contract";
 
 const infrastructureRoot = new URL(".", import.meta.url).pathname;
+
 const ingressOrigin = "http://127.0.0.1:8787";
+
 const webOrigin = "http://127.0.0.1:5173";
+
 const HTTP_OK = 200;
 
 class UnexpectedHttpStatus extends Data.TaggedError("UnexpectedHttpStatus")<{
@@ -50,6 +53,7 @@ layer(LocalEmulationServices, {
       Effect.gen(function* () {
         const crypto = yield* SecureRandom.SecureRandom;
         const stageId = yield* crypto.uuidV4();
+
         const developmentProcess = yield* ChildProcess.make("bun", ["run", "dev"], {
           cwd: infrastructureRoot,
           env: {
@@ -62,6 +66,7 @@ layer(LocalEmulationServices, {
           stdin: "ignore",
           stdout: "inherit",
         });
+
         yield* Effect.addFinalizer(() =>
           developmentProcess.kill({ killSignal: "SIGINT" }).pipe(Effect.ignore)
         );
@@ -76,6 +81,7 @@ layer(LocalEmulationServices, {
         const categoriesResponse = yield* HttpClient.get(`${ingressOrigin}/categories`, {
           headers: { authorization: `Bearer ${localCanonicalReadBearer}` },
         });
+
         expect(categoriesResponse.status).toBe(401);
         expect(yield* categoriesResponse.json).toEqual({
           error: {

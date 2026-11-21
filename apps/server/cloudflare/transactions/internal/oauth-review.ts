@@ -22,6 +22,7 @@ const FactRow = Schema.Struct({
   created_at: Schema.String,
   revision: Schema.Int,
 });
+
 const Snapshot = Schema.Struct({
   retained: Schema.Array(
     Schema.Struct({
@@ -49,6 +50,7 @@ const Snapshot = Schema.Struct({
     })
   ),
 });
+
 const SnapshotRow = Schema.Struct({ snapshot: Schema.fromJsonString(Snapshot) });
 
 const snapshotBody = `selected(id) AS (SELECT id FROM roots UNION
@@ -112,9 +114,12 @@ export const localCorrectionReview = Effect.fn(function* (
   const sql = yield* SqliteClient;
   const [row] = yield* sql.unsafe(snapshotSql, [id, id, user, id, id, user, user, user]);
   const { snapshot } = yield* Schema.decodeUnknownEffect(SnapshotRow)(row);
+
   const original = discloseTransactions(yield* decodeFacts(snapshot.retained)),
     effective = discloseTransactions(yield* decodeFacts(snapshot.effective));
+
   const revision = yield* Schema.encodeEffect(Schema.fromJsonString(Snapshot))(snapshot);
+
   return {
     revision,
     effect: Option.match(after, {

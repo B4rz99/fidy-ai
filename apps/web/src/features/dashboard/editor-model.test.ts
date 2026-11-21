@@ -10,7 +10,9 @@ import {
 } from "./editor-model";
 
 const firstId = WidgetId.make("f1d1a000-0000-4000-8000-000000000801");
+
 const secondId = WidgetId.make("f1d1a000-0000-4000-8000-000000000802");
+
 const thirdId = WidgetId.make("f1d1a000-0000-4000-8000-000000000803");
 
 const catalogEntry = {
@@ -29,7 +31,9 @@ const compile = (
 ): CanonicalInput<"dashboard.applyDashboardEdit">["payload"] => {
   const result = compileDashboardGesture(gesture);
   expect(Result.isSuccess(result)).toBe(true);
+
   if (Result.isFailure(result)) throw result.failure;
+
   return result.success;
 };
 
@@ -42,6 +46,7 @@ describe("Dashboard gesture compilation", () => {
       ["bottom", { besideWidget: secondId, axis: "column", side: "after" }],
       ["center", { besideWidget: secondId, axis: "row", side: "after" }],
     ] as const;
+
     for (const [edge, at] of placements) {
       expect(
         compile({
@@ -93,9 +98,11 @@ describe("Dashboard gesture compilation", () => {
         currency: "COP",
       },
     });
+
     if (widget.op !== "update-widget" || widget.widget.type !== "budget-bar") {
       throw new Error("Expected a Budget Widget");
     }
+
     expect(
       compile({
         kind: "configure-budget",

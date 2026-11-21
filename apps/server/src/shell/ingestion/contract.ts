@@ -45,6 +45,7 @@ import {
 export const ResolveNeedsReviewItemInput = Schema.Struct({
   extraction: TransactionExtraction,
 }).annotate({ identifier: "ResolveNeedsReviewItemInput" });
+
 export type ResolveNeedsReviewItemInput = typeof ResolveNeedsReviewItemInput.Type;
 
 const read = operationPolicy({
@@ -53,18 +54,21 @@ const read = operationPolicy({
   agentConfirmation: "not-required",
   kind: "query",
 });
+
 const write = operationPolicy({
   access: userOwnedAgentScoped("write"),
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "mutation",
 });
+
 const statementUpload = operationPolicy({
   access: verifiedWhatsAppHostedOnly,
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "mutation",
 });
+
 const confirmedWrite = operationPolicy({
   access: userOwnedAgentScoped("write"),
   requiredTier: "free",
@@ -73,6 +77,7 @@ const confirmedWrite = operationPolicy({
 });
 
 const maximumReviewMaterialCharacters = 100_000;
+
 export const ReviewMaterial = Schema.Union([
   Schema.Struct({
     available: Schema.Literal(true),
@@ -86,6 +91,7 @@ export const ReviewMaterial = Schema.Union([
 ]);
 
 export const maximumReviewExcerptCharacters = 180;
+
 export const ReviewPageContext = Schema.Struct({
   items: Schema.Array(
     Schema.Struct({
@@ -292,6 +298,7 @@ export {
   maximumStatementSubmissionsPerHour,
   statementParserRevision,
 } from "~/core/ingestion/contract";
+
 export { StatementSubmissionId, StatementSourceFormat } from "~/core/ingestion/contract";
 
 export class StatementParseFailed extends Data.TaggedError("StatementParseFailed")<{
@@ -305,7 +312,9 @@ export type ParsedStatement = Readonly<{
 }>;
 
 const bytesPerKibibyte = 1024;
+
 const maximumExpandedMebibytes = 12;
+
 const maximumReferencedTextMebibytes = 8;
 
 export const statementParserLimits = {
@@ -317,12 +326,14 @@ export const statementParserLimits = {
 } as const;
 
 export const EmailInterpretationReviewReason = NotificationEmailInterpretationReviewReason;
+
 export type EmailInterpretationReviewReason = NotificationEmailInterpretationReviewReason;
 
 export const NotificationEmailInterpretationEvidence = Schema.Struct({
   ...NotificationInterpretationEvidence.fields,
   revision: InterpretationRevision,
 });
+
 export type NotificationEmailInterpretationEvidence =
   typeof NotificationEmailInterpretationEvidence.Type;
 

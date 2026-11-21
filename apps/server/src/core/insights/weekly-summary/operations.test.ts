@@ -13,7 +13,9 @@ const periods = weeklyPeriods({
   scheduledAt: Schema.decodeSync(UtcTimestamp)("2026-10-12T23:00:00.000Z"),
   timeZone: IanaTimeZone.make("America/Bogota"),
 });
+
 const categoryId = CategoryId.make("00000000-0000-4000-8000-000000000001");
+
 const aggregate = (
   amount: string,
   direction: "inflow" | "outflow" = "outflow",
@@ -25,8 +27,10 @@ const aggregate = (
   const currency = options.currency;
   const category = options.categoryId;
   const money = Schema.decodeSync(Money)({ amount, currency });
+
   return { categoryId: category, direction, sum: money, maximum: money, count: 1n };
 };
+
 describe("weekly summary", () => {
   it("presents exact Spanish directional changes and Category labels without hiding unavailable metadata", () => {
     const result = summarizeWeek({
@@ -35,14 +39,18 @@ describe("weekly summary", () => {
       current: [aggregate("20.25")],
       previous: [aggregate("40.5")],
     });
+
     if (result._tag !== "Summary") throw new Error("Expected summary");
+
     const input = {
       payload: result.payload,
       timeZone: IanaTimeZone.make("America/Bogota"),
       categories: [{ id: categoryId, label: CategoryLabel.make("Mercado") }],
     };
+
     const presented = presentWeeklySummary(input);
     expect(presented._tag).toBe("Some");
+
     if (presented._tag !== "Some") throw new Error("Expected presentation");
     expect(presented.value.sections).toEqual([
       {
@@ -59,7 +67,9 @@ describe("weekly summary", () => {
       current: [aggregate("9007199254740993.01"), aggregate("2", "inflow")],
       previous: [aggregate("3", "outflow", { currency: "USD", categoryId })],
     });
+
     expect(result._tag).toBe("Summary");
+
     if (result._tag !== "Summary") throw new Error("Expected summary");
     const payload = Schema.encodeSync(WeeklySummaryPayload)(result.payload);
     expect(payload.groups.map((group) => group.currency)).toEqual(["COP", "USD"]);
@@ -72,10 +82,13 @@ describe("weekly summary", () => {
     const ids = [1, 2, 3, 4].map((index) =>
       CategoryId.make(`00000000-0000-4000-8000-00000000000${index}`)
     );
+
     const current = ids
       .map((id) => aggregate("10", "outflow", { currency: "COP", categoryId: id }))
       .reverse();
+
     const result = summarizeWeek({ periods, financialRevision: 1, current, previous: [] });
+
     if (result._tag !== "Summary") throw new Error("Expected summary");
     expect(
       result.payload.groups[0].topOutflowCategories.map(
@@ -96,6 +109,7 @@ describe("weekly summary", () => {
         { period: periods.previous, aggregates: [] },
       ],
     } as const;
+
     expect(buildWeeklySummary({ periods, facts })._tag).toBe("Summary");
     expect(() =>
       buildWeeklySummary({
@@ -111,7 +125,9 @@ describe("weekly summary", () => {
       current: [aggregate("20.25"), aggregate("3", "inflow")],
       previous: [aggregate("40.5")],
     });
+
     expect(result._tag).toBe("Summary");
+
     if (result._tag !== "Summary") return;
     const payload = Schema.encodeSync(WeeklySummaryPayload)(result.payload);
     expect(payload.groups[0].outflow).toEqual({
@@ -134,6 +150,7 @@ describe("weekly summary", () => {
       ],
       previous: [],
     });
+
     if (result._tag !== "Summary") throw new Error("Expected summary");
     expect(result.payload.groups).toMatchObject([
       { currency: "COP", topOutflowCategories: [] },
@@ -151,12 +168,15 @@ describe("weekly summary", () => {
       current: [aggregate("2", "inflow", { currency: "USD", categoryId })],
       previous: [],
     });
+
     if (result._tag !== "Summary") throw new Error("Expected summary");
+
     const presented = presentWeeklySummary({
       payload: result.payload,
       categories: [],
       timeZone: IanaTimeZone.make("America/Bogota"),
     });
+
     if (presented._tag !== "Some") throw new Error("Expected presentation");
     expect(presented.value).toEqual({
       period: "Del 5/10/2026 18:00 al 12/10/2026 18:00 (America/Bogota)",
@@ -174,10 +194,12 @@ describe("weekly summary", () => {
     for (const index of [0, 1] as const) {
       for (const boundary of ["from", "toExclusive"] as const) {
         const captured = [periods.current, periods.previous] as const;
+
         const altered = {
           ...captured[index],
           [boundary]: DateTime.add(captured[index][boundary], { seconds: 1 }),
         };
+
         expect(() =>
           buildWeeklySummary({
             periods,

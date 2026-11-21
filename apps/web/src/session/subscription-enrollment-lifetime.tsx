@@ -14,10 +14,12 @@ export const SubscriptionEnrollmentLifetime = ({
   makeClient,
 }: SubscriptionEnrollmentLifetimeProps): React.JSX.Element => {
   const [client, setClient] = useState<Option.Option<SubscriptionEnrollmentClient>>(Option.none);
+
   const attachLifetime = useCallback(
     (_element: HTMLSpanElement): (() => void) => {
       const current = makeClient();
       setClient(Option.some(current));
+
       return () => {
         current.dispose().catch(() => undefined);
       };

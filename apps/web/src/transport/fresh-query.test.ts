@@ -13,18 +13,23 @@ it.live(
       const newer = yield* Deferred.make<void>();
       let reads = 0;
       let finished = false;
+
       const query = makeFreshQuery({
         runtime: Atom.runtime(Layer.empty),
         load: Effect.gen(function* () {
           reads += 1;
           yield* Deferred.await(reads === 1 ? older : newer);
+
           return "same facts";
         }),
       });
+
       const registry = AtomRegistry.make();
       const unmount = registry.mount(query);
+
       try {
         yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(1)));
+
         const recovery = yield* readFreshQuery({ registry, query }).pipe(
           Effect.tap((success) =>
             Effect.sync(() => {
@@ -33,6 +38,7 @@ it.live(
           ),
           Effect.forkChild
         );
+
         yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(2)));
         yield* Deferred.succeed(older, undefined);
         expect(finished).toBe(false);
@@ -51,13 +57,16 @@ it.live(
   () =>
     Effect.gen(function* () {
       let failed = false;
+
       const query = makeFreshQuery({
         runtime: Atom.runtime(Layer.empty),
         load: Effect.suspend(() =>
           failed ? Effect.fail("refused") : Effect.succeed("same facts")
         ),
       });
+
       const registry = AtomRegistry.make();
+
       try {
         expect(yield* readFreshQuery({ registry, query })).toBe(true);
         expect(yield* readFreshQuery({ registry, query })).toBe(true);
@@ -73,15 +82,19 @@ it.live("superseded loader completion cannot certify the requested recovery", ()
   Effect.gen(function* () {
     const held = yield* Deferred.make<void>();
     let reads = 0;
+
     const query = makeFreshQuery({
       runtime: Atom.runtime(Layer.empty),
       load: Effect.gen(function* () {
         reads += 1;
         yield* Deferred.await(held);
+
         return "facts";
       }),
     });
+
     const registry = AtomRegistry.make();
+
     try {
       const first = yield* readFreshQuery({ registry, query }).pipe(Effect.forkChild);
       yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(1)));
@@ -96,12 +109,15 @@ it.live("superseded loader completion cannot certify the requested recovery", ()
 it.live("a replaced authentication registry never adopts the prior registry's completion", () =>
   Effect.gen(function* () {
     const held = yield* Deferred.make<void>();
+
     const query = makeFreshQuery({
       runtime: Atom.runtime(Layer.empty),
       load: Deferred.await(held),
     });
+
     const previous = AtomRegistry.make();
     const current = AtomRegistry.make();
+
     try {
       const oldRead = yield* readFreshQuery({ registry: previous, query }).pipe(Effect.forkChild);
       yield* Effect.yieldNow;
@@ -124,7 +140,9 @@ it.live(
         runtime: Atom.runtime(Layer.effectDiscard(Effect.fail("unavailable"))),
         load: Effect.succeed("facts"),
       });
+
       const registry = AtomRegistry.make();
+
       try {
         expect(yield* readFreshQuery({ registry, query })).toBe(false);
       } finally {
@@ -137,16 +155,20 @@ it.live("logical retirement settles pending strict reads before registry disposa
   Effect.gen(function* () {
     const held = yield* Deferred.make<void>();
     let reads = 0;
+
     const query = makeFreshQuery({
       runtime: Atom.runtime(Layer.empty),
       load: Effect.gen(function* () {
         reads += 1;
         yield* Deferred.await(held);
+
         return "facts";
       }),
     });
+
     const registry = AtomRegistry.make();
     const unmount = registry.mount(query);
+
     try {
       yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(1)));
       const pending = yield* readFreshQuery({ registry, query }).pipe(Effect.forkChild);
@@ -166,14 +188,17 @@ it.live("logical retirement settles pending strict reads before registry disposa
 it.live("an interrupted fresh loader cannot certify recovery from retained successful data", () =>
   Effect.gen(function* () {
     let interrupted = false;
+
     const query = makeFreshQuery({
       runtime: Atom.runtime(Layer.empty),
       load: Effect.suspend(() =>
         interrupted ? Effect.interrupt : Effect.succeed("retained facts")
       ),
     });
+
     const registry = AtomRegistry.make();
     const unmount = registry.mount(query);
+
     try {
       expect(yield* readFreshQuery({ registry, query })).toBe(true);
       interrupted = true;

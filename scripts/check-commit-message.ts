@@ -66,6 +66,7 @@ const blockAfter = (markdown: string, marker: string): readonly string[] => {
     .slice(marked + marker.length)
     .split(/\r?\n/)
     .slice(1);
+
   const block = lines.slice(lines.findIndex((line) => !isBlank(line)));
   const end = block.findIndex(isBlank);
 
@@ -181,6 +182,7 @@ const messageErrors = (message: string, allowlist: Allowlist): readonly string[]
   const bodyLines = lines
     .slice(2)
     .filter((line) => line.trim().length > 0 && !line.startsWith("#"));
+
   const badBodyLine = bodyLines.find((line) => !line.startsWith("- "));
 
   if (bodyLines.length === 0) {

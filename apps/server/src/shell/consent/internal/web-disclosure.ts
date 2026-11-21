@@ -1,6 +1,7 @@
 import { currentDisclosureFacts } from "./current-disclosure";
 
 const text = "Fidy usa tus datos para proteger tu cuenta y organizar tus finanzas.";
+
 export const webDisclosureFacts = {
   ...currentDisclosureFacts,
   revision: "web-provider-2026-10-09-browser-agents",

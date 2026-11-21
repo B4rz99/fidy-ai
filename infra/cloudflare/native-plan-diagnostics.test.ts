@@ -11,6 +11,7 @@ import {
 import { nativeResourceFailureMessage } from "./resource-failure";
 
 const revision = "1".repeat(40);
+
 const start = (
   report: Alchemist.ProgressReporter,
   logicalId: string,
@@ -21,9 +22,11 @@ const start = (
 it.effect("forwards the successful plan and progress", () =>
   Effect.gen(function* () {
     const phases: string[] = [];
+
     const result = yield* Effect.gen(function* () {
       const report = yield* Alchemist.Progress;
       yield* report({ _tag: "plan.phase", phase: "computing-plan" });
+
       return "verified";
     }).pipe(
       diagnoseNativePlan(revision),
@@ -33,6 +36,7 @@ it.effect("forwards the successful plan and progress", () =>
         })
       )
     );
+
     expect(result).toBe("verified");
     expect(phases).toEqual(["plan.phase"]);
   })
@@ -59,6 +63,7 @@ layer(FetchHttpClient.layer)("native planner HTTP reads", (suite) => {
           preconnect: fetch.preconnect,
         }
       );
+
       const failure = yield* Effect.gen(function* () {
         const report = yield* Alchemist.Progress;
         yield* report({ _tag: "plan.phase", phase: "computing-plan" });
@@ -81,6 +86,7 @@ layer(FetchHttpClient.layer)("native planner HTTP reads", (suite) => {
         yield* HttpClient.get(
           "https://alchemy-state-store.private.workers.dev/state/stacks/private/stages/private/resources/private"
         );
+
         return yield* Effect.fail(error);
       }).pipe(
         diagnoseNativePlan(revision),
@@ -90,6 +96,7 @@ layer(FetchHttpClient.layer)("native planner HTTP reads", (suite) => {
           onSuccess: () => "unexpected success",
         })
       );
+
       expect(failure).toContain("(" + category + ")");
       expect(failure).toContain(
         "Planner phase computing-plan. Resource diffs completed 1/3. Unfinished resources [ReleaseSmokeQueue]. Observed reads [queues 403, state resource 403]."
@@ -108,6 +115,7 @@ layer(FetchHttpClient.layer)("closed installation target", (suite) => {
         const request = HttpClient.get(
           "https://api.cloudflare.com/client/v4/accounts/private/builds/workers/private/triggers"
         ).pipe(Effect.andThen(Effect.fail(Error("private-provider-message"))));
+
         const failure = yield* request.pipe(
           diagnoseFreshTarget,
           Effect.provideService(
@@ -119,6 +127,7 @@ layer(FetchHttpClient.layer)("closed installation target", (suite) => {
           ),
           Effect.matchCause({ onFailure: nativeResourceFailureMessage, onSuccess: () => "" })
         );
+
         expect(failure).toContain("Worker Build triggers 403");
         expect(failure).not.toContain("private");
       })
@@ -131,12 +140,14 @@ layer(FetchHttpClient.layer)("scoped successor upload", (suite) => {
     () =>
       Effect.gen(function* () {
         const account = "https://api.cloudflare.com/client/v4/accounts/private-account";
+
         const failure = yield* Effect.gen(function* () {
           yield* HttpClient.post(account + "/workers/scripts/fidy-native-storage-ingress/versions");
           yield* HttpClient.put(
             account + "/workflows/fidy-native-smoke-" + revision + "?secret=private"
           );
           yield* HttpClient.put(account + "/workflows/private-unreviewed-name");
+
           return yield* Effect.fail(Error("private-provider-message"));
         }).pipe(
           diagnoseSuccessorApply(revision),
@@ -155,6 +166,7 @@ layer(FetchHttpClient.layer)("scoped successor upload", (suite) => {
           ),
           Effect.matchCause({ onFailure: nativeResourceFailureMessage, onSuccess: () => "" })
         );
+
         expect(failure).toContain("Observed writes [Ingress version 200, Smoke Workflow 422].");
         expect(failure).not.toContain("private");
         expect(failure).not.toContain(revision);

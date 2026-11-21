@@ -7,6 +7,7 @@ import { cn } from "@/ui/class-names";
 const inputVariants = cva("", {
   variants: { variant: { default: "", amount: "text-right tabular-nums" } },
 });
+
 const Input = ({
   className,
   type,

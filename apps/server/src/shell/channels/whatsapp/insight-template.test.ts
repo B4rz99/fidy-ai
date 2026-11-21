@@ -10,6 +10,7 @@ const configuration = {
   approval: "approved",
   body: "Tu resumen semanal: {{1}} Consulta tus movimientos en Fidy.",
 };
+
 const request = {
   recipient: WhatsAppBusinessScopedUserId.make("CO.573001234567"),
   businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
@@ -23,20 +24,24 @@ const request = {
     ],
   },
 };
+
 it.effect(
   "starts unenabled without an approved full-summary template and makes no provider call",
   () =>
     Effect.gen(function* () {
       let called = false;
+
       const sender = makeInsightTemplateSender({
         configuration: undefined,
         outboundHttp: {
           execute: () => {
             called = true;
+
             return Effect.die("must not send");
           },
         },
       });
+
       expect(Exit.isFailure(yield* Effect.exit(sender.send(request)))).toBe(true);
       expect(called).toBe(false);
     })
@@ -47,12 +52,14 @@ it.effect(
   () =>
     Effect.gen(function* () {
       let body = "";
+
       const sender = makeInsightTemplateSender({
         configuration,
         outboundHttp: {
           execute: (input) => {
             if (input._tag !== "KapsoMessages") return Effect.die("wrong provider");
             body = input.body;
+
             return Effect.succeed({
               status: 200,
               headers: {},
@@ -63,6 +70,7 @@ it.effect(
           },
         },
       });
+
       const prepared = yield* sender.prepare(request.summary);
       expect(prepared.text).toBe(
         "Tu resumen semanal: 1–7 de junio · COP: Ingresos 100000; salidas 50000 · USD: Ingresos 20; salidas 5 Consulta tus movimientos en Fidy."

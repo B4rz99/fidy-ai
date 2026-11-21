@@ -28,6 +28,7 @@ export type {
   DaviplataOtpPolicy,
   SubmitPaymentEnrollmentPayload,
 } from "@fidy/server/client";
+
 export {
   fidyWhatsAppUrl,
   TransactionId,
@@ -35,6 +36,7 @@ export {
   ReviewDraft,
   TransactionQueryValues,
 } from "@fidy/server/client";
+
 export {
   ConnectionAttemptReference,
   ConnectionContinuationReview,
@@ -48,6 +50,7 @@ export {
   OAuthReview,
   OAuthReviewChoice,
 } from "@fidy/server/client";
+
 export {
   BudgetMonth,
   Currency,
@@ -171,6 +174,7 @@ export const makeWebAuthClient = (options: BrowserClientOptions): WebAuthClient 
   });
 
 type EnrollmentApiClient = HttpApiClient.Client<SubscriptionEnrollmentApiGroups, never, never>;
+
 class EnrollmentClientService extends Context.Service<
   EnrollmentClientService,
   EnrollmentApiClient
@@ -197,10 +201,12 @@ export const makeSubscriptionEnrollmentClient = (
       transformResponse: observeBrowserDecode,
     })
   ).pipe(Layer.provide(browserClientLayer({ ...options, boundary: "enrollment" })));
+
   const runtime = ManagedRuntime.make(live);
   const lifetime = new AbortController();
   let available = true;
   let disposal = Option.none<Promise<void>>();
+
   return {
     signal: lifetime.signal,
     execute: (use, execution) =>
@@ -214,6 +220,7 @@ export const makeSubscriptionEnrollmentClient = (
           lifetime.abort();
           const current = runtime.dispose();
           disposal = Option.some(current);
+
           return current;
         },
         onSome: (current) => current,
@@ -226,6 +233,7 @@ export { RecurringDigestReport, RecurringDigestReportParams } from "@fidy/server
 export { ProviderHandoffSearch } from "@fidy/server/client";
 
 export { ManualPATReauthenticationRequired, User } from "@fidy/server/client";
+
 export { Budget, Category, BudgetStatusReport } from "@fidy/server/client";
 
 export type {
@@ -234,6 +242,7 @@ export type {
   ProcessingAuthorization,
   PrivacyTransactionPage,
 } from "@fidy/server/client";
+
 export {
   RecurringCommand,
   RecurringEdit,

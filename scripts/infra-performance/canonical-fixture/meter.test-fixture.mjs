@@ -5,8 +5,10 @@
 /** @typedef {new (state:{storage:NativeStorage}, environment:Bindings)=>{fetch(request:Request):Promise<Response>,alarm(...args:unknown[]):Promise<void>}} OwnerClass */
 /** @param {unknown} value Reflective native method. @returns {value is NativeMethod} */
 const isMethod = (value) => typeof value === "function";
+
 /** @param {unknown} value Native runtime object. @returns {value is object} */
 const isObject = (value) => typeof value === "object" && value !== null;
+
 const empty = () => ({
   fetches: 0,
   alarms: 0,
@@ -20,6 +22,7 @@ const empty = () => ({
   otherKv: 0,
   failedSql: 0,
 });
+
 /** @type {Map<string, ReturnType<typeof empty>>} */
 const owners = new Map();
 
@@ -27,25 +30,33 @@ const owners = new Map();
 const observedCursor = (cursor, counts) => {
   let reads = 0,
     writes = 0;
+
   const observe = () => {
     counts.rowsRead += cursor.rowsRead - reads;
     counts.rowsWritten += cursor.rowsWritten - writes;
     reads = cursor.rowsRead;
     writes = cursor.rowsWritten;
   };
+
   observe();
+
   /** @param {object} source Native cursor or its iterator. @returns {object} */
   const wrap = (source) => {
     return new Proxy(source, {
       get(target, property) {
         /** @type {unknown} */
         const value = Reflect.get(target, property, target);
+
         if (!isMethod(value)) return value;
+
         return (/** @type {unknown[]} */ ...args) => {
           try {
             const result = value.apply(target, args);
+
             if (property !== "raw" && property !== Symbol.iterator) return result;
+
             if (!isObject(result)) throw Error("SQL cursor did not return an iterator");
+
             return wrap(result);
           } finally {
             observe();
@@ -54,6 +65,7 @@ const observedCursor = (cursor, counts) => {
       },
     });
   };
+
   return wrap(cursor);
 };
 
@@ -61,9 +73,11 @@ const observedCursor = (cursor, counts) => {
 const observeStorage = (storage, counts) => {
   const sql = storage.sql,
     exec = sql.exec.bind(sql);
+
   Object.defineProperty(sql, "exec", {
     value: (/** @type {string} */ query, /** @type {unknown[]} */ ...bindings) => {
       counts.statements++;
+
       try {
         return observedCursor(exec(query, ...bindings), counts);
       } catch (cause) {
@@ -72,6 +86,7 @@ const observeStorage = (storage, counts) => {
       }
     },
   });
+
   for (const key of [
     "getAlarm",
     "setAlarm",
@@ -83,6 +98,7 @@ const observeStorage = (storage, counts) => {
     "list",
   ]) {
     const call = storage[key];
+
     if (!isMethod(call)) throw Error("Missing native storage method");
     Object.defineProperty(storage, key, {
       value: (/** @type {unknown[]} */ ...args) => {
@@ -94,6 +110,7 @@ const observeStorage = (storage, counts) => {
         ) {
           counts[key]++;
         } else counts.otherKv++;
+
         return call.apply(storage, args);
       },
     });
@@ -102,14 +119,20 @@ const observeStorage = (storage, counts) => {
 
 /** @type {Map<string,Record<string,number>>} */
 const bucketCalls = new Map();
+
 const names = ["SMOKE_BUCKET", "EMAIL_BUCKET", "STATEMENT_STAGING_BUCKET", "SAMPLE_BUCKET"];
+
 const methods = ["get", "head", "list", "put", "delete"];
+
 /** @param {Bindings} environment Original workerd environment. */
 export const observedBindings = (environment) => {
   const env = { ...environment };
+
   for (const name of names) {
     const bucket = env[name];
+
     if (!bucket) continue;
+
     if (!isObject(bucket)) throw Error("Invalid R2 binding");
     const totals = bucketCalls.get(name) ?? Object.fromEntries(methods.map((key) => [key, 0]));
     bucketCalls.set(name, totals);
@@ -117,26 +140,34 @@ export const observedBindings = (environment) => {
       get(target, key) {
         /** @type {unknown} */
         const value = Reflect.get(target, key, target);
+
         if (!isMethod(value)) return value;
+
         if (typeof key !== "string" || !methods.includes(key)) {
           throw Error("Unmeasured R2 binding operation");
         }
+
         return (/** @type {unknown[]} */ ...args) => {
           totals[key]++;
+
           return value.apply(target, args);
         };
       },
     });
   }
+
   return env;
 };
+
 export const buckets = () => {
   return Response.json(Object.fromEntries(bucketCalls));
 };
+
 /** @param {string} name Native Durable Object class name. @param {OwnerClass} Owner Application Durable Object. */
 export const observed = (name, Owner) => {
   const counts = empty();
   owners.set(name, counts);
+
   return class extends Owner {
     /** @param {{storage:NativeStorage}} state Workerd object state. @param {Bindings} env Workerd environment. */
     constructor(state, env) {
@@ -146,10 +177,12 @@ export const observed = (name, Owner) => {
     /** @param {Request} request Original fetch request. */
     fetch(request) {
       counts.fetches++;
+
       return super.fetch(request);
     }
     alarm(/** @type {unknown[]} */ ...args) {
       counts.alarms++;
+
       return super.alarm(...args);
     }
   };

@@ -31,7 +31,9 @@ const price = (
 });
 
 const weekly = price("22700000-0000-4000-8000-000000000001", "weekly", "9900");
+
 const monthly = price("22700000-0000-4000-8000-000000000002", "monthly", "28900");
+
 const yearly = price("22700000-0000-4000-8000-000000000003", "yearly", "289900");
 
 it("accepts the exact ordered launch Subscription offers", () => {
@@ -45,6 +47,7 @@ it("rejects a Price that is free or not denominated in COP", () => {
     ...weekly,
     money: { amount: "0", currency: "COP" },
   });
+
   const foreignCurrency = Schema.decodeResult(Price)({
     ...weekly,
     money: { amount: "9.9", currency: "USD" },
@@ -58,6 +61,7 @@ it("rejects a Price that is free or not denominated in COP", () => {
 
 it("rejects reordered periods and payment methods outside the launch set", () => {
   const reorderedPeriods = Schema.decodeResult(SubscriptionOffers)([monthly, weekly, yearly]);
+
   const unsupportedMethod = Schema.decodeUnknownResult(Price)({
     ...weekly,
     paymentMethods: ["card", "pse", "daviplata"],
@@ -89,6 +93,7 @@ it("preserves the displayed enrollment contracts and independently required auth
     providerContentHash: "b".repeat(32),
     observedAt: "2026-10-22T12:00:00.000Z",
   };
+
   const prepared = {
     status: "prepared",
     enrollmentId: weekly.id,
@@ -108,17 +113,21 @@ it("preserves the displayed enrollment contracts and independently required auth
     paymentSourceMode: "create",
     expiresAt: "2026-10-22T12:15:00.000Z",
   };
+
   expect(
     Schema.encodeSync(PreparedPaymentEnrollment)(
       Schema.decodeUnknownSync(PreparedPaymentEnrollment)(prepared)
     )
   ).toEqual(prepared);
+
   const decisions = {
     acceptedEndUserPolicy: true,
     acceptedPersonalDataAuthorization: true,
     authorizedRecurringCharges: true,
   };
+
   expect(Result.isSuccess(Schema.decodeUnknownResult(EnrollmentDecisions)(decisions))).toBe(true);
+
   for (const key of [
     "acceptedEndUserPolicy",
     "acceptedPersonalDataAuthorization",
@@ -130,10 +139,13 @@ it("preserves the displayed enrollment contracts and independently required auth
       )
     ).toBe(true);
   }
+
   const decodeEvidence = Schema.decodeUnknownResult(WompiContractEvidence);
+
   for (const kind of ["end-user-policy", "personal-data-authorization"]) {
     expect(Result.isSuccess(decodeEvidence({ ...evidence, kind }))).toBe(true);
   }
+
   for (const contentSha256 of [
     "a".repeat(63),
     "a".repeat(65),
@@ -145,11 +157,13 @@ it("preserves the displayed enrollment contracts and independently required auth
       Result.isFailure(decodeEvidence({ ...evidence, kind: "end-user-policy", contentSha256 }))
     ).toBe(true);
   }
+
   expect(
     Result.isSuccess(
       decodeEvidence({ ...evidence, kind: "end-user-policy", providerContentHash: "f".repeat(128) })
     )
   ).toBe(true);
+
   for (const providerContentHash of [
     "a".repeat(31),
     "a".repeat(129),
@@ -177,14 +191,17 @@ it("round trips pending payment submission and terminal enrollment outcomes with
     timeZone: "America/Bogota",
     createdAt: "2026-10-22T12:00:00.000Z",
   };
+
   const submission = {
     status: "payment-pending",
     enrollmentId: weekly.id,
     billingAttempt: attempt,
   };
+
   expect(
     Schema.encodeSync(PaymentSubmission)(Schema.decodeUnknownSync(PaymentSubmission)(submission))
   ).toEqual(submission);
+
   for (const status of ["creating", "available", "expired", "verifying", "refused"]) {
     const value = {
       status,
@@ -193,10 +210,12 @@ it("round trips pending payment submission and terminal enrollment outcomes with
       priceId: weekly.id,
       ...(status === "refused" ? { reason: "provider-declined" } : {}),
     };
+
     expect(
       Schema.encodeSync(PaymentEnrollment)(Schema.decodeUnknownSync(PaymentEnrollment)(value))
     ).toEqual(value);
   }
+
   expect(
     Result.isSuccess(
       Schema.decodeResult(PaymentSubmission)({
@@ -210,6 +229,7 @@ it("round trips pending payment submission and terminal enrollment outcomes with
 
 it("bounds DaviPlata OTP destinations to reviewed query-free Wompi paths", () => {
   const decode = Schema.decodeUnknownResult(DaviplataOtpPolicy);
+
   for (const url of [
     "https://sandbox.wompi.co/a_b-9",
     "https://production.wompi.co/path/OTP",
@@ -217,6 +237,7 @@ it("bounds DaviPlata OTP destinations to reviewed query-free Wompi paths", () =>
   ]) {
     expect(Result.isSuccess(decode({ sendUrl: url, confirmUrl: url }))).toBe(true);
   }
+
   for (const url of [
     "http://sandbox.wompi.co/a",
     "https://evil.example/a",

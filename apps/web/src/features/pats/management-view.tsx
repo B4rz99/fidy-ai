@@ -120,6 +120,7 @@ const RevocationControl = ({
       </Button>
     );
   }
+
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-destructive/40 p-4">
       {confirmation}
@@ -228,8 +229,10 @@ const AllRevocationControl = (props: RevocationActionProps): JSX.Element => (
 );
 
 type RevocationController = Readonly<{ state: PATManagementTask; actions: PATManagementActions }>;
+
 const selectedAll = (state: PATManagementTask): boolean =>
   (state._tag === "Reviewing" || state._tag === "Revoking") && state.target._tag === "All";
+
 const locked = (state: PATManagementTask): boolean =>
   state._tag !== "Ready" && state._tag !== "Reviewing";
 
@@ -267,6 +270,7 @@ const ReadyPATs = ({
   refreshFailed: boolean;
 }>): JSX.Element => {
   const disabled = locked(controller.state) || refreshing || refreshFailed;
+
   const rows = pats.map((pat) => ({
     pat,
     cancel: controller.actions.cancel,
@@ -276,6 +280,7 @@ const ReadyPATs = ({
     select: (): void => controller.actions.reviewOne(pat.shortId),
     selected: false,
   }));
+
   return (
     <>
       {pats.length === 0 ? (
@@ -320,7 +325,9 @@ const PATQueryContent = ({
   if (state._tag === "Initial") {
     return <PendingRead label="Cargando tokens activos" />;
   }
+
   if (state._tag === "Loading") return <PendingRead label="Cargando tokens activos" />;
+
   if (state._tag === "Ready") {
     return (
       <>
@@ -343,6 +350,7 @@ const PATQueryContent = ({
       </>
     );
   }
+
   return (
     <CanonicalQueryRetry
       description="Intenta de nuevo en unos momentos."
@@ -397,11 +405,13 @@ const ActivePATHeading = ({
 
 const outcomeMessage = (state: PATManagementTask): Option.Option<string> => {
   if (state._tag === "Revoking") return Option.none();
+
   if (state._tag === "Uncertain" || state._tag === "Refreshing") {
     return Option.some(
       "No recibimos un resultado confirmado. Actualiza los tokens antes de revisar otra desactivación. La actualización no repite la solicitud."
     );
   }
+
   return Option.map(state.outcome, (outcome) => {
     switch (outcome._tag) {
       case "One":
@@ -414,10 +424,12 @@ const outcomeMessage = (state: PATManagementTask): Option.Option<string> => {
         if (outcome.target._tag === "All") {
           return "La lista está actualizada. El resultado de la desactivación anterior y su cantidad siguen sin confirmar; la lista no confirma el cierre de autorizaciones pendientes.";
         }
+
         return outcome.active
           ? "El token figura activo. El resultado de la desactivación anterior sigue sin confirmar."
           : "El token ya no figura activo. Esto no confirma el resultado de la desactivación anterior.";
       }
+
       case "Refused":
         return {
           Authority:
@@ -478,6 +490,7 @@ export const ActivePATManagementView = ({
   lifecycleRef: RefCallback<HTMLElement>;
 }>): JSX.Element => {
   const controller = { state: task, actions };
+
   return (
     <section
       aria-labelledby="active-pats-title"

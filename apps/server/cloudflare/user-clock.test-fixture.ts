@@ -1,6 +1,7 @@
 import { UserStore as ProductionUserStore } from "./core-worker";
 
 export { default } from "./core-worker";
+
 export * from "./core-worker";
 
 export class UserStore extends ProductionUserStore {
@@ -11,11 +12,14 @@ export class UserStore extends ProductionUserStore {
     ) {
       return super.fetch(request);
     }
+
     const { instant } = this.ctx.storage.sql
       .exec<{ instant: number }>("SELECT instant FROM fixture_clock")
       .one();
+
     const live = Date.now;
     Date.now = (): number => instant;
+
     return super.fetch(request).finally(() => {
       Date.now = live;
     });

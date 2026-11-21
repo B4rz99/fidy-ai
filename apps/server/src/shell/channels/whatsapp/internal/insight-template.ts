@@ -11,6 +11,7 @@ import {
 import { sendKapsoMessage } from "./kapso-client";
 
 const maximumTemplateLength = 1024;
+
 const maximumTemplateBytes = 4096;
 
 export const buildInsightTemplateSender = (
@@ -22,31 +23,40 @@ export const buildInsightTemplateSender = (
   const configuration = Schema.decodeUnknownOption(InsightTemplateConfiguration)(
     input.configuration
   );
+
   const prepare: InsightTemplateSender["prepare"] = (summary) =>
     Effect.gen(function* () {
       if (Option.isNone(configuration)) return yield* new InsightTemplateUnavailable();
+
       const decoded = yield* Schema.decodeUnknownEffect(InsightTemplateSummary)(summary).pipe(
         Effect.mapError(() => new InsightTemplateUnavailable())
       );
+
       const parameter = [
         decoded.period,
         ...decoded.sections.map((section) => `${section.currency}: ${section.text}`),
       ].join(" · ");
+
       const text = configuration.value.body.replace("{{1}}", parameter);
+
       if (
         text.length > maximumTemplateLength ||
         new TextEncoder().encode(text).byteLength > maximumTemplateBytes
       ) {
         return yield* new InsightTemplateUnavailable();
       }
+
       return { parameter, text: TranscriptText.make(text) };
     });
+
   return {
     prepare,
     send: (request) =>
       Effect.gen(function* () {
         const prepared = yield* prepare(request.summary);
+
         if (Option.isNone(configuration)) return yield* new InsightTemplateUnavailable();
+
         const body = yield* Schema.encodeEffect(UnknownJsonString)({
           messaging_product: "whatsapp",
           recipient_type: "individual",
@@ -61,6 +71,7 @@ export const buildInsightTemplateSender = (
             ],
           },
         }).pipe(Effect.mapError(() => new InsightTemplateUnavailable()));
+
         return yield* sendKapsoMessage({
           outboundHttp: input.outboundHttp,
           businessPhoneNumberId: request.businessPhoneNumberId,

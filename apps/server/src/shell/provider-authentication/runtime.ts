@@ -19,6 +19,7 @@ export const makeProviderHandoffSender = (
     sandboxPhoneNumberId: input.sandboxPhoneNumberId,
     outboundHttp: makeKapsoOutboundHttp(input),
   });
+
   return ({ event, text }) =>
     client.sendText({
       confirmation: Option.none(),

@@ -13,6 +13,7 @@ import { makeHostedTurnClient } from "@/transport/hosted-turn-client";
 import { createWebRouter } from "./routes";
 
 const reactWork = (work: () => void): Promise<void> => Promise.resolve(act(work));
+
 const refusedPage = (
   authentication: BrowserAuthentication,
   path: string,
@@ -30,8 +31,10 @@ const refusedPage = (
     addEventListener: (): void => undefined,
     removeEventListener: (): void => undefined,
   }));
+
   const http = HttpClient.make((request) => {
     const pathname = new URL(request.url).pathname;
+
     if (pathname === "/web/consent" && consent === "Revoked") {
       return Effect.succeed(
         HttpClientResponse.fromWeb(
@@ -46,11 +49,13 @@ const refusedPage = (
         )
       );
     }
+
     if (pathname === "/web/consent" && consent !== "Unavailable") {
       return Effect.succeed(
         HttpClientResponse.fromWeb(request, Response.json({ status: consent, withdrawal: null }))
       );
     }
+
     if (pathname === "/web/privacy/transactions") {
       return Effect.succeed(
         HttpClientResponse.fromWeb(
@@ -66,13 +71,17 @@ const refusedPage = (
         )
       );
     }
+
     return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 503 })));
   });
+
   const options = {
     apiOrigin: "https://api.test.fidyapp.com",
     httpClient: Layer.succeed(HttpClient.HttpClient, http),
   };
+
   const registry = AtomRegistry.make();
+
   const router = createWebRouter({
     apiClient: makeFidyClient(options),
     webAuthClient: makeWebAuthClient(options),
@@ -81,9 +90,11 @@ const refusedPage = (
     registry,
     history: Option.some(createMemoryHistory({ initialEntries: [path] })),
   });
+
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
+
   return {
     router,
     container,
@@ -130,6 +141,7 @@ it.each(["Unavailable", "Granted", "Missing"] as const)(
     Effect.runPromise(
       Effect.gen(function* () {
         const page = refusedPage("expired", "/app/dashboard", consent);
+
         try {
           yield* Effect.tryPromise(page.render);
           yield* Effect.tryPromise(() =>
@@ -137,6 +149,7 @@ it.each(["Unavailable", "Granted", "Missing"] as const)(
               const recovery = page.container.querySelector<HTMLAnchorElement>(
                 'main a[href="/app/transactions"]'
               );
+
               expect(recovery?.textContent).toBe("Ver mis transacciones");
               expect(
                 page.container.querySelector('main a[href="/settings/privacy"]')?.textContent
@@ -163,6 +176,7 @@ it.each(["signed-in", "expired"] as const)(
     Effect.runPromise(
       Effect.gen(function* () {
         const page = refusedPage(authentication, "/app/recurring", "Revoked");
+
         try {
           yield* Effect.tryPromise(page.render);
           yield* Effect.tryPromise(() =>

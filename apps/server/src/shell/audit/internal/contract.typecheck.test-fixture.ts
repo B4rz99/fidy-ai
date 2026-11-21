@@ -11,6 +11,7 @@ type PublicationCall<Operation extends string> = Omit<
   "caller" | "operation" | "outcome"
 > &
   Readonly<{ caller: { _tag: "Publication" }; operation: Operation; outcome: "success" }>;
+
 type CredentialCall<
   Table extends AuditAuthority["table"],
   Operation extends string,
@@ -21,6 +22,7 @@ type CredentialCall<
     operation: Operation;
     outcome: Outcome;
   }>;
+
 type QueryCall<Operation extends string> = Omit<AuditQueryCall, "operation"> &
   Readonly<{ operation: Operation }>;
 

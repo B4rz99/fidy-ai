@@ -12,18 +12,23 @@ import {
 } from "./contract";
 
 const unbiasedBase20ByteLimit = 240;
+
 const millisecondsPerSecond = 1_000;
+
 const pollingSlowdownIncrementSeconds = 5;
 
 export const selectPublicCodeSymbols = (
   input: Readonly<{ readonly bytes: ReadonlyArray<number>; readonly maximum: number }>
 ): string => {
   let accepted = "";
+
   for (const byte of input.bytes) {
     if (byte >= unbiasedBase20ByteLimit) continue;
     accepted += browserLoginPublicCodeAlphabet[byte % browserLoginPublicCodeAlphabet.length];
+
     if (accepted.length === input.maximum) break;
   }
+
   return accepted;
 };
 
@@ -46,6 +51,7 @@ const wrongPendingBrowserLoginProof = (
   wrongVerifierAttempts: number
 ): PendingBrowserLoginProofDecision => {
   const nextAttempts = nextWrongVerifierAttempts(wrongVerifierAttempts);
+
   return {
     _tag: "WrongVerifier",
     wrongVerifierAttempts: nextAttempts,
@@ -89,11 +95,14 @@ export const decideBrowserLoginRedemption = (
   if (input.lifecycle !== "pending_approval" && input.lifecycle !== "ready") {
     return { _tag: "Invalid" };
   }
+
   if (DateTime.isGreaterThanOrEqualTo(input.attemptedAt, input.expiresAt)) {
     return { _tag: "Expired" };
   }
+
   if (!input.verifierMatches) {
     const wrongVerifierAttempts = nextWrongVerifierAttempts(input.wrongVerifierAttempts);
+
     return {
       _tag: "WrongVerifier",
       wrongVerifierAttempts,
@@ -106,9 +115,11 @@ export const decideBrowserLoginRedemption = (
       (DateTime.toEpochMillis(input.attemptedAt) -
         DateTime.toEpochMillis(input.lastAcceptedPollAt.value)) /
       millisecondsPerSecond;
+
     if (elapsedSeconds < input.minimumPollIntervalSeconds) {
       const minimumPollIntervalSeconds =
         input.minimumPollIntervalSeconds + pollingSlowdownIncrementSeconds;
+
       return {
         _tag: "SlowDown",
         minimumPollIntervalSeconds,

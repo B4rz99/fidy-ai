@@ -14,6 +14,7 @@ export default {
         const call = yield* Schema.decodeUnknownEffect(request)(
           yield* Effect.tryPromise(() => input.json())
         );
+
         return yield* Effect.tryPromise(() =>
           INGRESS.fetch(call.url, {
             method: call.method,

@@ -70,12 +70,15 @@ export const cloudflareWorkerTelemetry = makeWorkerTelemetry({
 });
 
 const firstClientFailureStatus = 400;
+
 const firstServerFailureStatus = 500;
 
 const projectResponse = (response: Response): TelemetryWorkSuccess => {
   let outcome: TelemetryWorkSuccess["outcome"] = "succeeded";
+
   if (response.status >= firstServerFailureStatus) outcome = "failed";
   else if (response.status >= firstClientFailureStatus) outcome = "rejected";
+
   return {
     outcome,
     statusClass: Option.some(projectHttpStatusClass(TelemetryHttpStatus.make(response.status))),
@@ -107,6 +110,7 @@ const runtimeDescriptor = (
   }>
 ): SpanDescriptor => {
   let trigger: SpanDescriptor["trigger"] = "api";
+
   if (observation.operation.includes("queue")) trigger = "queue";
   else if (
     observation.operation.includes("scheduled") ||
@@ -115,6 +119,7 @@ const runtimeDescriptor = (
   ) {
     trigger = "schedule";
   }
+
   return {
     release: workerDescriptor(workerRelease(observation.environment), observation.operation)
       .release,
@@ -129,9 +134,11 @@ const runtimeDescriptor = (
 
 const spanBreadcrumb = (descriptor: SpanDescriptor, completed: boolean): TelemetryBreadcrumb => {
   let category: TelemetryBreadcrumb["category"] = "operation";
+
   let action: TelemetryBreadcrumb["action"] = completed
     ? "operation_completed"
     : "operation_started";
+
   if (descriptor.workKind === "provider_call") {
     category = "provider";
     action = completed ? "provider_completed" : "provider_started";
@@ -139,6 +146,7 @@ const spanBreadcrumb = (descriptor: SpanDescriptor, completed: boolean): Telemet
     category = "agent";
     action = completed ? "model_completed" : "model_started";
   }
+
   return {
     category,
     action,
@@ -167,7 +175,9 @@ const runtimeSpan = <A, E, R>(
         )
       )
     );
+
   let observed: Effect.Effect<A, E, R>;
+
   if (descriptor.operation === "worker.public.fetch") {
     observed = observation.telemetry.rootSpan(descriptor, breadcrumbWork);
   } else if (observation.parent === undefined) {
@@ -175,6 +185,7 @@ const runtimeSpan = <A, E, R>(
   } else {
     observed = observation.telemetry.continueSpan(observation.parent, descriptor, breadcrumbWork);
   }
+
   return Effect.provideService(observed, Telemetry, observation.telemetry);
 };
 
@@ -333,6 +344,7 @@ const observeWorkerPromiseWork = <A>(
   });
 
 type ProviderName = "kapso" | "resend" | "wompi" | "cloudflare-access";
+
 type ResponseObservation = WorkerTraceContinuation &
   Readonly<{
     environment: unknown;
@@ -542,6 +554,7 @@ export const captureObservedProviderFetch: {
 const projectWorkTrace = (payload: unknown): Effect.Effect<WorkerTraceProjection> =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
+
     const parent = yield* Effect.sync(() => {
       try {
         return Schema.decodeUnknownOption(DurableTraceContext, { onExcessProperty: "error" })(
@@ -551,6 +564,7 @@ const projectWorkTrace = (payload: unknown): Effect.Effect<WorkerTraceProjection
         return Option.none();
       }
     });
+
     return Option.match(
       Option.filter(
         parent,
@@ -569,6 +583,7 @@ export const sanitizeWorkTrace = <A extends object>(payload: A): Effect.Effect<A
   Effect.map(projectWorkTrace(payload), (projection) => {
     const domain = { ...payload };
     Reflect.deleteProperty(domain, "traceContext");
+
     return Object.assign(domain, projection);
   });
 

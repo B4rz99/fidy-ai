@@ -2,7 +2,9 @@
 import Icon from "./docs-icon.astro";
 
 const { entry } = Astro.locals.starlightRoute;
+
 const intro = entry.body?.trim().split("\n\n")[0];
+
 const journeys = [
   {
     title: "Conectar mi agente",

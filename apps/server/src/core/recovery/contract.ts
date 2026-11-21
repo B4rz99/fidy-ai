@@ -8,6 +8,7 @@ export const BackupRecoveryCode = Schema.String.check(
 )
   .pipe(Schema.brand("BackupRecoveryCode"))
   .annotate({ identifier: "BackupRecoveryCode" });
+
 export type BackupRecoveryCode = typeof BackupRecoveryCode.Type;
 
 export const RotatedBackupRecoveryCode = Schema.Struct({
@@ -15,4 +16,5 @@ export const RotatedBackupRecoveryCode = Schema.Struct({
   backupRecoveryCode: Schema.RedactedFromValue(BackupRecoveryCode),
   rotatedAt: UtcTimestamp,
 }).annotate({ identifier: "RotatedBackupRecoveryCode" });
+
 export type RotatedBackupRecoveryCode = typeof RotatedBackupRecoveryCode.Type;

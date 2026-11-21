@@ -22,6 +22,7 @@ const member = (id: string): ReconciliationMember => ({
 it.effect("selects the earliest-created identity as the visible member", () =>
   Effect.gen(function* () {
     const notification = member("10000000-0000-4000-8000-000000000001");
+
     const statement = {
       ...member("20000000-0000-4000-8000-000000000002"),
       createdAt: DateTime.makeUnsafe("2026-07-20T13:00:00Z"),
@@ -54,6 +55,7 @@ it.effect("keeps the pair and visible identity invariant to caller order", () =>
 it.effect("rejects a different Currency before choosing the visible member", () =>
   Effect.gen(function* () {
     const first = member("10000000-0000-4000-8000-000000000001");
+
     const second = {
       ...member("20000000-0000-4000-8000-000000000002"),
       money: Money.make({
@@ -75,6 +77,7 @@ it.effect("rejects a different Currency before choosing the visible member", () 
 it.effect("rejects a pair whose exact Money differs by one minor unit", () =>
   Effect.gen(function* () {
     const first = member("10000000-0000-4000-8000-000000000001");
+
     const second = {
       ...member("20000000-0000-4000-8000-000000000002"),
       money: Money.make({
@@ -96,6 +99,7 @@ it.effect("rejects a pair whose exact Money differs by one minor unit", () =>
 it.effect("links equal Money written with a different number of fractional digits", () =>
   Effect.gen(function* () {
     const first = member("10000000-0000-4000-8000-000000000001");
+
     const second = {
       ...member("20000000-0000-4000-8000-000000000002"),
       money: Money.make({
@@ -113,6 +117,7 @@ it.effect("links equal Money written with a different number of fractional digit
 it.effect("keeps a Reversal as its own movement and refuses to link it to what it undoes", () =>
   Effect.gen(function* () {
     const original = member("10000000-0000-4000-8000-000000000001");
+
     const reversal = {
       ...member("20000000-0000-4000-8000-000000000002"),
       direction: "inflow" as const,

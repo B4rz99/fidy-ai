@@ -10,6 +10,7 @@ it.effect("reports only the failed conformance check and closed error category",
       HOSTED_AI_MODEL: "gpt-6-luna",
       OPENAI_API_KEY: openAiTestKey({ run: () => Promise.resolve(Response.json({ choices: [] })) }),
     };
+
     const response = yield* Effect.tryPromise({
       try: () =>
         handler.fetch(new Request("http://localhost/conformance", { method: "POST" }), environment),
@@ -17,10 +18,12 @@ it.effect("reports only the failed conformance check and closed error category",
     });
 
     expect(response.status).toBe(503);
+
     const body = yield* Effect.tryPromise({
       try: () => response.json(),
       catch: () => "invalid_response" as const,
     });
+
     expect(body).toEqual({
       modelApprovalRevision: "openai-gpt-6-luna-v1",
       outcome: "non_conforming",
@@ -33,9 +36,11 @@ it.effect("reports only the failed conformance check and closed error category",
 it.live("reaches the OpenAI HTTP boundary from native workerd without following redirects", () =>
   Effect.gen(function* () {
     const { build } = yield* Effect.tryPromise(() => import("esbuild"));
+
     const { Miniflare, Response: NativeResponse } = yield* Effect.tryPromise(
       () => import("miniflare")
     );
+
     const built = yield* Effect.tryPromise(() =>
       build({
         entryPoints: [new URL("./openai-conformance-worker.ts", import.meta.url).pathname],
@@ -46,8 +51,10 @@ it.live("reaches the OpenAI HTTP boundary from native workerd without following 
         external: ["cloudflare:workers", "node:*"],
       })
     );
+
     let calls = 0;
     let redirect = false;
+
     const runtime = yield* Effect.acquireRelease(
       Effect.sync(
         () =>
@@ -79,6 +86,7 @@ it.live("reaches the OpenAI HTTP boundary from native workerd without following 
                       expect(request.headers.get("authorization")).toBe(
                         "Bearer synthetic-native-key"
                       );
+
                       return redirect
                         ? new NativeResponse(null, {
                             status: 302,
@@ -94,17 +102,21 @@ it.live("reaches the OpenAI HTTP boundary from native workerd without following 
       ),
       (runtime) => Effect.tryPromise(() => runtime.dispose()).pipe(Effect.orDie)
     );
+
     const response = yield* Effect.tryPromise(() =>
       runtime.dispatchFetch("http://localhost/conformance", { method: "POST" })
     );
+
     const body = yield* Effect.tryPromise(() => response.json());
     expect(calls).toBe(1);
     expect(body).toMatchObject({ check: "canonical_recurring_read", category: "InvalidOutput" });
     calls = 0;
     redirect = true;
+
     const refused = yield* Effect.tryPromise(() =>
       runtime.dispatchFetch("http://localhost/conformance", { method: "POST" })
     );
+
     expect(yield* Effect.tryPromise(() => refused.json())).toMatchObject({
       category: "ProviderUnavailable",
     });

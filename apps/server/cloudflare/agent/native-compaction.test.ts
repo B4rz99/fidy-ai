@@ -6,9 +6,11 @@ import { native } from "../user-store.test-fixture";
 import { journey } from "./turn-journey.test-fixture";
 
 const dayMs = 86400000;
+
 const compactionJourney = Effect.fn(function* () {
   const { db, post, provider, user, start, proposal, now } = yield* journey();
   const midnight = (Math.floor(now / dayMs) + 1) * dayMs;
+
   const providerCalls = (mode?: string): Effect.Effect<{ readonly calls: number }> =>
     native(() =>
       provider
@@ -19,24 +21,31 @@ const compactionJourney = Effect.fn(function* () {
         .then((response) => response.json())
         .then(Schema.decodeUnknownSync(Schema.Struct({ calls: Schema.Int })))
     );
+
   const owner = (path: string): Effect.Effect<Pick<Response, "status">> =>
     native(() => user.fetch("https://fixture.invalid/" + path));
+
   const clock = Effect.fn(function* (instant: number) {
     yield* owner("set-opportunity-clock?now=" + instant);
   });
+
   yield* owner("hold-alarm");
   yield* native(() => provider.fetch("https://fixture.invalid/release"));
   yield* native(() => db.exec("UPDATE web_sessions SET idle_expires_at_ms=?", midnight + 3600000));
+
   const deliver = Effect.fn(function* (turnId: string) {
     const visible = yield* proposal(turnId);
     expect((yield* post("/delivery", { turnId, receipt: visible.receipt })).status).toBe(200);
   });
+
   const run = Effect.fn(function* (instant: number) {
     const id = yield* start();
     expect((yield* owner("clocked-alarm?now=" + instant)).status).toBe(204);
     yield* deliver(id);
+
     return id;
   });
+
   const seed = Effect.fn(function* (id: string) {
     yield* native(() =>
       db.exec(
@@ -51,6 +60,7 @@ const compactionJourney = Effect.fn(function* () {
       )
     );
   });
+
   const history = (turn: string): Effect.Effect<Awaited<ReturnType<typeof db.exec>>> =>
     native(() =>
       db.exec(
@@ -58,6 +68,7 @@ const compactionJourney = Effect.fn(function* () {
         turn
       )
     );
+
   const summary = (turn: string): Effect.Effect<Awaited<ReturnType<typeof db.exec>>> =>
     native(() =>
       db.exec(
@@ -65,11 +76,14 @@ const compactionJourney = Effect.fn(function* () {
         turn
       )
     );
+
   return { db, clock, midnight, providerCalls, owner, start, run, deliver, seed, history, summary };
 });
+
 const compaction = Effect.gen(function* () {
   const { db, clock, midnight, providerCalls, owner, start, run, deliver, seed, history, summary } =
     yield* compactionJourney();
+
   const before = midnight - 1000;
   yield* clock(before);
   const first = yield* run(before);
@@ -91,6 +105,7 @@ const compaction = Effect.gen(function* () {
   yield* providerCalls("held");
   const third = yield* start();
   const alarm = yield* owner("clocked-alarm?now=" + before).pipe(Effect.forkChild);
+
   const observed = yield* providerCalls().pipe(
     Effect.repeat({
       while: (state) => state.calls !== 3,
@@ -98,6 +113,7 @@ const compaction = Effect.gen(function* () {
       schedule: Schedule.spaced("30 millis"),
     })
   );
+
   expect(observed.calls).toBe(3);
   yield* native(() =>
     db.exec(
@@ -147,6 +163,7 @@ const compaction = Effect.gen(function* () {
   expect(yield* history(first)).toEqual(firstPrefix);
   expect(yield* summary(first)).toEqual(firstSummary);
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "preserves the exact Transcript and prior summary for invalid and stale Compaction and renews three shared Session attempts at UTC midnight",

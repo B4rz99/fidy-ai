@@ -24,9 +24,11 @@ export const observeCanonicalSignup = Effect.fn(function* ({
   ) {
     return;
   }
+
   const payload = yield* Effect.tryPromise(() => response.clone().json()).pipe(
     Effect.orElseSucceed(() => undefined)
   );
+
   if (created(payload)) {
     yield* Effect.logInfo({
       message:

@@ -25,7 +25,9 @@ import { OAuthManagementView } from "./management-view";
 import { workspaceQueryRetention } from "@/transport/workspace-query";
 
 const connectionKey = "oauth-connections";
+
 type RevocationResult = "revoked" | "identity-required" | "failed";
+
 const makeRevocation = (
   client: WebAuthClient
 ): Atom.AtomResultFn<Option.Option<OAuthConnectionId>, RevocationResult, never> =>
@@ -49,6 +51,7 @@ const makeRevocation = (
       Effect.catchCause(() => Effect.succeed("failed" as const))
     )
   );
+
 const ManagementContent = ({
   listing,
   busy,
@@ -61,9 +64,11 @@ const ManagementContent = ({
   next: (id: OAuthConnectionId) => void;
 }>): JSX.Element => {
   if (listing._tag === "Initial") return <PendingRead label="Cargando agentes" />;
+
   if (listing._tag === "Failure") {
     return <ConnectionReadFailure failure={listing.failure} />;
   }
+
   return (
     <section className="flex flex-col gap-3">
       {Option.isSome(listing.refreshFailure) ? (
@@ -81,11 +86,13 @@ const ManagementContent = ({
     </section>
   );
 };
+
 const ConnectionReadFailure = ({
   failure,
 }: Readonly<{ failure: CanonicalQueryFailure<unknown> }>): JSX.Element => {
   const unauthenticated =
     failure._tag === "DeclaredFailure" && Schema.is(OAuthUnauthenticated)(failure.error);
+
   return (
     <section>
       <p role="alert">
@@ -101,10 +108,12 @@ const ConnectionReadFailure = ({
     </section>
   );
 };
+
 const RevocationFeedback = ({
   result,
 }: Readonly<{ result: AsyncResult.AsyncResult<RevocationResult, never> }>): JSX.Element => {
   if (result._tag !== "Success" || result.waiting) return <></>;
+
   if (result.value === "identity-required") {
     return (
       <section className="flex flex-col items-start gap-3">
@@ -120,6 +129,7 @@ const RevocationFeedback = ({
       </section>
     );
   }
+
   return (
     <p role={result.value === "revoked" ? "status" : "alert"}>
       {result.value === "revoked"
@@ -128,10 +138,13 @@ const RevocationFeedback = ({
     </p>
   );
 };
+
 const needsRetry = (listing: CanonicalQueryState<OAuthConnectionList, unknown>): boolean => {
   if (listing._tag === "Failure") return true;
+
   return listing._tag === "Ready" && Option.isSome(listing.refreshFailure);
 };
+
 const ManagementHeading = (): JSX.Element => (
   <div className="settings-access-heading">
     <span className="settings-section-icon">
@@ -177,10 +190,12 @@ export const ManagementPage = ({
   const [command] = useState(() => makeRevocation(client));
   const result = useAtomValue(command);
   const revoke = useAtomSet(command);
+
   const refresh = (): void => {
     revoke(Atom.Reset);
     refreshQuery();
   };
+
   const next = (id: OAuthConnectionId): void => {
     router
       .navigate({
@@ -192,6 +207,7 @@ export const ManagementPage = ({
       })
       .catch(() => undefined);
   };
+
   return (
     <section className="settings-access-section" aria-labelledby="connected-agents-title">
       <ManagementHeading />

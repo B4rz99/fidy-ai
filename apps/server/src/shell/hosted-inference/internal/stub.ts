@@ -38,5 +38,6 @@ export const makeHostedInferenceStubInternal = (
         Effect.succeed({ execute: behavior.generateStructured(outputSchema) }),
     },
   };
+
   return makeHostedInferenceInternal(adapter);
 };

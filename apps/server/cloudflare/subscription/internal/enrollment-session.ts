@@ -17,18 +17,21 @@ export type NativeEnrollmentEnv = WompiBindings &
     BROWSER_ORIGIN: string;
     PRICING: DurableObjectNamespace;
   };
+
 export const sessionRow = Schema.Struct({
   id: Schema.String,
   user_id: UserId,
   time_zone: IanaTimeZone,
   email: Schema.NullOr(Schema.String),
 });
+
 export const authorized = Effect.fn(function* (
   digest: Awaited<ReturnType<typeof sessionDigest>>,
   binding: string,
   now: number
 ) {
   const sql = yield* SqliteClient;
+
   const guard = protectConsentStatement({
     subject: { _tag: "Owner", column: "s.user_id" },
     requirement: "active",
@@ -38,16 +41,23 @@ export const authorized = Effect.fn(function* (
       params: [new Uint8Array(digest), binding, now, now, now],
     },
   });
+
   const [row] = yield* sql.unsafe(guard.sql, guard.params);
+
   return Schema.decodeUnknownOption(sessionRow)(row);
 });
+
 const enrollmentJson = (input: Readonly<{ body: unknown; status: number }>): Response =>
   Response.json(input.body, { status: input.status, headers: { "cache-control": "no-store" } });
+
 export { enrollmentJson as json };
+
 export type EnrollmentSession = typeof sessionRow.Type;
+
 export const liveSession = Effect.fn(function* (session: EnrollmentSession) {
   const sql = yield* SqliteClient;
   const now = yield* Clock.currentTimeMillis;
+
   const guard = protectConsentStatement({
     subject: { _tag: "User", userId: session.user_id },
     requirement: "active",
@@ -56,6 +66,7 @@ export const liveSession = Effect.fn(function* (session: EnrollmentSession) {
       params: [session.id, session.user_id, now, now, now],
     },
   });
+
   return (yield* sql.unsafe(guard.sql, guard.params)).length === 1;
 });
 
@@ -64,6 +75,7 @@ export type EnrollmentContext = Readonly<{
   storage: DurableObjectStorage;
   transport: WompiTransportFactory;
 }>;
+
 export type BrowserEnrollment = EnrollmentContext &
   Readonly<{ request: Request; session: EnrollmentSession }>;
 
@@ -72,16 +84,19 @@ export const invalidEnrollment = (): Response =>
     status: 400,
     headers: { "cache-control": "no-store" },
   });
+
 export const unavailableEnrollment = (): Response =>
   Response.json(paymentEnrollmentUnavailableBody, {
     status: 503,
     headers: { "cache-control": "no-store" },
   });
+
 export const limitedEnrollment = (): Response =>
   Response.json(paymentEnrollmentRateLimitedBody, {
     status: 429,
     headers: { "cache-control": "no-store" },
   });
+
 export const unauthorizedEnrollment = (): Response =>
   Response.json(paymentEnrollmentInvalidBody, {
     status: 401,

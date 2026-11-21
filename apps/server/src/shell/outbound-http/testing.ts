@@ -10,6 +10,7 @@ import {
 export type TestOutboundTransportRequest = HttpClientRequest.HttpClientRequest;
 
 export type TestOutboundTransport = HttpClient.HttpClient;
+
 export type TestOutboundTransportError = HttpClientError.HttpClientError;
 
 export type TestOutboundTransportHandler = (
@@ -56,4 +57,5 @@ export const testOutboundTransportFromClientLayer = (
 ): Layer.Layer<HttpClient.HttpClient> => Layer.succeed(HttpClient.HttpClient, transport);
 
 export const testFetchOutboundTransportLayer = FetchHttpClient.layer;
+
 export const TestOutboundFetch = FetchHttpClient.Fetch;

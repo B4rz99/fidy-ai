@@ -4,27 +4,32 @@ import { BrowserLoginPairingId } from "~/core/browser-login/contract";
 import { UserId } from "~/core/identity/contract";
 
 const sha256ByteLength = 32;
+
 const sha256DigestLength = Schema.makeFilter<{ readonly length: number }>((digest) =>
   digest.length === sha256ByteLength ? undefined : "Expected a 32-byte SHA-256 digest"
 );
 
 export const BackupRecoveryDigest = Schema.Uint8Array.check(sha256DigestLength);
+
 export type BackupRecoveryDigest = typeof BackupRecoveryDigest.Type;
 
 export const SupportOperatorId = Schema.Struct({
   issuer: Schema.String.check(Schema.isNonEmpty()),
   subject: Schema.String.check(Schema.isNonEmpty()),
 }).annotate({ identifier: "SupportOperatorId" });
+
 export type SupportOperatorId = typeof SupportOperatorId.Type;
 
 export const SupportRecoveryCaseId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("SupportRecoveryCaseId"))
   .annotate({ identifier: "SupportRecoveryCaseId" });
+
 export type SupportRecoveryCaseId = typeof SupportRecoveryCaseId.Type;
 
 export const SupportRecoveryCaseEventId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("SupportRecoveryCaseEventId"))
   .annotate({ identifier: "SupportRecoveryCaseEventId" });
+
 export type SupportRecoveryCaseEventId = typeof SupportRecoveryCaseEventId.Type;
 
 const BackupRecoveryCredentialVariants = Schema.Union([
@@ -42,9 +47,11 @@ const BackupRecoveryCredentialVariants = Schema.Union([
     createdAt: UtcTimestamp,
   }),
 ]);
+
 type BackupRecoveryCredentialTimeView =
   | Readonly<{ _tag: "Active" }>
   | Readonly<{ _tag: "Consumed"; createdAt: DateTime.Utc; consumedAt: DateTime.Utc }>;
+
 const validCredentialTimes = Schema.makeFilter<BackupRecoveryCredentialTimeView>((credential) =>
   credential._tag === "Active" || DateTime.Order(credential.createdAt, credential.consumedAt) <= 0
     ? undefined
@@ -54,11 +61,13 @@ const validCredentialTimes = Schema.makeFilter<BackupRecoveryCredentialTimeView>
 export const BackupRecoveryCredentialLifecycle = BackupRecoveryCredentialVariants.check(
   validCredentialTimes
 ).annotate({ identifier: "BackupRecoveryCredentialLifecycle" });
+
 export type BackupRecoveryCredentialLifecycle = typeof BackupRecoveryCredentialLifecycle.Type;
 
 export const BackupRecoveryCredential = BackupRecoveryCredentialLifecycle.annotate({
   identifier: "BackupRecoveryCredential",
 });
+
 export type BackupRecoveryCredential = typeof BackupRecoveryCredential.Type;
 
 const SupportRecoveryCaseIdentity = {
@@ -81,12 +90,15 @@ const SupportRecoveryCaseVariants = Schema.Union([
     closedAt: UtcTimestamp,
   }),
 ]);
+
 const validCaseTimes = Schema.makeFilter<typeof SupportRecoveryCaseVariants.Type>(
   (recoveryCase) => {
     if (DateTime.Order(recoveryCase.openedAt, recoveryCase.expiresAt) >= 0) {
       return { path: ["expiresAt"], issue: "Expected an instant after openedAt" };
     }
+
     if (recoveryCase.lifecycle === "open") return undefined;
+
     return DateTime.Order(recoveryCase.openedAt, recoveryCase.closedAt) <= 0 &&
       DateTime.Order(recoveryCase.closedAt, recoveryCase.expiresAt) <= 0
       ? undefined
@@ -97,6 +109,7 @@ const validCaseTimes = Schema.makeFilter<typeof SupportRecoveryCaseVariants.Type
 export const SupportRecoveryCase = SupportRecoveryCaseVariants.check(validCaseTimes).annotate({
   identifier: "SupportRecoveryCase",
 });
+
 export type SupportRecoveryCase = typeof SupportRecoveryCase.Type;
 
 const EventIdentity = {
@@ -105,7 +118,9 @@ const EventIdentity = {
   ordinal: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 7 })),
   occurredAt: UtcTimestamp,
 };
+
 const OperatorActor = Schema.TaggedStruct("Operator", { operatorId: SupportOperatorId });
+
 const ExpiryActor = Schema.TaggedStruct("Policy", {
   policyRevision: Schema.Literal("support-recovery-expiry-v1"),
 });
@@ -142,4 +157,5 @@ export const SupportRecoveryCaseEvent = Schema.Union([
     outcome: Schema.Literal("expired"),
   }),
 ]).annotate({ identifier: "SupportRecoveryCaseEvent" });
+
 export type SupportRecoveryCaseEvent = typeof SupportRecoveryCaseEvent.Type;

@@ -12,12 +12,16 @@ export const VisibleReply = ({
 }>): JSX.Element => {
   useEffect((): void | (() => void) => {
     if (!active) return;
+
     const acknowledgeVisible = (): void => {
       if (document.visibilityState === "visible") onVisible();
     };
+
     acknowledgeVisible();
     document.addEventListener("visibilitychange", acknowledgeVisible);
+
     return (): void => document.removeEventListener("visibilitychange", acknowledgeVisible);
   }, [active, onVisible]);
+
   return <>{children}</>;
 };

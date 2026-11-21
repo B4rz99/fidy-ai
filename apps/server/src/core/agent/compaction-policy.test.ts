@@ -11,11 +11,13 @@ it("compacts at either independent capacity boundary", () => {
 it("selects the terminal prefix before pending work, including an empty or entirely terminal transcript", () => {
   expect(terminalPrefixCursor([])).toEqual(Option.none());
   expect(terminalPrefixCursor([{ sequence: 10, status: "pending" }])).toEqual(Option.none());
+
   const terminal = [
     { sequence: 10, status: "completed" },
     { sequence: 20, status: "failed" },
     { sequence: 30, status: "interrupted" },
   ] as const;
+
   expect(terminalPrefixCursor(terminal)).toEqual(Option.some(30));
   expect(
     terminalPrefixCursor([

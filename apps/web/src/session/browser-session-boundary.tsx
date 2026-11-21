@@ -21,6 +21,7 @@ export const BrowserSessionBoundary = ({
   const [state, setState] = useState<Option.Option<BindingState>>(() => Option.none());
   const [failed, setFailed] = useState(false);
   const [owner] = useState(() => ({}));
+
   const attach = useCallback(
     (_node: HTMLSpanElement): (() => void) =>
       observeBinding({
@@ -36,11 +37,13 @@ export const BrowserSessionBoundary = ({
       }),
     [apiOrigin, initial, owner, expireAuthentication]
   );
+
   const pendingContent = failed ? (
     <p role="alert">No pudimos comprobar tu sesión. Recarga para continuar.</p>
   ) : (
     pending
   );
+
   return (
     <>
       <span hidden ref={attach} />

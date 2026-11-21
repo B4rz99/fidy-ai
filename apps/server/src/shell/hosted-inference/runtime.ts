@@ -14,6 +14,7 @@ export const makeOpenAiHostedInference = (
     const configuredModel = yield* Effect.fromOption(configuration.model);
     const model = yield* Schema.decodeUnknownEffect(ApprovedOpenAiModel)(configuredModel);
     const run = yield* Effect.fromOption(configuration.run);
+
     return makeOpenAiInferenceServiceInternal({ run, model });
   }).pipe(
     Effect.mapError(

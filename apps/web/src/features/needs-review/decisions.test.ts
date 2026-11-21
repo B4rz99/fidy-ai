@@ -8,7 +8,9 @@ import { type ReviewDecisions, makeReviewDecisions } from "./decisions";
 import { type Detail, type Draft, emptyDraft } from "./model";
 
 const firstId = "24000000-0000-4000-8000-000000001350";
+
 const secondId = "24000000-0000-4000-8000-000000001351";
+
 type FixtureItem = {
   id: string;
   source: string;
@@ -19,6 +21,7 @@ type FixtureItem = {
   createdAt: string;
   expiresAt: string;
 };
+
 const fixtureItem = (id = firstId): FixtureItem => ({
   id,
   source: "statement",
@@ -29,8 +32,11 @@ const fixtureItem = (id = firstId): FixtureItem => ({
   createdAt: "2026-10-15T12:00:00Z",
   expiresAt: "2027-01-13T12:00:00Z",
 });
+
 type Saved = { item: ReturnType<typeof fixtureItem>; revision: number; draft: unknown };
+
 const resources: Array<() => void> = [];
+
 afterEach(() => {
   resources
     .splice(0)
@@ -38,6 +44,7 @@ afterEach(() => {
     .forEach((dispose) => dispose());
   vi.useRealTimers();
 });
+
 type Fixture = {
   view: () => ReviewDecisions;
   detail: Detail;
@@ -53,19 +60,24 @@ type Fixture = {
   delay: (value: number) => void;
   holdWrite: () => () => void;
 };
+
 const fixture = Effect.fnUntraced(function* (firstExpiry: Option.Option<number> = Option.none()) {
   vi.useFakeTimers();
   vi.setSystemTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-28T00:00:00Z")));
   const originalNow = yield* Clock.currentTimeMillis;
+
   const entries = new Map<string, Saved>(
     [firstId, secondId].map((id) => {
       const item = fixtureItem(id);
+
       if (id === firstId && Option.isSome(firstExpiry)) {
         item.expiresAt = DateTime.formatIso(DateTime.makeUnsafe(originalNow + firstExpiry.value));
       }
+
       return [id, { item, revision: 0, draft: undefined }];
     })
   );
+
   const sent: Array<ReviewCommand> = [];
   const reads: Array<string> = [];
   let failWrite = false;
@@ -74,26 +86,32 @@ const fixture = Effect.fnUntraced(function* (firstExpiry: Option.Option<number> 
   let duplicateResult = false;
   let delay = 0;
   let writeGate: Effect.Effect<void> = Effect.void;
+
   const http = HttpClient.make((request) =>
     Effect.gen(function* () {
       const path = new URL(request.url).pathname;
       let data: unknown;
+
       if (request.method === "POST") {
         const command = yield* Schema.decodeEffect(Schema.fromJsonString(ReviewCommand))(
           request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : ""
         );
+
         sent.push(command);
         yield* writeGate;
         yield* Effect.sleep(delay);
         data = fixtureResult(applyFixture(entries, command), { missingResult, duplicateResult });
+
         if (failWrite) {
           return HttpClientResponse.fromWeb(request, new Response("unavailable", { status: 503 }));
         }
       } else {
         reads.push(path);
+
         if (failRead) {
           return HttpClientResponse.fromWeb(request, new Response("unavailable", { status: 503 }));
         }
+
         data = path.endsWith("review-workspace")
           ? {
               pendingCount: entries.size,
@@ -102,6 +120,7 @@ const fixture = Effect.fnUntraced(function* (firstExpiry: Option.Option<number> 
             }
           : entries.get(path.split("/").at(-1) ?? "");
       }
+
       return HttpClientResponse.fromWeb(
         request,
         new Response(
@@ -113,26 +132,33 @@ const fixture = Effect.fnUntraced(function* (firstExpiry: Option.Option<number> 
       );
     }).pipe(Effect.orDie)
   );
+
   const client = makeFidyClient({
     apiOrigin: "https://api.test.fidyapp.com",
     httpClient: Layer.succeed(HttpClient.HttpClient, http),
   });
+
   const registry = AtomRegistry.make();
   resources.push(() => registry.dispose());
+
   const query = client.query("ingestion", "getReviewWorkspace", {
     query: { status: Option.some("pending" as const), offset: Option.none() },
   });
+
   const atom = makeReviewDecisions({ client, query, created: () => {} });
   const unmount = registry.mount(atom);
   resources.push(unmount);
   const dispose = registry.get(atom).mount();
   resources.push(dispose);
+
   const detailQuery = client.query("ingestion", "getReviewItem", {
     params: { id: yield* Schema.decodeEffect(ReviewCommand.members[0].fields.id)(firstId) },
   });
+
   const detailFiber = yield* Effect.forkChild(AtomRegistry.getResult(registry, detailQuery));
   yield* advance(0);
   const detail = (yield* Fiber.join(detailFiber)).data;
+
   const fixture: Fixture = {
     view: (): ReviewDecisions => registry.get(atom),
     detail,
@@ -158,6 +184,7 @@ const fixture = Effect.fnUntraced(function* (firstExpiry: Option.Option<number> 
     holdWrite: () => {
       const pending = Deferred.makeUnsafe<void>();
       writeGate = Deferred.await(pending);
+
       return () => {
         writeGate = Effect.void;
         Deferred.doneUnsafe(pending, Effect.void);
@@ -167,40 +194,54 @@ const fixture = Effect.fnUntraced(function* (firstExpiry: Option.Option<number> 
       delay = value;
     },
   };
+
   return fixture;
 });
+
 const advance = Effect.fnUntraced(function* (milliseconds: number) {
   yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(milliseconds));
 });
+
 const fixtureResult = (
   data: ReadonlyArray<Saved>,
   mode: Readonly<{ missingResult: boolean; duplicateResult: boolean }>
 ): ReadonlyArray<Saved> => {
   if (mode.missingResult) return [];
+
   return mode.duplicateResult ? [...data, ...data] : data;
 };
+
 const applyFixture = (
   entries: Map<string, Saved>,
   command: ReviewCommand
 ): ReadonlyArray<Saved> => {
   const refs =
     "items" in command ? command.items : [{ id: command.id, revision: command.revision }];
+
   return refs.map((reference) => {
     const entry = entries.get(reference.id);
+
     if (entry === undefined || reference.revision !== entry.revision) {
       throw new Error("Stale fixture revision");
     }
+
     entry.revision += 1;
     entry.item = { ...entry.item, revision: entry.revision };
+
     if (command._tag === "SaveDraft") {
       const encoded = Schema.encodeSync(ReviewCommand)(command);
+
       if (encoded._tag === "SaveDraft") entry.draft = encoded.draft;
     }
+
     if (command._tag === "Skip") entry.item.status = "skipped";
+
     if (command._tag === "Restore") entry.item.status = "pending";
+
     return { ...entry };
   });
 };
+
 const edit = (amount: string): Draft => ({ ...emptyDraft(), amount });
 
 it.live(
@@ -348,6 +389,7 @@ it.live("disposal during a save prevents its queued decision and ignores a late 
 it.live("evidence expiry prevents a pending autosave from submitting", () =>
   Effect.gen(function* () {
     const test = yield* fixture();
+
     const detail: Detail = {
       ...test.detail,
       item: {
@@ -355,6 +397,7 @@ it.live("evidence expiry prevents a pending autosave from submitting", () =>
         expiresAt: DateTime.makeUnsafe((yield* Clock.currentTimeMillis) + 100),
       },
     };
+
     test.view().editor(detail).change(edit("100"));
     yield* advance(1000);
     expect(test.sent).toHaveLength(0);
@@ -389,6 +432,7 @@ it.live("keeps a failed item's lock local while allowing another item to save", 
     test.view().editor(test.detail).change(edit("100"));
     yield* advance(650);
     test.failWrite(false);
+
     const other: Detail = {
       ...test.detail,
       item: {
@@ -396,6 +440,7 @@ it.live("keeps a failed item's lock local while allowing another item to save", 
         id: yield* Schema.decodeEffect(ReviewCommand.members[0].fields.id)(secondId),
       },
     };
+
     test.view().editor(other).change(edit("200"));
     yield* advance(650);
     expect(test.view().editor(test.detail).locked).toBe(true);
@@ -422,6 +467,7 @@ it.live("accepts a newer canonical draft only while the local draft is clean", (
 it.live("an unrelated individual completion cannot release an in-flight bulk lock", () =>
   Effect.gen(function* () {
     const test = yield* fixture();
+
     const other: Detail = {
       ...test.detail,
       item: {
@@ -429,6 +475,7 @@ it.live("an unrelated individual completion cannot release an in-flight bulk loc
         id: yield* Schema.decodeEffect(ReviewCommand.members[0].fields.id)(secondId),
       },
     };
+
     test.delay(100);
     test.view().decide(test.detail, "Skip");
     yield* advance(0);
@@ -460,10 +507,12 @@ it.live("a workspace refresh cannot release a bulk decision still waiting for it
 it.live("rechecks every selected item's expiry after waiting for other draft saves", () =>
   Effect.gen(function* () {
     const test = yield* fixture();
+
     const expiring = {
       ...test.detail.item,
       expiresAt: DateTime.makeUnsafe((yield* Clock.currentTimeMillis) + 100),
     };
+
     const other: Detail = {
       ...test.detail,
       item: {
@@ -471,6 +520,7 @@ it.live("rechecks every selected item's expiry after waiting for other draft sav
         id: yield* Schema.decodeEffect(ReviewCommand.members[0].fields.id)(secondId),
       },
     };
+
     test.delay(300);
     test.view().editor(other).change(edit("200"));
     test.view().bulk(false, [expiring, other.item]);
@@ -483,6 +533,7 @@ it.live("rechecks every selected item's expiry after waiting for other draft sav
 it.live("opens canonical review suggestions as localized drafts without changing their Money", () =>
   Effect.gen(function* () {
     const test = yield* fixture();
+
     const detail = {
       ...test.detail,
       suggestions: Option.some({
@@ -491,6 +542,7 @@ it.live("opens canonical review suggestions as localized drafts without changing
         currency: Option.some("COP" as const),
       }),
     };
+
     expect(test.view().editor(detail).draft.amount).toBe("12,5");
   })
 );
@@ -498,6 +550,7 @@ it.live("opens canonical review suggestions as localized drafts without changing
 it.live("confirms localized review Money exactly and blocks invalid amounts", () =>
   Effect.gen(function* () {
     const test = yield* fixture();
+
     const draft = {
       ...emptyDraft(),
       amount: "12.500,50",
@@ -505,6 +558,7 @@ it.live("confirms localized review Money exactly and blocks invalid amounts", ()
       direction: Option.some("outflow" as const),
       occurredAt: "2026-10-15T12:00:00Z",
     };
+
     for (const amount of ["", "0", "-12", "12.50", "12,501"]) {
       test
         .view()
@@ -512,13 +566,16 @@ it.live("confirms localized review Money exactly and blocks invalid amounts", ()
         .change({ ...draft, amount });
       expect(test.view().editor(test.detail).canCreate).toBe(false);
     }
+
     test.view().editor(test.detail).change(draft);
     expect(test.view().editor(test.detail).canCreate).toBe(true);
     test.view().decide(test.detail, "Create");
     yield* advance(0);
     const command = test.sent.find((sent) => sent._tag === "Create");
+
     const encoded =
       command === undefined ? undefined : yield* Schema.encodeEffect(ReviewCommand)(command);
+
     expect(encoded).toMatchObject({
       _tag: "Create",
       extraction: { money: { amount: "12500.5", currency: "COP" } },
@@ -553,6 +610,7 @@ it.live("retires an obsolete autosave waiting for the item permit before a newer
 it.live("keeps the first expiry after a canonical recovery returns a later deadline", () =>
   Effect.gen(function* () {
     const test = yield* fixture();
+
     const detail: Detail = {
       ...test.detail,
       item: {
@@ -560,6 +618,7 @@ it.live("keeps the first expiry after a canonical recovery returns a later deadl
         expiresAt: DateTime.makeUnsafe((yield* Clock.currentTimeMillis) + 1000),
       },
     };
+
     test.view().editor(detail).recover();
     yield* advance(0);
     yield* advance(1100);
@@ -648,6 +707,7 @@ it.live(
   () =>
     Effect.gen(function* () {
       const test = yield* fixture();
+
       const detail: Detail = {
         ...test.detail,
         item: {
@@ -655,6 +715,7 @@ it.live(
           expiresAt: DateTime.makeUnsafe((yield* Clock.currentTimeMillis) + 100),
         },
       };
+
       test.delay(500);
       test.view().editor(detail).change(edit("100"));
       test.view().decide(detail, "Skip");
@@ -672,6 +733,7 @@ it.live("a recovery queued behind a save cannot read after original item expiry"
   Effect.gen(function* () {
     const test = yield* fixture();
     const initialReads = test.reads.length;
+
     const detail: Detail = {
       ...test.detail,
       item: {
@@ -679,6 +741,7 @@ it.live("a recovery queued behind a save cannot read after original item expiry"
         expiresAt: DateTime.makeUnsafe((yield* Clock.currentTimeMillis) + 500),
       },
     };
+
     test.delay(1000);
     test.view().editor(detail).change(edit("100"));
     yield* advance(250);
@@ -711,6 +774,7 @@ it.live("bulk admission closes recovery before its canonical decision completes"
 it.live("bulk Skip cannot revive a recovered item after its original expiry", () =>
   Effect.gen(function* () {
     const test = yield* fixture();
+
     const detail: Detail = {
       ...test.detail,
       item: {
@@ -718,6 +782,7 @@ it.live("bulk Skip cannot revive a recovered item after its original expiry", ()
         expiresAt: DateTime.makeUnsafe((yield* Clock.currentTimeMillis) + 1000),
       },
     };
+
     test.view().editor(detail).recover();
     yield* advance(1100);
     test.view().bulk(false, [test.detail.item]);
@@ -730,10 +795,12 @@ it.live("bulk Skip cannot revive a recovered item after its original expiry", ()
 it.live("an unrelated held bulk decision does not consume another item's autosave timer", () =>
   Effect.gen(function* () {
     const test = yield* fixture();
+
     const other = {
       ...test.detail.item,
       id: yield* Schema.decodeEffect(ReviewCommand.members[0].fields.id)(secondId),
     };
+
     test.view().editor(test.detail).change(edit("100"));
     const release = test.holdWrite();
     test.view().bulk(false, [other]);
@@ -751,6 +818,7 @@ it.live("an unrelated held bulk decision does not consume another item's autosav
 it.live("bulk drain rechecks the original expiry after another item's held save", () =>
   Effect.gen(function* () {
     const test = yield* fixture();
+
     const detail: Detail = {
       ...test.detail,
       item: {
@@ -758,8 +826,10 @@ it.live("bulk drain rechecks the original expiry after another item's held save"
         expiresAt: DateTime.makeUnsafe((yield* Clock.currentTimeMillis) + 100),
       },
     };
+
     test.view().editor(detail).recover();
     yield* advance(0);
+
     const other: Detail = {
       ...test.detail,
       item: {
@@ -767,6 +837,7 @@ it.live("bulk drain rechecks the original expiry after another item's held save"
         id: yield* Schema.decodeEffect(ReviewCommand.members[0].fields.id)(secondId),
       },
     };
+
     const release = test.holdWrite();
     test.view().editor(other).change(edit("200"));
     test.view().bulk(false, [test.detail.item, other.item]);

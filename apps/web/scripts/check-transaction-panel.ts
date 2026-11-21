@@ -4,8 +4,11 @@ import { Config, Effect, Option } from "effect";
 const { chromium } = await import("@playwright/test");
 
 const css = Bun.fileURLToPath(new URL("../src/ui/components/transactions.css", import.meta.url));
+
 const executable = await Effect.runPromise(Config.option(Config.String("ASSESSMENT_CHROMIUM")));
+
 const browser = await chromium.launch({ executablePath: Option.getOrUndefined(executable) });
+
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   await page.setContent(`
@@ -27,14 +30,17 @@ try {
       </div>
     </main>`);
   await page.addStyleTag({ path: css });
+
   const reachable = (control: ReturnType<typeof page.getByRole>): Promise<boolean> =>
     control.evaluate((element) => {
       element.scrollIntoView({ block: "center", behavior: "instant" });
       const rect = element.getBoundingClientRect();
+
       return element.contains(
         document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
       );
     });
+
   assert.ok(
     await reachable(page.getByRole("button", { name: "Guardar" })),
     "Save must be reachable in one scroll"

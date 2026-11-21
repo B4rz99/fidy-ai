@@ -14,6 +14,7 @@ it.effect(
       const observed: Array<
         Readonly<{ url: string; key: Option.Option<string>; redirect: Option.Option<string> }>
       > = [];
+
       const client = HttpClient.make((request) =>
         Effect.gen(function* () {
           const context = yield* Effect.context<never>();
@@ -23,13 +24,16 @@ it.effect(
             key: Option.fromUndefinedOr(request.headers["x-api-key"]),
             redirect: Option.flatMap(init, redirectValue),
           });
+
           return HttpClientResponse.fromWeb(request, new Response("bounded bytes"));
         })
       );
+
       const outbound = makeKapsoOutboundHttp({
         apiKey: Redacted.make("synthetic-media-key"),
         httpClient: client,
       });
+
       yield* outbound.execute({
         _tag: "KapsoMediaMetadata",
         mediaId: WhatsAppMediaId.make("media/../123"),

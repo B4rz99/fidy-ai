@@ -12,6 +12,7 @@ export const registerUserLifetime = Effect.fn(function* (
   userId: UserId
 ) {
   const issuedAt = yield* Clock.currentTimeMillis;
+
   const response = yield* Effect.tryPromise((signal) =>
     maintenance.getByName(maintenanceName).fetch(registerLifetimeUrl, {
       method: "POST",
@@ -19,6 +20,7 @@ export const registerUserLifetime = Effect.fn(function* (
       signal,
     })
   );
+
   if (response.status !== registrationAcceptedStatus) {
     return yield* new UserRegistrationUnavailable();
   }

@@ -14,8 +14,11 @@ import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 
 const decodeDirection = Schema.decodeUnknownResult(Direction);
+
 const decodeTransaction = Schema.decodeUnknownResult(Transaction);
+
 const decodeCreateInput = Schema.decodeUnknownResult(CreateTransactionInput);
+
 const decodeExtraction = Schema.decodeUnknownResult(TransactionExtraction);
 
 type TransactionInput = typeof Transaction.Encoded;
@@ -86,6 +89,7 @@ it("rejects zero Transaction Money at the nested amount field", () => {
 
 it("preserves positive Money checks in independent and linked Transaction presentations", () => {
   const decode = Schema.decodeUnknownResult(TransactionPresentation);
+
   for (const presentation of [
     { kind: "independent" },
     { kind: "visible-member" },
@@ -103,10 +107,12 @@ it("preserves positive Money checks in independent and linked Transaction presen
 it("rejects restored pairs with zero Money in either independent Transaction", () => {
   const decode = Schema.decodeUnknownResult(RestoredTransactionPair);
   const positive = { ...apiTransaction(), presentation: { kind: "independent" } };
+
   const zero = {
     ...apiTransaction({ money: { amount: "0", currency: "COP" } }),
     presentation: { kind: "independent" },
   };
+
   expect(
     Result.isSuccess(decode({ firstTransaction: positive, secondTransaction: positive }))
   ).toBe(true);
@@ -158,6 +164,7 @@ it("accepts both manual and statement-line provenance variants", () => {
     interpretationRevision: "manual-v1",
     createdAt: "2026-07-21T08:00:00Z",
   };
+
   const decode = Schema.decodeUnknownResult(SourceAttestation);
 
   expect(Result.isSuccess(decode({ ...common, kind: "manual" }))).toBe(true);
@@ -178,9 +185,12 @@ it("accepts both manual and statement-line provenance variants", () => {
 
 it("accepts only complete keyset positions with two millisecond UTC instants and one UUID-shaped identity", () => {
   const decode = Schema.decodeUnknownResult(TransactionQueryValues.fields.cursor);
+
   const position =
     "2026-10-22T12:34:56.789Z|2026-10-21T01:02:03.456Z|10000000-0000-4000-8000-000000000001";
+
   expect(Result.isSuccess(decode(position))).toBe(true);
+
   for (const value of [
     `x${position}`,
     `${position}x`,
@@ -199,9 +209,11 @@ it("normalizes instrument labels on decode and preserves the normalized spelling
   expect(label).toBe("tarjeta débito");
   expect(Schema.encodeSync(InstrumentLabel)(label)).toBe("tarjeta débito");
   const decode = Schema.decodeUnknownResult(NotificationFormatId);
+
   for (const value of ["a", "bank12", "bank-alert-09"]) {
     expect(Result.isSuccess(decode(value))).toBe(true);
   }
+
   for (const value of [
     "",
     "-bank",
@@ -227,6 +239,7 @@ it("preserves notification-email attestation integrity and the fields explicitly
     interpretationRevision: "test-v1",
     createdAt: "2026-10-22T12:00:00.000Z",
   };
+
   const notification = {
     ...common,
     kind: "notification-email",
@@ -236,6 +249,7 @@ it("preserves notification-email attestation integrity and the fields explicitly
     sourceFormat: "notification-email",
     extractorRevision: "test-v1",
   };
+
   const manual = { ...common, kind: "manual", userProvidedFields: ["money", "counterparty"] };
   expect(
     Schema.encodeSync(SourceAttestation)(Schema.decodeUnknownSync(SourceAttestation)(manual))
@@ -243,6 +257,7 @@ it("preserves notification-email attestation integrity and the fields explicitly
   expect(
     Schema.encodeSync(SourceAttestation)(Schema.decodeUnknownSync(SourceAttestation)(notification))
   ).toEqual(notification);
+
   for (const messageContentSha256 of [
     "a".repeat(63),
     "a".repeat(65),

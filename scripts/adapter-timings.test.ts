@@ -101,6 +101,7 @@ it("refuses incomplete, duplicated, or non-equivalent evidence", () => {
 it("rejects failed, skipped, or non-Linux reports before aggregating", () => {
   const decode = Schema.decodeUnknownSync(timingRuns);
   expect(() => decode([{ ...run("1", 10), platform: "darwin" }])).toThrow();
+
   for (const field of ["numFailedTests", "numPendingTests", "numTodoTests"]) {
     const sample = run("1", 10);
     expect(() =>

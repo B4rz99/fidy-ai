@@ -3,9 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const css = readFileSync(new URL("../design/tokens.css", import.meta.url), "utf8");
+
 const tokens = new Map(
   [...css.matchAll(/(--[\w-]+):\s*([^;]+);/gu)].map((match) => [match[1], match[2]])
 );
+
 /**
  * @param {string} name - Semantic token name.
  * @param {string} theme - Appearance to resolve.
@@ -16,8 +18,10 @@ const color = (name, theme) => {
   assert.ok(value, `Missing ${name}`);
   value = value.replace(/var\(--fidy-([\w-]+)\)/gu, (_, key) => color(String(key), theme));
   const pair = /^light-dark\(([^,]+),\s*([^)]+)\)$/u.exec(value);
+
   return pair ? pair[theme === "light" ? 1 : 2].trim() : value;
 };
+
 /** @param {string} hex - Six-digit sRGB color. */
 const luminance = (hex) => {
   const channels = hex
@@ -25,22 +29,28 @@ const luminance = (hex) => {
     .match(/../gu)
     .map((channel) => {
       const value = Number.parseInt(channel, 16) / 255;
+
       return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
     });
+
   return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
 };
+
 /**
  * @param {string} foreground - Text or border color.
  * @param {string} background - Adjacent surface color.
  */
 const contrast = (foreground, background) => {
   const values = [luminance(foreground), luminance(background)].sort((left, right) => right - left);
+
   return (values[0] + 0.05) / (values[1] + 0.05);
 };
+
 await Promise.all(
   ["light", "dark"].flatMap((theme) => [
     test(`${theme}: primary remains the approved lime and all button states have readable labels`, () => {
       assert.equal(color("button-primary-default-background", theme), "#88cc20");
+
       for (const state of ["default", "hover", "pressed"]) {
         assert.ok(
           contrast(
@@ -49,6 +59,7 @@ await Promise.all(
           ) >= 4.5
         );
       }
+
       assert.ok(
         contrast(
           color("button-disabled-foreground", theme),
@@ -59,6 +70,7 @@ await Promise.all(
     test(`${theme}: semantic messages remain readable on their paired fills and base surfaces`, () => {
       for (const state of ["success", "warning", "error", "info"]) {
         const foreground = color(`semantic-${state}-foreground`, theme);
+
         for (const background of [
           `semantic-${state}-subtle-background`,
           "background-canvas",

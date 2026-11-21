@@ -17,11 +17,13 @@ import { WebSessionId } from "~/core/web-session/contract";
 export const PendingConsentExchangeId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("PendingConsentExchangeId"))
   .annotate({ identifier: "PendingConsentExchangeId" });
+
 export type PendingConsentExchangeId = typeof PendingConsentExchangeId.Type;
 
 export const ConsentRecordId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("ConsentRecordId"))
   .annotate({ identifier: "ConsentRecordId" });
+
 export type ConsentRecordId = typeof ConsentRecordId.Type;
 
 export const PolicyRevision = Schema.String.check(
@@ -30,6 +32,7 @@ export const PolicyRevision = Schema.String.check(
 )
   .pipe(Schema.brand("PolicyRevision"))
   .annotate({ identifier: "PolicyRevision" });
+
 export type PolicyRevision = typeof PolicyRevision.Type;
 
 export const DisclosureRevision = Schema.String.check(
@@ -38,15 +41,19 @@ export const DisclosureRevision = Schema.String.check(
 )
   .pipe(Schema.brand("DisclosureRevision"))
   .annotate({ identifier: "DisclosureRevision" });
+
 export type DisclosureRevision = typeof DisclosureRevision.Type;
 
 export const Sha256Digest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u))
   .pipe(Schema.brand("Sha256Digest"))
   .annotate({ identifier: "Sha256Digest" });
+
 export type Sha256Digest = typeof Sha256Digest.Type;
 
 const maximumLegalFactLength = 1_000;
+
 const maximumPolicyUrlLength = 2_048;
+
 const maximumDisclosureTextLength = 8_000;
 
 const legalFact = Schema.NonEmptyString.check(
@@ -61,6 +68,7 @@ export const PolicyUrl = Schema.String.check(
 )
   .pipe(Schema.brand("PolicyUrl"))
   .annotate({ identifier: "PolicyUrl" });
+
 export type PolicyUrl = typeof PolicyUrl.Type;
 
 export const PolicySnapshot = Schema.Struct({
@@ -68,6 +76,7 @@ export const PolicySnapshot = Schema.Struct({
   revision: PolicyRevision,
   contentSha256: Sha256Digest,
 }).annotate({ identifier: "PolicySnapshot" });
+
 export type PolicySnapshot = typeof PolicySnapshot.Type;
 
 export const DisclosureSnapshot = Schema.Struct({
@@ -85,6 +94,7 @@ export const DisclosureSnapshot = Schema.Struct({
   duration: legalFact,
   revocationMethod: legalFact,
 }).annotate({ identifier: "DisclosureSnapshot" });
+
 export type DisclosureSnapshot = typeof DisclosureSnapshot.Type;
 
 export const ConsentGrant = Schema.Union([
@@ -92,18 +102,21 @@ export const ConsentGrant = Schema.Union([
   Schema.TaggedStruct("PAT", { tokenId: PATId }),
   Schema.TaggedStruct("InsightDelivery", { insightKind: InsightKind }),
 ]);
+
 export type ConsentGrant = typeof ConsentGrant.Type;
 
 export const ConsentEvent = Schema.Union([
   Schema.TaggedStruct("Granted", { grant: ConsentGrant }),
   Schema.TaggedStruct("Revoked", { grantId: ConsentRecordId }),
 ]);
+
 export type ConsentEvent = typeof ConsentEvent.Type;
 
 export const ProviderQualifiedMessages = Schema.TaggedStruct("ProviderQualifiedMessages", {
   disclosureMessage: ProviderMessageEvidence,
   decisionMessage: ProviderMessageEvidence,
 }).annotate({ identifier: "ProviderQualifiedMessages" });
+
 export type ProviderQualifiedMessages = typeof ProviderQualifiedMessages.Type;
 
 export const ConsentDecisionEvidence = Schema.Union([
@@ -115,6 +128,7 @@ export const ConsentDecisionEvidence = Schema.Union([
     policy: Schema.Literals(["pat-approved-unclaimed-expiry", "pat-fixed-lifetime-expiry"]),
   }),
 ]).annotate({ identifier: "ConsentDecisionEvidence" });
+
 export type ConsentDecisionEvidence = typeof ConsentDecisionEvidence.Type;
 
 export const ConsentRecord = Schema.Struct({
@@ -125,6 +139,7 @@ export const ConsentRecord = Schema.Struct({
   occurredAt: UtcTimestamp,
   evidence: ConsentDecisionEvidence,
 }).annotate({ identifier: "ConsentRecord" });
+
 export type ConsentRecord = typeof ConsentRecord.Type;
 
 export const PendingConsentExchange = Schema.Union([
@@ -147,6 +162,7 @@ export const PendingConsentExchange = Schema.Union([
     expiresAt: UtcTimestamp,
   }),
 ]);
+
 export type PendingConsentExchange = typeof PendingConsentExchange.Type;
 
 export const ConsentInboundContent = Schema.Union([
@@ -155,6 +171,7 @@ export const ConsentInboundContent = Schema.Union([
     choice: Schema.Literals(["accept", "decline"]),
   }),
 ]);
+
 export type ConsentInboundContent = typeof ConsentInboundContent.Type;
 
 export type ConsentReplyDecision =
@@ -210,6 +227,7 @@ export const ConsentIngressExchange = Schema.Struct({
     }),
   ]),
 });
+
 export type ConsentIngressExchange = typeof ConsentIngressExchange.Type;
 
 export type ConsentIngressMessage = Readonly<{
@@ -227,6 +245,7 @@ export const PATRevocationOrigin = Schema.Literals([
   "approved-unclaimed-expiry",
   "fixed-lifetime-expiry",
 ]);
+
 export type PATRevocationOrigin = typeof PATRevocationOrigin.Type;
 
 export type PATRevocationDisclosure<Origin extends PATRevocationOrigin = PATRevocationOrigin> =
@@ -253,6 +272,7 @@ export const OnboardingConsentGrantId = Schema.Union([
   ConsentRecordId,
   WebOnboardingConsentGrantId,
 ]);
+
 export type OnboardingConsentGrantId = typeof OnboardingConsentGrantId.Type;
 
 export const OnboardingConsentBasis = Schema.Struct({
@@ -262,4 +282,5 @@ export const OnboardingConsentBasis = Schema.Struct({
   policyRevision: PolicyRevision,
   policySha256: Sha256Digest,
 });
+
 export type OnboardingConsentBasis = typeof OnboardingConsentBasis.Type;

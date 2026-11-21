@@ -2,12 +2,19 @@ import { DateTime, Option } from "effect";
 import type { RequestKind, TitularCase } from "./contract";
 
 const monthDayOffset = 5;
+
 const consultationDays = 10;
+
 const complaintDays = 15;
+
 const consultationExtensionDays = 5;
+
 const complaintExtensionDays = 8;
+
 const completionDays = 5;
+
 const completionMonths = 2;
+
 const bogotaZone = DateTime.zoneMakeNamedUnsafe("America/Bogota");
 
 export const completionReviewDate = (value: TitularCase): Option.Option<string> =>
@@ -73,21 +80,27 @@ const workingDeadline = (
   includeReceipt: boolean
 ): Option.Option<string> => {
   const parsed = parseDate(value);
+
   if (Option.isNone(parsed)) return Option.none();
   let date = includeReceipt ? parsed.value : DateTime.add(parsed.value, { days: 1 });
   let remaining = count;
+
   while (remaining > 0) {
     const label = DateTime.formatIsoDateUtc(date);
     const excluded = holidays[label.slice(0, 4)];
+
     if (excluded === undefined) return Option.none();
+
     if (
       DateTime.toPartsUtc(date).weekDay !== 0 &&
       !excluded.includes(label.slice(monthDayOffset))
     ) {
       remaining -= 1;
     }
+
     if (remaining > 0) date = DateTime.add(date, { days: 1 });
   }
+
   return Option.some(DateTime.formatIsoDateUtc(date));
 };
 
@@ -102,11 +115,13 @@ export const caseDeadlines = ({
   claimAnnotation: Option.Option<string>;
 }> => {
   const consultation = ["Access", "AuthorizationProof", "UseExplanation"].includes(kind);
+
   const response = workingDeadline(
     receivedDate,
     consultation ? consultationDays : complaintDays,
     consultation
   );
+
   return {
     response,
     maximumExtension: Option.flatMap(response, (date) =>

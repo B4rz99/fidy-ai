@@ -14,9 +14,13 @@ import { makeCanonicalFixture } from "./canonical.test-fixture";
 import { makeCanonicalClient } from "./runtime";
 
 const fixture = makeCanonicalFixture(makeCanonicalClient);
+
 const encode = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Json));
+
 const decode = Schema.decodeSync(Schema.fromJsonString(Schema.Json));
+
 const callId = "01900000-0000-4000-8000-000000000010";
+
 const transaction = {
   id: "01900000-0000-4000-8000-000000000001",
   money: { amount: "9007199254740993.15", currency: "USD" },
@@ -26,6 +30,7 @@ const transaction = {
   createdAt: "2026-01-02T00:00:00.000Z",
   revision: 0,
 };
+
 const input = {
   payload: {
     money: transaction.money,
@@ -42,6 +47,7 @@ it.effect(
       const batch = {
         payload: { calls: [{ callId, operation: "transactions.createTransaction", input }] },
       };
+
       const success = {
         data: {
           results: [
@@ -54,6 +60,7 @@ it.effect(
         },
         next: [],
       };
+
       const rejection = {
         error: {
           code: "scope_missing",
@@ -64,6 +71,7 @@ it.effect(
         },
         next: [],
       };
+
       for (const [body, status, failed] of [
         [success, 200, false],
         [rejection, 400, true],
@@ -77,6 +85,7 @@ it.effect(
         ).toBe(failed);
         expect(decode(test.stdout.join(""))).toEqual(body);
         expect(test.requests).toHaveLength(1);
+
         if (failed) expect(test.stderr.join("")).toContain("cambios de dominio no se confirmaron");
       }
     })
@@ -89,6 +98,7 @@ it.effect("transports a valid twelve-child batch beyond the bootstrap request bu
       operation: "transactions.createTransaction",
       input: { payload: { ...input.payload, notes: "あ".repeat(500) } },
     }));
+
     const body = {
       data: {
         results: calls.map((child) => ({
@@ -99,6 +109,7 @@ it.effect("transports a valid twelve-child batch beyond the bootstrap request bu
       },
       next: [],
     };
+
     const test = fixture({ body: encode(body), status: 200 }, ["write"]);
     expect(
       yield* runOperationCommand(["operations", "executeAtomicBatch", "--input", "-"], {
@@ -120,6 +131,7 @@ it.effect("does not promise rollback when a batch returns an unindexed unavailab
       },
       ["write"]
     );
+
     expect(
       yield* Effect.result(
         runOperationCommand(["operations", "executeAtomicBatch", "--input", "-"], {
@@ -145,6 +157,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const child = { callId, operation: "transactions.createTransaction", input };
+
       for (const calls of [
         null,
         {},
@@ -186,22 +199,27 @@ it.effect(
     Effect.gen(function* () {
       const test = fixture(undefined, ["read", "write", "dashboard"]);
       const visible = discoverOperations(["read", "write", "dashboard"]);
+
       for (const operation of operationCatalog.operations) {
         const allowed =
           decideOperationAccess(operation.policy.access, {
             _tag: "PAT",
             capabilities: ["read", "write", "dashboard"],
           })._tag === "Allowed";
+
         expect(visible.some(({ id }) => id === operation.id)).toBe(allowed);
+
         if (allowed) continue;
         expect(
           yield* Effect.result(runOperationCommand(operation.id.split("."), test.dependencies))
         ).toMatchObject({ failure: { reason: "OperationUnavailable" } });
       }
+
       expect(test.requests).toEqual([]);
       expect(discoverOperations(["read"]).every(({ policy }) => policy.kind === "query")).toBe(
         true
       );
+
       for (const child of atomicBatchChildOperations(operationCatalog)) {
         expect(child.policy.kind).toBe("mutation");
         expect(child.id).not.toBe(atomicBatchOperation);
@@ -215,8 +233,10 @@ it.effect(
     Effect.gen(function* () {
       const test = fixture(undefined, ["dashboard"]);
       let calls = 0;
+
       const lost = HttpClient.make((request) => {
         calls += 1;
+
         return Effect.fail(
           new HttpClientError.HttpClientError({
             reason: new HttpClientError.TransportError({
@@ -226,6 +246,7 @@ it.effect(
           })
         );
       });
+
       expect(
         yield* Effect.result(
           runOperationCommand(["dashboard", "initializeDashboard"], {
@@ -235,10 +256,13 @@ it.effect(
         )
       ).toMatchObject({ failure: { reason: "MutationAmbiguous" } });
       expect(calls).toBe(1);
+
       for (const interrupt of [false, true]) {
         let cancelled = false;
+
         const pending = HttpClient.make((request) => {
           calls += 1;
+
           return Effect.succeed(
             HttpClientResponse.fromWeb(
               request,
@@ -252,13 +276,16 @@ it.effect(
             )
           );
         });
+
         const fiber = yield* Effect.result(
           runOperationCommand(["dashboard", "initializeDashboard"], {
             ...test.dependencies,
             httpClient: pending,
           })
         ).pipe(Effect.forkChild);
+
         yield* TestClock.adjust(interrupt ? "1 second" : "16 seconds");
+
         if (interrupt) {
           yield* Fiber.interrupt(fiber);
           expect(test.stderr.join("")).toContain("servidor puede haber confirmado cambios");
@@ -267,8 +294,10 @@ it.effect(
             failure: { reason: "MutationAmbiguous" },
           });
         }
+
         expect(cancelled).toBe(true);
       }
+
       expect(calls).toBe(3);
       expect(test.stdout).toEqual([]);
       const recovery = formatFailure({ reason: "MutationAmbiguous", json: false });

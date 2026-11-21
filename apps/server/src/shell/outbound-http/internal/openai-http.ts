@@ -13,6 +13,7 @@ export const openAiHttp = ({
   client: HttpClient.HttpClient;
 }>): OpenAiHttpService => {
   const http = makeProviderTransport("openai")(client);
+
   return {
     execute: (body) =>
       http

@@ -23,6 +23,7 @@ import {
 import { type EnrollmentInteraction, makeEnrollmentInteraction } from "./interaction";
 
 type DisclosureContract = PreparedEnrollment["contracts"][keyof PreparedEnrollment["contracts"]];
+
 const contract = (kind: DisclosureContract["kind"]): DisclosureContract => ({
   kind,
   permalink: new URL("https://wompi.co/synthetic"),
@@ -31,6 +32,7 @@ const contract = (kind: DisclosureContract["kind"]): DisclosureContract => ({
   providerContentHash: "b".repeat(64),
   observedAt: DateTime.makeUnsafe(0),
 });
+
 const prepared = (now: number): PreparedEnrollment => ({
   status: "prepared",
   method: "card",
@@ -68,6 +70,7 @@ const prepared = (now: number): PreparedEnrollment => ({
 });
 
 const cleanups: Array<() => void> = [];
+
 afterEach(() => {
   cleanups
     .splice(0)
@@ -78,6 +81,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   sessionStorage.clear();
 });
+
 type Fixture = Readonly<{
   enrollment: PreparedEnrollment;
   submission: PaymentSubmission;
@@ -87,15 +91,18 @@ type Fixture = Readonly<{
   dispose: () => void;
   view: () => EnrollmentInteraction;
 }>;
+
 const fixture = (): Fixture => {
   vi.useFakeTimers();
   vi.setSystemTime(0);
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
   const enrollment = { ...prepared(0), paymentSourceMode: "reuse" as const };
+
   const submission: PaymentSubmission = {
     status: "source-verifying",
     enrollmentId: enrollment.enrollmentId,
   };
+
   const gateway = {
     availability: vi.fn<EnrollmentGateway["availability"]>(() =>
       Promise.resolve({ enabledMethods: ["card", "nequi", "daviplata"] })
@@ -110,17 +117,21 @@ const fixture = (): Fixture => {
     resume: vi.fn<EnrollmentGateway["resume"]>(() => Promise.resolve(Option.none())),
     startDaviplata: vi.fn<EnrollmentGateway["startDaviplata"]>(),
   };
+
   const registry = AtomRegistry.make();
   const authorizationLock = Atom.make(false);
+
   const atom = makeEnrollmentInteraction({
     gateway: Option.some(gateway),
     offers: [enrollment.price, enrollment.price, enrollment.price],
     authorizationLock,
   });
+
   cleanups.push(() => registry.dispose());
   cleanups.push(registry.mount(atom));
   const dispose = registry.get(atom).mount();
   cleanups.push(dispose);
+
   return {
     enrollment,
     submission,
@@ -131,9 +142,11 @@ const fixture = (): Fixture => {
     view: (): EnrollmentInteraction => registry.get(atom),
   };
 };
+
 const advance = Effect.fn(function* (milliseconds: number) {
   yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(milliseconds));
 });
+
 const prepareFixture = Effect.fn(function* (input: Fixture) {
   yield* advance(0);
   input.view().selectPrice(input.enrollment.price.id);
@@ -167,6 +180,7 @@ it.effect(
       expect(input.view().changeSelection()).toBe(false);
     })
 );
+
 it.effect(
   "keeps uncertain submission locked through failed recovery without replaying the mutation",
   () =>
@@ -202,6 +216,7 @@ it.effect(
       expect(input.gateway.submit).toHaveBeenCalledTimes(1);
     })
 );
+
 it.effect(
   "accepts method replacement only after selection is unlocked and never prepares on selection",
   () =>
@@ -225,6 +240,7 @@ it.effect(
       );
     })
 );
+
 it.effect(
   "fences a late completion and aborts its signal when the mounted lifetime is replaced",
   () =>
@@ -251,6 +267,7 @@ it.effect(
       expect(input.gateway.submit).not.toHaveBeenCalled();
     })
 );
+
 it.effect("pauses observation while hidden and stops observation on disposal", () =>
   Effect.gen(function* () {
     const input = fixture();
@@ -268,6 +285,7 @@ it.effect("pauses observation while hidden and stops observation on disposal", (
     expect(input.gateway.continue).toHaveBeenCalledTimes(1);
   })
 );
+
 it.effect("ignores DaviPlata submissions for a different mounted enrollment", () =>
   Effect.gen(function* () {
     const input = fixture();
@@ -316,6 +334,7 @@ const SubmissionRequest = Schema.Struct({
   paymentRequestId: Schema.String,
   cardToken: Schema.optional(Schema.String),
 });
+
 type RecoveryFixture = {
   enrollment: PreparedEnrollment;
   submission: Extract<PaymentSubmission, { status: "payment-pending" }>;
@@ -324,8 +343,10 @@ type RecoveryFixture = {
   failResume: boolean;
   reads: number;
 };
+
 const recoveryFixture = (status: RecoveryFixture["status"]): RecoveryFixture => {
   const enrollment = prepared(DateTime.nowUnsafe().epochMilliseconds);
+
   return {
     enrollment,
     status,
@@ -349,6 +370,7 @@ const recoveryFixture = (status: RecoveryFixture["status"]): RecoveryFixture => 
     }),
   };
 };
+
 const recoverySubmission = (
   fixture: RecoveryFixture,
   submission: typeof SubmissionRequest.Type
@@ -358,17 +380,20 @@ const recoverySubmission = (
   submission.paymentRequestId !== fixture.requests[0]?.paymentRequestId
     ? new Response(null, { status: 503 })
     : Response.json(Schema.encodeSync(PaymentSubmissionSchema)(fixture.submission));
+
 const recoveryHttp = (fixture: RecoveryFixture): HttpClient.HttpClient =>
   HttpClient.make((request) =>
     Effect.gen(function* () {
       const path = new URL(request.url).pathname;
       let response: Response;
+
       if (path.endsWith("/availability")) response = Response.json({ enabledMethods: ["card"] });
       else if (path.endsWith("/prepare")) {
         response = Response.json(yield* Schema.encodeEffect(PaymentEnrollment)(fixture.enrollment));
       } else if (path.endsWith("/submit")) {
         const text =
           request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "";
+
         const body = yield* Schema.decodeEffect(UnknownJsonString)(text);
         const submission = yield* Schema.decodeUnknownEffect(SubmissionRequest)(body);
         fixture.requests.push(submission);
@@ -387,24 +412,30 @@ const recoveryHttp = (fixture: RecoveryFixture): HttpClient.HttpClient =>
           priceId: fixture.enrollment.price.id,
         });
       }
+
       return HttpClientResponse.fromWeb(request, response);
     }).pipe(Effect.orDie)
   );
+
 const mountRecovery = (
   gateway: EnrollmentGateway,
   enrollment: PreparedEnrollment
 ): (() => EnrollmentInteraction) => {
   const registry = AtomRegistry.make();
+
   const atom = makeEnrollmentInteraction({
     gateway: Option.some(gateway),
     offers: [enrollment.price, enrollment.price, enrollment.price],
     authorizationLock: Atom.make(false),
   });
+
   cleanups.push(() => registry.dispose());
   cleanups.push(registry.mount(atom));
   cleanups.push(registry.get(atom).mount());
+
   return () => registry.get(atom);
 };
+
 for (const status of ["available", "verifying"] as const) {
   it.effect(
     `recovers a lost submission acknowledgment from ${status} with the original request and BillingAttempt`,
@@ -413,10 +444,13 @@ for (const status of ["available", "verifying"] as const) {
         vi.useFakeTimers();
         vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
         const input = recoveryFixture(status);
+
         const provider = vi.fn(() =>
           Promise.resolve(Response.json({ data: { id: "tok_test_synthetic", brand: "VISA" } }))
         );
+
         vi.stubGlobal("fetch", provider);
+
         const client = yield* Effect.acquireRelease(
           Effect.sync(() =>
             makeSubscriptionEnrollmentClient({
@@ -426,6 +460,7 @@ for (const status of ["available", "verifying"] as const) {
           ),
           (client) => Effect.tryPromise(() => client.dispose()).pipe(Effect.orDie)
         );
+
         const view = mountRecovery(makeEnrollmentGateway(client), input.enrollment);
         yield* advance(0);
         view().selectPrice(input.enrollment.price.id);
@@ -641,10 +676,12 @@ it.effect(
       const input = fixture();
       yield* advance(0);
       input.view().selectPrice(input.enrollment.price.id);
+
       const replacement = {
         ...input.enrollment.price,
         id: PriceId.make("23200000-0000-4000-8000-000000000099"),
       };
+
       input.view().updateOffers([replacement, replacement, replacement]);
       input.view().continueToPayment();
       yield* advance(0);
@@ -665,6 +702,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const input = fixture();
+
       const daviplata: PreparedEnrollment = {
         ...input.enrollment,
         method: "daviplata",
@@ -673,6 +711,7 @@ it.effect(
           confirmUrl: "https://sandbox.wompi.co/synthetic/confirm",
         },
       };
+
       input.gateway.prepare.mockResolvedValue(daviplata);
       input.gateway.status.mockResolvedValue(daviplata);
       yield* advance(0);
@@ -700,19 +739,23 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const input = fixture();
+
       const available = {
         status: "available" as const,
         enrollmentId: input.enrollment.enrollmentId,
         method: "card" as const,
         priceId: input.enrollment.price.id,
       };
+
       input.gateway.prepare.mockResolvedValue(available);
       input.gateway.status.mockResolvedValue(available);
       yield* prepareFixture(input);
+
       const replacement = {
         ...input.enrollment.price,
         id: PriceId.make("23200000-0000-4000-8000-000000000099"),
       };
+
       input.view().updateOffers([replacement, replacement, replacement]);
       input.view().refresh();
       yield* advance(0);
@@ -731,12 +774,17 @@ for (const rejection of ["invalid-email", "expired", "busy", "disposed", "unprep
   it.effect(`clears rejected Nequi phone material when submission is ${rejection}`, () =>
     Effect.gen(function* () {
       const input = fixture();
+
       if (rejection !== "unprepared") yield* prepareFixture(input);
+
       if (rejection === "expired") yield* advance(60_001);
+
       if (rejection === "busy") {
         input.view().submit("synthetic@example.invalid");
       }
+
       if (rejection === "disposed") input.dispose();
+
       const fields = {
         method: "nequi" as const,
         phoneNumber: Redacted.make("3991111111"),
@@ -744,6 +792,7 @@ for (const rejection of ["invalid-email", "expired", "busy", "disposed", "unprep
         onAwaiting: vi.fn(),
         signal: AbortSignal.abort(),
       };
+
       const admitted = input.gateway.submit.mock.calls.length;
       input
         .view()

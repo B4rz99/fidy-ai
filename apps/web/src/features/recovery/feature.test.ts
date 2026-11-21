@@ -16,15 +16,19 @@ import { makeFidyClient } from "@/transport/client";
 import { BackupRecoveryFeature } from "./feature";
 
 const recoveryCode = "ABCDE-FGHJK-LMNPQ-RSTUV-WXY23";
+
 const reactWork = (work: () => void): Promise<void> =>
   Promise.resolve(act(() => Promise.resolve(work())));
+
 const reactAssertion = (assertion: () => void): Promise<void> =>
   Promise.resolve(act(() => vi.waitFor(assertion)));
+
 const click = (container: HTMLElement, label: string): Promise<void> =>
   reactWork(() => {
     const button = Array.from(container.querySelectorAll("button")).find(
       (candidate) => candidate.textContent === label
     );
+
     if (button === undefined) throw new Error(`Missing ${label}`);
     button.click();
   });
@@ -38,6 +42,7 @@ it.each(["matching", "unrelated", "pending"] as const)(
         vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
         let text = "";
         const pending = Promise.withResolvers<void>();
+
         const clipboard = {
           readText: (): Promise<string> => Promise.resolve(text),
           writeText: (value: string): Promise<void> => {
@@ -46,11 +51,15 @@ it.each(["matching", "unrelated", "pending"] as const)(
                 text = value;
               });
             }
+
             text = value;
+
             return Promise.resolve();
           },
         };
+
         Object.defineProperty(navigator, "clipboard", { configurable: true, value: clipboard });
+
         const http = HttpClient.make((request) =>
           Effect.succeed(
             HttpClientResponse.fromWeb(
@@ -66,18 +75,23 @@ it.each(["matching", "unrelated", "pending"] as const)(
             )
           )
         );
+
         const apiClient = makeFidyClient({
           apiOrigin: "https://api.test.fidyapp.com",
           httpClient: Layer.succeed(HttpClient.HttpClient, http),
         });
+
         const registry = AtomRegistry.make();
+
         const router = createRouter({
           routeTree: createRootRoute({ component: BackupRecoveryFeature }),
           context: { apiClient },
           history: createMemoryHistory(),
         });
+
         const container = document.createElement("div");
         const root = createRoot(container);
+
         try {
           yield* Effect.tryPromise(() => router.load());
           yield* Effect.tryPromise(() =>
@@ -97,7 +111,9 @@ it.each(["matching", "unrelated", "pending"] as const)(
             reactAssertion(() => expect(container.textContent).toContain(recoveryCode))
           );
           yield* Effect.tryPromise(() => click(container, "Copiar código"));
+
           if (scenario !== "pending") expect(text).toBe(recoveryCode);
+
           if (scenario === "unrelated") text = "unrelated text";
           yield* Effect.tryPromise(() =>
             reactWork(() => window.dispatchEvent(new Event("pagehide")))

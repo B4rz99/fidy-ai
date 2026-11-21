@@ -22,6 +22,7 @@ describe("safe account hints", () => {
     for (const value of ["", " \u00a0 ", "visa\u0000oro", "visa\u200boro", "a".repeat(65)]) {
       expect(Schema.decodeOption(InstrumentLabel)(value)).toEqual(Option.none());
     }
+
     expect(Schema.decodeOption(InstrumentLabel)("💳".repeat(64))).toEqual(
       Option.some("💳".repeat(64))
     );
@@ -33,6 +34,7 @@ describe("safe account hints", () => {
         cardLastFour: "0012",
         instrumentLabel: "  ＶＩＳＡ\u00a0  Oro  ",
       });
+
       expect(hints.cardLastFour).toEqual(Option.some("0012"));
       expect(hints.accountLastFour).toEqual(Option.none());
       expect(hints.instrumentLabel).toEqual(Option.some("visa oro"));

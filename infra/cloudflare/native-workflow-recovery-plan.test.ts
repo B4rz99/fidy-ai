@@ -2,8 +2,11 @@ import { expect, it } from "vitest";
 import { interruptedRevision, qualifyWorkflowRecoveryPlan } from "./native-workflow-recovery-plan";
 
 const workflow = "ReleaseSmokeWorkflowV2-" + interruptedRevision;
+
 const host = "ReleaseSmoke-" + interruptedRevision;
+
 const name = "fidy-native-smoke-" + interruptedRevision;
+
 const properties = { workflowName: name, className: "ReleaseSmokeWorkflowV2" };
 
 const observedPlan = (): Parameters<typeof qualifyWorkflowRecoveryPlan>[0] => ({
@@ -54,7 +57,9 @@ it("qualifies one Workflow create with the existing exact hosting Worker untouch
 it("refuses a host update, metadata change, or unexpected selected cycle", () => {
   const observed = observedPlan();
   const same = observed.resources[host];
+
   if (same === undefined) throw Error("Missing host in test inventory");
+
   for (const edit of [
     { ...same, action: "update" },
     { ...same, downstream: [] },
@@ -66,6 +71,7 @@ it("refuses a host update, metadata change, or unexpected selected cycle", () =>
       })
     ).toThrow("would change an upstream resource");
   }
+
   expect(() =>
     qualifyWorkflowRecoveryPlan({ ...observed, cycleMembers: new Set([workflow]) })
   ).toThrow("requires a scoped acyclic plan");
@@ -74,6 +80,7 @@ it("refuses a host update, metadata change, or unexpected selected cycle", () =>
 it("refuses untracked Workflow state and a plan bound to a different Smoke Worker", () => {
   const observed = observedPlan();
   const same = observed.resources[workflow];
+
   if (same === undefined) throw Error("Missing Workflow in test inventory");
   expect(() =>
     qualifyWorkflowRecoveryPlan({
@@ -98,6 +105,7 @@ it("refuses untracked Workflow state and a plan bound to a different Smoke Worke
 it("refuses any plan that could adopt the Workflow", () => {
   const observed = observedPlan();
   const tracked = observed.resources[workflow];
+
   if (tracked === undefined) throw Error("Missing Workflow in test inventory");
   expect(() =>
     qualifyWorkflowRecoveryPlan({

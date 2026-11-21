@@ -18,7 +18,9 @@ export const ProviderSpend = Schema.Struct({
   phase: Schema.Literals(["model", "reminderGeneration", "reminderSend"]),
   units: Schema.Int.check(Schema.isGreaterThan(0)),
 });
+
 export const providerAllowanceUrl = "https://directory.invalid/provider-allowance";
+
 export const providerAllowanceSchema = [
   "CREATE TABLE provider_spend_attempts(phase TEXT NOT NULL,at_ms INTEGER NOT NULL,units INTEGER NOT NULL CHECK(units>=0)) STRICT",
   "CREATE INDEX provider_spend_by_phase ON provider_spend_attempts(phase,at_ms,units)",

@@ -22,15 +22,23 @@ import {
 } from "./production-native";
 
 const stringify = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
+
 class LocalProofFailure extends Data.TaggedError("LocalProofFailure")<{
   message: string;
 }> {}
+
 const privateDirectoryMode = 0o700;
+
 const privateFileMode = 0o600;
+
 const bridgeUrl = "http://127.0.0.1:19488";
+
 const httpOk = 200;
+
 const requestTimeout = 10_000;
+
 const bridgeResponseLimit = 65_536;
+
 const Cases = Schema.Literals([
   "claude-accept",
   "claude-cancel",
@@ -39,8 +47,11 @@ const Cases = Schema.Literals([
   "claude-headless",
   "codex-headless",
 ]);
+
 type HostCase = typeof Cases.Type;
+
 const Reset = Schema.Struct({ budgetId: Schema.String.check(Schema.isUUID()) });
+
 const Trace = Schema.Struct({
   method: Schema.String,
   tool: Schema.String,
@@ -53,18 +64,21 @@ const Trace = Schema.Struct({
   negotiatedProtocol: Schema.String,
   httpStatus: Schema.Int,
 });
+
 const Status = Schema.Struct({
   budgetId: Reset.fields.budgetId,
   remaining: Schema.Int,
   accepted: Schema.Int,
   trace: Schema.Array(Trace),
 });
+
 type Arguments = Readonly<{
   claude: string;
   codex: string;
   output: string;
   cases: ReadonlyArray<HostCase>;
 }>;
+
 type CaseResult = Readonly<{
   host: NativeHost;
   decision: NativeMode;
@@ -75,6 +89,7 @@ type CaseResult = Readonly<{
   actualToolCalled: boolean;
   passed: boolean;
 }>;
+
 const requireCheck = (
   passed: boolean,
   message: string
@@ -101,14 +116,18 @@ export const requestLocalConfirmationBridge = <A>({
     let text = "";
     yield* Stream.runForEach(response.stream, (chunk) => {
       size += chunk.byteLength;
+
       if (size > bridgeResponseLimit) {
         return Effect.fail(
           new LocalProofFailure({ message: "Local fixture bridge response exceeded limit" })
         );
       }
+
       text += decoder.decode(chunk, { stream: true });
+
       return Effect.void;
     });
+
     return yield* Schema.decodeEffect(Schema.fromJsonString(codec))(text + decoder.decode());
   }).pipe(
     Effect.scoped,
@@ -117,6 +136,7 @@ export const requestLocalConfirmationBridge = <A>({
     Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
     Effect.provideService(HttpClient.TracerDisabledWhen, () => true)
   );
+
 const writeJson = (
   path: string,
   value: unknown
@@ -132,7 +152,9 @@ const decodeArguments = Schema.decodeUnknownSync(
     output: Schema.NonEmptyString,
   })
 );
+
 const decodeCases = Schema.decodeUnknownSync(Schema.Array(Cases));
+
 const readArguments = Effect.try({
   try: (): Arguments => {
     const parsed = parseArgs({
@@ -155,17 +177,22 @@ const readArguments = Effect.try({
         },
       },
     });
+
     const { claude, codex, output } = decodeArguments(parsed.values);
+
     const requested =
       parsed.values.cases !== undefined
         ? [...parsed.values.cases, ...parsed.positionals]
         : [...Cases.literals];
+
     if (parsed.values.cases === undefined && parsed.positionals.length > 0) {
       throw new Error("unexpected arguments");
     }
+
     if (requested.length === 0 || new Set(requested).size !== requested.length) {
       throw new Error("duplicate cases");
     }
+
     return {
       claude: resolve(claude),
       codex: resolve(codex),
@@ -178,6 +205,7 @@ const readArguments = Effect.try({
       message: "Expected --claude PATH --codex PATH [--output DIR] [--cases CASE ...]",
     }),
 });
+
 const prepareCase = Effect.fn(function* (
   input: Readonly<{
     host: NativeHost;
@@ -194,6 +222,7 @@ const prepareCase = Effect.fn(function* (
   yield* writeJson(join(root, `${host}-budget-private.json`), {
     id: budgetId,
   });
+
   if (host === "claude") {
     yield* writeJson(join(profile, ".claude.json"), {
       hasCompletedOnboarding: true,
@@ -213,24 +242,31 @@ const prepareCase = Effect.fn(function* (
     });
   }
 });
+
 const decisionFor = (name: HostCase): NativeMode => {
   if (name.endsWith("-headless")) return "headless";
+
   if (name.endsWith("-cancel")) return "cancel";
+
   return "accept";
 };
+
 const runCase = Effect.fn(function* (args: Arguments, name: HostCase) {
   const host: NativeHost = name.startsWith("claude-") ? "claude" : "codex";
   const decision = decisionFor(name);
   const root = join(args.output, name);
+
   const reset = yield* requestLocalConfirmationBridge({
     path: "/reset",
     codec: Reset,
   });
+
   yield* prepareCase({
     host,
     root,
     budgetId: reset.budgetId,
   });
+
   const native = yield* nativeTools({
     host,
     binary: args[host],
@@ -239,11 +275,14 @@ const runCase = Effect.fn(function* (args: Arguments, name: HostCase) {
     namespace: "local-native-confirmation",
     mcpUrl: Option.some(`${bridgeUrl}/mcp`),
   });
+
   const observed = yield* requestLocalConfirmationBridge({ path: "/status", codec: Status });
   const accepted = decision === "accept";
+
   const actualToolCalled = observed.trace.some(
     (event) => event.method === "tools/call" && event.tool === "budgets.deleteBudget"
   );
+
   const passed = [
     native.passed,
     actualToolCalled,
@@ -251,6 +290,7 @@ const runCase = Effect.fn(function* (args: Arguments, name: HostCase) {
     observed.remaining === (accepted ? 0 : 1),
     observed.accepted === (accepted ? 1 : 0),
   ].every(Boolean);
+
   const result: CaseResult = {
     host,
     decision,
@@ -261,13 +301,16 @@ const runCase = Effect.fn(function* (args: Arguments, name: HostCase) {
     actualToolCalled,
     passed,
   };
+
   yield* writeJson(join(root, "result.json"), result);
   yield* Effect.sync(() => {
     process.stdout.write(stringify(result) + "\n");
   });
   yield* requireCheck(passed, `Local native ${name} proof failed`);
+
   return result;
 });
+
 const cleanupCase = (
   root: string
 ): Effect.Effect<void, PlatformError.PlatformError, FileSystem.FileSystem> =>
@@ -306,12 +349,15 @@ const execute = Effect.gen(function* () {
     }).pipe(Effect.orDie)
   );
   const results: CaseResult[] = [];
+
   for (const name of args.cases) {
     const result = yield* runCase(args, name).pipe(
       Effect.ensuring(cleanupCase(join(args.output, name)).pipe(Effect.orDie))
     );
+
     results.push(result);
   }
+
   yield* writeJson(join(args.output, "evidence.json"), {
     trustBoundary:
       "OAuth-authorized client-native decision; no independent human-presence attestation",
@@ -322,6 +368,7 @@ const execute = Effect.gen(function* () {
     results,
   });
 });
+
 if (import.meta.main) {
   Effect.runPromise(
     Effect.scoped(execute).pipe(
@@ -336,9 +383,11 @@ if (import.meta.main) {
     )
   ).catch((error: unknown) => {
     if (error instanceof LocalProofFailure) process.stderr.write(error.message + "\n");
+
     if (error instanceof NativeProofError) {
       process.stderr.write(`Native ${error.host} failed during ${error.phase}: ${error.reason}\n`);
     }
+
     process.stderr.write(
       "Local native confirmation proof failed; inspect metadata-only result files.\n"
     );

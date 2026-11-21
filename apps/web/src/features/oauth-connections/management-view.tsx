@@ -22,18 +22,23 @@ const dateFormat = new Intl.DateTimeFormat("es-CO", {
   year: "numeric",
   timeZone: "UTC",
 });
+
 const Timestamp = ({ value }: Readonly<{ value: DateTime.Utc }>): JSX.Element => (
   <time dateTime={DateTime.formatIso(value)}>
     {dateFormat.format(DateTime.toDate(value)).replaceAll(" de ", " ")}
   </time>
 );
+
 const stateVariants = { active: "success", expired: "warning", revoked: "destructive" } as const;
+
 const states = { active: "Activo", expired: "Vencido", revoked: "Revocado" } as const;
+
 type ConnectionProps = Readonly<{
   connection: OAuthConnectionMetadata;
   busy: boolean;
   revoke: (id: OAuthConnectionId) => void;
 }>;
+
 const connectionDetails = (
   connection: OAuthConnectionMetadata
 ): ReadonlyArray<Readonly<{ label: string; value: ReactNode }>> => [
@@ -58,6 +63,7 @@ const connectionDetails = (
     ),
   },
 ];
+
 const ConnectionAction = ({ connection, busy, revoke }: ConnectionProps): JSX.Element =>
   connection.state === "active" ? (
     <Button
@@ -76,6 +82,7 @@ const ConnectionAction = ({ connection, busy, revoke }: ConnectionProps): JSX.El
       Para volver a conectarlo necesitas una nueva aprobación.
     </span>
   );
+
 const ConnectionRow = (props: ConnectionProps): JSX.Element => (
   <TableRow data-connection-id={props.connection.connectionId}>
     <TableHead scope="row" density="compact" className="whitespace-normal">
@@ -91,6 +98,7 @@ const ConnectionRow = (props: ConnectionProps): JSX.Element => (
     </TableCell>
   </TableRow>
 );
+
 const ConnectionMobileItem = (props: ConnectionProps): JSX.Element => (
   <li>
     <h3>{props.connection.claimedClientName}</h3>
@@ -107,6 +115,7 @@ const ConnectionMobileItem = (props: ConnectionProps): JSX.Element => (
     </div>
   </li>
 );
+
 const ConnectionList = ({
   connections,
   busy,
@@ -142,6 +151,7 @@ const ConnectionList = ({
       </ul>
     </>
   );
+
 export const OAuthManagementView = ({
   list,
   busy,

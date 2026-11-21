@@ -14,6 +14,7 @@ import { afterAll, beforeAll, expect, vi } from "vitest";
 import { applyScopedNativePlan } from "./native-fixture-plan";
 
 let profileDirectory = "";
+
 beforeAll(() =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -24,10 +25,12 @@ beforeAll(() =>
     }).pipe(Effect.provide(BunServices.layer))
   )
 );
+
 afterAll(() =>
   Effect.runPromise(
     Effect.gen(function* () {
       vi.unstubAllEnvs();
+
       if (profileDirectory !== "") {
         yield* (yield* FileSystem.FileSystem).remove(profileDirectory, { recursive: true });
       }
@@ -40,7 +43,9 @@ type FixtureResource = Resource<
   { revision: string; dependency: string; replacement: "update" | "create-first" | "delete-first" },
   { identity: string; revision: string; dependency: string }
 >;
+
 const FixtureResource = Resource<FixtureResource>("RetirementFixture.Resource");
+
 class ResourceStillUsed extends Data.TaggedError("ResourceStillUsed")<{}> {}
 
 const fixture = Effect.gen(function* () {
@@ -49,6 +54,7 @@ const fixture = Effect.gen(function* () {
   const calls: string[] = [];
   const savedState = yield* InMemoryService();
   const state = Layer.succeed(State, Effect.succeed(savedState));
+
   const providers = Provider.succeed(FixtureResource, {
     diff: ({ olds, news }) =>
       Effect.succeed(
@@ -62,6 +68,7 @@ const fixture = Effect.gen(function* () {
         const result = { identity: `${id}:${instanceId}`, ...news };
         calls.push(`reconcile:${id}`);
         cloud.set(result.identity, result);
+
         return result;
       }),
     delete: ({ output }) =>
@@ -72,10 +79,12 @@ const fixture = Effect.gen(function* () {
         ) {
           return yield* new ResourceStillUsed();
         }
+
         calls.push("delete:" + output.identity.split(":")[0]);
         cloud.delete(output.identity);
       }),
   });
+
   const deploy = Effect.fn(function* (
     onboarding: boolean,
     revision: string,
@@ -87,8 +96,10 @@ const fixture = Effect.gen(function* () {
       | { deletions: "successor"; beforeApply: Effect.Effect<unknown, StateStoreError> }
   ) {
     const deletions = typeof mode === "string" ? mode : mode.deletions;
+
     const replacement =
       typeof mode === "string" || mode.deletions === "successor" ? "update" : mode.replacement;
+
     return yield* evalStack(
       Alchemy.Stack(
         "RetirementFixture",
@@ -101,23 +112,29 @@ const fixture = Effect.gen(function* () {
                 replacement: "update",
               })).identity
             : "";
+
           return yield* FixtureResource("Core", { revision, dependency, replacement });
         })
       ),
       Effect.fn(function* (stack) {
         if (deletions === "successor") {
           const plan = yield* Plan.make(stack, { include: ["Core"] });
+
           if (typeof mode !== "string" && mode.deletions === "successor") {
             yield* mode.beforeApply;
           }
+
           return yield* applyScopedNativePlan(plan).pipe(Effect.provide(stack.services));
         }
+
         const plan = yield* Plan.make(stack);
+
         return yield* Apply.apply(plan, { deletions }).pipe(Effect.provide(stack.services));
       }),
       { stage: "production" }
     ).pipe(Effect.provide(state));
   });
+
   return {
     cloud,
     calls,
@@ -148,9 +165,11 @@ it.effect("refuses a prior generation saved after the scoped plan was captured",
     const key = { stack: "RetirementFixture", stage: "production", fqn: "Core" };
     yield* deploy(true, "1", "defer");
     const baseline = yield* savedState.get(key);
+
     if (baseline === undefined) return yield* Effect.fail(Error("Missing baseline state"));
     yield* deploy(true, "2", { deletions: "defer", replacement: "create-first" });
     const pending = yield* savedState.get(key);
+
     if (pending?.status !== "replaced") {
       return yield* Effect.fail(Error("Missing prior generation"));
     }
@@ -158,12 +177,14 @@ it.effect("refuses a prior generation saved after the scoped plan was captured",
     yield* savedState.set({ ...key, value: baseline });
     const before = [...calls];
     const retained = [...cloud.values()];
+
     const refusal = yield* Effect.flip(
       deploy(false, "3", {
         deletions: "successor",
         beforeApply: savedState.set({ ...key, value: pending }),
       })
     );
+
     expect(refusal).toMatchObject({
       _tag: "FixturePlanRefused",
       reason: "successor scope has a pending replacement",
@@ -198,13 +219,16 @@ it.effect(
     Effect.gen(function* () {
       const { cloud, calls, deploy } = yield* fixture;
       const baseline = yield* deploy(true, "1", "defer");
+
       const candidate = yield* deploy(false, "2", {
         deletions: "defer",
         replacement: "create-first",
       });
+
       if (baseline === undefined || candidate === undefined) {
         return yield* Effect.fail(Error("Missing full deployment output"));
       }
+
       expect(cloud.get(baseline.identity)).toEqual(baseline);
       expect(cloud.get(candidate.identity)).toEqual(candidate);
       expect(calls.filter((call) => call.startsWith("delete:"))).toEqual([]);
@@ -227,9 +251,11 @@ it.effect("refuses delete-first replacement before any resource mutation", () =>
     yield* deploy(true, "1", "defer");
     const baseline = [...cloud.values()];
     const beforeUpload = [...calls];
+
     const upload = yield* Effect.exit(
       deploy(false, "2", { deletions: "defer", replacement: "delete-first" })
     );
+
     expect(Exit.isFailure(upload)).toBe(true);
     expect(calls).toEqual(beforeUpload);
     expect([...cloud.values()]).toEqual(baseline);

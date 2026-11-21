@@ -9,6 +9,7 @@ import {
 
 const opaque = <Behavior extends object>(properties: Behavior): Behavior => {
   const authority: Behavior = { ...properties };
+
   for (const key of Reflect.ownKeys(authority)) {
     Object.defineProperty(authority, key, {
       value: Reflect.get(authority, key),
@@ -17,11 +18,14 @@ const opaque = <Behavior extends object>(properties: Behavior): Behavior => {
       configurable: false,
     });
   }
+
   Object.setPrototypeOf(authority, null);
+
   return Object.freeze(authority);
 };
 
 const textAuthority = Brand.nominal<PreparedHostedText>();
+
 const continuationAuthority = Brand.nominal<HostedTextContinuation>();
 
 export const makePreparedTextAuthority = (
@@ -42,8 +46,10 @@ export const continuationPolicy = (input: {
   readonly consumedToolCalls: number;
 }): HostedTextToolPolicy => {
   const { policy, consumedToolCalls } = input;
+
   if (policy.toolChoice === "none") return policy;
   const remaining = policy.maximumToolCalls - consumedToolCalls;
+
   return remaining <= 0
     ? { toolChoice: "none", availableOperations: policy.availableOperations }
     : {
@@ -61,10 +67,12 @@ export type OneShotPreparation = Readonly<{
 
 export const makeOneShotPreparation = (): OneShotPreparation => {
   let available = true;
+
   return {
     begin: () => {
       if (!available) return false;
       available = false;
+
       return true;
     },
     restore: () => {

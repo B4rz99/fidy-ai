@@ -35,14 +35,18 @@ type Props = Readonly<{
   link: () => void;
   stopTracking: () => void;
 }>;
+
 const PaymentForm = ({ item, save, disabled, today }: Props): JSX.Element => {
   const [invalid, setInvalid] = useState(false);
+
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const command = paymentCommand(new FormData(event.currentTarget), item);
     setInvalid(Option.isNone(command));
+
     if (Option.isSome(command)) save(command.value.edit);
   };
+
   return (
     <form onSubmit={submit} className="grid gap-4 border-t pt-4">
       <fieldset disabled={disabled} className="grid min-w-0 gap-4">
@@ -80,6 +84,7 @@ const PaymentForm = ({ item, save, disabled, today }: Props): JSX.Element => {
     </form>
   );
 };
+
 const TrackingActions = ({ item, save, disabled, stopTracking }: Props): JSX.Element => (
   <div className="grid gap-3 border-t pt-4">
     <Button
@@ -115,9 +120,11 @@ const TrackingActions = ({ item, save, disabled, stopTracking }: Props): JSX.Ele
     </Disclosure>
   </div>
 );
+
 export const OccurrenceDetails = (props: Props): JSX.Element => {
   const { item, save, disabled } = props;
   const trackingHeading = useRef<HTMLHeadingElement>(null);
+
   return (
     <div data-recurring-slot="occurrence-detail" className="grid gap-5">
       <p>
@@ -204,6 +211,7 @@ const OccurrenceEditor = ({
   const descriptionId = useId();
   const hasTracking = hasOccurrenceTracking({ document, item });
   const preserved = preservesOccurrence({ document, item });
+
   return (
     <>
       <Disclosure title="Editar recurrente">
@@ -252,6 +260,7 @@ const OccurrenceEditor = ({
 const paymentCommand = (form: FormData, item: Occurrence): Option.Option<RecurringCommand> => {
   const transactionId = formText(form, "transactionId").trim();
   const replaces = formText(form, "replaces");
+
   return Schema.decodeUnknownOption(Schema.toCodecJson(RecurringCommand))({
     expectedRevision: 0,
     edit: {
@@ -272,5 +281,6 @@ const paymentCommand = (form: FormData, item: Occurrence): Option.Option<Recurri
 
 const formText = (form: FormData, key: string): string => {
   const entry = form.get(key);
+
   return typeof entry === "string" ? entry : "";
 };

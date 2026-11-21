@@ -9,9 +9,11 @@ export const parseApiOrigin = (configured: unknown): string => {
 
   try {
     const url = new URL(configured);
+
     if (!isHttpOrigin(url)) {
       throw new Error(originConfigurationMessage);
     }
+
     return url.origin;
   } catch {
     throw new Error(originConfigurationMessage);
@@ -29,10 +31,13 @@ export const browserApiOrigin = ({
     if (browserOrigin === installedOrigins.acceptance.browser) {
       return installedOrigins.acceptance.api;
     }
+
     if (browserOrigin === installedOrigins.production.browser) {
       return installedOrigins.production.api;
     }
+
     throw new Error("Unexpected installed browser origin");
   }
+
   return parseApiOrigin(configured);
 };

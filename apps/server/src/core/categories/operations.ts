@@ -47,7 +47,9 @@ export const categorizeCapture = ({
     const keywordRule = Option.isNone(counterparty)
       ? Option.none<CategoryId>()
       : yield* findKeywordCategory({ counterparty: counterparty.value, rules });
+
     const known = yield* findKnownCaptureCategory({ caller, keywordRule });
+
     return Option.getOrElse(known, () => fallbackCaptureCategory(direction));
   });
 
@@ -72,6 +74,7 @@ export const validateKeywordRuleChange = ({
     ) {
       return Option.some(new KeywordRuleNotFound({ keywordRuleId: change.ruleId }));
     }
+
     if (
       change.operation !== "categories.deleteKeywordRule" &&
       (yield* hasKeywordRule({
@@ -85,24 +88,31 @@ export const validateKeywordRuleChange = ({
     ) {
       return Option.some(new KeywordRuleAlreadyExists({ keyword: change.keyword }));
     }
+
     if (
       change.operation === "categories.createKeywordRule" &&
       !(yield* canCreateKeywordRule(rules))
     ) {
       return Option.some(new KeywordRuleLimitReached({ maximum: maximumKeywordRulesPerUser }));
     }
+
     return Option.none<CategoryFailure>();
   });
 
 const decodedRelease = Schema.decodeSync(CategoryTaxonomyRelease)(releaseData);
+
 for (const revision of decodedRelease.revisions) {
   for (const category of revision.categories) Object.freeze(category);
   Object.freeze(revision.categories);
   Object.freeze(revision);
 }
+
 Object.freeze(decodedRelease.revisions);
+
 export const currentCategoryRelease = Object.freeze(decodedRelease);
 
 export const activeCategoryTaxonomy: typeof writingTaxonomy = (release) => writingTaxonomy(release);
+
 export const compatibleCategoryReleases: typeof canOverlap = (input) => canOverlap(input);
+
 export const interpretCategory: typeof interpretReference = (input) => interpretReference(input);

@@ -34,6 +34,7 @@ export const retainedRecoveryPairingsQuery = (): OwnedStatement => ({
 
 export const recoveryCodeDigest: typeof nativeRecoveryCodeDigest = (...args) =>
   nativeRecoveryCodeDigest(...args);
+
 export const sampleRecoveryCode: typeof nativeSampleRecoveryCode = (...args) =>
   nativeSampleRecoveryCode(...args);
 
@@ -45,6 +46,7 @@ export const nativeSupportRecovery = Effect.fn(function* (input: {
   directory: Option.Option<UserStoreBindings["DIRECTORY"]>;
 }) {
   const directory = Option.map(input.directory, (value) => value.getByName(directoryName));
+
   const post = (url: string, body: object): Promise<Response> =>
     Option.isNone(directory)
       ? Promise.resolve(new Response(null, { status: 503 }))
@@ -53,6 +55,7 @@ export const nativeSupportRecovery = Effect.fn(function* (input: {
           headers: { "content-type": "application/json" },
           body: JSON.stringify(body),
         });
+
   return yield* handleSupportProof({
     ...input,
     http: makeAccessSigningKeysOutboundHttp({
@@ -62,6 +65,7 @@ export const nativeSupportRecovery = Effect.fn(function* (input: {
     admit: (operator) =>
       post(supportAdmissionUrl, operator).then((response) => {
         if (response.ok) return "allowed";
+
         return response.status === limitedStatus ? "limited" : "unavailable";
       }),
     approve: (decision) =>
@@ -87,5 +91,6 @@ export const localSupportApproval: typeof nativeLocalSupportApproval = (...args)
 
 export const repairSupportRetention: typeof nativeRepairSupportRetention = (...args) =>
   nativeRepairSupportRetention(...args);
+
 export const expireSupportCases: typeof nativeExpireSupportCases = (...args) =>
   nativeExpireSupportCases(...args);

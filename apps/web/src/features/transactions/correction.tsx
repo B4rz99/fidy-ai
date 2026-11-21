@@ -28,6 +28,7 @@ type CorrectionDraft = Readonly<{
   direction: Transaction["direction"];
   categoryId: string;
 }>;
+
 type CorrectionProps = Readonly<{
   renderForm: (form: JSX.Element) => JSX.Element;
   transaction: Transaction;
@@ -35,10 +36,12 @@ type CorrectionProps = Readonly<{
   timeZone: string;
   onCancel: () => void;
 }>;
+
 const localDate = (transaction: Transaction, timeZone: string): string =>
   DateTime.formatIsoDate(
     DateTime.setZone(transaction.occurredAt, DateTime.zoneMakeNamedUnsafe(timeZone))
   );
+
 const initialDraft = (transaction: Transaction, timeZone: string): CorrectionDraft => ({
   amount: formatMoneyInput(transaction.money),
   currency: transaction.money.currency,
@@ -48,7 +51,9 @@ const initialDraft = (transaction: Transaction, timeZone: string): CorrectionDra
   direction: transaction.direction,
   categoryId: transaction.categoryId,
 });
+
 type CorrectionChanges = CanonicalInput<"transactions.updateTransaction">["payload"]["changes"];
+
 const textChanges = (draft: CorrectionDraft, original: CorrectionDraft): CorrectionChanges => ({
   ...(draft.counterparty !== original.counterparty
     ? { counterparty: draft.counterparty.trim() || null }
@@ -56,31 +61,39 @@ const textChanges = (draft: CorrectionDraft, original: CorrectionDraft): Correct
   ...(draft.notes !== original.notes ? { notes: draft.notes.trim() || null } : {}),
   ...(draft.direction !== original.direction ? { direction: draft.direction } : {}),
 });
+
 const parseDate = (draft: CorrectionDraft, timeZone: string): Option.Option<DateTime.Zoned> =>
   DateTime.makeZoned(`${draft.date}T00:00:00.000Z`, { timeZone, adjustForTimeZone: true }).pipe(
     Option.filter((date) => DateTime.formatIsoDate(date) === draft.date)
   );
+
 const moneyChanged = (money: Transaction["money"], original: Transaction["money"]): boolean =>
   money.currency !== original.currency || BigDecimal.Order(money.amount, original.amount) !== 0;
+
 const correctionChanges = (
   draft: CorrectionDraft,
   props: CorrectionProps
 ): Option.Option<CorrectionChanges> => {
   const money = parseMoneyInput({ text: draft.amount, currency: draft.currency });
   const occurredAt = parseDate(draft, props.timeZone);
+
   const category = Option.fromNullishOr(
     props.categories.find((item) => item.id === draft.categoryId)
   );
+
   if (Option.isNone(money) || Option.isNone(occurredAt) || Option.isNone(category)) {
     return Option.none();
   }
+
   const original = initialDraft(props.transaction, props.timeZone);
+
   const changes: CorrectionChanges = {
     ...textChanges(draft, original),
     ...(moneyChanged(money.value, props.transaction.money) ? { money: money.value } : {}),
     ...(draft.categoryId !== original.categoryId ? { categoryId: category.value.id } : {}),
     ...(draft.date !== original.date ? { occurredAt: DateTime.toUtc(occurredAt.value) } : {}),
   };
+
   return isCanonicalInput("transactions.updateTransaction", {
     params: { id: props.transaction.id },
     payload: { expectedRevision: props.transaction.revision, changes },
@@ -88,6 +101,7 @@ const correctionChanges = (
     ? Option.some(changes)
     : Option.none();
 };
+
 const DraftInputs = ({
   draft,
   timeZone,
@@ -122,6 +136,7 @@ const DraftInputs = ({
           width="full"
           onChange={(value) => {
             const selected = Schema.decodeUnknownOption(Currency)(value);
+
             if (Option.isSome(selected)) onChange({ ...draft, currency: selected.value });
           }}
         />
@@ -142,6 +157,7 @@ const DraftInputs = ({
     </div>
   </>
 );
+
 const DraftCategory = ({
   draft,
   categories,
@@ -166,6 +182,7 @@ const DraftCategory = ({
     />
   </div>
 );
+
 const DraftDescription = ({
   draft,
   categories,
@@ -207,6 +224,7 @@ const DraftDescription = ({
     </div>
   </>
 );
+
 const DraftNotes = ({
   draft,
   onChange,
@@ -225,6 +243,7 @@ const DraftNotes = ({
     />
   </div>
 );
+
 const CorrectionFeedback = ({ status }: Readonly<{ status: CorrectionStatus }>): JSX.Element => (
   <>
     {status === "invalid" ? (
@@ -234,10 +253,13 @@ const CorrectionFeedback = ({ status }: Readonly<{ status: CorrectionStatus }>):
     ) : null}
   </>
 );
+
 const saveLabel = (status: CorrectionStatus): string => {
   if (status === "refreshing") return "Actualizando…";
+
   return status === "saving" ? "Guardando…" : "Guardar";
 };
+
 const CorrectionActions = ({
   status,
   locked,
@@ -256,6 +278,7 @@ const CorrectionActions = ({
     </Button>
   </div>
 );
+
 export const TransactionCorrection = (input: CorrectionProps): JSX.Element => {
   const [transaction] = useState(() => input.transaction);
   const props = { ...input, transaction };
@@ -264,21 +287,30 @@ export const TransactionCorrection = (input: CorrectionProps): JSX.Element => {
   const [submit] = useState(() => corrections.submit);
   const [submission, setSubmission] = useState<"pristine" | "invalid" | "submitted">("pristine");
   const feedback = corrections.status === "recovering" ? "saving" : corrections.status;
+
   const status: CorrectionStatus =
     !corrections.locked && submission === "invalid" ? "invalid" : feedback;
+
   const locked = corrections.locked;
+
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
+
     if (locked) return;
     const changes = correctionChanges(draft, props);
+
     if (Option.isNone(changes)) {
       setSubmission("invalid");
+
       return;
     }
+
     if (Object.keys(changes.value).length === 0) {
       props.onCancel();
+
       return;
     }
+
     setSubmission("submitted");
     submit({
       kind: "single",
@@ -287,6 +319,7 @@ export const TransactionCorrection = (input: CorrectionProps): JSX.Element => {
       changes: changes.value,
     });
   };
+
   return props.renderForm(
     <form aria-label="Corregir transacción" onSubmit={onSubmit} className="flex flex-col gap-5">
       <fieldset disabled={locked} data-transaction-slot="transaction-correction-fields">

@@ -54,8 +54,11 @@ export const decodeDashboardTransactions = ({
 const selectedColumns = `effective.id, effective.amount, effective.currency,
   effective.direction, effective.counterparty, effective.notes, effective.category_id,
   strftime('%Y-%m-%dT%H:%M:%fZ',effective.occurred_at_ms/1000.0,'unixepoch') AS occurred_at, strftime('%Y-%m-%dT%H:%M:%fZ',effective.created_at_ms/1000.0,'unixepoch') AS created_at, effective.revision`;
+
 const selectedFrom = `FROM transaction_projection_leaf effective`;
+
 const recentOrder = `effective.occurred_at_ms DESC, effective.created_at_ms DESC, effective.id DESC`;
+
 const categoryWindowOrder = `occurred_at_ms DESC, created_at_ms DESC, id DESC`;
 
 const listSearchText = [
@@ -84,7 +87,9 @@ const recentCategoryPage = ({ userId, categories, limit }: ListInput): OwnedStat
     SELECT id FROM transaction_projection_leaf INDEXED BY transaction_projection_leaf_category_recent
     WHERE user_id = ? AND category_id = ? ORDER BY ${categoryWindowOrder} LIMIT ?)`
   );
+
   const bindings = categories.flatMap((category) => [userId, category, limit]);
+
   return {
     sql: `WITH selected AS (${windows.join(" UNION ALL ")})
     SELECT ${selectedColumns} ${selectedFrom}
@@ -99,7 +104,9 @@ const searchPage = ({ userId, categories, search, limit }: ListInput): OwnedStat
     categories.length === 0
       ? ""
       : `AND effective.category_id IN (${categories.map(() => "?").join(",")})`;
+
   const text = Option.getOrThrow(search).toLocaleLowerCase("es-CO");
+
   return {
     sql: `SELECT ${selectedColumns}
     FROM transaction_projection_leaf effective INDEXED BY transaction_projection_leaf_recent
@@ -117,7 +124,9 @@ export const dashboardListStatement = ({
   limit,
 }: ListInput): OwnedStatement => {
   if (Option.isSome(search)) return searchPage({ userId, categories, search, limit });
+
   if (categories.length > 0) return recentCategoryPage({ userId, categories, search, limit });
+
   return {
     sql: `SELECT ${selectedColumns} ${selectedFrom}
     WHERE effective.user_id = ? ORDER BY ${recentOrder} LIMIT ?`,

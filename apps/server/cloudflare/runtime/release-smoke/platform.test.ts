@@ -10,7 +10,9 @@ it("reports only the closed failing stage for unavailable native smoke resources
           stage,
           tryWork: () => Promise.reject(new Error("private provider diagnostics")),
         }).pipe(Effect.result);
+
         expect(Result.isFailure(observed)).toBe(true);
+
         if (Result.isFailure(observed)) expect(observed.failure.stage).toBe(stage);
         expect(
           yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(observed)

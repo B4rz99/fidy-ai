@@ -15,11 +15,15 @@ import { it } from "@effect/vitest";
 import { workerDriftFields } from "./worker-drift";
 
 const versionId = "163ee99f-f0aa-4101-910e-aae30b4c5aca";
+
 const credential = apiTokenCredentials({ apiToken: "test-only" });
+
 const tags = ["alchemy:stack:FidyCloudflare", "alchemy:stage:production", "alchemy:id:Core"];
+
 const client = HttpClient.make((request) => {
   if (request.method !== "GET") return Effect.die("Worker receipt inspection must not write");
   const path = new URL(request.url).pathname;
+
   if (path.endsWith("/versions/deleted-version")) {
     return Effect.succeed(
       HttpClientResponse.fromWeb(
@@ -35,7 +39,9 @@ const client = HttpClient.make((request) => {
       )
     );
   }
+
   let result: unknown;
+
   if (path.endsWith("/subdomain")) {
     result = { enabled: false, previews_enabled: false };
   } else if (path.endsWith("/settings")) {
@@ -45,6 +51,7 @@ const client = HttpClient.make((request) => {
   } else {
     return Effect.die("Unexpected Worker receipt read");
   }
+
   return Effect.succeed(
     HttpClientResponse.fromWeb(
       request,
@@ -52,6 +59,7 @@ const client = HttpClient.make((request) => {
     )
   );
 });
+
 const services = Layer.mergeAll(
   PlatformServices,
   Layer.effect(Scope.Scope, Effect.scope),
@@ -75,6 +83,7 @@ const services = Layer.mergeAll(
     actions: {},
   })
 );
+
 const output: Worker["Attributes"] = {
   accountId: "test-account",
   workerId: "immutable-worker-id",
@@ -101,7 +110,9 @@ it.layer(Layer.provideMerge(LiveWorkerProvider(), services))((it) => {
     () =>
       Effect.gen(function* () {
         const provider = yield* Provider<Worker>(Worker.Type);
+
         if (provider.read === undefined) return yield* Effect.die("Worker read unavailable");
+
         const observed = yield* provider
           .read({
             id: "Core",
@@ -111,14 +122,17 @@ it.layer(Layer.provideMerge(LiveWorkerProvider(), services))((it) => {
             olds: { name: "fidy-core", version: { traffic: 0 } },
           })
           .pipe(Effect.orDie);
+
         expect(workerDriftFields({ expected: output, actual: observed })).toEqual([]);
       })
   );
   it.effect("still reports drift when the saved upload no longer exists", () =>
     Effect.gen(function* () {
       const provider = yield* Provider<Worker>(Worker.Type);
+
       if (provider.read === undefined) return yield* Effect.die("Worker read unavailable");
       const expected = { ...output, versionId: "deleted-version" };
+
       const observed = yield* provider
         .read({
           id: "Core",
@@ -128,14 +142,17 @@ it.layer(Layer.provideMerge(LiveWorkerProvider(), services))((it) => {
           olds: { name: "fidy-core", version: { traffic: 0 } },
         })
         .pipe(Effect.orDie);
+
       expect(workerDriftFields({ expected, actual: observed })).toEqual(["versionId"]);
     })
   );
   it.effect("still reports live configuration changes despite a valid upload receipt", () =>
     Effect.gen(function* () {
       const provider = yield* Provider<Worker>(Worker.Type);
+
       if (provider.read === undefined) return yield* Effect.die("Worker read unavailable");
       const expected = { ...output, logpush: true };
+
       const observed = yield* provider
         .read({
           id: "Core",
@@ -145,6 +162,7 @@ it.layer(Layer.provideMerge(LiveWorkerProvider(), services))((it) => {
           olds: { name: "fidy-core", version: { traffic: 0 } },
         })
         .pipe(Effect.orDie);
+
       expect(workerDriftFields({ expected, actual: observed })).toEqual(["logpush"]);
     })
   );

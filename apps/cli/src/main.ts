@@ -23,12 +23,16 @@ import { runSupportRecovery } from "./support-recovery/operations";
 import { makeRecoveryOperator } from "./support-recovery/runtime";
 
 const args = Bun.argv.slice(2);
+
 const json = args.includes("--json");
+
 const commandArgs = args.filter((argument) => argument !== "--json");
+
 const validateFlags = Effect.fn(function* () {
   if (args.filter((argument) => argument === "--json").length > 1) {
     return yield* new CliFailure({ reason: "InvalidInput" });
   }
+
   if (
     json &&
     commandArgs.filter((argument) => argument !== "--no-browser").length === 1 &&
@@ -37,6 +41,7 @@ const validateFlags = Effect.fn(function* () {
     return yield* new CliFailure({ reason: "InvalidInput" });
   }
 });
+
 const runOperator = Effect.fn(function* () {
   const terminalOutput = {
     interactive: process.stdin.isTTY === true && process.stderr.isTTY === true,
@@ -45,27 +50,38 @@ const runOperator = Effect.fn(function* () {
         process.stderr.write(message);
       }),
   };
+
   if (commandArgs[0] === "sample-review") {
     return yield* runSampleReview(args, yield* makeReviewer(terminalOutput));
   }
+
   const operator = yield* makeRecoveryOperator(yield* HttpClient.HttpClient, terminalOutput);
+
   if (yield* runSupportRecovery(args, operator)) process.exitCode = 1;
 });
+
 const localCredentialStore = Effect.gen(function* () {
   const home = yield* Schema.decodeUnknownEffect(Schema.NonEmptyString)(
     process.platform === "win32" ? Bun.env.USERPROFILE : Bun.env.HOME
   ).pipe(Effect.mapError(() => new CliFailure({ reason: "StorageUnavailable" })));
+
   const path = yield* Path.Path;
+
   if (!path.isAbsolute(home)) return yield* new CliFailure({ reason: "StorageUnavailable" });
+
   return yield* makeCredentialStore(path.join(home, ".fidy", "cli"));
 });
+
 const authenticatedProgram = Effect.gen(function* () {
   yield* validateFlags();
+
   if (commandArgs[0] === "sample-review" || commandArgs[0] === "support-recovery") {
     return yield* runOperator();
   }
+
   const credential = yield* localCredentialStore;
   const httpClient = yield* HttpClient.HttpClient;
+
   if (!["login", "status", "logout"].includes(commandArgs[0] ?? "")) {
     const failed = yield* runOperationCommand(commandArgs, {
       store: credential.store,
@@ -82,9 +98,12 @@ const authenticatedProgram = Effect.gen(function* () {
         }),
       json,
     });
+
     if (failed) process.exitCode = 1;
+
     return;
   }
+
   const pairing = yield* makePairingClient(httpClient);
   const browserSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const terminal = yield* Terminal.Terminal;
@@ -118,6 +137,7 @@ const authenticatedProgram = Effect.gen(function* () {
           )
   );
 }).pipe(Effect.scoped);
+
 const emitOutput = (output: PublicOutput): Effect.Effect<void> =>
   formatOutput(output, json).pipe(
     Effect.flatMap((text) =>
@@ -127,14 +147,17 @@ const emitOutput = (output: PublicOutput): Effect.Effect<void> =>
     ),
     Effect.orDie
   );
+
 const program = Effect.gen(function* () {
   const installation = installationOutput(args);
+
   if (Option.isSome(installation)) {
     process.stdout.write(installation.value);
   } else {
     yield* authenticatedProgram;
   }
 });
+
 const interruptedExitCode = 130;
 
 if (import.meta.main) {
@@ -143,17 +166,22 @@ if (import.meta.main) {
     process.exitCode = 1;
   } else {
     const controller = new AbortController();
+
     const interrupt = (): void => {
       controller.abort();
     };
+
     process.once("SIGINT", interrupt);
     process.once("SIGTERM", interrupt);
+
     const exit = await Effect.runPromiseExit(
       program.pipe(Effect.provide(Layer.mergeAll(BunServices.layer, FetchHttpClient.layer))),
       { signal: controller.signal }
     );
+
     process.removeListener("SIGINT", interrupt);
     process.removeListener("SIGTERM", interrupt);
+
     if (Exit.isFailure(exit)) {
       const { message, interrupted } = formatCommandFailure({ cause: exit.cause, json });
       process.stderr.write(

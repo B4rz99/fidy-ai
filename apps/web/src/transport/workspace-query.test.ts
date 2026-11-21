@@ -28,53 +28,67 @@ const metadataResponse = (label: string): Response =>
     }),
     { headers: { "content-type": "application/json" } }
   );
+
 it.live("shares inline taxonomy with the profile and rereads its owner on explicit recovery", () =>
   Effect.gen(function* () {
     const reads: string[] = [];
     let label = "Mercado";
+
     const http = HttpClient.make((request) => {
       reads.push(new URL(request.url).pathname);
+
       return Effect.succeed(HttpClientResponse.fromWeb(request, metadataResponse(label)));
     });
+
     const client = makeFidyClient({
       apiOrigin: "https://api.test.fidyapp.com",
       httpClient: Layer.succeed(HttpClient.HttpClient, http),
     });
+
     const registry = AtomRegistry.make();
     const profile = workspaceProfileQuery(client);
     const categories = workspaceCategoriesQuery(client);
     const unmount = [registry.mount(profile), registry.mount(categories.view)];
+
     try {
       const first = yield* AtomRegistry.getResult(registry, categories.source);
       expect(first.data[0]?.label).toBe("Mercado");
       expect(reads).toEqual(["/user"]);
       label = "Compras";
       registry.refresh(categories.source);
+
       const second = yield* AtomRegistry.getResult(registry, categories.source, {
         suspendOnWaiting: true,
       });
+
       expect(second.data[0]?.label).toBe("Compras");
       expect(reads).toEqual(["/user", "/user"]);
     } finally {
       for (const dispose of unmount) {
         dispose();
       }
+
       registry.dispose();
     }
   })
 );
+
 it.live("reuses recent display reads but respects explicit refresh and expiry", () => {
   const now = vi.spyOn(Date, "now").mockReturnValue(1000);
   const registry = AtomRegistry.make();
   const cleanup: Array<() => void> = [];
+
   return Effect.gen(function* () {
     let reads = 0;
     const source = Atom.make(Effect.sync(() => ++reads)).pipe(Atom.setIdleTTL("1 minute"));
+
     const mount = (): ReturnType<typeof revalidateWorkspaceQuery<number, never>> => {
       const query = revalidateWorkspaceQuery(source);
       cleanup.push(registry.mount(query));
+
       return query;
     };
+
     expect(yield* AtomRegistry.getResult(registry, mount())).toBe(1);
     now.mockReturnValue(3000);
     const recent = mount();
@@ -92,23 +106,28 @@ it.live("reuses recent display reads but respects explicit refresh and expiry", 
         for (const unmount of cleanup) {
           unmount();
         }
+
         registry.dispose();
         now.mockRestore();
       })
     )
   );
 });
+
 it.live("retains prepared metadata while the first fresh read is pending", () =>
   Effect.gen(function* () {
     const observedAt = yield* Clock.currentTimeMillis;
     const release = yield* Deferred.make<void>();
+
     const initialHttp = HttpClient.make((request) =>
       Effect.succeed(HttpClientResponse.fromWeb(request, metadataResponse("Mercado")))
     );
+
     const initialClient = makeFidyClient({
       apiOrigin: "https://api.test.fidyapp.com",
       httpClient: Layer.succeed(HttpClient.HttpClient, initialHttp),
     });
+
     const initialRegistry = AtomRegistry.make();
     const initialProfile = workspaceProfileQuery(initialClient);
     const detachInitial = initialRegistry.mount(initialProfile);
@@ -116,25 +135,32 @@ it.live("retains prepared metadata while the first fresh read is pending", () =>
     detachInitial();
     initialRegistry.dispose();
     let reads = 0;
+
     const http = HttpClient.make((request) => {
       reads += 1;
+
       return Deferred.await(release).pipe(
         Effect.as(HttpClientResponse.fromWeb(request, metadataResponse("Compras")))
       );
     });
+
     const client = makeFidyClient({
       apiOrigin: "https://api.test.fidyapp.com",
       httpClient: Layer.succeed(HttpClient.HttpClient, http),
     });
+
     const registry = AtomRegistry.make();
+
     const [slot, value] = workspaceMetadataInitialValue({
       client,
       value: prepared,
       timestamp: observedAt,
     });
+
     registry.set(slot, value);
     const profile = workspaceProfileQuery(client);
     const detach = registry.mount(profile);
+
     try {
       expect(yield* AtomRegistry.getResult(registry, profile)).toEqual(prepared);
       expect(reads).toBe(0);
@@ -157,24 +183,31 @@ it.live("retains prepared metadata while the first fresh read is pending", () =>
 it.live("keeps mounted taxonomy atoms stable through collection and an equivalent lookup", () =>
   Effect.gen(function* () {
     let reads = 0;
+
     const http = HttpClient.make((request) => {
       reads += 1;
+
       return Effect.succeed(HttpClientResponse.fromWeb(request, metadataResponse("Mercado")));
     });
+
     const client = makeFidyClient({
       apiOrigin: "https://api.test.fidyapp.com",
       httpClient: Layer.succeed(HttpClient.HttpClient, http),
     });
+
     const registry = AtomRegistry.make();
     const { source, view } = workspaceCategoriesQuery(client);
     const mounts = [registry.mount(view)];
+
     try {
       yield* AtomRegistry.getResult(registry, view);
       expect(reads).toBe(1);
+
       for (let turn = 0; turn < 5; turn += 1) {
         yield* Effect.sleep("20 millis");
         Bun.gc(true);
       }
+
       const now = yield* Clock.currentTimeMillis;
       vi.spyOn(Date, "now").mockReturnValue(now + 6000);
       const equivalent = workspaceCategoriesQuery(client);
@@ -185,6 +218,7 @@ it.live("keeps mounted taxonomy atoms stable through collection and an equivalen
       expect(reads).toBe(1);
     } finally {
       vi.restoreAllMocks();
+
       for (const unmount of mounts) unmount();
       registry.dispose();
     }
@@ -194,9 +228,11 @@ it.live("keeps mounted taxonomy atoms stable through collection and an equivalen
 it.live("strict Category recovery awaits newly decoded canonical taxonomy reads", () =>
   Effect.gen(function* () {
     const reads: string[] = [];
+
     const http = HttpClient.make((request) => {
       const path = new URL(request.url).pathname;
       reads.push(path);
+
       const response =
         path === "/user"
           ? metadataResponse("Mercado")
@@ -204,14 +240,18 @@ it.live("strict Category recovery awaits newly decoded canonical taxonomy reads"
               data: [{ id: "10000000-0000-4000-8000-000000000002", label: "Mercado" }],
               next: [],
             });
+
       return Effect.succeed(HttpClientResponse.fromWeb(request, response));
     });
+
     const client = makeFidyClient({
       apiOrigin: "https://api.test.fidyapp.com",
       httpClient: Layer.succeed(HttpClient.HttpClient, http),
     });
+
     const registry = AtomRegistry.make();
     const categories = workspaceCategoriesQuery(client);
+
     try {
       yield* AtomRegistry.getResult(registry, categories.source);
       expect(reads).toEqual(["/user"]);

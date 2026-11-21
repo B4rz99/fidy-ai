@@ -21,15 +21,19 @@ import { type PATDraft, preservePATDraft } from "./reauthentication-draft";
 import { activePATReactivityKey } from "./presentation";
 
 type PATScopeValue = PATScope;
+
 type PATRefusal =
   | Readonly<{ _tag: "ReviewExpired" | "Input" | "Consent" | "Authority" }>
   | Readonly<{ _tag: "RateLimited"; retryAt: DateTime.Utc }>;
+
 type IssuanceFailure =
   | Readonly<{ _tag: "Uncertain" }>
   | Readonly<{ _tag: "IdentityConfirmation"; userId: string }>
   | Readonly<{ _tag: "Refused"; refusal: PATRefusal }>;
+
 export type ReviewedManualPATGrant = ManualPATGrantInput &
   Readonly<{ reviewExpiresAt: DateTime.Utc }>;
+
 type ManualPATCreationState =
   | Readonly<{
       _tag: "Editing";
@@ -83,6 +87,7 @@ const beginReview = (
     Effect.runSync(DateTime.now),
     Duration.days(state.lifetimeDays)
   );
+
   return Object.freeze({
     _tag: "Reviewing",
     grant: Object.freeze({
@@ -100,6 +105,7 @@ export type PATCreationDisplay =
   | Readonly<{ _tag: "Reviewing" | "Issuing"; grant: ReviewedManualPATGrant }>
   | Extract<ManualPATCreationState, { _tag: "Uncertain" | "Refused" }>
   | Readonly<{ _tag: "IdentityConfirmation"; preservationFailed: boolean }>;
+
 export type PATCreationActions = Readonly<{
   update: (draft: Extract<ManualPATCreationState, { _tag: "Editing" }>) => void;
   review: () => void;
@@ -110,19 +116,23 @@ export type PATCreationActions = Readonly<{
   reset: () => void;
   copy: (onCopied: () => void) => void;
 }>;
+
 type Issuance = Readonly<{
   grant: ManualPATGrantInput;
   requestId: ManualPATRequestIdType;
   deliver: (issued: IssuedPAT) => void;
   fail: (failure: IssuanceFailure) => void;
 }>;
+
 type ManualPATError = Effect.Error<
   ReturnType<Effect.Success<FidyClient>["pats"]["createManualPAT"]>
 >;
+
 type OrdinaryIssuanceError = Exclude<
   ManualPATError,
   { _tag: "ManualPATReauthenticationRequired" | "ManualPATIssuanceRateLimited" | "ResourceLimited" }
 >;
+
 const refusalTags: Readonly<
   Record<OrdinaryIssuanceError["_tag"], Exclude<PATRefusal["_tag"], "RateLimited"> | "Uncertain">
 > = {
@@ -139,10 +149,12 @@ const refusalTags: Readonly<
   SchemaError: "Uncertain",
   Unavailable: "Uncertain",
 };
+
 const classifyIssueError = (error: ManualPATError): IssuanceFailure => {
   if (error._tag === "ManualPATReauthenticationRequired") {
     return { _tag: "IdentityConfirmation", userId: error.error.userId };
   }
+
   if (error._tag === "ManualPATIssuanceRateLimited" || error._tag === "ResourceLimited") {
     return {
       _tag: "Refused",
@@ -155,22 +167,27 @@ const classifyIssueError = (error: ManualPATError): IssuanceFailure => {
       },
     };
   }
+
   const refusal = refusalTags[error._tag];
+
   return refusal === "Uncertain"
     ? { _tag: "Uncertain" }
     : { _tag: "Refused", refusal: { _tag: refusal } };
 };
+
 const issueCommand = (apiClient: FidyClient): Atom.AtomResultFn<Issuance, void, never> =>
   apiClient.runtime.fn<Issuance>()(
     (command) =>
       Effect.gen(function* () {
         const client = yield* apiClient;
+
         const response = yield* Reactivity.mutation(
           client.pats.createManualPAT({
             payload: { requestId: command.requestId, grant: command.grant },
           }),
           [activePATReactivityKey]
         );
+
         yield* Effect.sync(() => command.deliver(response.data));
       }).pipe(Effect.catch((error) => Effect.sync(() => command.fail(classifyIssueError(error))))),
     { concurrent: false }
@@ -199,24 +216,31 @@ type IssuanceOwner = Readonly<{
   forget: () => void;
   clear: () => void;
 }>;
+
 type Issue = (command: Issuance) => Promise<Exit.Exit<void, never>>;
+
 type CreationBinding = Readonly<{ owner: IssuanceOwner; state: ManualPATCreationState }>;
+
 type DisclosureBinding = Readonly<{ owner: IssuanceOwner; generation: number; patId: PATId }>;
+
 const currentDisclosure = ({ owner, generation, patId }: DisclosureBinding): boolean =>
   owner.lifetime.active &&
   owner.lifetime.generation === generation &&
   owner.current.value._tag === "Issued" &&
   owner.current.value.issued.pat.id === patId;
+
 const expireDisclosure =
   (binding: DisclosureBinding): (() => void) =>
   () => {
     if (currentDisclosure(binding)) binding.owner.forget();
   };
+
 const acknowledgeCopy =
   (binding: DisclosureBinding, copied: () => void): (() => void) =>
   () => {
     if (currentDisclosure(binding)) copied();
   };
+
 const confirmPAT = (
   binding: CreationBinding,
   issue: Issue,
@@ -224,15 +248,20 @@ const confirmPAT = (
 ): void => {
   const { owner, state: previous } = binding;
   const { current, lifetime, change } = owner;
+
   if (!lifetime.active || current.value !== previous || previous._tag !== "Reviewing") return;
   const generation = lifetime.generation;
   const { grant, requestId } = previous;
   const issuing = { _tag: "Issuing" as const, grant, requestId };
+
   const live = (): boolean =>
     lifetime.active && lifetime.generation === generation && current.value === issuing;
+
   change(issuing);
+
   const fail = (failure: IssuanceFailure): void => {
     if (!live()) return;
+
     if (failure._tag === "IdentityConfirmation") {
       change({
         _tag: "IdentityConfirmation",
@@ -248,6 +277,7 @@ const confirmPAT = (
       change({ _tag: "Refused", grant, requestId, refusal: failure.refusal });
     } else change({ _tag: "Uncertain", grant, requestId });
   };
+
   issue({
     grant,
     requestId,
@@ -262,21 +292,26 @@ const confirmPAT = (
     () => fail({ _tag: "Uncertain" })
   );
 };
+
 const reviewDraft = ({ owner, state }: CreationBinding): void => {
   if (state._tag !== "Editing") return;
   const draft = { ...state, recipientLabel: state.recipientLabel.trim() };
+
   if (Schema.is(PATRecipientLabel)(draft.recipientLabel) && Schema.is(PATScopes)(draft.scopes)) {
     owner.change(beginReview(draft));
   }
 };
+
 const editingDraft = (draft: PATDraft): Extract<ManualPATCreationState, { _tag: "Editing" }> => ({
   _tag: "Editing",
   recipientLabel: draft.recipientLabel,
   scopes: draft.scopes,
   lifetimeDays: draft.lifetimeDays,
 });
+
 const prepareReview = ({ owner, state }: CreationBinding): void => {
   if (state._tag !== "Uncertain" && state._tag !== "Refused") return;
+
   if (
     state._tag === "Refused" &&
     state.refusal._tag === "RateLimited" &&
@@ -284,8 +319,10 @@ const prepareReview = ({ owner, state }: CreationBinding): void => {
   ) {
     return;
   }
+
   owner.change(editingDraft(state.grant));
 };
+
 const creationActions = (
   binding: CreationBinding,
   issue: Issue,
@@ -294,6 +331,7 @@ const creationActions = (
   const { owner, state } = binding;
   const { current, lifetime, change, clear } = owner;
   const live = (): boolean => lifetime.active && current.value === state;
+
   return {
     update: (draft) => {
       if (live() && state._tag === "Editing") change(draft);
@@ -303,6 +341,7 @@ const creationActions = (
     },
     edit: () => {
       if (!live()) return;
+
       if (state._tag === "Reviewing") {
         change(editingDraft(state.grant));
       } else if (state._tag === "IdentityConfirmation") {
@@ -317,7 +356,9 @@ const creationActions = (
     },
     confirmIdentity: () => {
       if (!live()) return;
+
       if (state._tag !== "IdentityConfirmation") return;
+
       if (preservePATDraft({ userId: state.userId, draft: state.draft })) {
         window.location.assign("/login?resume=pat");
       } else change({ ...state, preservationFailed: true });
@@ -327,6 +368,7 @@ const creationActions = (
     },
     copy: (onCopied) => {
       if (!live()) return;
+
       if (state._tag === "Issued") {
         owner.current.copyRelease = Option.some(
           clipboard.copy(
@@ -341,25 +383,32 @@ const creationActions = (
     },
   };
 };
+
 const makeIssuanceOwner = (
   setState: Dispatch<SetStateAction<ManualPATCreationState>>
 ): IssuanceOwner => {
   const current: IssuanceOwner["current"] = { value: initialState, copyRelease: Option.none() };
   const lifetime = { active: false, generation: 0, initialized: false };
+
   const change = (next: ManualPATCreationState): void => {
     current.value = next;
     setState(next);
   };
+
   const forget = (): void => {
     lifetime.generation += 1;
     const release = current.copyRelease;
     current.copyRelease = Option.none();
     change({ ...initialState });
+
     if (Option.isSome(release)) release.value.release();
   };
+
   const clear = forget;
+
   return { current, lifetime, change, forget, clear };
 };
+
 const mountIssuance =
   (
     { current, lifetime, change, clear }: IssuanceOwner,
@@ -368,21 +417,27 @@ const mountIssuance =
   (node) => {
     if (node === null) return;
     lifetime.active = true;
+
     if (!lifetime.initialized) {
       lifetime.initialized = true;
+
       if (Option.isSome(initialDraft)) {
         change(beginReview({ _tag: "Editing", ...initialDraft.value }));
       }
     }
+
     const hide = clear;
     window.addEventListener("pagehide", hide);
+
     return (): void => {
       lifetime.active = false;
       lifetime.generation += 1;
       window.removeEventListener("pagehide", hide);
+
       if (current.value._tag === "Issued") clear();
     };
   };
+
 export const usePATIssuance = ({
   apiClient,
   clipboard,
@@ -400,10 +455,12 @@ export const usePATIssuance = ({
   const [owner] = useState(() => makeIssuanceOwner(setState));
   const [command] = useState(() => issueCommand(apiClient));
   const issue = useAtomSet(command, { mode: "promiseExit" });
+
   const lifecycleRef = useCallback<RefCallback<HTMLElement>>(
     (node) => mountIssuance(owner, initialDraft)(node),
     [owner, initialDraft]
   );
+
   return {
     state: display(state),
     lifecycleRef,

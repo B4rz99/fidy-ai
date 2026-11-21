@@ -39,11 +39,15 @@ it.effect(
   () =>
     Effect.gen(function* () {
       let calls = 0;
+
       const httpClient = HttpClient.make((request) => {
         calls += 1;
+
         return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
       });
+
       const digest = Context.get(yield* Layer.build(TestCrypto), Digest.Digest);
+
       for (const scenario of [
         { environment: "production", policy: Option.none<DaviplataOtpPolicy>() },
         { environment: "sandbox", policy: Option.none<DaviplataOtpPolicy>() },
@@ -79,6 +83,7 @@ it.effect(
           httpClient,
           digest,
         });
+
         for (const request of [
           { _tag: "WompiDaviplataSandboxToken", outcome: "approved" },
           {
@@ -106,6 +111,7 @@ it.effect(
           );
         }
       }
+
       expect(calls).toBe(0);
     })
 );
@@ -115,11 +121,15 @@ it.effect(
   () =>
     Effect.gen(function* () {
       let calls = 0;
+
       const httpClient = HttpClient.make((request) => {
         calls++;
+
         return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
       });
+
       const digest = Context.get(yield* Layer.build(TestCrypto), Digest.Digest);
+
       const outbound = makeWompiOutboundHttp({
         environment: "production",
         publicKey: "pub_prod_synthetic_only",
@@ -128,6 +138,7 @@ it.effect(
         httpClient,
         digest,
       });
+
       for (const request of [
         { _tag: "WompiSandboxRefund", body: "{}" },
         { _tag: "WompiSandboxCardVoid", transactionId: "provider-charge" },
@@ -143,6 +154,7 @@ it.effect(
           )
         );
       }
+
       expect(calls).toBe(0);
     })
 );
@@ -159,6 +171,7 @@ it.effect(
       const observed: Array<
         Readonly<{ url: string; method: string; authorization: string; body: string }>
       > = [];
+
       const httpClient = HttpClient.make((request) => {
         observed.push({
           url: request.url,
@@ -167,9 +180,12 @@ it.effect(
           body:
             request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "",
         });
+
         return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
       });
+
       const digest = Context.get(yield* Layer.build(TestCrypto), Digest.Digest);
+
       const outbound = makeWompiOutboundHttp({
         environment: "sandbox",
         publicKey: "pub_test_synthetic_only",
@@ -179,9 +195,11 @@ it.effect(
         digest,
         daviplataSandboxPolicy: Option.some(sandboxOtpPolicy),
       });
+
       for (const outcome of ["approved", "declined"] as const) {
         yield* outbound.execute({ _tag: "WompiDaviplataSandboxToken", outcome });
       }
+
       yield* outbound.execute({
         _tag: "WompiDaviplataSandboxOtp",
         step: "send",
@@ -283,18 +301,22 @@ it.effect("keeps the configured Kapso API key redacted while sending it only as 
     let observedUrl = "";
     let observedApiKey = "";
     let observedBody = "";
+
     const outbound = yield* makeTestOutbound(
       HttpClient.make((request) => {
         observedUrl = request.url;
         observedApiKey = new Headers(request.headers).get("x-api-key") ?? "";
+
         if (request.body._tag === "Uint8Array") {
           observedBody = new TextDecoder().decode(request.body.body);
         }
+
         return Effect.succeed(
           HttpClientResponse.fromWeb(request, new Response("response", { status: 202 }))
         );
       })
     );
+
     expectNotInspected(outbound, "private-kapso-key");
 
     const response = yield* outbound.execute(kapsoRequest);
@@ -318,6 +340,7 @@ it.effect("owns the Resend delivery destination, authorization, and idempotency"
       readonly idempotencyKey: Option.Option<string>;
       readonly body: string;
     }> = [];
+
     const outbound = yield* makeTestOutbound(
       HttpClient.make((request) => {
         const headers = new Headers(request.headers);
@@ -328,9 +351,11 @@ it.effect("owns the Resend delivery destination, authorization, and idempotency"
           body:
             request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "",
         });
+
         return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
       })
     );
+
     yield* outbound.execute({
       _tag: "ResendEmailDelivery",
       idempotencyKey: "delivery-1",
@@ -350,10 +375,12 @@ it.effect("owns the Resend delivery destination, authorization, and idempotency"
 it.effect("executes only the closed Cloudflare Access operation", () =>
   Effect.gen(function* () {
     let observedToken = "";
+
     const outbound = makeCloudflareAccessOutboundHttp({
       accessToken: Redacted.make("private-cloudflare-access-token"),
       httpClient: HttpClient.make((request) => {
         observedToken = new Headers(request.headers).get("cf-access-token") ?? "";
+
         return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
       }),
     });
@@ -362,6 +389,7 @@ it.effect("executes only the closed Cloudflare Access operation", () =>
       _tag: "CloudflareAccessSupportRecovery",
       body: "{}",
     });
+
     const rejected = yield* outbound.execute(kapsoRequest).pipe(Effect.flip);
 
     expect(response.status).toBe(200);
@@ -373,9 +401,11 @@ it.effect("executes only the closed Cloudflare Access operation", () =>
 it.effect("rejects a destination outside the service authority before transport", () =>
   Effect.gen(function* () {
     let requests = 0;
+
     const outbound = yield* makeTestOutbound(
       HttpClient.make((request) => {
         requests += 1;
+
         return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("unexpected")));
       })
     );
@@ -386,6 +416,7 @@ it.effect("rejects a destination outside the service authority before transport"
         body: "private-support-body",
       })
       .pipe(Effect.exit);
+
     const unannotatedExit = Exit.isFailure(exit)
       ? Exit.fail(Option.getOrThrow(Cause.findErrorOption(exit.cause)))
       : exit;
@@ -408,6 +439,7 @@ it.effect("rejects a destination outside the service authority before transport"
 it.effect("bounds the streamed Kapso response before exposing bytes and cancels overflow", () =>
   Effect.gen(function* () {
     let cancelled = false;
+
     const outbound = yield* makeTestOutbound(
       HttpClient.make((request) =>
         Effect.succeed(
@@ -430,6 +462,7 @@ it.effect("bounds the streamed Kapso response before exposing bytes and cancels 
     );
 
     const exit = yield* outbound.execute(kapsoRequest).pipe(Effect.exit);
+
     const failure = Option.getOrThrow(
       Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none()
     );
@@ -448,6 +481,7 @@ it.effect("bounds the streamed Kapso response before exposing bytes and cancels 
 it.effect("bounds Wompi response streams at the provider-specific limit before decoding", () =>
   Effect.gen(function* () {
     let cancelled = false;
+
     const outbound = yield* makeTestOutbound(
       HttpClient.make((request) =>
         Effect.succeed(
@@ -486,6 +520,7 @@ it.effect("releases the owned response body when streaming is interrupted", () =
   Effect.gen(function* () {
     const started = yield* Deferred.make<void>();
     const cancelled = yield* Deferred.make<void>();
+
     const outbound = yield* makeTestOutbound(
       HttpClient.make((request) => {
         const response = HttpClientResponse.fromWeb(request, new Response());
@@ -497,12 +532,15 @@ it.effect("releases the owned response body when streaming is interrupted", () =
             )
           ),
         });
+
         return Effect.succeed(response);
       })
     );
+
     const fiber = yield* outbound
       .execute(kapsoRequest)
       .pipe(Effect.forkChild({ startImmediately: true }));
+
     yield* Deferred.await(started);
 
     yield* Fiber.interrupt(fiber);
@@ -519,6 +557,7 @@ it.effect(
     Effect.gen(function* () {
       const started = yield* Deferred.make<void>();
       const cancelled = yield* Deferred.make<void>();
+
       const outbound = yield* makeTestOutbound(
         HttpClient.make(() =>
           Deferred.succeed(started, undefined).pipe(
@@ -527,9 +566,11 @@ it.effect(
           )
         )
       );
+
       const fiber = yield* outbound
         .execute(kapsoRequest)
         .pipe(Effect.forkChild({ startImmediately: true }));
+
       yield* Deferred.await(started);
 
       yield* Fiber.interrupt(fiber);
@@ -552,10 +593,12 @@ it.effect(
           ]) {
             const redirectOptions: Array<Option.Option<string>> = [];
             let networkRequests = 0;
+
             const redirectFetch: typeof globalThis.fetch = Object.assign(
               (_input: string | URL | globalThis.Request, init?: RequestInit) => {
                 networkRequests += 1;
                 redirectOptions.push(Option.fromUndefinedOr(init?.redirect));
+
                 return Promise.resolve(
                   new Response("private redirect body", {
                     status,
@@ -568,9 +611,11 @@ it.effect(
               },
               { preconnect: (): void => undefined }
             );
+
             const fetchLayer = FetchHttpClient.layer.pipe(
               Layer.provide(Layer.succeed(FetchHttpClient.Fetch, redirectFetch))
             );
+
             const context = yield* Layer.build(fetchLayer);
             const outbound = yield* makeTestOutbound(Context.get(context, HttpClient.HttpClient));
 
@@ -591,24 +636,31 @@ it.effect(
 it.effect("does not propagate trace coordinates or provider details to Kapso", () =>
   Effect.gen(function* () {
     const spans: Array<Tracer.NativeSpan> = [];
+
     const tracer = Tracer.make({
       span: (options) => {
         const span = new Tracer.NativeSpan(options);
         spans.push(span);
+
         return span;
       },
     });
+
     let propagatedHeaders = new Headers();
+
     const responseFetch: typeof globalThis.fetch = Object.assign(
       (_input: string | URL | globalThis.Request, init?: RequestInit) => {
         propagatedHeaders = new Headers(init?.headers);
+
         return Promise.resolve(new Response(null, { status: 202 }));
       },
       { preconnect: (): void => undefined }
     );
+
     const fetchLayer = FetchHttpClient.layer.pipe(
       Layer.provide(Layer.succeed(FetchHttpClient.Fetch, responseFetch))
     );
+
     const context = yield* Layer.build(fetchLayer);
     const outbound = yield* makeTestOutbound(Context.get(context, HttpClient.HttpClient));
 
@@ -624,9 +676,11 @@ it.effect("does not propagate trace coordinates or provider details to Kapso", (
       expect.arrayContaining(["b3", "baggage", "traceparent", "tracestate"])
     );
     expect(spans.map((span) => span.name)).toEqual(["safe.parent", "provider.request"]);
+
     const recorded = spans
       .flatMap((span) => [span.name, ...span.attributes.keys(), ...span.attributes.values()])
       .join("|");
+
     expect(recorded).not.toContain("api.kapso.ai");
     expect(recorded).not.toContain("123456789");
     expect(recorded).not.toContain("private-kapso-key");
@@ -653,7 +707,9 @@ const coordinateBearingReason = (
       headers: { "x-private-coordinate": "response-private-sentinel" },
     })
   );
+
   const properties = { request, description: "transport-private-sentinel" };
+
   switch (tag) {
     case "TransportError":
       return new HttpClientError.TransportError(properties);
@@ -696,9 +752,11 @@ it.effect.each(transportFailureTags)(
       const expectedStatus = ["StatusCodeError", "DecodeError", "EmptyBodyError"].includes(tag)
         ? Option.some(503)
         : Option.none<number>();
+
       const failure = Option.getOrThrow(
         Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none()
       );
+
       expect(failure).toEqual(
         new OutboundHttpFailure({
           reason: "transport-failed",
@@ -707,6 +765,7 @@ it.effect.each(transportFailureTags)(
         })
       );
       const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "";
+
       for (const sentinel of [
         "credential-private-sentinel",
         "private-body-sentinel",
@@ -733,15 +792,18 @@ it.effect("projects a hostile response-stream failure without its coordinates", 
             })
           ),
         });
+
         return Effect.succeed(response);
       }),
       "credential-private-sentinel"
     );
 
     const exit = yield* outbound.execute(kapsoRequest).pipe(Effect.exit);
+
     const failure = Option.getOrThrow(
       Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none()
     );
+
     expect(failure).toEqual(
       new OutboundHttpFailure({
         reason: "response-body-failed",
@@ -756,16 +818,21 @@ it.effect("projects a hostile response-stream failure without its coordinates", 
     expect(rendered).not.toContain("credential-private-sentinel");
   })
 );
+
 it.effect(
   "binds real Sandbox DaviPlata OTP requests to the reviewed endpoint and authorization",
   () =>
     Effect.gen(function* () {
       const urls: Array<string> = [];
+
       const httpClient = HttpClient.make((request) => {
         urls.push(request.url);
+
         return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
       });
+
       const digest = Context.get(yield* Layer.build(TestCrypto), Digest.Digest);
+
       const outbound = makeWompiOutboundHttp({
         environment: "sandbox",
         publicKey: "pub_test_synthetic_only",
@@ -778,6 +845,7 @@ it.effect(
           confirmUrl: "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox",
         }),
       });
+
       for (const step of ["send", "confirm"] as const) {
         yield* outbound.execute({
           _tag: "WompiDaviplataSandboxOtp",
@@ -786,6 +854,7 @@ it.effect(
           token: Redacted.make("synthetic-service-bearer"),
         });
       }
+
       expect(urls).toEqual([
         "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox?token=daviplata_test_synthetic&operation=RESEND_OTP",
         "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox?token=daviplata_test_synthetic&operation=VALIDATE_OTP_API",
@@ -796,11 +865,15 @@ it.effect(
 it.effect("refuses malformed DaviPlata authorization IDs before any OTP egress", () =>
   Effect.gen(function* () {
     let calls = 0;
+
     const httpClient = HttpClient.make((request) => {
       calls += 1;
+
       return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
     });
+
     const digest = Context.get(yield* Layer.build(TestCrypto), Digest.Digest);
+
     const outbound = makeWompiOutboundHttp({
       environment: "sandbox",
       publicKey: "pub_test_synthetic_only",
@@ -813,6 +886,7 @@ it.effect("refuses malformed DaviPlata authorization IDs before any OTP egress",
         confirmUrl: "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox",
       }),
     });
+
     for (const authorizationId of [
       "",
       "daviplata_prod_synthetic",
@@ -827,9 +901,11 @@ it.effect("refuses malformed DaviPlata authorization IDs before any OTP egress",
           token: Redacted.make("synthetic-secret"),
         })
       );
+
       expect(Exit.isFailure(outcome)).toBe(true);
       expect(String(outcome)).not.toContain("synthetic-secret");
     }
+
     expect(calls).toBe(0);
   })
 );

@@ -7,6 +7,7 @@ it("identifies equivalent generated contract artifacts with the same digest", ()
     policy: { operations: [{ id: "categories.list", policy: { kind: "query", access: "read" } }] },
     subject: "first",
   });
+
   const reordered = contractArtifactsFrom({
     openapi: { info: { title: "Fidy" }, paths: { "/a": {}, "/b": {} } },
     policy: { operations: [{ policy: { access: "read", kind: "query" }, id: "categories.list" }] },

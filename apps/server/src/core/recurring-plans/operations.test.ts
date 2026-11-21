@@ -65,17 +65,20 @@ it("keeps fourteen-day and twice-monthly dates distinct, including leap month en
 
 it("tracks a partial payment without creating financial history and preserves it after a forward edit", () => {
   const planId = RecurringPlanId.make("20000000-0000-4000-8000-000000000001");
+
   const plan = Schema.decodeSync(Schema.toType(RecurringPlanInput))({
     ...monthly,
     amountMode: "fixed",
     money: { amount: BigDecimal.make(100n, 0), currency: "COP" },
   });
+
   const created = Effect.runSync(
     applyRecurringEdit({
       document: emptyRecurringDocument(),
       command: { expectedRevision: 0, edit: { kind: "create", id: planId, plan } },
     })
   );
+
   const paid = Effect.runSync(
     applyRecurringEdit({
       document: created,
@@ -95,6 +98,7 @@ it("tracks a partial payment without creating financial history and preserves it
       },
     })
   );
+
   const changed = Effect.runSync(
     applyRecurringEdit({
       document: paid,
@@ -110,11 +114,13 @@ it("tracks a partial payment without creating financial history and preserves it
       },
     })
   );
+
   const january = projectRecurringMonth({
     document: changed,
     month: "2026-01",
     now: DateTime.makeUnsafe("2026-02-02T12:00:00Z"),
   });
+
   expect(january[0]?.status).toBe("partial");
   expect(january[0]?.plan.name).toBe("Arriendo");
   expect(january[0]?.remaining).toEqual({ amount: BigDecimal.make(60n, 0), currency: "COP" });
@@ -132,6 +138,7 @@ it.each([
     "half-yearly": "2028-08-31",
     yearly: "2032-02-29",
   };
+
   const through = limits[frequency];
   expect(
     projectDates({
@@ -143,16 +150,19 @@ it.each([
 });
 
 const planId = RecurringPlanId.make("20000000-0000-4000-8000-000000000011");
+
 const command = (document: RecurringDocument, edit: RecurringEdit): RecurringDocument =>
   Effect.runSync(
     applyRecurringEdit({ document, command: { expectedRevision: document.revision, edit } })
   );
+
 const createdPlan = (): RecurringDocument =>
   command(emptyRecurringDocument(), {
     kind: "create",
     id: planId,
     plan: { ...monthly, firstDate: "2026-01-31" },
   });
+
 it("retains unresolved earlier occurrences, excludes a paused interval and resumes on the original anchor", () => {
   const paused = command(createdPlan(), {
     kind: "lifecycle",
@@ -160,12 +170,14 @@ it("retains unresolved earlier occurrences, excludes a paused interval and resum
     date: "2026-02-01",
     action: "pause",
   });
+
   const resumed = command(paused, {
     kind: "lifecycle",
     planId,
     date: "2026-04-01",
     action: "resume",
   });
+
   expect(
     projectRecurringMonth({
       document: resumed,
@@ -188,12 +200,14 @@ it("retains unresolved earlier occurrences, excludes a paused interval and resum
     })[0]?.status
   ).toBe("unconfirmed");
 });
+
 it("keeps card payments out of expenses and unknown amounts out of known remaining Money", () => {
   const income = command(createdPlan(), {
     kind: "create",
     id: RecurringPlanId.make("20000000-0000-4000-8000-000000000012"),
     plan: { ...monthly, kind: "transfer", cardPayment: true },
   });
+
   const summary = summarizeRecurring(
     projectRecurringMonth({
       document: income,
@@ -201,11 +215,13 @@ it("keeps card payments out of expenses and unknown amounts out of known remaini
       now: DateTime.makeUnsafe("2026-01-01T12:00:00Z"),
     })
   );
+
   expect(summary.map((group) => ({ kind: group.kind, unknown: group.unknown }))).toEqual([
     { kind: "expense", unknown: 1 },
     { kind: "transfer", unknown: 1 },
   ]);
 });
+
 it("requires an exact unique fixed amount within three days and never allocates a competing Transaction", () => {
   const fixed = command(emptyRecurringDocument(), {
     kind: "create",
@@ -217,11 +233,13 @@ it("requires an exact unique fixed amount within three days and never allocates 
       money: { amount: "100", currency: "COP" },
     }),
   });
+
   const items = projectRecurringMonth({
     document: fixed,
     month: "2026-01",
     now: DateTime.makeUnsafe("2026-02-01T12:00:00Z"),
   });
+
   const fact = {
     id: "20000000-0000-4000-8000-000000000013",
     money: { amount: BigDecimal.make(100n, 0), currency: "COP" as const },
@@ -230,6 +248,7 @@ it("requires an exact unique fixed amount within three days and never allocates 
     counterparty: " comercio ",
     categoryId: "category",
   };
+
   expect(proposeRecurringMatches({ document: fixed, items, facts: [fact] })).toHaveLength(1);
   expect(
     proposeRecurringMatches({ document: fixed, items, facts: [{ ...fact, date: "2026-02-04" }] })
@@ -249,6 +268,7 @@ it("requires an exact unique fixed amount within three days and never allocates 
 it("keeps same-date exceptions and payments separate for different plans", () => {
   const otherId = RecurringPlanId.make("20000000-0000-4000-8000-000000000012");
   const created = command(createdPlan(), { kind: "create", id: otherId, plan: monthly });
+
   const moved = command(created, {
     kind: "edit",
     planId,
@@ -256,6 +276,7 @@ it("keeps same-date exceptions and payments separate for different plans", () =>
     scope: "once",
     plan: { ...monthly, firstDate: "2026-02-02" },
   });
+
   const paid = command(moved, {
     kind: "fulfill",
     fulfillment: Schema.decodeSync(RecurringFulfillment)({
@@ -267,6 +288,7 @@ it("keeps same-date exceptions and payments separate for different plans", () =>
       money: { amount: "120", currency: "COP" },
     }),
   });
+
   const now = DateTime.makeUnsafe("2026-02-04T12:00:00Z");
   const january = projectRecurringMonth({ document: paid, month: "2026-01", now });
   expect(january.map((item) => [item.planId, item.expectedDate, item.status])).toEqual([
@@ -289,12 +311,15 @@ it("moves only one occurrence, keeps its identity, permits actual values above a
     scope: "once",
     plan: { ...monthly, firstDate: "2026-02-02" },
   });
+
   const february = projectRecurringMonth({
     document: changed,
     month: "2026-02",
     now: DateTime.makeUnsafe("2026-02-01T12:00:00Z"),
   });
+
   expect(february.map((item) => item.expectedDate)).toEqual(["2026-02-02", "2026-02-28"]);
+
   const mark = Schema.decodeSync(RecurringFulfillment)({
     id: "20000000-0000-4000-8000-000000000014",
     planId,
@@ -303,6 +328,7 @@ it("moves only one occurrence, keeps its identity, permits actual values above a
     settled: true,
     money: { amount: "120", currency: "COP" },
   });
+
   const paid = command(changed, { kind: "fulfill", fulfillment: mark });
   expect(
     projectRecurringMonth({
@@ -320,8 +346,10 @@ it("moves only one occurrence, keeps its identity, permits actual values above a
     })[0]?.status
   ).toBe("unconfirmed");
 });
+
 it("refuses fabricated occurrence dates and mixed-currency fulfillment", () => {
   const document = createdPlan();
+
   for (const edit of [
     { kind: "skip", planId, date: "2026-01-30", skipped: true },
     { kind: "edit", planId, date: "2026-01-30", scope: "once", plan: monthly },
@@ -343,6 +371,7 @@ it("refuses fabricated occurrence dates and mixed-currency fulfillment", () => {
     ).toBe("Failure");
   }
 });
+
 it("retains skipped disposition while excluding its Money from summaries", () => {
   const skipped = command(createdPlan(), {
     kind: "skip",
@@ -350,11 +379,13 @@ it("retains skipped disposition while excluding its Money from summaries", () =>
     date: "2026-01-31",
     skipped: true,
   });
+
   const items = projectRecurringMonth({
     document: skipped,
     month: "2026-01",
     now: DateTime.makeUnsafe("2026-02-01T12:00:00Z"),
   });
+
   expect(items[0]?.status).toBe("skipped");
   expect(summarizeRecurring(items)).toEqual([]);
 });
@@ -368,6 +399,7 @@ it.each(["pause", "stop"] as const)(
       date: "2026-01-31",
       skipped: true,
     });
+
     const restored = command(skipped, { kind: "skip", planId, date: "2026-01-31", skipped: false });
     const inactive = command(restored, { kind: "lifecycle", planId, date: "2026-01-15", action });
     expect(
@@ -392,6 +424,7 @@ it.each(["pause", "stop"] as const)(
         id: planId,
         plan: { ...monthly, firstDate: identity },
       });
+
       const edited = command(created, {
         kind: "edit",
         planId,
@@ -399,13 +432,17 @@ it.each(["pause", "stop"] as const)(
         scope: "once",
         plan: { ...monthly, firstDate: expected },
       });
+
       const inactive = command(edited, { kind: "lifecycle", planId, date: "2026-01-15", action });
+
       const items = projectRecurringMonth({
         document: inactive,
         month: "2026-01",
         now: DateTime.makeUnsafe("2026-01-15T12:00:00Z"),
       });
+
       expect(items.map((item) => item.expectedDate)).toEqual(visible ? [expected] : []);
+
       if (visible) expect(items[0]?.status).toBe("unconfirmed");
     }
   }
@@ -421,9 +458,11 @@ it.each(["pause", "stop"] as const)(
       scope: "once",
       plan: { ...monthly, name: "Excepción futura" },
     });
+
     const inactive = command(edited, { kind: "lifecycle", planId, date: "2026-01-15", action });
     const projection = { month: "2026-01", now: DateTime.makeUnsafe("2026-01-15T12:00:00Z") };
     expect(projectRecurringMonth({ document: inactive, ...projection })).toEqual([]);
+
     const paid = command(edited, {
       kind: "fulfill",
       fulfillment: Schema.decodeSync(RecurringFulfillment)({
@@ -435,6 +474,7 @@ it.each(["pause", "stop"] as const)(
         money: { amount: "100", currency: "COP" },
       }),
     });
+
     const paidInactive = command(paid, { kind: "lifecycle", planId, date: "2026-01-15", action });
     const items = projectRecurringMonth({ document: paidInactive, ...projection });
     expect(items).toHaveLength(1);
@@ -447,15 +487,18 @@ it.each(["once", "forward"] as const)(
   "uses the effective occurrence time zone after a %s edit near midnight",
   (scope) => {
     const initial = { ...monthly, firstDate: "2026-10-13" };
+
     const created = command(emptyRecurringDocument(), {
       kind: "create",
       id: planId,
       plan: initial,
     });
+
     const now = DateTime.makeUnsafe("2026-10-14T02:00:00Z");
     expect(projectRecurringMonth({ document: created, month: "2026-10", now })[0]?.status).toBe(
       "upcoming"
     );
+
     const changed = command(created, {
       kind: "edit",
       planId,
@@ -466,6 +509,7 @@ it.each(["once", "forward"] as const)(
         timeZone: Schema.decodeSync(RecurringPlanInput.fields.timeZone)("Pacific/Kiritimati"),
       },
     });
+
     expect(projectRecurringMonth({ document: changed, month: "2026-10", now })[0]?.status).toBe(
       "unconfirmed"
     );
@@ -480,6 +524,7 @@ it("includes both calendar bounds and ends a schedule on its explicit last date"
     ]);
     expect(projectDates({ plan, from: "2026-01-02", through: "2026-12-31" })).toEqual([]);
   }
+
   expect(
     projectDates({
       plan: { ...monthly, frequency: "weekly", firstDate: "2026-01-01" },
@@ -512,6 +557,7 @@ it("reads only existing occurrences for the requested plan and retains a displac
     status: "upcoming",
     fulfillments: [],
   });
+
   const moved = command(document, {
     kind: "edit",
     planId,
@@ -519,6 +565,7 @@ it("reads only existing occurrences for the requested plan and retains a displac
     scope: "once",
     plan: { ...monthly, firstDate: "2026-02-02" },
   });
+
   expect(
     Option.getOrThrow(readRecurringOccurrence({ document: moved, planId, date: "2026-01-31" }))
       .expectedDate
@@ -531,6 +578,7 @@ const fixedPlan = Schema.decodeSync(RecurringPlanInput)({
   counterparty: "Café Central",
   money: { amount: "100", currency: "COP" },
 });
+
 const associatedFact: RecurringMatchFact = {
   id: "20000000-0000-4000-8000-000000000020",
   money: { amount: BigDecimal.make(100n, 0), currency: "COP" },
@@ -539,6 +587,7 @@ const associatedFact: RecurringMatchFact = {
   counterparty: "  CAFE\u0301   CENTRAL  ",
   categoryId: "category",
 };
+
 const associatedMark = Schema.decodeSync(RecurringFulfillment)({
   id: "20000000-0000-4000-8000-000000000021",
   planId,
@@ -553,6 +602,7 @@ it("revalidates every retained financial fact and applies exact matching only to
   expect(
     validRecurringFulfillment({ mark: associatedMark, fact: associatedFact, plan: fixedPlan })
   ).toBe(true);
+
   for (const fact of [
     { ...associatedFact, id: "another" },
     { ...associatedFact, money: { ...associatedFact.money, currency: "USD" as const } },
@@ -562,10 +612,12 @@ it("revalidates every retained financial fact and applies exact matching only to
   ]) {
     expect(validRecurringFulfillment({ mark: associatedMark, fact, plan: fixedPlan })).toBe(false);
   }
+
   const automatic = { ...associatedMark, automatic: true };
   expect(
     validRecurringFulfillment({ mark: automatic, fact: associatedFact, plan: fixedPlan })
   ).toBe(true);
+
   for (const plan of [
     { ...monthly },
     { ...fixedPlan, accountId: "account" },
@@ -578,6 +630,7 @@ it("revalidates every retained financial fact and applies exact matching only to
       true
     );
   }
+
   expect(
     validRecurringFulfillment({
       mark: automatic,
@@ -585,6 +638,7 @@ it("revalidates every retained financial fact and applies exact matching only to
       plan: fixedPlan,
     })
   ).toBe(false);
+
   for (const kind of ["income", "expense", "transfer"] as const) {
     expect(validAssociation({ plan: { ...fixedPlan, kind }, fact: associatedFact })).toBe(
       kind !== "income"
@@ -596,6 +650,7 @@ it("revalidates every retained financial fact and applies exact matching only to
       })
     ).toBe(kind === "income");
   }
+
   expect(validAssociation({ plan: { ...fixedPlan, currency: "USD" }, fact: associatedFact })).toBe(
     false
   );
@@ -611,12 +666,15 @@ it("filters recurring occurrences by every supplied criterion with case-insensit
       accountId: "20000000-0000-4000-8000-000000000023",
     },
   });
+
   const items = projectRecurringMonth({
     document,
     month: "2026-01",
     now: DateTime.makeUnsafe("2026-01-01"),
   });
+
   expect(filterRecurring({ items, filters: {} })).toEqual(items);
+
   const filters: RecurringFilters = {
     search: "ARRIENDO",
     kind: "expense",
@@ -626,7 +684,9 @@ it("filters recurring occurrences by every supplied criterion with case-insensit
     accountId: "20000000-0000-4000-8000-000000000023",
     status: "upcoming",
   };
+
   expect(filterRecurring({ items, filters })).toEqual(items);
+
   for (const mismatch of [
     { search: "absent" },
     { kind: "income" },
@@ -650,6 +710,7 @@ it("sums actual, remaining, estimated and unknown amounts separately for each ki
       settled: false,
     },
   });
+
   for (const [id, plan] of [
     ["20000000-0000-4000-8000-000000000024", { ...fixedPlan, amountMode: "estimated" as const }],
     ["20000000-0000-4000-8000-000000000025", monthly],
@@ -665,9 +726,11 @@ it("sums actual, remaining, estimated and unknown amounts separately for each ki
   ] as const) {
     document = command(document, { kind: "create", id: RecurringPlanId.make(id), plan });
   }
+
   const summary = summarizeRecurring(
     projectRecurringMonth({ document, month: "2026-01", now: DateTime.makeUnsafe("2026-02-01") })
   );
+
   expect(
     summary.map((group) => ({
       kind: group.kind,
@@ -717,6 +780,7 @@ it("rejects stale revisions, duplicate plans and lifecycle transitions without a
   const create: RecurringEdit = { kind: "create", id: planId, plan: monthly };
   rejects(document, create, 0);
   rejects(document, create);
+
   for (const action of ["pause", "resume", "stop"] as const) {
     rejects(document, {
       kind: "lifecycle",
@@ -725,31 +789,39 @@ it("rejects stale revisions, duplicate plans and lifecycle transitions without a
       action,
     });
   }
+
   rejects(document, { kind: "lifecycle", planId, date: "2026-01-31", action: "resume" });
+
   const paused = command(document, {
     kind: "lifecycle",
     planId,
     date: "2026-02-01",
     action: "pause",
   });
+
   rejects(paused, { kind: "lifecycle", planId, date: "2026-02-02", action: "pause" });
   rejects(paused, { kind: "lifecycle", planId, date: "2026-01-31", action: "resume" });
+
   const resumed = command(paused, {
     kind: "lifecycle",
     planId,
     date: "2026-02-01",
     action: "resume",
   });
+
   expect(resumed.plans[0]?.pauses).toEqual([{ from: "2026-02-01", through: "2026-02-01" }]);
+
   const stopped = command(resumed, {
     kind: "lifecycle",
     planId,
     date: "2026-03-01",
     action: "stop",
   });
+
   for (const action of ["pause", "resume", "stop"] as const) {
     rejects(stopped, { kind: "lifecycle", planId, date: "2026-03-01", action });
   }
+
   expect(
     projectRecurringMonth({
       document: stopped,
@@ -762,19 +834,23 @@ it("rejects stale revisions, duplicate plans and lifecycle transitions without a
 it("updates one suggestion disposition without altering other decisions and can restore it", () => {
   const first = "20000000-0000-4000-8000-000000000030";
   const second = "20000000-0000-4000-8000-000000000031";
+
   const created = command(emptyRecurringDocument(), {
     kind: "create",
     id: planId,
     plan: monthly,
     seriesId: first,
   });
+
   expect(created.suggestions).toEqual([{ seriesId: first, disposition: "linked", planId }]);
   const dismissed = command(created, { kind: "suggestion", seriesId: second, action: "dismiss" });
+
   const redismissed = command(dismissed, {
     kind: "suggestion",
     seriesId: first,
     action: "dismiss",
   });
+
   expect(redismissed.suggestions).toEqual([
     { seriesId: second, disposition: "dismissed" },
     { seriesId: first, disposition: "dismissed" },
@@ -782,12 +858,14 @@ it("updates one suggestion disposition without altering other decisions and can 
   const restored = command(redismissed, { kind: "suggestion", seriesId: first, action: "restore" });
   expect(restored.suggestions).toEqual([{ seriesId: second, disposition: "dismissed" }]);
   rejects(restored, { kind: "suggestion", seriesId: first, action: "link" });
+
   const linked = command(restored, {
     kind: "suggestion",
     seriesId: second,
     action: "link",
     planId,
   });
+
   expect(linked.suggestions).toEqual([{ seriesId: second, disposition: "linked", planId }]);
 });
 
@@ -797,6 +875,7 @@ it("replaces only a fulfillment for the same occurrence and reserves each associ
     id: planId,
     plan: fixedPlan,
   });
+
   const paid = command(created, { kind: "fulfill", fulfillment: associatedMark });
   expect(
     projectRecurringMonth({
@@ -818,16 +897,19 @@ it("replaces only a fulfillment for the same occurrence and reserves each associ
   });
   rejects(paid, { kind: "edit", scope: "once", planId, date: "2026-01-31", plan: monthly });
   rejects(paid, { kind: "skip", planId, date: "2026-01-31", skipped: true });
+
   const replacement = {
     ...associatedMark,
     id: "20000000-0000-4000-8000-000000000032",
     money: { amount: BigDecimal.make(120n, 0), currency: "COP" as const },
   };
+
   const replaced = command(paid, {
     kind: "fulfill",
     replaces: associatedMark.id,
     fulfillment: replacement,
   });
+
   expect(replaced.fulfillments).toEqual([replacement]);
   const reversed = command(replaced, { kind: "reverse", fulfillmentId: replacement.id });
   expect(reversed.fulfillments).toEqual([]);
@@ -842,12 +924,15 @@ it("preserves completed future facts across forward edits and only changes the s
     id: planId,
     plan: fixedPlan,
   });
+
   const secondId = RecurringPlanId.make("20000000-0000-4000-8000-000000000040");
   const two = command(created, { kind: "create", id: secondId, plan: monthly });
+
   const paid = command(two, {
     kind: "fulfill",
     fulfillment: { ...associatedMark, date: "2026-02-28" },
   });
+
   const changed = command(paid, {
     kind: "edit",
     scope: "forward",
@@ -855,11 +940,13 @@ it("preserves completed future facts across forward edits and only changes the s
     date: "2026-02-01",
     plan: { ...fixedPlan, name: "Nuevo", firstDate: "2026-02-15" },
   });
+
   const items = projectRecurringMonth({
     document: changed,
     month: "2026-02",
     now: DateTime.makeUnsafe("2026-03-01T12:00:00Z"),
   });
+
   expect(
     items.map((item) => [item.planId, item.expectedDate, item.plan.name, item.status])
   ).toEqual([
@@ -877,17 +964,21 @@ it("never offers excluded, already allocated, ambiguous or partially recorded as
     id: planId,
     plan: fixedPlan,
   });
+
   const items = projectRecurringMonth({
     document,
     month: "2026-01",
     now: DateTime.makeUnsafe("2026-01-01T12:00:00Z"),
   });
+
   expect(proposeRecurringMatches({ document, items, facts: [associatedFact] })).toHaveLength(1);
+
   for (const date of ["2026-01-28", "2026-02-03"]) {
     expect(
       proposeRecurringMatches({ document, items, facts: [{ ...associatedFact, date }] })
     ).toHaveLength(1);
   }
+
   for (const fact of [
     { ...associatedFact, date: "2026-01-27" },
     { ...associatedFact, direction: "inflow" as const },
@@ -895,6 +986,7 @@ it("never offers excluded, already allocated, ambiguous or partially recorded as
   ]) {
     expect(proposeRecurringMatches({ document, items, facts: [fact] })).toEqual([]);
   }
+
   expect(
     proposeRecurringMatches({
       document: { ...document, excludedTransactionIds: [associatedFact.id] },
@@ -909,6 +1001,7 @@ it("never offers excluded, already allocated, ambiguous or partially recorded as
       facts: [associatedFact],
     })
   ).toEqual([]);
+
   for (const status of ["completed", "skipped", "partial"] as const) {
     expect(
       proposeRecurringMatches({
@@ -922,6 +1015,7 @@ it("never offers excluded, already allocated, ambiguous or partially recorded as
       })
     ).toEqual([]);
   }
+
   const secondId = RecurringPlanId.make("20000000-0000-4000-8000-000000000050");
   expect(
     proposeRecurringMatches({
@@ -957,6 +1051,7 @@ it("selects the new plan at the exact forward revision boundary and keeps the pr
     date: "2026-02-28",
     plan: { ...monthly, firstDate: "2026-02-28", name: "Nuevo" },
   });
+
   for (const [month, date, name] of [
     ["2026-01", "2026-01-31", "Arriendo"],
     ["2026-02", "2026-02-28", "Nuevo"],
@@ -967,12 +1062,14 @@ it("selects the new plan at the exact forward revision boundary and keeps the pr
       month,
       now: DateTime.makeUnsafe("2026-04-01T12:00:00Z"),
     });
+
     expect(items.map((item) => [item.date, item.plan.name])).toEqual([[date, name]]);
   }
 });
 
 it("keeps separate pause intervals and applies exact stop and resume dates to occurrences", () => {
   let document = createdPlan();
+
   for (const [date, action] of [
     ["2026-01-31", "pause"],
     ["2026-02-28", "resume"],
@@ -981,10 +1078,12 @@ it("keeps separate pause intervals and applies exact stop and resume dates to oc
   ] as const) {
     document = command(document, { kind: "lifecycle", planId, date, action });
   }
+
   expect(document.plans[0]?.pauses).toEqual([
     { from: "2026-01-31", through: "2026-02-28" },
     { from: "2026-03-31", through: "2026-04-30" },
   ]);
+
   for (const [month, expected] of [
     ["2026-01", []],
     ["2026-02", ["2026-02-28"]],
@@ -999,12 +1098,14 @@ it("keeps separate pause intervals and applies exact stop and resume dates to oc
       }).map((item) => item.date)
     ).toEqual(expected);
   }
+
   const stopped = command(document, {
     kind: "lifecycle",
     planId,
     date: "2026-05-31",
     action: "stop",
   });
+
   expect(
     projectRecurringMonth({
       document: stopped,
@@ -1023,6 +1124,7 @@ it("completes exact fixed payments automatically while estimated and unknown val
     [monthly, 40n, true, "completed", undefined],
   ] as const) {
     const created = command(emptyRecurringDocument(), { kind: "create", id: planId, plan });
+
     const paid = command(created, {
       kind: "fulfill",
       fulfillment: {
@@ -1031,11 +1133,13 @@ it("completes exact fixed payments automatically while estimated and unknown val
         settled,
       },
     });
+
     const items = projectRecurringMonth({
       document: paid,
       month: "2026-01",
       now: DateTime.makeUnsafe("2026-02-01T12:00:00Z"),
     });
+
     expect(items[0]?.status).toBe(status);
     expect(
       items[0]?.remaining === undefined ? undefined : BigDecimal.format(items[0].remaining.amount)
@@ -1048,11 +1152,13 @@ it("completes exact fixed payments automatically while estimated and unknown val
 
 it("does not invent another plan's occurrences from retained exceptions or fulfillments", () => {
   const secondId = RecurringPlanId.make("20000000-0000-4000-8000-000000000060");
+
   const two = command(createdPlan(), {
     kind: "create",
     id: secondId,
     plan: { ...monthly, firstDate: "2026-01-10" },
   });
+
   const moved = command(two, {
     kind: "edit",
     scope: "once",
@@ -1060,6 +1166,7 @@ it("does not invent another plan's occurrences from retained exceptions or fulfi
     date: "2026-01-31",
     plan: { ...monthly, firstDate: "2026-02-02" },
   });
+
   expect(
     Option.isNone(
       readRecurringOccurrence({ document: moved, planId: secondId, date: "2026-01-31" })
@@ -1090,6 +1197,7 @@ it("replaces one exception while retaining other exceptions and keeps displaceme
     date: "2026-01-31",
     plan: { ...monthly, firstDate: "2026-02-02" },
   });
+
   const second = command(first, {
     kind: "edit",
     scope: "once",
@@ -1097,6 +1205,7 @@ it("replaces one exception while retaining other exceptions and keeps displaceme
     date: "2026-02-28",
     plan: { ...monthly, firstDate: "2026-03-02" },
   });
+
   const changed = command(second, {
     kind: "edit",
     scope: "once",
@@ -1104,6 +1213,7 @@ it("replaces one exception while retaining other exceptions and keeps displaceme
     date: "2026-01-31",
     plan: { ...monthly, firstDate: "2026-02-03" },
   });
+
   expect(changed.exceptions).toHaveLength(2);
   const skipped = command(changed, { kind: "skip", planId, date: "2026-01-31", skipped: true });
   const restored = command(skipped, { kind: "skip", planId, date: "2026-01-31", skipped: false });
@@ -1130,11 +1240,13 @@ it("rejects duplicate fulfillment identities across occurrences and association 
     kind: "fulfill",
     fulfillment: { ...associatedMark, id: "20000000-0000-4000-8000-000000000061" },
   });
+
   const second = {
     ...associatedMark,
     id: "20000000-0000-4000-8000-000000000062",
     date: "2026-02-28",
   };
+
   const both = command(paid, { kind: "fulfill", fulfillment: second });
   const reversed = command(both, { kind: "reverse", fulfillmentId: manual.id });
   expect(reversed.fulfillments).toEqual([second]);
@@ -1157,17 +1269,21 @@ it("keeps independent matches for different occurrences of one weekly plan", () 
     id: planId,
     plan: { ...fixedPlan, frequency: "weekly", firstDate: "2026-01-01" },
   });
+
   const items = projectRecurringMonth({
     document,
     month: "2026-01",
     now: DateTime.makeUnsafe("2026-01-01T12:00:00Z"),
   });
+
   const first = { ...associatedFact, date: "2026-01-01" };
+
   const second = {
     ...associatedFact,
     id: "20000000-0000-4000-8000-000000000070",
     date: "2026-01-08",
   };
+
   expect(
     proposeRecurringMatches({ document, items, facts: [first, second] }).map((pair) => [
       pair.item.date,
@@ -1182,21 +1298,25 @@ it("keeps independent matches for different occurrences of one weekly plan", () 
 it("keeps same-day associations for different plans and refuses a retained mark in another Currency", () => {
   const first = command(emptyRecurringDocument(), { kind: "create", id: planId, plan: fixedPlan });
   const secondId = RecurringPlanId.make("20000000-0000-4000-8000-000000000071");
+
   const document = command(first, {
     kind: "create",
     id: secondId,
     plan: { ...fixedPlan, counterparty: "Otro" },
   });
+
   const items = projectRecurringMonth({
     document,
     month: "2026-01",
     now: DateTime.makeUnsafe("2026-01-01T12:00:00Z"),
   });
+
   const other = {
     ...associatedFact,
     id: "20000000-0000-4000-8000-000000000072",
     counterparty: "Otro",
   };
+
   expect(
     proposeRecurringMatches({ document, items, facts: [associatedFact, other] }).map((pair) => [
       pair.item.planId,
@@ -1227,6 +1347,7 @@ it("freezes a completed occurrence when a forward edit starts on that exact occu
     command(emptyRecurringDocument(), { kind: "create", id: planId, plan: fixedPlan }),
     { kind: "fulfill", fulfillment: associatedMark }
   );
+
   const changed = command(paid, {
     kind: "edit",
     planId,
@@ -1234,6 +1355,7 @@ it("freezes a completed occurrence when a forward edit starts on that exact occu
     date: "2026-01-31",
     plan: { ...fixedPlan, name: "Nuevo" },
   });
+
   expect(
     Option.getOrThrow(readRecurringOccurrence({ document: changed, planId, date: "2026-01-31" }))
       .plan.name
@@ -1246,6 +1368,7 @@ it("freezes a completed occurrence when a forward edit starts on that exact occu
 
 it("reads retained paid dates after their generated schedule is replaced", () => {
   const paid = command(createdPlan(), { kind: "fulfill", fulfillment: associatedMark });
+
   const changed = command(paid, {
     kind: "edit",
     planId,
@@ -1253,9 +1376,11 @@ it("reads retained paid dates after their generated schedule is replaced", () =>
     date: "2026-01-01",
     plan: { ...monthly, firstDate: "2026-01-15" },
   });
+
   const retained = Option.getOrThrow(
     readRecurringOccurrence({ document: changed, planId, date: "2026-01-31" })
   );
+
   expect(retained.fulfillments).toEqual([associatedMark]);
   expect(retained.expectedDate).toBe("2026-01-31");
   expect(retained.status).toBe("completed");
@@ -1282,14 +1407,17 @@ it.each([false, true])(
       id: planId,
       plan: fixedPlan,
     });
+
     const item = projectRecurringMonth({
       document,
       month: "2026-01",
       now: DateTime.makeUnsafe("2026-01-01T12:00:00Z"),
     })[0];
+
     assert(item !== undefined);
     const count = 1000;
     let identityReads = 0;
+
     const pairs = Array.from({ length: count }, (_, index) => ({
       item: {
         ...item,
@@ -1302,12 +1430,14 @@ it.each([false, true])(
         ...associatedFact,
         get id(): string {
           identityReads += 1;
+
           return ambiguous
             ? associatedFact.id
             : `81000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
         },
       },
     }));
+
     const selected = uniqueRecurringMatches(pairs);
     expect(selected).toEqual(ambiguous ? [] : pairs);
     expect(identityReads).toBeLessThanOrEqual(count * 32);

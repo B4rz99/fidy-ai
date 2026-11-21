@@ -5,6 +5,7 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { makePairingClient } from "./runtime";
 
 const secretCharacters = 43;
+
 const pairing = Schema.decodeSync(Schema.toCodecJson(StartedPATPairing))({
   pairingId: "01900000-0000-4000-8000-000000000002",
   privateDeviceCode: "p".repeat(secretCharacters),
@@ -12,6 +13,7 @@ const pairing = Schema.decodeSync(Schema.toCodecJson(StartedPATPairing))({
   expiresAt: "2026-10-03T00:10:00.000Z",
   pollingIntervalSeconds: 5,
 });
+
 const clientFor = (body: string, status: number): HttpClient.HttpClient =>
   HttpClient.make((request) =>
     Effect.succeed(
@@ -21,11 +23,13 @@ const clientFor = (body: string, status: number): HttpClient.HttpClient =>
       )
     )
   );
+
 const request = {
   recipientLabel: PATRecipientLabel.make("Mi agente"),
   scopes: ["read"],
   lifetimeDays: 7,
 } as const;
+
 const unavailableBody =
   '{"error":{"code":"rate_limited","message":"PAT pairing is temporarily unavailable. Try again later."}}';
 
@@ -41,9 +45,11 @@ it.effect(
       expect(yield* Effect.result(dependency.start(request))).toMatchObject({
         failure: { reason: "DependencyUnavailable" },
       });
+
       const slowdown = yield* makePairingClient(
         clientFor('{"error":{"code":"rate_limited","retryAfterSeconds":10}}', 429)
       );
+
       expect(yield* Effect.result(slowdown.claim(pairing))).toMatchObject({
         failure: { _tag: "PollingDelayed", retryAfterSeconds: 10 },
       });
@@ -60,12 +66,15 @@ it.effect(
           400
         )
       );
+
       expect(yield* Effect.result(invalid.claim(pairing))).toMatchObject({
         failure: { reason: "PairingInvalid" },
       });
+
       const malformed = yield* makePairingClient(
         clientFor('{"bearer":"sensitive-unvalidated-value"}', 200)
       );
+
       const result = yield* Effect.result(malformed.claim(pairing));
       expect(result).toMatchObject({ failure: { reason: "ClaimAmbiguous" } });
       const diagnostic = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result);

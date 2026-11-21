@@ -6,6 +6,7 @@ const money = (
   amount: string,
   currency = "COP"
 ): Readonly<{ amount: string; currency: string }> => ({ amount, currency });
+
 const comparison = ({
   current,
   previous,
@@ -29,6 +30,7 @@ const comparison = ({
   change,
   absoluteDelta: money(delta, currency),
 });
+
 const zero = comparison({
   current: "0",
   previous: "0",
@@ -36,6 +38,7 @@ const zero = comparison({
   delta: "0",
   currency: "COP",
 });
+
 const category = (
   id: number,
   amount: string,
@@ -44,6 +47,7 @@ const category = (
   categoryId: `10000000-0000-4000-8000-${String(id).padStart(12, "0")}`,
   outflow: money(amount, currency),
 });
+
 const group = {
   currency: "COP",
   inflow: zero,
@@ -65,11 +69,13 @@ it("requires exact same-Currency deltas and the matching direction of weekly cha
   ] as const) {
     const value = comparison({ current, previous, change, delta, currency: "COP" });
     expect(Result.isSuccess(Schema.decodeUnknownResult(WeeklyComparison)(value))).toBe(true);
+
     for (const other of ["Increased", "Decreased", "Unchanged"].filter((name) => name !== change)) {
       expect(
         Result.isSuccess(Schema.decodeUnknownResult(WeeklyComparison)({ ...value, change: other }))
       ).toBe(false);
     }
+
     expect(
       Result.isSuccess(
         Schema.decodeUnknownResult(WeeklyComparison)({ ...value, absoluteDelta: money("1") })
@@ -101,6 +107,7 @@ it("requires unique positive same-Currency leaders ordered by Money and then sta
       })
     )
   ).toBe(true);
+
   for (const topOutflowCategories of [
     [],
     [category(1, "0")],
@@ -118,6 +125,7 @@ it("requires unique positive same-Currency leaders ordered by Money and then sta
       )
     ).toBe(false);
   }
+
   expect(
     Result.isSuccess(
       Schema.decodeUnknownResult(WeeklyCurrencyGroup)({
@@ -172,7 +180,9 @@ it("requires sorted unique Currency groups and actual current activity in a capt
     financialRevision: 0,
     groups: [group],
   };
+
   expect(Result.isSuccess(Schema.decodeUnknownResult(WeeklySummaryPayload)(value))).toBe(true);
+
   const usd = {
     currency: "USD",
     inflow: comparison({
@@ -191,11 +201,13 @@ it("requires sorted unique Currency groups and actual current activity in a capt
     }),
     topOutflowCategories: [],
   };
+
   expect(
     Result.isSuccess(
       Schema.decodeUnknownResult(WeeklySummaryPayload)({ ...value, groups: [group, usd] })
     )
   ).toBe(true);
+
   for (const groups of [
     [],
     [group, group],
@@ -218,6 +230,7 @@ it("requires sorted unique Currency groups and actual current activity in a capt
       Result.isSuccess(Schema.decodeUnknownResult(WeeklySummaryPayload)({ ...value, groups }))
     ).toBe(false);
   }
+
   expect(
     Result.isSuccess(
       Schema.decodeUnknownResult(WeeklySummaryPayload)({ ...value, financialRevision: -1 })
@@ -235,6 +248,7 @@ it("requires descending totals even when the smaller leader has an earlier ident
     )
   ).toBe(true);
 });
+
 it("rejects an otherwise internally consistent outflow comparison in a different Currency", () => {
   const value = {
     ...group,
@@ -247,5 +261,6 @@ it("rejects an otherwise internally consistent outflow comparison in a different
     }),
     topOutflowCategories: [category(1, "100", "USD")],
   };
+
   expect(Result.isFailure(Schema.decodeUnknownResult(WeeklyCurrencyGroup)(value))).toBe(true);
 });

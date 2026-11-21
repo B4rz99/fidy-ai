@@ -15,8 +15,10 @@ import { type ReviewTaskState, initialReviewSelection, makeReviewTask } from "./
 export const OAuthManagementFeature = (): JSX.Element => {
   const search = useSearch({ strict: false });
   const after = Option.fromUndefinedOr(search.after);
+
   return <ManagementPage key={Option.getOrElse(after, () => "first")} after={after} />;
 };
+
 const ReviewUnavailable = ({ requestId }: Readonly<{ requestId: string }>): JSX.Element => (
   <OAuthState title="Solicitud no disponible" kind="warning">
     <p>
@@ -28,6 +30,7 @@ const ReviewUnavailable = ({ requestId }: Readonly<{ requestId: string }>): JSX.
     </Button>
   </OAuthState>
 );
+
 const useReviewedRequest = (
   client: WebAuthClient,
   requestId: string
@@ -35,27 +38,36 @@ const useReviewedRequest = (
   const [query] = useState(() =>
     client.query("oauthReview", "review", { query: { requestId }, timeToLive: "0 seconds" })
   );
+
   const result = useAtomValue(query);
+
   return presentCanonicalQuery(result);
 };
+
 const CancelledRequest = (): JSX.Element => (
   <OAuthState title="Solicitud cancelada" kind="information">
     <p>No se autorizó ningún acceso.</p>
   </OAuthState>
 );
+
 const LoadingRequest = (): JSX.Element => (
   <OAuthWorkspace title="Conectar con Fidy">
     <PendingRead label="Cargando solicitud" />
   </OAuthWorkspace>
 );
+
 const ReviewContent = ({ requestId }: Readonly<{ requestId: string }>): JSX.Element => {
   const router = useRouter();
   const result = useReviewedRequest(router.options.context.webAuthClient, requestId);
+
   if (result._tag === "Initial") return <LoadingRequest />;
+
   if (result._tag === "Failure" || Option.isSome(result.refreshFailure)) {
     return <ReviewUnavailable requestId={requestId} />;
   }
+
   if (result.waiting) return <LoadingRequest />;
+
   return (
     <MountedReviewTask
       key={result.value.requestId}
@@ -64,12 +76,14 @@ const ReviewContent = ({ requestId }: Readonly<{ requestId: string }>): JSX.Elem
     />
   );
 };
+
 const MountedReviewTask = ({
   review,
   client,
 }: Readonly<{ review: OAuthReview; client: WebAuthClient }>): JSX.Element => {
   const [initial] = useState(() => initialReviewSelection(review));
   const [state, setState] = useState<ReviewTaskState>(initial);
+
   const [task] = useState(() =>
     makeReviewTask({
       client,
@@ -78,21 +92,27 @@ const MountedReviewTask = ({
       navigate: (callback): void => window.location.assign(callback),
     })
   );
+
   const dispatch = useAtomSet(task.atom);
+
   const lifecycleRef = useCallback<RefCallback<HTMLDivElement>>(
     (node) => {
       if (node === null) return;
+
       return task.mount();
     },
     [task]
   );
+
   const actions = task.actions(state, dispatch);
+
   return (
     <div ref={lifecycleRef}>
       <ReviewTaskContent state={state} actions={actions} />
     </div>
   );
 };
+
 const CancellationRecovery = ({
   state,
   readAgain,
@@ -126,6 +146,7 @@ const ReviewTaskContent = ({
   actions: ReturnType<ReturnType<typeof makeReviewTask>["actions"]>;
 }>): JSX.Element => {
   if (state._tag === "Cancelled") return <CancelledRequest />;
+
   if (state._tag === "Disposed") {
     return (
       <OAuthState title="Solicitud no disponible" kind="warning">
@@ -133,6 +154,7 @@ const ReviewTaskContent = ({
       </OAuthState>
     );
   }
+
   if (state._tag === "Uncertain") {
     return (
       <OAuthState title="Conexión sin confirmar" kind="warning">
@@ -143,6 +165,7 @@ const ReviewTaskContent = ({
       </OAuthState>
     );
   }
+
   if (state._tag === "Redirecting") {
     return (
       <OAuthState title="Volviendo a tu agente" kind="information">
@@ -150,6 +173,7 @@ const ReviewTaskContent = ({
       </OAuthState>
     );
   }
+
   if (
     state._tag === "CancellationUnconfirmed" ||
     state._tag === "Loading" ||
@@ -157,6 +181,7 @@ const ReviewTaskContent = ({
   ) {
     return <CancellationRecovery state={state} readAgain={actions.readAgain} />;
   }
+
   return (
     <OAuthWorkspace title="Conectar con Fidy">
       <OAuthReviewView
@@ -170,9 +195,11 @@ const ReviewTaskContent = ({
     </OAuthWorkspace>
   );
 };
+
 export const OAuthReviewFeature = (): JSX.Element => {
   const params = useParams({ strict: false });
   const requestId = Schema.decodeUnknownOption(OAuthRequestId)(params.requestId);
+
   return Option.isSome(requestId) ? (
     <ReviewContent key={requestId.value} requestId={requestId.value} />
   ) : (

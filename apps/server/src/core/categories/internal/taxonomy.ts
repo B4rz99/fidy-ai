@@ -29,6 +29,7 @@ const understands = (
   revision: CategoryTaxonomyRevision
 ): boolean => {
   const definition = reader.revisions.find((item) => item.id === revision.id);
+
   return (
     definition !== undefined &&
     definition.categories.length === revision.categories.length &&

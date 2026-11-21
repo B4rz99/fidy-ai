@@ -51,6 +51,7 @@ const conformanceStub = (
       times.conversationalText,
       () => "Tienes Pro, pero no hay una suscripción de pago que cancelar."
     );
+
     const recurring = times.recurring;
     const recurringRead = times.recurringRead;
     const occurredAt = times.occurredAt;
@@ -60,9 +61,11 @@ const conformanceStub = (
     let recurringRound = 0;
     let recurringReadRound = 0;
     let conversationalRound = 0;
+
     const recurringReadResult = (): Omit<HostedTextResult, "continuation"> => {
       recurringReadRound++;
       const maximumReads = recurringRead === "derived" || recurringRead === "past" ? 1 : 2;
+
       if (recurringReadRound > maximumReads) {
         const replies = {
           observe:
@@ -84,8 +87,10 @@ const conformanceStub = (
           contradictory:
             "El plan «Plan de prueba» no está activo; próxima fecha 2026-09-18; después aparece 2026-10-18",
         };
+
         return result(replies[recurringRead]);
       }
+
       return result("", [
         {
           id: `recurring-read-${recurringReadRound}`,
@@ -98,6 +103,7 @@ const conformanceStub = (
         },
       ]);
     };
+
     const toolArguments = (operation: CanonicalOperationId): Schema.Json => {
       switch (operation) {
         case "transactions.createTransaction":
@@ -134,15 +140,18 @@ const conformanceStub = (
           return { query: {} };
       }
     };
+
     const recurringResult = (): Effect.Effect<Omit<HostedTextResult, "continuation">> => {
       if (recurring === "ask" || (recurring === "ask-after-read" && recurringRound > 0)) {
         return Effect.succeed(result("Necesito expectedRevision."));
       }
+
       const operation = CanonicalOperationId.make(
         recurring === "invent" || recurringRound++ > 0
           ? "recurringPlans.applyRecurringEdit"
           : "recurringPlans.getRecurringWorkspace"
       );
+
       return Effect.succeed(
         result("", [
           {
@@ -156,6 +165,7 @@ const conformanceStub = (
         ])
       );
     };
+
     return makeHostedInferenceStub({
       countText: () => Effect.succeed(1),
       countTranscript: () => Effect.succeed(1),
@@ -178,6 +188,7 @@ const conformanceStub = (
               : result(conversationalText)
           );
         }
+
         if (
           policy.availableOperations.includes(
             CanonicalOperationId.make("recurring.listRecurringSeries")
@@ -185,6 +196,7 @@ const conformanceStub = (
         ) {
           return Effect.sync(recurringReadResult);
         }
+
         if (policy.toolChoice === "auto") {
           if (
             policy.availableOperations.includes(
@@ -193,6 +205,7 @@ const conformanceStub = (
           ) {
             return recurringResult();
           }
+
           return Effect.sync(() =>
             result("", [
               {
@@ -208,6 +221,7 @@ const conformanceStub = (
             ])
           );
         }
+
         return Ref.getAndUpdate(textRound, (round) => round + 1).pipe(
           Effect.map((round) => result(round === 0 ? firstText : "Trabajo con pesos colombianos."))
         );
@@ -242,6 +256,7 @@ it.effect("accepts the correct future date derived from the complete canonical p
       recurring: "observe",
       recurringRead: "derived",
     });
+
     yield* verifyHostedInferenceConformanceChecks(inference);
   })
 );
@@ -277,6 +292,7 @@ it.effect("rejects local wall time when the canonical mutation needs the UTC ins
       recurring: "observe",
       recurringRead: "observe",
     });
+
     assert.deepStrictEqual(
       yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
       Exit.fail({ check: "canonical_mutation_time", category: "InvalidOutput" })
@@ -306,6 +322,7 @@ it.effect("rejects UTC midnight and an invented daylight-saving offset for a dat
         recurring: "observe",
         recurringRead: "observe",
       });
+
       assert.deepStrictEqual(
         yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
         Exit.fail({ check: "canonical_date_only", category: "InvalidOutput" })
@@ -325,6 +342,7 @@ it.effect("rejects timestamps and a different calendar day for recurring lifecyc
         recurring: "observe",
         recurringRead: "observe",
       });
+
       assert.deepStrictEqual(
         yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
         Exit.fail({ check: "canonical_recurring_lifecycle", category: "InvalidOutput" })
@@ -344,6 +362,7 @@ it.effect("requires a workspace read followed by an edit using the observed revi
         recurring,
         recurringRead: "observe",
       });
+
       assert.deepStrictEqual(
         yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
         Exit.fail({ check: "canonical_recurring_lifecycle", category: "InvalidOutput" })
@@ -374,6 +393,7 @@ it.effect(
           recurring: "observe",
           recurringRead,
         });
+
         assert.deepStrictEqual(
           yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
           Exit.fail({ check: "canonical_recurring_read", category: "InvalidOutput" })
@@ -399,6 +419,7 @@ it.effect.each([
       recurringRead: "observe",
       conversationalText: Option.some(text),
     });
+
     expect(yield* verifyHostedInferenceConformanceChecks(inference).pipe(Effect.flip)).toEqual({
       check: "conversational_es_co",
       category: "InvalidOutput",

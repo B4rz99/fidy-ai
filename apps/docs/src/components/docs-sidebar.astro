@@ -4,15 +4,21 @@ import { guideGroups } from "../lib/navigation";
 import Icon from "./docs-icon.astro";
 
 const { id, entry } = Astro.locals.starlightRoute;
+
 const referencePage = id.startsWith("reference/");
+
 const domain = entry.data.title.split(".")[0];
+
 const operations = (await getCollection("docs")).filter(
   (page) => page.id.startsWith("reference/") && !page.data.draft
 );
+
 const domains = [...new Set(operations.map((page) => page.data.title.split(".")[0] ?? ""))].sort(
   (left, right) => {
     if (left === domain) return -1;
+
     if (right === domain) return 1;
+
     return left.localeCompare(right);
   }
 );

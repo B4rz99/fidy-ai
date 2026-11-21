@@ -27,11 +27,13 @@ it.effect(
     Effect.gen(function* () {
       const outcomes: DeclaredOutcome[] = [];
       const descriptors: SpanDescriptor[] = [];
+
       const telemetry = makeTelemetryService({
         ...DisabledTelemetryResource.adapter,
         startSpan: (descriptor) =>
           Effect.sync(() => {
             descriptors.push(descriptor);
+
             return Option.some({
               traceId: TelemetryTraceId.make("1".repeat(32)),
               spanId: TelemetrySpanId.make("2".repeat(16)),
@@ -44,6 +46,7 @@ it.effect(
             outcomes.push(outcome);
           }),
       });
+
       for (const [status, outcome] of [
         [200, "succeeded"],
         [403, "rejected"],
@@ -59,6 +62,7 @@ it.effect(
         expect(response.bodyUsed).toBe(false);
         expect(outcomes.at(-1)?.outcome).toBe(outcome);
       }
+
       expect(descriptors).toHaveLength(3);
       expect(outcomes).toHaveLength(3);
       expect(descriptors).toEqual(
@@ -79,6 +83,7 @@ it.effect("nests model work beneath a hosted Turn and preserves provider failure
     const parents: string[] = [];
     let nextSpan = 1;
     const failure = { _tag: "ProviderUnavailable" };
+
     const telemetry = makeTelemetryService({
       ...DisabledTelemetryResource.adapter,
       startSpan: (_descriptor, parent) =>
@@ -86,6 +91,7 @@ it.effect("nests model work beneath a hosted Turn and preserves provider failure
           parents.push(
             Option.match(parent, { onNone: () => "root", onSome: (value) => value.parentSpanId })
           );
+
           return Option.some({
             traceId: TelemetryTraceId.make("1".repeat(32)),
             spanId: TelemetrySpanId.make(String(nextSpan++).padStart(16, "0")),
@@ -94,6 +100,7 @@ it.effect("nests model work beneath a hosted Turn and preserves provider failure
           });
         }),
     });
+
     const exit = yield* observeHostedResponse(
       observeApplicationOperation(Effect.fail(failure), {
         component: "agent",
@@ -105,6 +112,7 @@ it.effect("nests model work beneath a hosted Turn and preserves provider failure
       }),
       { trigger: "api", parent: Option.none(), release: "unknown" }
     ).pipe(Effect.provideService(Telemetry, telemetry), Effect.exit);
+
     expect(exit).toEqual(Exit.fail(failure));
     expect(parents).toEqual(["root", "0000000000000001"]);
   })
@@ -127,6 +135,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const outcomes: DeclaredOutcome[] = [];
+
       const telemetry = makeTelemetryService({
         ...DisabledTelemetryResource.adapter,
         startSpan: () =>
@@ -141,6 +150,7 @@ it.effect(
             outcomes.push(outcome);
           }),
       });
+
       const failures = [
         new HostedInferenceError({
           reason: { _tag: "ProviderQuotaExceeded" },
@@ -173,6 +183,7 @@ it.effect(
           retryAfter: Option.none(),
         }),
       ];
+
       for (const failure of failures) {
         assert.deepStrictEqual(
           yield* observeApplicationOperation(Effect.fail(failure), {
@@ -186,6 +197,7 @@ it.effect(
           Exit.fail(failure)
         );
       }
+
       expect(outcomes).toEqual([
         {
           outcome: "failed",

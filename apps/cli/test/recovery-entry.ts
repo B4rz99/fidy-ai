@@ -18,19 +18,24 @@ const Premise = Schema.fromJsonString(
     ]),
   })
 );
+
 await Effect.runPromise(
   Effect.gen(function* () {
     const premise = yield* Schema.decodeEffect(Premise)(yield* readOperationInput("-"));
     const original = yield* FetchHttpClient.Fetch;
+
     const loopback = Object.assign(
       (input: Parameters<typeof original>[0], init?: RequestInit): Promise<Response> => {
         const source = input instanceof Request ? input.url : input.toString();
+
         if (source !== `${apiOrigin}/internal/support-recovery`) {
           return Promise.reject(new RecoveryFailure({ reason: "InvalidInput" }));
         }
+
         const headers = new Headers(init?.headers);
         headers.set("cf-access-jwt-assertion", headers.get("cf-access-token") ?? "");
         headers.delete("cf-access-token");
+
         return original(premise.endpoint, {
           ...init,
           headers,
@@ -39,7 +44,9 @@ await Effect.runPromise(
       },
       { preconnect: original.preconnect }
     );
+
     const http = yield* HttpClient.HttpClient;
+
     const failed = yield* runSupportRecovery(["support-recovery"], {
       interactive: true,
       authenticate: Effect.succeed(Redacted.make(premise.assertion)),
@@ -51,6 +58,7 @@ await Effect.runPromise(
           process.stdout.write(text);
         }),
     }).pipe(Effect.provideService(FetchHttpClient.Fetch, loopback));
+
     process.exitCode = failed ? 1 : 0;
   }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer))
 );

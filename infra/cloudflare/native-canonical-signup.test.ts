@@ -46,6 +46,7 @@ it("matches a single new physical signup Store without publishing prior identiti
       ["empty", false],
     ])
   );
+
   expect(prior.count).toBe(1);
   expect(prior.sha256).toMatch(/^[a-f0-9]{64}$/u);
   expect(
@@ -90,12 +91,14 @@ it("matches a single new physical signup Store without publishing prior identiti
 it("retains unmodified launch controls when staging ordinary admission", () => {
   const plain = (text: string): { type: string; text: string } => ({ type: "plain_text", text });
   const before = { PROACTIVITY_ENABLED: plain("disabled") };
+
   const after = {
     ...before,
     NATIVE_STORAGE_ADMISSION: plain("open"),
     RECOVERY_ISOLATION: plain(""),
     BROWSER_ORIGIN: plain("https://app.fidyapp.com"),
   };
+
   requireCanonicalSignupBindings({ before, after, role: "Ingress" });
   expect(() =>
     requireCanonicalSignupBindings({
@@ -108,6 +111,7 @@ it("retains unmodified launch controls when staging ordinary admission", () => {
 
 it("requires the ordinary WhatsApp sandbox binding to be a valid ID or empty", () => {
   const plain = (text: string): { type: string; text: string } => ({ type: "plain_text", text });
+
   const secrets = Object.fromEntries(
     [
       "GOOGLE_CLIENT_SECRET",
@@ -121,7 +125,9 @@ it("requires the ordinary WhatsApp sandbox binding to be a valid ID or empty", (
       "WOMPI_PRIVATE_KEY",
     ].map((name) => [name, { type: "secret_text" }])
   );
+
   const before = { ...secrets, WHATSAPP_SANDBOX_PHONE_NUMBER_ID: plain("123456789012345") };
+
   const after = {
     ...secrets,
     NATIVE_STORAGE_ADMISSION: plain("open"),
@@ -133,6 +139,7 @@ it("requires the ordinary WhatsApp sandbox binding to be a valid ID or empty", (
     MICROSOFT_REDIRECT_URI: plain("https://api.fidyapp.com/providers/microsoft/callback"),
     WHATSAPP_SANDBOX_PHONE_NUMBER_ID: plain(""),
   };
+
   requireCanonicalSignupBindings({ before, after, role: "Core" });
   expect(() =>
     requireCanonicalSignupBindings({

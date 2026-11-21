@@ -10,12 +10,15 @@ export const publicOAuthRequest: typeof nativePublicOAuth = (input) => nativePub
 
 export const handleOAuthRouteCommand: typeof oauthCredentialCommand = (request) =>
   oauthCredentialCommand(request);
+
 export const handleOAuthReview: typeof nativeOAuthBrowser = (input) => nativeOAuthBrowser(input);
 
 export const handleOAuthToken: typeof exchangeLocalToken = (...args) => exchangeLocalToken(...args);
 
 export const localOAuthAccessSubject: typeof accessSubject = (...args) => accessSubject(...args);
+
 export const resolveLocalOAuthCaller: typeof nativeCaller = (input) => nativeCaller(input);
+
 export const denyMcpAccess = (): Response => denyAccess();
 
 export const localOAuthCanonicalRequest: typeof canonicalLocalRequest = (...args) =>

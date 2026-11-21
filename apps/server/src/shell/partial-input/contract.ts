@@ -64,6 +64,7 @@ const conditionalCheck = (
       check.annotations
     );
   }
+
   return new SchemaAST.Filter(
     (input, self, options) => (isComplete(input) ? check.run(input, self, options) : undefined),
     check.annotations,
@@ -89,9 +90,11 @@ const isCompleteArray = (ast: SchemaAST.Arrays, input: ReadonlyArray<unknown>): 
   if (!fixedElementsComplete(ast.elements, input)) return false;
 
   const [repeated, ...tail] = ast.rest;
+
   if (repeated === undefined) return input.length <= ast.elements.length;
 
   const tailStart = input.length - tail.length;
+
   return (
     tailStart >= ast.elements.length &&
     input.slice(ast.elements.length, tailStart).every((item) => isCompleteInput(repeated, item)) &&
@@ -134,12 +137,16 @@ const matchingIndexKeys = (
 const isCompleteObject = (ast: SchemaAST.Objects, input: object): boolean => {
   const propertiesComplete = ast.propertySignatures.every((property) => {
     const isPresent = Object.hasOwn(input, property.name);
+
     if (SchemaAST.isOptional(property.type) && !isPresent) return true;
+
     return isPresent && isCompleteInput(property.type, Reflect.get(input, property.name));
   });
+
   if (!propertiesComplete) return false;
 
   const propertyNames = new Set(ast.propertySignatures.map((property) => property.name));
+
   return ast.indexSignatures.every((signature) =>
     matchingIndexKeys(input, signature.parameter).every(
       (key) => propertyNames.has(key) || isCompleteInput(signature.type, Reflect.get(input, key))
@@ -196,16 +203,21 @@ const isCompleteUnionMember = (member: SchemaAST.AST, input: unknown): boolean =
 
 const isCompleteInput = (ast: SchemaAST.AST, input: unknown): boolean => {
   if (ast._tag === "Objects") return isCompleteObjectInput(ast, input);
+
   if (ast._tag === "Arrays") return isCompleteArrayInput(ast, input);
+
   if (ast._tag === "Union") {
     return ast.types.some((member) => isCompleteUnionMember(member, input));
   }
+
   if (ast._tag === "Suspend") return isCompleteInput(ast.thunk(), input);
+
   return isCompleteAtomic(ast, input);
 };
 
 const partialArraysAst = (ast: SchemaAST.Arrays): SchemaAST.AST => {
   const isComplete = (input: unknown): boolean => isCompleteArrayInput(ast, input);
+
   return new SchemaAST.Arrays(
     ast.isMutable,
     ast.elements.map(partialInputAst),
@@ -220,6 +232,7 @@ const partialArraysAst = (ast: SchemaAST.Arrays): SchemaAST.AST => {
 
 const partialUnionAst = (ast: SchemaAST.Union): SchemaAST.AST => {
   const isComplete = (input: unknown): boolean => isCompleteInput(ast, input);
+
   return new SchemaAST.Union(
     ast.types.map(partialInputAst),
     ast.options,
@@ -242,6 +255,7 @@ const partialSuspendAst = (ast: SchemaAST.Suspend): SchemaAST.AST =>
 
 const partialObjectsAst = (ast: SchemaAST.Objects): SchemaAST.AST => {
   const isComplete = (input: unknown): boolean => isCompleteInput(ast, input);
+
   return new SchemaAST.Objects(
     ast.propertySignatures.map(
       (property) =>
@@ -264,9 +278,13 @@ const partialObjectsAst = (ast: SchemaAST.Objects): SchemaAST.AST => {
 
 const rewrittenPartialAst = (ast: SchemaAST.AST): SchemaAST.AST => {
   if (ast._tag === "Arrays") return partialArraysAst(ast);
+
   if (ast._tag === "Union") return partialUnionAst(ast);
+
   if (ast._tag === "Suspend") return partialSuspendAst(ast);
+
   if (ast._tag === "Objects") return partialObjectsAst(ast);
+
   return ast;
 };
 
@@ -274,9 +292,11 @@ const partialAstCache = new WeakMap<SchemaAST.AST, SchemaAST.AST>();
 
 const partialInputAst = (ast: SchemaAST.AST): SchemaAST.AST => {
   const cached = partialAstCache.get(ast);
+
   if (cached !== undefined) return cached;
   const partial = rewrittenPartialAst(ast);
   partialAstCache.set(ast, partial);
+
   return partial;
 };
 

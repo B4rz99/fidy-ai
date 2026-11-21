@@ -8,6 +8,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const requests: string[] = [];
+
       const client = HttpClient.make((request) =>
         Effect.gen(function* () {
           requests.push(request.url);
@@ -15,6 +16,7 @@ it.effect(
             Option.getOrThrow(yield* Effect.serviceOption(FetchHttpClient.RequestInit)).redirect
           ).toBe("manual");
           expect(request.headers.authorization).toBeUndefined();
+
           return HttpClientResponse.fromWeb(
             request,
             new Response("", {
@@ -24,11 +26,14 @@ it.effect(
           );
         })
       );
+
       const bank = makeBancolombiaSandboxOutboundHttp(client);
+
       const result = yield* bank.execute({
         _tag: "Authenticate",
         assertion: Redacted.make("synthetic-assertion"),
       });
+
       expect(result.status).toBe(302);
       expect(result.headers).toEqual({});
       expect(requests).toEqual(["https://as1-api-open-finance-sandbox.ambientesbc.com/token"]);

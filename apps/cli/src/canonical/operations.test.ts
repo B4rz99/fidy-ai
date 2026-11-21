@@ -13,6 +13,7 @@ import { makeCanonicalClient } from "./runtime";
 const makeQueryFixture = constructQueryFixture(makeCanonicalClient);
 
 const encodeFixture = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Json));
+
 const decodeOutput = Schema.decodeSync(Schema.fromJsonString(Schema.Json));
 
 it("offers read queries but never mutations or account-security work", () => {
@@ -41,6 +42,7 @@ it("describes only the caller's eligible batch children without publishing an in
     const batch = discoverQueries(scopes).find(
       (operation) => operation.id === "operations.executeAtomicBatch"
     );
+
     expect(batch).toBeDefined();
     const input = encodeFixture(batch?.input);
     expect(input.includes("transactions.createTransaction")).toBe(
@@ -61,10 +63,12 @@ it.effect(
     Effect.gen(function* () {
       const id = "01900000-0000-4000-8000-000000000001";
       const operation = "categories.deleteKeywordRule";
+
       const result = {
         data: { results: [{ callId: id, operation, output: { data: id, next: [] } }] },
         next: [],
       };
+
       const fixture = makeQueryFixture({ body: encodeFixture(result), status: 200 }, ["write"]);
       yield* runQueryCommand(["operations", "executeAtomicBatch", "--input", "-"], {
         ...fixture.dependencies,
@@ -141,6 +145,7 @@ it.effect(
           "Fidy-Canonical-Reset": "2026-11-01T05:00:00.000Z",
         },
       });
+
       yield* runQueryCommand(["categories", "listCategories"], fixture.dependencies);
       expect(fixture.stdout).toEqual(['{"data":[],"next":[]}\n']);
       expect(fixture.stderr.join("")).toContain("49 de 50 llamadas canónicas restantes");
@@ -191,6 +196,7 @@ it.effect(
           error: { code: example.code, message: example.message, ...example.detail },
           next: [],
         };
+
         const fixture = makeQueryFixture(
           {
             body: encodeFixture(envelope),
@@ -205,6 +211,7 @@ it.effect(
           },
           ["read", "write"]
         );
+
         expect(yield* runQueryCommand(["categories", "listCategories"], fixture.dependencies)).toBe(
           true
         );
@@ -230,7 +237,9 @@ it.effect(
         "Fidy-Canonical-Remaining": "49",
         "Fidy-Canonical-Reset": "2026-11-01T05:00:00.000Z",
       };
+
       const oversizedHeaderCharacters = 65;
+
       const unavailableHeaders: ReadonlyArray<Readonly<Record<string, string>>> = [
         {},
         { "RateLimit-Remaining": "0", "RateLimit-Reset": "12" },
@@ -245,6 +254,7 @@ it.effect(
         { ...valid, "Fidy-Canonical-Remaining": "1".repeat(oversizedHeaderCharacters) },
         { ...valid, "Fidy-Canonical-Limit": "uncapped" },
       ];
+
       for (const headers of unavailableHeaders) {
         const fixture = makeQueryFixture({ body: '{"data":[],"next":[]}', status: 200, headers });
         yield* runQueryCommand(["categories", "listCategories"], fixture.dependencies);
@@ -281,6 +291,7 @@ it.effect(
             "retry-after": "12",
           },
         });
+
         yield* runQueryCommand(["categories", "listCategories"], fixture.dependencies);
         expect(decodeOutput(fixture.stdout.join(""))).toEqual(decodeOutput(response.body));
         expect(fixture.stderr.join("")).toContain("sin medidor comercial mensual");
@@ -305,6 +316,7 @@ it.effect("decodes nested query filters and encodes exact Money, dates and optio
       createdAt: "2026-01-02T00:00:00.000Z",
       revision: 0,
     };
+
     const fixture = makeQueryFixture({
       body: encodeFixture({
         data: [transaction],
@@ -312,6 +324,7 @@ it.effect("decodes nested query filters and encodes exact Money, dates and optio
       }),
       status: 200,
     });
+
     yield* runQueryCommand(["transactions", "listTransactions", "--input", "-"], {
       ...fixture.dependencies,
       readInput: () =>
@@ -334,6 +347,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const fixture = makeQueryFixture();
+
       for (const args of [
         ["transactions", "createTransaction"],
         ["pats", "listPATs"],
@@ -345,6 +359,7 @@ it.effect(
           Exit.isFailure(yield* Effect.exit(runQueryCommand(args, fixture.dependencies)))
         ).toBe(true);
       }
+
       for (const input of [
         '{"query":{"from":"bad"}}',
         '{"payload":{}}',
@@ -357,8 +372,10 @@ it.effect(
             readInput: () => Effect.succeed(input),
           })
         );
+
         expect(result).toMatchObject({ failure: { reason: "InvalidInput" } });
       }
+
       expect(fixture.requests).toEqual([]);
       expect(fixture.stdout).toEqual([]);
     })
@@ -375,6 +392,7 @@ it.effect(
         },
         next: [],
       };
+
       const fixture = makeQueryFixture({ body: encodeFixture(envelope), status: 401 });
       expect(yield* runQueryCommand(["categories", "listCategories"], fixture.dependencies)).toBe(
         true
@@ -394,6 +412,7 @@ it.effect(
       const start = DateTime.makeUnsafe("2026-01-01T00:00:00Z").epochMilliseconds;
       yield* TestClock.setTime(start);
       const fixture = makeQueryFixture();
+
       const httpClient = HttpClient.make((request) =>
         Effect.succeed(
           HttpClientResponse.fromWeb(
@@ -412,6 +431,7 @@ it.effect(
           )
         )
       );
+
       expect(
         yield* runQueryCommand(["categories", "listCategories"], {
           ...fixture.dependencies,
@@ -428,6 +448,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const responseOverflow = 1_048_577;
+
       for (const response of [
         { body: "not json", status: 200 },
         { body: '{"data":"wrong","next":[]}', status: 200 },
@@ -453,6 +474,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const fixture = makeQueryFixture();
+
       const protectedClient = makeProtectedClient({
         client: fixture.dependencies.httpClient,
         allowQuery: true,
@@ -462,6 +484,7 @@ it.effect(
         captureAllowance: () => {},
         captureTrace: () => {},
       });
+
       for (const destination of [
         "https://attacker.example/transactions",
         "https://api.fidyapp.com@attacker.example/transactions",
@@ -469,8 +492,10 @@ it.effect(
       ]) {
         expect(Exit.isFailure(yield* Effect.exit(protectedClient.get(destination)))).toBe(true);
       }
+
       expect(fixture.requests).toEqual([]);
       let cancelled = false;
+
       const httpClient = HttpClient.make((request) =>
         Effect.succeed(
           HttpClientResponse.fromWeb(
@@ -485,10 +510,12 @@ it.effect(
           )
         )
       );
+
       const fiber = yield* runQueryCommand(["categories", "listCategories"], {
         ...fixture.dependencies,
         httpClient,
       }).pipe(Effect.forkChild);
+
       yield* TestClock.adjust("1 second");
       yield* Fiber.interrupt(fiber);
       expect(cancelled).toBe(true);
@@ -508,6 +535,7 @@ it.effect("refuses absent and expired local access before HTTP", () =>
       )
     ).toMatchObject({ failure: { reason: "LoginRequired" } });
     const saved = yield* fixture.dependencies.store.load;
+
     if (Option.isNone(saved)) throw new Error("fixture must contain access");
     yield* TestClock.setTime(saved.value.grant.pat.expiresAt.epochMilliseconds);
     expect(
@@ -526,6 +554,7 @@ it.effect("keeps Consent revocation actionable and suggestions inert and query-o
       },
       next: [],
     };
+
     const fixture = makeQueryFixture({ body: encodeFixture(envelope), status: 403 });
     expect(yield* runQueryCommand(["categories", "listCategories"], fixture.dependencies)).toBe(
       true
@@ -533,6 +562,7 @@ it.effect("keeps Consent revocation actionable and suggestions inert and query-o
     expect(decodeOutput(fixture.stdout.join(""))).toEqual(envelope);
     expect(fixture.stderr.join("")).toContain("Consentimiento");
     expect(fixture.requests).toHaveLength(1);
+
     const suggested = makeQueryFixture({
       body: encodeFixture({
         data: [],
@@ -540,13 +570,16 @@ it.effect("keeps Consent revocation actionable and suggestions inert and query-o
       }),
       status: 200,
     });
+
     yield* runQueryCommand(["categories", "listCategories"], suggested.dependencies);
     expect(suggested.requests).toHaveLength(1);
     expect(suggested.stderr.join("")).not.toContain("createTransaction");
+
     const unknown = makeQueryFixture({
       body: encodeFixture({ data: [], next: [{ tool: "unknown.execute", hint: "Execute." }] }),
       status: 200,
     });
+
     expect(
       yield* Effect.result(runQueryCommand(["categories", "listCategories"], unknown.dependencies))
     ).toMatchObject({ failure: { reason: "TransportUnavailable" } });
@@ -578,13 +611,16 @@ it.effect(
     Effect.gen(function* () {
       const body =
         '{"error":{"code":"unavailable","message":"Temporarily unavailable."},"next":[]}';
+
       const traceId = "0123456789abcdef0123456789abcdef";
+
       for (const receipt of [traceId, "private-content", "f".repeat(33)]) {
         const fixture = makeQueryFixture({
           body,
           status: 503,
           headers: { "fidy-trace-id": receipt },
         });
+
         expect(yield* runQueryCommand(["categories", "listCategories"], fixture.dependencies)).toBe(
           true
         );
@@ -595,11 +631,13 @@ it.effect(
         expect(fixture.stderr.join("")).not.toContain("private-content");
         expect(fixture.requests).toHaveLength(1);
       }
+
       const success = makeQueryFixture({
         body: '{"data":[],"next":[]}',
         status: 200,
         headers: { "fidy-trace-id": traceId },
       });
+
       expect(yield* runQueryCommand(["categories", "listCategories"], success.dependencies)).toBe(
         false
       );
@@ -610,11 +648,13 @@ it.effect(
 it.effect("preserves a received diagnostic trace when decoding a response fails", () =>
   Effect.gen(function* () {
     const traceId = "0123456789abcdef0123456789abcdef";
+
     const fixture = makeQueryFixture({
       body: "not-json",
       status: 503,
       headers: { "fidy-trace-id": traceId },
     });
+
     expect(
       yield* Effect.result(runQueryCommand(["categories", "listCategories"], fixture.dependencies))
     ).toMatchObject({ failure: { reason: "TransportUnavailable" } });

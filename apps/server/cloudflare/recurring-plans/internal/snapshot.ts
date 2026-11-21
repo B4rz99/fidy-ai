@@ -31,22 +31,30 @@ export const retainCompletions = <E, R>({
   Effect.gen(function* () {
     if (document.plans.length === 0 || command.edit.kind === "reverse") return document;
     const through = DateTime.formatIsoDateUtc(DateTime.add(now, { days: 4 })).slice(0, monthWidth);
+
     const first = document.plans.reduce(
       (date, plan) => (plan.revisions[0].from < date ? plan.revisions[0].from : date),
       `${through}-01`
     );
+
     const months = yield* selectMonths(
       DateTime.formatIso(DateTime.subtract(DateTime.makeUnsafe(first), { days: 4 })),
       DateTime.formatIso(DateTime.add(DateTime.makeUnsafe(`${through}-01`), { months: 1 }))
     );
+
     if (Option.isNone(months)) return yield* new RecurringPlanningUnavailable();
+
     const candidates = completionMonths(months.value).filter(
       (month) => month >= first.slice(0, monthWidth) && month <= through
     );
+
     let retained = document;
+
     for (const month of candidates) {
       const projection = yield* project(retained, month, now);
+
       if (!projection.complete) return yield* new RecurringPlanningUnavailable();
+
       const extra = projection.document.fulfillments.filter(
         (mark) =>
           mark.automatic === true &&
@@ -54,6 +62,7 @@ export const retainCompletions = <E, R>({
             ({ item, fact }) => fact.id === mark.id && item.expectedDate.startsWith(month)
           )
       );
+
       retained = {
         ...retained,
         fulfillments: [
@@ -62,6 +71,7 @@ export const retainCompletions = <E, R>({
         ],
       };
     }
+
     return retained;
   });
 

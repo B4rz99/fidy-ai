@@ -13,10 +13,12 @@ export const displayDocument = ({
   if (!compact) return document;
   const from = DateTime.formatIsoDateUtc(DateTime.subtract(now, { days: 1 }));
   const through = DateTime.formatIsoDateUtc(DateTime.add(now, { days: 1 }));
+
   return {
     ...document,
     plans: document.plans.map((plan) => {
       const preceding = plan.revisions.findLast((revision) => revision.from <= from);
+
       return {
         ...plan,
         revisions: [

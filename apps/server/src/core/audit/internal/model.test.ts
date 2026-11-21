@@ -61,6 +61,7 @@ it("attributes evidence to exactly one PAT, WebSession, or Hosted Agent Session 
 
 it("preserves accountable canonical-call metadata without publishing request bodies", () => {
   const id = "10000000-0000-4000-8000-000000000001";
+
   const value = {
     id,
     subjectUserId: id,
@@ -69,9 +70,11 @@ it("preserves accountable canonical-call metadata without publishing request bod
     outcome: "succeeded",
     occurredAt: "2026-10-22T12:00:00.000Z",
   };
+
   const decoded = Schema.decodeUnknownSync(AuditLogEntry)({
     ...value,
     requestBody: "private financial text",
   });
+
   expect(Schema.encodeSync(AuditLogEntry)(decoded)).toEqual(value);
 });

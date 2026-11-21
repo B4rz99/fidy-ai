@@ -10,14 +10,19 @@ import {
 } from "../../../apps/server/cloudflare/release-isolation/contract";
 
 const Phase = Schema.Literals(["before", "after"]);
+
 const Sha256 = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
+
 const Count = Schema.Natural;
+
 const AuditGroup = Schema.Tuple([Schema.NonEmptyString, Schema.NonEmptyString, Count]);
+
 const Snapshot = Schema.Struct({
   groups: Schema.Array(AuditGroup),
   canonicalUnits: Count,
   receipts: Count,
 });
+
 const Report = Schema.Struct({
   statement: Schema.Tuple([
     Schema.Literal("fidy-2259-native-accounting-v1"),
@@ -33,6 +38,7 @@ const Report = Schema.Struct({
   ]),
   signature: SealedTransactionReceipt.fields.signature,
 });
+
 const Scope = Schema.Struct({
   phase: Phase,
   capture: SealedTransactionReceipt,
@@ -41,14 +47,23 @@ const Scope = Schema.Struct({
   binding: Schema.NonEmptyString,
   deadline: Schema.Int,
 });
+
 type Scope = typeof Scope.Type;
+
 const origins = installedOrigins.acceptance;
+
 const canonical = Schema.encodeSync(Schema.fromJsonString(Schema.Json));
+
 const maximumGroups = 16;
+
 const maximumBytes = 8192;
+
 const requestTimeout = 15000;
+
 const successStatus = 200;
+
 const algorithm = { name: "ECDSA", namedCurve: "P-256" };
+
 const digest = (binding: string): string =>
   new Bun.CryptoHasher("sha256").update(binding).digest("hex");
 
@@ -68,6 +83,7 @@ export const verifyAccounting = Effect.fn("verifyAccounting")(function* ({
 }) {
   const { statement, signature } = yield* Schema.decodeEffect(Schema.fromJsonString(Report))(text);
   const [, , , , , , , groups, canonicalUnits, receipts] = statement;
+
   const expected = [
     "fidy-2259-native-accounting-v1",
     scope.capture.nativeRevision,
@@ -77,6 +93,7 @@ export const verifyAccounting = Effect.fn("verifyAccounting")(function* ({
     digest(scope.binding),
     scope.phase,
   ];
+
   if (
     !isDeepStrictEqual(statement.slice(0, expected.length), expected) ||
     scope.capture.sessionBindingSha256 !== expected[5] ||
@@ -84,9 +101,11 @@ export const verifyAccounting = Effect.fn("verifyAccounting")(function* ({
   ) {
     return yield* Effect.fail(Error("Native accounting witness scope differs"));
   }
+
   const key = yield* cryptoOperation(() =>
     crypto.subtle.importKey("spki", Buffer.from(publicKey, "hex"), algorithm, false, ["verify"])
   );
+
   const signatureMatches = yield* cryptoOperation(() =>
     crypto.subtle.verify(
       { name: "ECDSA", hash: "SHA-256" },
@@ -95,33 +114,39 @@ export const verifyAccounting = Effect.fn("verifyAccounting")(function* ({
       new TextEncoder().encode(canonical(statement))
     )
   );
+
   if (!signatureMatches) {
     return yield* Effect.fail(Error("Native accounting witness signature differs"));
   }
+
   return { groups, canonicalUnits, receipts };
 });
 
 const snapshot = Effect.fn("nativeAccountingSnapshot")(function* (scope: Scope) {
   const now = yield* Clock.currentTimeMillis;
   const deadline = Math.min(scope.deadline, now + acceptanceLifetimeMs);
+
   if (deadline <= now) return yield* Effect.fail(Error("Native accounting lease expired"));
   const url = new URL("/internal/release-smoke", origins.api);
   url.searchParams.set("acceptance", "transaction-accounting");
   url.searchParams.set("cohort", "performance");
   url.searchParams.set("ordinal", scope.capture.member === "performance-1" ? "1" : "2");
   const payload = canonical({ phase: scope.phase, capture: scope.capture });
+
   const headers = {
     cookie: scope.cookie,
     origin: origins.browser,
     "fidy-session-binding": scope.binding,
     "content-type": "application/json",
   };
+
   const request = new Request(url.href, {
     method: "POST",
     redirect: "error",
     headers,
     body: payload,
   });
+
   const proof = yield* signAcceptanceRequest({
     request,
     boundary: "ingress",
@@ -134,11 +159,15 @@ const snapshot = Effect.fn("nativeAccountingSnapshot")(function* (scope: Scope) 
     },
     deadline,
   });
+
   const remaining = Math.min(deadline - (yield* Clock.currentTimeMillis), requestTimeout);
+
   if (remaining <= 0) {
     return yield* Effect.fail(Error("Native accounting lease expired before dispatch"));
   }
+
   const client = yield* HttpClient.HttpClient;
+
   const response = yield* client
     .execute(
       HttpClientRequest.post(url.href, {
@@ -147,13 +176,17 @@ const snapshot = Effect.fn("nativeAccountingSnapshot")(function* (scope: Scope) 
       })
     )
     .pipe(Effect.timeout(remaining));
+
   if (response.status !== successStatus) {
     return yield* Effect.fail(Error("Native accounting witness refused"));
   }
+
   const bytes = yield* response.arrayBuffer.pipe(Effect.timeout(remaining));
+
   if (bytes.byteLength > maximumBytes) {
     return yield* Effect.fail(Error("Native accounting witness exceeds bound"));
   }
+
   return yield* verifyAccounting({
     scope,
     text: new TextDecoder().decode(bytes),
@@ -167,13 +200,16 @@ export const nativeAccountingSnapshot = Effect.fn(function* (input: unknown) {
 
 if (import.meta.main) {
   const runtime = ManagedRuntime.make(FetchHttpClient.layer);
+
   try {
     const input: unknown = await Bun.stdin.json();
+
     const proof = await runtime.runPromise(
       nativeAccountingSnapshot(input).pipe(
         Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" })
       )
     );
+
     process.stdout.write(canonical(proof));
   } catch {
     process.stderr.write("Protected native accounting witness failed\n");

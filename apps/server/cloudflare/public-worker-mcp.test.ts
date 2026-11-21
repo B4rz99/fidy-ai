@@ -27,6 +27,7 @@ const refusedRequests: ReadonlyArray<
   { url: "https://api.fidyapp.com/mcp", headers: { origin: "null" } },
   { url: "https://api.fidyapp.com/mcp", headers: { origin: "" } },
 ];
+
 it.each(refusedRequests)(
   "rejects invalid MCP transport coordinates before Core admission: $url $headers",
   (input) =>
@@ -34,10 +35,13 @@ it.each(refusedRequests)(
       Effect.gen(function* () {
         const fetch = vi.fn(() => Promise.resolve(new Response(null, { status: 401 })));
         const headers = new Headers({ "cf-connecting-ip": "192.0.2.35" });
+
         for (const [name, value] of Object.entries(input.headers)) headers.set(name, value);
+
         const response = yield* Effect.tryPromise(() =>
           publicWorker.fetch(new Request(input.url, { headers }), environment(fetch))
         );
+
         expect(response.status).toBe(403);
         expect(response.headers.get("cache-control")).toBe("no-store");
         expect(fetch).not.toHaveBeenCalled();
@@ -53,6 +57,7 @@ it.each([
   Effect.runPromise(
     Effect.gen(function* () {
       const fetch = vi.fn(() => Promise.resolve(new Response(null, { status: 401 })));
+
       const response = yield* Effect.tryPromise(() =>
         publicWorker.fetch(
           new Request(input.url, {
@@ -61,6 +66,7 @@ it.each([
           environment(fetch, input.browserOrigin)
         )
       );
+
       expect(response.status).toBe(401);
       expect(fetch).toHaveBeenCalledOnce();
     })

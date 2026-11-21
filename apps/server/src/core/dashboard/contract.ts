@@ -7,24 +7,31 @@ import { Currency, MoneyGroups, type ReadonlyMoney } from "~/core/_shared/money"
 import { UtcTimestamp } from "~/core/_shared/time";
 
 const maximumDashboardLabelLength = 80;
+
 const maximumCatalogTextLength = 160;
+
 const maximumFilteredCategories = 16;
+
 const maximumWidgetsPerDashboard = 24;
+
 const maximumLayoutDepth = 8;
 
 export const WidgetId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("WidgetId"))
   .annotate({ identifier: "WidgetId" });
+
 export type WidgetId = typeof WidgetId.Type;
 
 export const DashboardTitle = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
   Schema.isMaxLength(maximumDashboardLabelLength)
 );
+
 export type DashboardTitle = typeof DashboardTitle.Type;
 
 export const WidgetTitle = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
   Schema.isMaxLength(maximumDashboardLabelLength)
 );
+
 export type WidgetTitle = typeof WidgetTitle.Type;
 
 export const DashboardPeriod = Schema.Literals([
@@ -35,9 +42,11 @@ export const DashboardPeriod = Schema.Literals([
   "last-7-days",
   "last-30-days",
 ]);
+
 export type DashboardPeriod = typeof DashboardPeriod.Type;
 
 export const SpendingGroupBy = Schema.Literals(["category", "day", "month"]);
+
 export type SpendingGroupBy = typeof SpendingGroupBy.Type;
 
 const CategoryFilter = Schema.TupleWithRest(Schema.Tuple([CategoryId]), [CategoryId]).check(
@@ -50,9 +59,11 @@ const MetricLabel = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
 );
 
 export const MoneyAggregation = Schema.Literals(["sum", "average", "maximum"]);
+
 export type MoneyAggregation = typeof MoneyAggregation.Type;
 
 export const DashboardQueryContext = UserContext.annotate({ identifier: "DashboardQueryContext" });
+
 export type DashboardQueryContext = typeof DashboardQueryContext.Type;
 
 const AppliedDashboardPeriodShape = Schema.Struct({
@@ -71,6 +82,7 @@ const validAppliedPeriod = Schema.makeFilter<typeof AppliedDashboardPeriodShape.
 export const AppliedDashboardPeriod = AppliedDashboardPeriodShape.check(
   validAppliedPeriod
 ).annotate({ identifier: "AppliedDashboardPeriod" });
+
 export type AppliedDashboardPeriod = typeof AppliedDashboardPeriod.Type;
 
 const TransactionSearch = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
@@ -80,6 +92,7 @@ const TransactionSearch = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
 export const TransactionListLimit = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 }))
   .pipe(Schema.brand("TransactionListLimit"))
   .annotate({ identifier: "TransactionListLimit" });
+
 export type TransactionListLimit = typeof TransactionListLimit.Type;
 
 const WidgetBase = {
@@ -94,6 +107,7 @@ export const SpendingChartWidget = Schema.Struct({
   period: DashboardPeriod,
   categories: Schema.optionalKey(CategoryFilter),
 }).annotate({ identifier: "SpendingChartWidget" });
+
 export type SpendingChartWidget = typeof SpendingChartWidget.Type;
 
 export const BudgetBarWidget = Schema.Struct({
@@ -102,6 +116,7 @@ export const BudgetBarWidget = Schema.Struct({
   categoryId: CategoryId,
   currency: Currency,
 }).annotate({ identifier: "BudgetBarWidget" });
+
 export type BudgetBarWidget = typeof BudgetBarWidget.Type;
 
 export const TransactionListWidget = Schema.Struct({
@@ -111,6 +126,7 @@ export const TransactionListWidget = Schema.Struct({
   categories: Schema.optionalKey(CategoryFilter),
   search: Schema.optionalKey(TransactionSearch),
 }).annotate({ identifier: "TransactionListWidget" });
+
 export type TransactionListWidget = typeof TransactionListWidget.Type;
 
 export const CustomMetricWidget = Schema.Struct({
@@ -121,6 +137,7 @@ export const CustomMetricWidget = Schema.Struct({
   period: DashboardPeriod,
   categories: Schema.optionalKey(CategoryFilter),
 }).annotate({ identifier: "CustomMetricWidget" });
+
 export type CustomMetricWidget = typeof CustomMetricWidget.Type;
 
 export const Widget = Schema.Union([
@@ -131,17 +148,21 @@ export const Widget = Schema.Union([
 ])
   .annotate({ identifier: "Widget" })
   .pipe(Schema.toTaggedUnion("type"));
+
 export type Widget = typeof Widget.Type;
 
 const SpendingChartTemplate = SpendingChartWidget.mapFields(Struct.omit(["id"])).annotate({
   identifier: "SpendingChartTemplate",
 });
+
 const BudgetBarTemplate = BudgetBarWidget.mapFields(Struct.omit(["id"])).annotate({
   identifier: "BudgetBarTemplate",
 });
+
 const TransactionListTemplate = TransactionListWidget.mapFields(Struct.omit(["id"])).annotate({
   identifier: "TransactionListTemplate",
 });
+
 const CustomMetricTemplate = CustomMetricWidget.mapFields(Struct.omit(["id"])).annotate({
   identifier: "CustomMetricTemplate",
 });
@@ -154,12 +175,15 @@ export const WidgetTemplate = Schema.Union([
 ])
   .annotate({ identifier: "WidgetTemplate" })
   .pipe(Schema.toTaggedUnion("type"));
+
 export type WidgetTemplate = typeof WidgetTemplate.Type;
 
 export const Axis = Schema.Literals(["row", "column"]);
+
 export type Axis = typeof Axis.Type;
 
 export const minimumSplitWeight = 0.001;
+
 export const maximumSplitWeight = 1000;
 
 export const SplitWeight = Schema.Finite.check(
@@ -167,6 +191,7 @@ export const SplitWeight = Schema.Finite.check(
 )
   .pipe(Schema.brand("SplitWeight"))
   .annotate({ identifier: "SplitWeight" });
+
 export type SplitWeight = typeof SplitWeight.Type;
 
 export type LayoutLeaf<Leaf> = Readonly<{
@@ -210,11 +235,13 @@ export const makeLayoutNodeSchema = <Leaf extends Schema.Top>(
 ): LayoutNodeSchema<Leaf> => {
   const { identifier } = input;
   const leaf = input.leaf();
+
   const node: Schema.Codec<unknown, unknown, unknown, unknown> = Schema.suspend(() => {
     const child = Schema.Struct({
       weight: SplitWeight,
       node: Schema.suspend((): Schema.Codec<unknown, unknown, unknown, unknown> => node),
     });
+
     return Schema.Union([
       Schema.Struct({ kind: Schema.Literal("leaf"), widget: leaf }),
       Schema.Struct({
@@ -226,18 +253,23 @@ export const makeLayoutNodeSchema = <Leaf extends Schema.Top>(
       }),
     ]);
   }).annotate({ identifier });
+
   return Schema.make(node.ast);
 };
 
 export const LayoutNode = makeLayoutNodeSchema({ leaf: () => Widget, identifier: "LayoutNode" });
+
 export type LayoutNode = typeof LayoutNode.Type;
+
 export type LeafNode = Extract<LayoutNode, { readonly kind: "leaf" }>;
+
 export type SplitNode = Extract<LayoutNode, { readonly kind: "split" }>;
 
 const DashboardDocumentShape = Schema.Struct({
   title: DashboardTitle,
   layout: LayoutNode,
 });
+
 type DashboardDocumentShape = typeof DashboardDocumentShape.Type;
 
 export type DashboardStructureIssue = Readonly<{
@@ -262,39 +294,51 @@ export const findDashboardStructureIssue = (
     if (Option.isSome(issue)) {
       return;
     }
+
     if (node.kind === "leaf") {
       widgetCount += 1;
+
       if (widgetCount > maximumWidgetsPerDashboard) {
         issue = Option.some({
           path: context.path,
           issue: "DashboardDocument permits at most 24 widgets",
         });
+
         return;
       }
+
       if (widgetIds.has(node.widget.id)) {
         issue = Option.some({
           path: [...context.path, "widget", "id"],
           issue: "Expected a unique WidgetId in DashboardDocument",
         });
+
         return;
       }
+
       widgetIds.add(node.widget.id);
+
       return;
     }
+
     if (context.depth >= maximumLayoutDepth) {
       issue = Option.some({
         path: context.path,
         issue: "DashboardDocument layout depth must not exceed 8",
       });
+
       return;
     }
+
     if (Option.contains(context.parentAxis, node.axis)) {
       issue = Option.some({
         path: [...context.path, "axis"],
         issue: "Expected canonical layout without nested splits on the same axis",
       });
+
       return;
     }
+
     for (const [index, child] of node.children.entries()) {
       visit(child.node, {
         depth: context.depth + 1,
@@ -305,6 +349,7 @@ export const findDashboardStructureIssue = (
   };
 
   visit(document.layout, { depth: 0, parentAxis: Option.none(), path: ["layout"] });
+
   return issue;
 };
 
@@ -315,6 +360,7 @@ const validDocumentStructure = Schema.makeFilter<DashboardDocumentShape>((docume
 export const DashboardDocument = DashboardDocumentShape.check(validDocumentStructure).annotate({
   identifier: "DashboardDocument",
 });
+
 export type DashboardDocument = typeof DashboardDocument.Type;
 
 export const CatalogPresetId = Schema.Literals([
@@ -323,6 +369,7 @@ export const CatalogPresetId = Schema.Literals([
   "recent-transactions",
   "monthly-outflows",
 ]);
+
 export type CatalogPresetId = typeof CatalogPresetId.Type;
 
 const CatalogText = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
@@ -335,6 +382,7 @@ export const DashboardCatalogEntry = Schema.Struct({
   description: CatalogText,
   widget: WidgetTemplate,
 }).annotate({ identifier: "DashboardCatalogEntry" });
+
 export type DashboardCatalogEntry = typeof DashboardCatalogEntry.Type;
 
 export const DashboardCatalog = Schema.Tuple([
@@ -343,12 +391,14 @@ export const DashboardCatalog = Schema.Tuple([
   DashboardCatalogEntry,
   DashboardCatalogEntry,
 ]);
+
 export type DashboardCatalog = typeof DashboardCatalog.Type;
 
 export const SetTitle = Schema.Struct({
   op: Schema.tag("set-title"),
   title: DashboardTitle,
 }).annotate({ identifier: "SetTitle" });
+
 export type SetTitle = typeof SetTitle.Type;
 
 const BesidePlacement = Schema.Struct({
@@ -356,11 +406,13 @@ const BesidePlacement = Schema.Struct({
   axis: Axis,
   side: Schema.Literals(["before", "after"]),
 }).annotate({ identifier: "BesidePlacement" });
+
 export type BesidePlacement = typeof BesidePlacement.Type;
 
 export const isBesidePlacement = Schema.is(BesidePlacement);
 
 export const Placement = Schema.Union([Schema.Literals(["top", "bottom"]), BesidePlacement]);
+
 export type Placement = typeof Placement.Type;
 
 export const AddWidget = Schema.Struct({
@@ -368,12 +420,14 @@ export const AddWidget = Schema.Struct({
   widget: Widget,
   at: Placement,
 }).annotate({ identifier: "AddWidget" });
+
 export type AddWidget = typeof AddWidget.Type;
 
 export const RemoveWidget = Schema.Struct({
   op: Schema.tag("remove-widget"),
   widgetId: WidgetId,
 }).annotate({ identifier: "RemoveWidget" });
+
 export type RemoveWidget = typeof RemoveWidget.Type;
 
 export const MoveWidget = Schema.Struct({
@@ -381,6 +435,7 @@ export const MoveWidget = Schema.Struct({
   widgetId: WidgetId,
   at: Placement,
 }).annotate({ identifier: "MoveWidget" });
+
 export type MoveWidget = typeof MoveWidget.Type;
 
 export const SwapWidgets = Schema.Struct({
@@ -388,11 +443,13 @@ export const SwapWidgets = Schema.Struct({
   widgetId: WidgetId,
   withWidgetId: WidgetId,
 }).annotate({ identifier: "SwapWidgets" });
+
 export type SwapWidgets = typeof SwapWidgets.Type;
 
 export const LayoutRegionSelector = Schema.TupleWithRest(Schema.Tuple([WidgetId]), [WidgetId])
   .check(Schema.isMaxLength(maximumWidgetsPerDashboard), Schema.isUnique())
   .annotate({ identifier: "LayoutRegionSelector" });
+
 export type LayoutRegionSelector = typeof LayoutRegionSelector.Type;
 
 export const LayoutRegionRatio = Schema.Literals([
@@ -402,6 +459,7 @@ export const LayoutRegionRatio = Schema.Literals([
   "two-thirds",
   "three-quarters",
 ]);
+
 export type LayoutRegionRatio = typeof LayoutRegionRatio.Type;
 
 const RegionResizeSize = Schema.Union([
@@ -414,12 +472,14 @@ export const ResizeRegion = Schema.Struct({
   widgetIds: LayoutRegionSelector,
   size: RegionResizeSize,
 }).annotate({ identifier: "ResizeRegion" });
+
 export type ResizeRegion = typeof ResizeRegion.Type;
 
 export const UpdateWidget = Schema.Struct({
   op: Schema.tag("update-widget"),
   widget: Widget,
 }).annotate({ identifier: "UpdateWidget" });
+
 export type UpdateWidget = typeof UpdateWidget.Type;
 
 export const DashboardEdit = Schema.Union([
@@ -433,6 +493,7 @@ export const DashboardEdit = Schema.Union([
 ])
   .annotate({ identifier: "DashboardEdit" })
   .pipe(Schema.toTaggedUnion("op"));
+
 export type DashboardEdit = typeof DashboardEdit.Type;
 
 export type DashboardCategoryReference = Readonly<{
@@ -511,7 +572,9 @@ export type DashboardProjectionRange = Readonly<{
 const LocalCalendarDate = Schema.String.check(
   Schema.isPattern(/^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/u)
 );
+
 const LocalCalendarMonth = Schema.String.check(Schema.isPattern(/^\d{4}-(?:0[1-9]|1[0-2])$/u));
+
 export const DashboardBucket = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("category"), category: Category }),
   Schema.Struct({ kind: Schema.Literal("day"), date: LocalCalendarDate }),
@@ -524,6 +587,7 @@ export const DashboardChartBucket = Schema.Struct({
   key: DashboardBucket,
   moneyGroups: MoneyGroups,
 });
+
 export type DashboardChartBucket = typeof DashboardChartBucket.Type;
 
 export type ProjectedContribution = Readonly<
@@ -532,6 +596,7 @@ export type ProjectedContribution = Readonly<
     maximum: ReadonlyMoney;
   }
 >;
+
 export type ProjectedRange = Readonly<{
   key: string;
   contributions: ReadonlyArray<ProjectedContribution>;

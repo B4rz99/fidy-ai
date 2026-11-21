@@ -17,6 +17,7 @@ import { buttonVariants } from "@/ui/components/button-variants";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/components/card";
 
 type AttemptReference = typeof ConnectionAttemptReference.Type;
+
 const expirationFormatter = new Intl.DateTimeFormat("es-CO", {
   dateStyle: "medium",
   timeStyle: "short",
@@ -50,6 +51,7 @@ const Unavailable = ({ attempt }: Readonly<{ attempt: AttemptReference }>): JSX.
     </CardContent>
   </Card>
 );
+
 const BankHandoff = ({
   review,
   disabled,
@@ -60,9 +62,11 @@ const BankHandoff = ({
   canFollow: () => boolean;
 }>): JSX.Element => {
   if (disabled || review.authorization === undefined) return <></>;
+
   const follow = (event: MouseEvent<HTMLAnchorElement>): void => {
     if (!canFollow()) event.preventDefault();
   };
+
   return (
     <a
       className={buttonVariants()}
@@ -76,18 +80,22 @@ const BankHandoff = ({
     </a>
   );
 };
+
 const useExpiry = (
   expiresAt: DateTime.Utc
 ): Readonly<{ expired: boolean; check: () => boolean }> => {
   const { webAuthClient: client, registry } = useRouter().options.context;
+
   const [expiry] = useState(() => {
     const timer = client.runtime.atom(
       Effect.gen(function* () {
         const current = yield* Clock.currentTimeMillis;
         yield* Effect.sleep(Math.max(0, expiresAt.epochMilliseconds - current));
+
         return true;
       })
     );
+
     return Atom.writable(
       (get) =>
         get(timer).pipe(presentCanonicalQuery)._tag === "Ready" ||
@@ -95,15 +103,18 @@ const useExpiry = (
       (context, _value: void) => context.setSelf(true)
     );
   });
+
   return {
     expired: useAtomValue(expiry),
     check: () => {
       if (expiresAt.epochMilliseconds > Effect.runSync(Clock.currentTimeMillis)) return true;
       registry.set(expiry, undefined);
+
       return false;
     },
   };
 };
+
 const ExpiringReview = ({
   review,
   busy,
@@ -121,6 +132,7 @@ const ExpiringReview = ({
 }>): JSX.Element => {
   const expiresAt = continuationDeadline(review);
   const disabled = busy || blocked || expired;
+
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
@@ -156,6 +168,7 @@ const ExpiringReview = ({
     </Card>
   );
 };
+
 const UncertainNotice = ({ expired }: Readonly<{ expired: boolean }>): JSX.Element => (
   <p role="alert">
     {expired
@@ -163,6 +176,7 @@ const UncertainNotice = ({ expired }: Readonly<{ expired: boolean }>): JSX.Eleme
       : "No pudimos confirmar el resultado. Consulta el estado antes de continuar; no repitas esta solicitud."}
   </p>
 );
+
 const ReviewNotices = ({
   uncertain,
   sent,
@@ -190,7 +204,9 @@ const ReviewNotices = ({
     ) : null}
   </>
 );
+
 type ReadyContinuation = Extract<ReturnType<typeof useContinuation>["result"], { _tag: "Ready" }>;
+
 const ContinuationReview = ({
   task,
   review,
@@ -201,6 +217,7 @@ const ContinuationReview = ({
   const { busy, uncertain, submitted, begin, refresh, canFollow } = task;
   const { value, waiting, refreshFailure } = review;
   const { expired, check } = useExpiry(continuationDeadline(value));
+
   return (
     <>
       <ReviewNotices
@@ -232,11 +249,15 @@ const ContinuationReview = ({
     </>
   );
 };
+
 const Continuation = ({ attempt }: Readonly<{ attempt: AttemptReference }>): JSX.Element => {
   const task = useContinuation(attempt);
   const { result, mounted } = task;
+
   if (result._tag === "Initial") return <PendingRead label="Cargando solicitud" />;
+
   if (result._tag === "Failure") return <Unavailable attempt={attempt} />;
+
   return (
     <div ref={mounted} className="flex w-full max-w-md flex-col gap-3">
       <ContinuationReview
@@ -253,6 +274,7 @@ export const ConnectionContinuationFeature = (): JSX.Element => {
   const { authentication } = useSession();
   const search = useSearch({ strict: false });
   const attempt = Schema.decodeUnknownOption(ConnectionAttemptReference)(search.attempt);
+
   if (Option.isNone(attempt)) {
     return (
       <ConnectionRecovery
@@ -262,6 +284,7 @@ export const ConnectionContinuationFeature = (): JSX.Element => {
       />
     );
   }
+
   return (
     <main className="flex min-h-svh items-center justify-center bg-muted/40 px-4 py-12">
       <Continuation key={`${sessionBinding}:${attempt.value}`} attempt={attempt.value} />
@@ -271,11 +294,14 @@ export const ConnectionContinuationFeature = (): JSX.Element => {
 
 export const ConnectionResultFeature = (): JSX.Element => {
   const client = useRouter().options.context.apiClient;
+
   const [query] = useState(() =>
     client.query("connections", "listConnections", { timeToLive: "0 seconds" })
   );
+
   const result = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
+
   return (
     <main className="flex min-h-svh flex-col">
       <WorkspaceHeader title="Conexión con Bancolombia" context={null}>

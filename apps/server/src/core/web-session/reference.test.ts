@@ -3,6 +3,7 @@ import { Result, Schema } from "effect";
 import { WebSessionBearer } from "./contract";
 
 const decodeBearer = Schema.decodeUnknownResult(WebSessionBearer);
+
 const validBearer = "A".repeat(43);
 
 it("accepts exactly 43 base64url characters as a WebSession bearer", () => {

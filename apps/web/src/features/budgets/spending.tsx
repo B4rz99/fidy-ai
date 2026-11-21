@@ -23,12 +23,16 @@ type Props = Readonly<{
   period: BudgetReport["period"];
   user: CurrentUser;
 }>;
+
 type Page = CanonicalSuccess<"transactions.listTransactions">;
+
 const continuation = (page: Page): Option.Option<string> => {
   const suggestion = page.next.find((entry) => entry.tool === "transactions.listTransactions");
+
   if (suggestion === undefined || !("args" in suggestion) || Option.isNone(suggestion.args)) {
     return Option.none();
   }
+
   return Option.some(
     Schema.decodeUnknownSync(
       Schema.Struct({ query: Schema.Struct({ cursor: TransactionQueryValues.fields.cursor }) })
@@ -39,6 +43,7 @@ const continuation = (page: Page): Option.Option<string> => {
 export const BudgetSpending = (props: Props): JSX.Element => {
   const [open, setOpen] = useState(false);
   const amount = formatMoneyWithCode({ locale: props.user.locale, money: props.spent });
+
   const month = useMemo(
     () =>
       new Intl.DateTimeFormat(props.user.locale, {
@@ -48,6 +53,7 @@ export const BudgetSpending = (props: Props): JSX.Element => {
       }).format(props.period.from.epochMilliseconds),
     [props.user.locale, props.period.timeZone, props.period.from.epochMilliseconds]
   );
+
   return (
     <>
       <Button
@@ -74,8 +80,10 @@ export const BudgetSpending = (props: Props): JSX.Element => {
     </>
   );
 };
+
 const SpendingHistory = (props: Props): JSX.Element => {
   const [cursor, setCursor] = useState<Option.Option<string>>(() => Option.none());
+
   return (
     <SpendingPage
       key={Option.getOrElse(cursor, () => "first")}
@@ -85,10 +93,13 @@ const SpendingHistory = (props: Props): JSX.Element => {
     />
   );
 };
+
 type PageProps = Props &
   Readonly<{ cursor: Option.Option<string>; next: (cursor: Option.Option<string>) => void }>;
+
 const SpendingPage = ({ category, spent, period, user, cursor, next }: PageProps): JSX.Element => {
   const client = useRouter().options.context.apiClient;
+
   const [resource] = useState(() =>
     client.query("transactions", "listTransactions", {
       query: {
@@ -101,10 +112,14 @@ const SpendingPage = ({ category, spent, period, user, cursor, next }: PageProps
       },
     })
   );
+
   const state = useAtomValue(resource).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(resource);
+
   if (state._tag === "Failure") return <SpendingRetry retry={refresh} waiting={state.waiting} />;
+
   if (state._tag !== "Ready") return <PendingRead label="Cargando movimientos" />;
+
   return (
     <div className="grid gap-3">
       {Option.isSome(state.refreshFailure) ? (
@@ -120,6 +135,7 @@ const SpendingPage = ({ category, spent, period, user, cursor, next }: PageProps
     </div>
   );
 };
+
 const SpendingRetry = ({
   retry,
   waiting,
@@ -131,6 +147,7 @@ const SpendingRetry = ({
     </Button>
   </div>
 );
+
 const SpendingResults = ({
   page,
   user,
@@ -156,6 +173,7 @@ const SpendingResults = ({
     {page.data.length === 0 ? <li>Sin movimientos en esta página.</li> : null}
   </ul>
 );
+
 const SpendingNavigation = ({
   page,
   cursor,
@@ -168,6 +186,7 @@ const SpendingNavigation = ({
   disabled: boolean;
 }>): JSX.Element => {
   const more = continuation(page);
+
   return (
     <>
       {Option.isSome(more) ? (

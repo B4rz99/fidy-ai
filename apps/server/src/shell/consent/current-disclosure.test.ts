@@ -23,11 +23,13 @@ it.effect("pins the exact chat disclosure and web-owned policy metadata", () =>
     const disclosure = yield* loadCurrentDisclosure;
 
     expect(sha256(disclosure.text)).toBe(disclosure.contentSha256);
+
     const policy = yield* Effect.tryPromise({
       try: () =>
         Bun.file(new URL("../../../../site/src/assets/policy.html", import.meta.url)).bytes(),
       catch: () => new PolicyFixtureUnavailable(),
     });
+
     expect(sha256(policy)).toBe(disclosure.policy.contentSha256);
   })
 );

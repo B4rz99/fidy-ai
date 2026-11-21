@@ -8,6 +8,7 @@ import { makeCanonicalClient } from "./runtime";
 const fixture = makeCanonicalFixture(makeCanonicalClient);
 
 const encode = Schema.encodeSync(Schema.fromJsonString(Schema.Json));
+
 const transaction = {
   id: "01900000-0000-4000-8000-000000000001",
   money: { amount: "9007199254740993.15", currency: "USD" },
@@ -17,6 +18,7 @@ const transaction = {
   createdAt: "2026-01-02T00:00:00.000Z",
   revision: 0,
 } as const;
+
 const mutationFlags = [
   "--amount",
   "9007199254740993.15",
@@ -29,6 +31,7 @@ const mutationFlags = [
   "--occurred-at",
   transaction.occurredAt,
 ];
+
 const facts = {
   money: transaction.money,
   direction: transaction.direction,
@@ -42,6 +45,7 @@ it.effect(
     Effect.gen(function* () {
       const bodies: string[] = [];
       const outputs: string[] = [];
+
       for (const args of [mutationFlags, ["--input", "-"]]) {
         const test = fixture(undefined, ["write"]);
         yield* runOperationCommand(["transactions", "createTransaction", ...args], {
@@ -52,6 +56,7 @@ it.effect(
               if (request.body._tag === "Uint8Array") {
                 bodies.push(new TextDecoder().decode(request.body.body));
               }
+
               return HttpClientResponse.fromWeb(
                 request,
                 new Response(encode({ data: transaction, next: [] }), {
@@ -64,6 +69,7 @@ it.effect(
         });
         outputs.push(test.stdout.join(""));
       }
+
       expect(bodies).toEqual([encode(facts), encode(facts)]);
       expect(outputs).toEqual([
         encode({ data: transaction, next: [] }) + "\n",
@@ -75,6 +81,7 @@ it.effect(
 it.effect("query flags and JSON keep the same canonical filter representation", () =>
   Effect.gen(function* () {
     const queries: string[] = [];
+
     for (const args of [
       ["--currency", "COP", "--direction", "outflow"],
       ["--input", "-"],
@@ -86,6 +93,7 @@ it.effect("query flags and JSON keep the same canonical filter representation", 
         httpClient: HttpClient.make((request) =>
           Effect.sync(() => {
             queries.push(UrlParams.toString(request.urlParams));
+
             return HttpClientResponse.fromWeb(
               request,
               new Response('{"data":[],"next":[]}', {
@@ -97,6 +105,7 @@ it.effect("query flags and JSON keep the same canonical filter representation", 
       });
       expect(test.stdout).toEqual(['{"data":[],"next":[]}\n']);
     }
+
     expect(queries).toEqual(["direction=outflow&currency=COP", "direction=outflow&currency=COP"]);
   })
 );
@@ -122,19 +131,23 @@ it.effect(
         mutationFlags.map((value) => (value === "outflow" ? "invalid" : value)),
         ["--amount", "1", "--currency", "COP", "--direction", "outflow"],
       ];
+
       for (const args of invalid) {
         const test = fixture(undefined, ["write"]);
         let reads = 0;
+
         const result = yield* Effect.result(
           runOperationCommand(["transactions", "createTransaction", ...args], {
             ...test.dependencies,
             readInput: () =>
               Effect.sync(() => {
                 reads += 1;
+
                 return "{}";
               }),
           })
         );
+
         expect(result).toMatchObject({ failure: { reason: "InvalidInput" } });
         expect(test.requests).toEqual([]);
         expect(test.stdout).toEqual([]);
@@ -156,9 +169,11 @@ it.effect("does not make private account-security work available through friendl
       )
     ).toMatchObject({ failure: { reason: "OperationUnavailable" } });
     expect(test.requests).toEqual([]);
+
     const batch = discoverOperations(["write"]).find(
       (command) => command.id === "operations.executeAtomicBatch"
     );
+
     expect(batch).toMatchObject({
       flags: [],
       structured: [{ path: ["payload", "calls"], required: true }],

@@ -81,6 +81,7 @@ it("accepts exactly the non-empty unique TokenBearer scope vocabulary", () => {
 it("normalizes one manual PAT recipient label before enforcing the grant boundary", () => {
   const decodeGrant = Schema.decodeUnknownResult(ManualPATGrantInput);
   const reviewExpiresAt = "2026-09-15T12:00:00.000Z";
+
   const accepted = decodeGrant({
     recipientLabel: "  Automatización casa  ",
     scopes: ["read"],
@@ -139,6 +140,7 @@ it("accepts only the four fixed PAT lifetime presets", () => {
 
 it("carries bearer grant instants over the wire as date-time strings", () => {
   const createdAt = DateTime.makeUnsafe("2026-07-28T12:34:56Z");
+
   const encoded = Schema.encodeSync(TokenGrant)({
     _tag: "PAT",
     id: PATId.make("f1d1a000-0000-4000-8000-000000000010"),
@@ -178,6 +180,7 @@ it("keeps an issued PAT bearer raw only in its encoded wire representation", () 
 it("keeps fixed PAT expiration independent from successful use", () => {
   const decodeToken = Schema.decodeUnknownResult(Schema.toType(TokenGrant));
   const createdAt = DateTime.makeUnsafe("2026-07-28T12:34:56Z");
+
   const validToken = {
     _tag: "PAT" as const,
     id: PATId.make("f1d1a000-0000-4000-8000-000000000010"),
@@ -192,23 +195,29 @@ it("keeps fixed PAT expiration independent from successful use", () => {
   };
 
   const usedAt = DateTime.addDuration(createdAt, "1 day");
+
   const validReviewedExpiry = decodeToken({
     ...validToken,
     expiresAt: DateTime.subtractDuration(validToken.expiresAt, "1 minute"),
   });
+
   const invalidExpiry = decodeToken({ ...validToken, expiresAt: createdAt });
+
   const invalidExtendedExpiry = decodeToken({
     ...validToken,
     expiresAt: DateTime.addDuration(validToken.expiresAt, "1 millis"),
   });
+
   const invalidEarlyUse = decodeToken({
     ...validToken,
     lastUsedAt: Option.some(DateTime.subtractDuration(createdAt, "1 millis")),
   });
+
   const validUseWithoutRenewal = decodeToken({
     ...validToken,
     lastUsedAt: Option.some(usedAt),
   });
+
   const invalidRevocationBeforeUse = decodeToken({
     ...validToken,
     lastUsedAt: Option.some(usedAt),

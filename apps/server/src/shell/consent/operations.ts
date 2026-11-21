@@ -56,6 +56,7 @@ export {
 } from "~/core/consent/operations";
 
 const revocationRevision = "oauth-revoke-2026-10";
+
 const revocationDisclosure =
   "Revocar este acceso detiene llamadas y renovaciones futuras; no deshace acciones ya realizadas.";
 
@@ -170,6 +171,7 @@ export const protectConsentStatement = ({
   requirement,
 }: ConsentProtectedStatement): OwnedStatement => {
   const guard = consentConditions({ subject, requirement });
+
   return {
     sql: `${statement.sql} AND ${guard.sql}`,
     params: [...statement.params, ...guard.params],
@@ -186,6 +188,7 @@ export const protectConsentAuthority = <Authority extends ConsentAuthority>({
   requirement: ConsentStandingRequirement;
 }>): Authority => {
   const guard = consentConditions({ subject, requirement });
+
   return {
     ...authority,
     predicate: `${authority.predicate} AND ${guard.sql}`,
@@ -201,6 +204,7 @@ export const protectPATRevocationStatement = ({
   evidence: PATRevocationProtection;
 }>): OwnedStatement => {
   const guard = revocationEvidence(evidence);
+
   return {
     sql: `${statement.sql} AND ${guard.sql}`,
     params: [...statement.params, ...guard.params],

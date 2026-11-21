@@ -1,7 +1,9 @@
 import { Predicate, Schema } from "effect";
 
 const JsonObject = Schema.Record(Schema.String, Schema.Json);
+
 export type JsonValue = Schema.Json;
+
 export type JsonObject = typeof JsonObject.Type;
 
 const OperationPolicyManifest = Schema.Struct({
@@ -12,6 +14,7 @@ const OperationPolicyManifest = Schema.Struct({
     })
   ),
 });
+
 export type OperationPolicyManifest = typeof OperationPolicyManifest.Type;
 
 export type ContractArtifacts = {
@@ -21,14 +24,17 @@ export type ContractArtifacts = {
 
 const sortJson = (value: JsonValue): JsonValue => {
   if (Array.isArray(value)) return value.map(sortJson);
+
   if (Predicate.isObject(value)) {
     const object: JsonObject = Schema.decodeUnknownSync(JsonObject)(value);
+
     return Object.fromEntries(
       Object.entries(object)
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([key, entry]) => [key, sortJson(entry)])
     );
   }
+
   return value;
 };
 
@@ -36,6 +42,7 @@ type JsonInput = Readonly<{ value: unknown }> | Readonly<{ value: unknown; path:
 
 export const asJsonValue = (input: JsonInput): JsonValue => {
   const path = "path" in input ? input.path : "$";
+
   try {
     return sortJson(Schema.decodeUnknownSync(Schema.Json)(input.value));
   } catch {
@@ -45,6 +52,7 @@ export const asJsonValue = (input: JsonInput): JsonValue => {
 
 export const asJsonObject = (input: JsonInput): JsonObject => {
   const path = "path" in input ? input.path : "$";
+
   try {
     return Schema.decodeUnknownSync(JsonObject)(input.value);
   } catch {
@@ -65,11 +73,13 @@ export const contractArtifactsFrom = ({
   subject,
 }: ContractArtifactInput): ContractArtifacts => {
   let operationPolicy: OperationPolicyManifest;
+
   try {
     operationPolicy = Schema.decodeUnknownSync(OperationPolicyManifest)(policy);
   } catch {
     throw new Error(`${subject} operation policy is not an operation-policy manifest`);
   }
+
   return {
     openapi: asJsonObject({ value: openapi, path: `${subject} OpenAPI contract` }),
     operationPolicy,

@@ -22,6 +22,7 @@ export const planningFact = ({
     ? { counterparty: transaction.counterparty.value }
     : {}),
 });
+
 export const linkedTransactionIds = (
   document: Pick<RecurringDocument, "fulfillments">
 ): ReadonlyArray<string> => [

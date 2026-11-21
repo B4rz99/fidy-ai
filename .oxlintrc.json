@@ -4,7 +4,31 @@
   "jsPlugins": [
     "./scripts/oxlint/effect-guards.js",
     "./scripts/oxlint/test-guards.js",
-    "./scripts/oxlint/effect-recovery.js"
+    "./scripts/oxlint/effect-recovery.js",
+    {
+      "name": "anti-slop",
+      "specifier": "./tools/oxlint/anti-slop/index.ts"
+    },
+    {
+      "name": "anti-slop-effect",
+      "specifier": "./tools/oxlint/anti-slop/effect/index.ts"
+    },
+    {
+      "name": "landmines",
+      "specifier": "./tools/oxlint/anti-slop/plugins/landmines.ts"
+    },
+    {
+      "name": "ai-guard",
+      "specifier": "./tools/oxlint/anti-slop/plugins/ai-guard.ts"
+    },
+    {
+      "name": "enfect",
+      "specifier": "./tools/oxlint/anti-slop/plugins/enfect.ts"
+    },
+    {
+      "name": "effect",
+      "specifier": "./tools/oxlint/anti-slop/plugins/effect.ts"
+    }
   ],
   "extends": ["./.oxlintrc.ui.json"],
   "ignorePatterns": [
@@ -12,7 +36,10 @@
     "**/dist/**",
     "**/build/**",
     "**/coverage/**",
-    "**/.repos/**"
+    "**/.repos/**",
+    ".agents/skills/install-anti-slop/**",
+    ".claude/skills/install-anti-slop/**",
+    "tools/oxlint/anti-slop/**"
   ],
   "rules": {
     "test-guards/no-module-mocks": "error",
@@ -20,7 +47,12 @@
     "test-guards/no-react-test-tools": "error",
     "array-callback-return": "error",
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["error", { "allowConstantExport": true }],
+    "react/only-export-components": [
+      "error",
+      {
+        "allowConstantExport": true
+      }
+    ],
     "jsx-a11y/alt-text": "error",
     "jsx-a11y/anchor-has-content": "error",
     "jsx-a11y/aria-props": "error",
@@ -49,14 +81,36 @@
         "ignorePattern": "^react-doctor-disable(?:-next-line)?\\b"
       }
     ],
-    "complexity": ["error", { "max": 8 }],
+    "complexity": [
+      "error",
+      {
+        "max": 8
+      }
+    ],
     "effect-guards/no-nullable-type": "error",
-    "id-length": ["error", { "exceptions": ["_", "A", "E", "R"], "properties": "never" }],
+    "id-length": [
+      "error",
+      {
+        "exceptions": ["_", "A", "E", "R"],
+        "properties": "never"
+      }
+    ],
     "import/exports-last": "off",
     "import/group-exports": "off",
     "import/newline-after-import": "error",
-    "max-lines-per-function": ["error", { "max": 60 }],
-    "max-statements": ["error", { "max": 70 }],
+    "max-lines-per-function": [
+      "error",
+      {
+        "max": 60,
+        "skipBlankLines": true
+      }
+    ],
+    "max-statements": [
+      "error",
+      {
+        "max": 70
+      }
+    ],
     "no-magic-numbers": [
       "error",
       {
@@ -65,7 +119,12 @@
         "ignoreDefaultValues": true
       }
     ],
-    "sort-imports": ["error", { "ignoreDeclarationSort": true }],
+    "sort-imports": [
+      "error",
+      {
+        "ignoreDeclarationSort": true
+      }
+    ],
     "typescript/explicit-function-return-type": "error",
     "import/extensions": [
       "error",
@@ -84,13 +143,24 @@
     "no-void": "error",
     "curly": ["error", "multi-line"],
     "default-case-last": "error",
-    "eqeqeq": ["error", "always", { "null": "ignore" }],
+    "eqeqeq": [
+      "error",
+      "always",
+      {
+        "null": "ignore"
+      }
+    ],
     "func-style": ["error", "expression"],
     "import/first": "error",
     "import/no-cycle": "error",
     "import/no-default-export": "error",
     "import/no-self-import": "error",
-    "jsdoc/check-tag-names": ["error", { "definedTags": ["effect-expect-leaking"] }],
+    "jsdoc/check-tag-names": [
+      "error",
+      {
+        "definedTags": ["effect-expect-leaking"]
+      }
+    ],
     "jsdoc/empty-tags": "error",
     "jsdoc/require-param-description": "error",
     "jsdoc/require-param-type": "off",
@@ -101,7 +171,12 @@
     "no-await-in-loop": "error",
     "no-console": "error",
     "no-constant-binary-expression": "error",
-    "no-duplicate-imports": ["error", { "allowSeparateTypeImports": true }],
+    "no-duplicate-imports": [
+      "error",
+      {
+        "allowSeparateTypeImports": true
+      }
+    ],
     "no-else-return": "error",
     "no-fallthrough": "error",
     "no-implicit-coercion": "error",
@@ -126,13 +201,25 @@
     "typescript/await-thenable": "error",
     "typescript/ban-ts-comment": [
       "error",
-      { "ts-expect-error": true, "ts-ignore": true, "ts-nocheck": true }
+      {
+        "ts-expect-error": true,
+        "ts-ignore": true,
+        "ts-nocheck": true
+      }
     ],
-    "typescript/consistent-type-assertions": ["error", { "assertionStyle": "never" }],
+    "typescript/consistent-type-assertions": [
+      "error",
+      {
+        "assertionStyle": "never"
+      }
+    ],
     "effect-guards/no-ordinary-interface": "error",
     "typescript/consistent-type-imports": [
       "error",
-      { "prefer": "type-imports", "fixStyle": "inline-type-imports" }
+      {
+        "prefer": "type-imports",
+        "fixStyle": "inline-type-imports"
+      }
     ],
     "typescript/no-explicit-any": "error",
     "typescript/no-floating-promises": "error",
@@ -154,13 +241,96 @@
     "typescript/prefer-optional-chain": "error",
     "typescript/restrict-template-expressions": "error",
     "typescript/switch-exhaustiveness-check": "error",
-    "yoda": "error"
+    "yoda": "error",
+    "anti-slop/max-ternary-depth": [
+      "error",
+      {
+        "maxDepth": 2
+      }
+    ],
+    "oxc/no-accumulating-spread": "error",
+    "anti-slop/no-array-filter-map": "error",
+    "anti-slop/no-reduce-accumulator-copy": "error",
+    "anti-slop/no-chained-type-assertions": "error",
+    "anti-slop/no-conditional-spread": "error",
+    "anti-slop/no-dev-env-branch": "error",
+    "anti-slop/no-disabled-type-assertion-rules": "error",
+    "anti-slop/no-instanceof": "error",
+    "anti-slop/no-known-value-widening": "error",
+    "anti-slop/no-module-mocking": "error",
+    "anti-slop/no-object-parameters": "error",
+    "anti-slop/no-reflect-apply": "error",
+    "anti-slop/no-reflect-get": "error",
+    "anti-slop/no-reprovide-ambient-service": "error",
+    "anti-slop/no-runtime-typeof": "error",
+    "anti-slop/no-shape-in-symbol-names": "error",
+    "anti-slop/no-unknown-returns": "error",
+    "anti-slop/no-unknown-type-aliases": "error",
+    "anti-slop/no-unsafe-dictionary-type": "error",
+    "anti-slop/no-widen-then-assert": "error",
+    "anti-slop/require-readable-spacing": "error",
+    "anti-slop/require-safety-comment-for-type-assertion": "error",
+    "landmines/strict-msw": "error",
+    "landmines/no-fixed-sleep": "error",
+    "landmines/no-unsignaled-poll": "error",
+    "landmines/no-flake-masking": "error",
+    "ai-guard/no-placeholder-implementation": "error",
+    "ai-guard/no-test-env-branch": "error",
+    "ai-guard/no-tautological-assertion": "error",
+    "ai-guard/no-assertionless-test": "error",
+    "ai-guard/no-undeclared-import": "error",
+    "ai-guard/no-silent-fallback": "error",
+    "anti-slop-effect/no-manual-effect-error-tag": "error",
+    "anti-slop-effect/no-manual-tag-comparison": "error",
+    "anti-slop-effect/no-manual-tagged-construction": "error",
+    "anti-slop-effect/no-manual-tagged-type": "error",
+    "anti-slop-effect/no-ordie-in-service-construction": "error",
+    "anti-slop-effect/no-service-constructor-imports": "error",
+    "anti-slop-effect/no-service-parameters": "error",
+    "anti-slop-effect/no-static-effect-service-forwarders": "error",
+    "anti-slop-effect/no-test-code-in-src": "error",
+    "anti-slop-effect/no-unbounded-retry": "error",
+    "anti-slop-effect/prefer-effect-match": "error",
+    "anti-slop-effect/prefer-tagged-error-handling": "error",
+    "anti-slop-effect/prefer-yield-service": "error",
+    "anti-slop-effect/require-cause-when-narrowing": "error",
+    "anti-slop-effect/require-operation-span": "error",
+    "anti-slop-effect/require-service-make-layer": "error",
+    "anti-slop-effect/stream-large-files": "error",
+    "anti-slop-effect/throw-in-effect-gen": "error",
+    "effect/noAliasTestLayer": "error",
+    "effect/noEagerAcquire": "error",
+    "effect/noManagedRuntimeInEffect": "error",
+    "effect/noPerCallCacheConstruction": "error",
+    "effect/noPointFreeLog": "error",
+    "effect/noRunCollectOnUnboundedStream": "error",
+    "effect/noSilentCatchAll": "error",
+    "effect/noUnboundedConcurrency": "error",
+    "effect/requireSuppressionReason": "error",
+    "effect/requireForceKillAfter": "error",
+    "enfect/effect-promise-vs-trypromise": "error",
+    "enfect/prefer-redacted-config": "error",
+    "enfect/avoid-option-getorthrow": "error",
+    "enfect/effect-run-in-body": "error",
+    "enfect/no-cause-in-http-response": "error",
+    "enfect/no-effect-ignore-then-as": "error",
+    "enfect/avoid-expect-in-if": "error",
+    "enfect/prefer-duration-constructors": "error",
+    "enfect/avoid-mutable-state": "error",
+    "enfect/prefer-option-over-null": "error",
+    "enfect/yield-in-for-loop": "warn"
   },
   "overrides": [
     {
       "files": ["scripts/comment-syntax.ts"],
       "rules": {
-        "import/extensions": ["error", "never", { "ignorePackages": true }]
+        "import/extensions": [
+          "error",
+          "never",
+          {
+            "ignorePackages": true
+          }
+        ]
       }
     },
     {
@@ -188,15 +358,21 @@
     },
     {
       "files": ["apps/web/src/features/agent/visible-reply.tsx"],
-      "rules": { "effect-guards/no-react-use-effect": "off" }
+      "rules": {
+        "effect-guards/no-react-use-effect": "off"
+      }
     },
     {
       "files": ["apps/web/src/features/transactions/scroll-restoration.ts"],
-      "rules": { "effect-guards/no-react-use-effect": "off" }
+      "rules": {
+        "effect-guards/no-react-use-effect": "off"
+      }
     },
     {
       "files": ["apps/web/src/features/budgets/write-lifetime.ts"],
-      "rules": { "effect-guards/no-react-use-effect": "off" }
+      "rules": {
+        "effect-guards/no-react-use-effect": "off"
+      }
     },
     {
       "files": [
@@ -211,15 +387,21 @@
         "apps/web/src/features/transactions/ledger.tsx",
         "apps/web/src/features/needs-review/workspace.tsx"
       ],
-      "rules": { "import/extensions": "off" }
+      "rules": {
+        "import/extensions": "off"
+      }
     },
     {
       "files": ["apps/web/src/features/transactions/ledger.tsx"],
-      "rules": { "react/incompatible-library": "off" }
+      "rules": {
+        "react/incompatible-library": "off"
+      }
     },
     {
       "files": ["apps/cli/vitest.config.ts"],
-      "rules": { "import/no-default-export": "off" }
+      "rules": {
+        "import/no-default-export": "off"
+      }
     },
     {
       "files": ["infra/**/*.ts"],
@@ -380,13 +562,29 @@
     {
       "files": ["tools/depcruise/*.mjs"],
       "rules": {
-        "import/extensions": ["error", "never", { "pattern": { "js": "always" } }]
+        "import/extensions": [
+          "error",
+          "never",
+          {
+            "pattern": {
+              "js": "always"
+            }
+          }
+        ]
       }
     },
     {
       "files": ["scripts/oxlint/*.js"],
       "rules": {
-        "import/extensions": ["error", "never", { "pattern": { "js": "always" } }]
+        "import/extensions": [
+          "error",
+          "never",
+          {
+            "pattern": {
+              "js": "always"
+            }
+          }
+        ]
       }
     },
     {
@@ -397,7 +595,9 @@
     },
     {
       "files": ["tools/depcruise/*.mjs"],
-      "rules": { "import/extensions": "off" }
+      "rules": {
+        "import/extensions": "off"
+      }
     },
     {
       "files": ["apps/server/src/core/**"],
@@ -408,7 +608,12 @@
         "effect-guards/no-unknown-parameters": "error",
         "effect-guards/no-unsafe-dictionary-type": "error",
         "effect-guards/scalar-brand-only": "error",
-        "no-param-reassign": ["error", { "props": true }],
+        "no-param-reassign": [
+          "error",
+          {
+            "props": true
+          }
+        ],
         "no-restricted-globals": [
           "error",
           {
@@ -442,23 +647,43 @@
           },
           {
             "object": "Console",
-            "message": "core may not log. Return what happened and let the shell decide whether to print it — Console is an Effect default service, so it does not appear in the requirements channel and nothing else will catch this."
+            "message": "core may not log. Return what happened and let the shell decide whether to print it \u2014 Console is an Effect default service, so it does not appear in the requirements channel and nothing else will catch this."
           },
           {
             "object": "performance",
             "property": "now",
-            "message": "core may not read the clock. `performance.now()` is a clock like any other — a monotonic one — so a core function using it depends on when it runs."
+            "message": "core may not read the clock. `performance.now()` is a clock like any other \u2014 a monotonic one \u2014 so a core function using it depends on when it runs."
           }
         ],
         "typescript/prefer-readonly-parameter-types": [
           "error",
           {
             "allow": [
-              { "from": "package", "package": "effect", "name": "Utc" },
-              { "from": "package", "package": "effect", "name": "Brand" },
-              { "from": "package", "package": "effect", "name": "Option" },
-              { "from": "package", "package": "effect", "name": "Json" },
-              { "from": "package", "package": "effect", "name": "SchemaError" }
+              {
+                "from": "package",
+                "package": "effect",
+                "name": "Utc"
+              },
+              {
+                "from": "package",
+                "package": "effect",
+                "name": "Brand"
+              },
+              {
+                "from": "package",
+                "package": "effect",
+                "name": "Option"
+              },
+              {
+                "from": "package",
+                "package": "effect",
+                "name": "Json"
+              },
+              {
+                "from": "package",
+                "package": "effect",
+                "name": "SchemaError"
+              }
             ]
           }
         ],
@@ -468,11 +693,11 @@
             "patterns": [
               {
                 "group": ["~/shell", "~/shell/**", "**/shell", "**/shell/**"],
-                "message": "core may not import shell. Shell may import core; the arrow only points one way (ARCHITECTURE.md §1). Take what you need as a plain parameter and let the shell supply it."
+                "message": "core may not import shell. Shell may import core; the arrow only points one way (ARCHITECTURE.md \u00a71). Take what you need as a plain parameter and let the shell supply it."
               },
               {
                 "group": ["effect/http-api", "effect/http-api/**", "effect/http", "effect/http/**"],
-                "message": "core may not import the HTTP modules. A canonical operation's declaration — path, status code, required scope, cost class — is a delivery concern and belongs in the slice's shell contract; core holds the canonical schema and has no knowledge it is served over HTTP (ARCHITECTURE.md §4)."
+                "message": "core may not import the HTTP modules. A canonical operation's declaration \u2014 path, status code, required scope, cost class \u2014 is a delivery concern and belongs in the slice's shell contract; core holds the canonical schema and has no knowledge it is served over HTTP (ARCHITECTURE.md \u00a74)."
               }
             ]
           }
@@ -528,6 +753,443 @@
       ],
       "rules": {
         "import/no-default-export": "off"
+      }
+    },
+    {
+      "files": [
+        "**/*.test.*",
+        "**/*.spec.*",
+        "**/*.test-fixture.*",
+        "**/*.fixture.*",
+        "**/test/**",
+        "**/tests/**",
+        "**/__tests__/**"
+      ],
+      "rules": {
+        "anti-slop-effect/throw-in-effect-gen": "off",
+        "effect/noUnboundedConcurrency": "off",
+        "enfect/effect-promise-vs-trypromise": "off",
+        "enfect/avoid-option-getorthrow": "off",
+        "enfect/effect-run-in-body": "off"
+      }
+    },
+    {
+      "files": [
+        "apps/cli/src/main.ts",
+        "apps/web/src/main.tsx",
+        "apps/site/cloudflare/worker.ts",
+        "apps/server/cloudflare/*-worker.ts",
+        "apps/server/cloudflare/ai/*-worker.ts",
+        "apps/server/cloudflare/documents/*-worker.ts",
+        "apps/server/cloudflare/ingestion/email-worker.ts",
+        "apps/server/scripts/*.ts",
+        "apps/server/tools/*/generate*.ts",
+        "apps/server/tools/contracts/digest-artifacts.ts",
+        "apps/docs/scripts/*.ts",
+        "apps/site/scripts/*.ts",
+        "apps/web/scripts/*.ts",
+        "infra/cloudflare/alchemy*.ts",
+        "infra/cloudflare/verify-edge-policy.ts",
+        "infra/cloudflare/scripts/*.ts",
+        "scripts/check-*.ts",
+        "scripts/ci-changes.ts",
+        "scripts/dev-browser.ts",
+        "scripts/partition-source-scan.ts",
+        "scripts/verify.ts",
+        "scripts/document-parsing/check.ts",
+        "scripts/document-parsing/xlsx-work.ts",
+        "scripts/pro/main.ts",
+        "scripts/titular-requests/main.ts",
+        "tools/astro/check.ts"
+      ],
+      "rules": {
+        "enfect/effect-run-in-body": "off"
+      }
+    },
+    {
+      "files": ["apps/server/src/shell/**"],
+      "rules": {
+        "anti-slop-effect/no-manual-effect-error-tag": "off",
+        "anti-slop-effect/no-manual-tag-comparison": "off",
+        "anti-slop-effect/no-manual-tagged-construction": "off",
+        "anti-slop-effect/no-manual-tagged-type": "off",
+        "anti-slop-effect/no-service-constructor-imports": "off",
+        "anti-slop-effect/no-service-parameters": "off",
+        "anti-slop-effect/no-test-code-in-src": "off",
+        "anti-slop-effect/require-cause-when-narrowing": "off",
+        "anti-slop-effect/require-service-make-layer": "off",
+        "anti-slop/no-array-filter-map": "off",
+        "anti-slop/no-conditional-spread": "off",
+        "anti-slop/no-instanceof": "off",
+        "anti-slop/no-known-value-widening": "off",
+        "anti-slop/no-object-parameters": "off",
+        "anti-slop/no-reflect-apply": "off",
+        "anti-slop/no-reflect-get": "off",
+        "anti-slop/no-runtime-typeof": "off",
+        "anti-slop/no-shape-in-symbol-names": "off",
+        "anti-slop/no-unknown-returns": "off",
+        "anti-slop/no-unsafe-dictionary-type": "off",
+        "enfect/avoid-expect-in-if": "off",
+        "enfect/avoid-option-getorthrow": "off",
+        "enfect/yield-in-for-loop": "off"
+      }
+    },
+    {
+      "files": ["apps/server/src/core/**"],
+      "rules": {
+        "anti-slop-effect/no-manual-tag-comparison": "off",
+        "anti-slop-effect/no-manual-tagged-construction": "off",
+        "anti-slop-effect/no-manual-tagged-type": "off",
+        "anti-slop-effect/no-test-code-in-src": "off",
+        "anti-slop-effect/require-cause-when-narrowing": "off",
+        "anti-slop/no-array-filter-map": "off",
+        "anti-slop/no-conditional-spread": "off",
+        "anti-slop/no-known-value-widening": "off",
+        "anti-slop/no-runtime-typeof": "off",
+        "anti-slop/no-shape-in-symbol-names": "off",
+        "anti-slop/no-unknown-returns": "off",
+        "enfect/avoid-expect-in-if": "off",
+        "enfect/avoid-option-getorthrow": "off",
+        "enfect/yield-in-for-loop": "off"
+      }
+    },
+    {
+      "files": [
+        "apps/server/cloudflare/ingestion/**",
+        "apps/server/cloudflare/runtime/**",
+        "apps/server/cloudflare/subscription/**",
+        "apps/server/cloudflare/transactions/**"
+      ],
+      "rules": {
+        "anti-slop-effect/no-manual-tag-comparison": "off",
+        "anti-slop-effect/no-manual-tagged-construction": "off",
+        "anti-slop-effect/no-manual-tagged-type": "off",
+        "anti-slop-effect/no-service-constructor-imports": "off",
+        "anti-slop-effect/require-cause-when-narrowing": "off",
+        "anti-slop-effect/require-service-make-layer": "off",
+        "anti-slop/no-conditional-spread": "off",
+        "anti-slop/no-instanceof": "off",
+        "anti-slop/no-known-value-widening": "off",
+        "anti-slop/no-object-parameters": "off",
+        "anti-slop/no-runtime-typeof": "off",
+        "anti-slop/no-shape-in-symbol-names": "off",
+        "anti-slop/no-unknown-returns": "off",
+        "anti-slop/no-unsafe-dictionary-type": "off",
+        "enfect/avoid-expect-in-if": "off",
+        "enfect/avoid-option-getorthrow": "off",
+        "enfect/effect-run-in-body": "off",
+        "enfect/yield-in-for-loop": "off",
+        "landmines/no-flake-masking": "off"
+      }
+    },
+    {
+      "files": [
+        "apps/server/cloudflare/agent/**",
+        "apps/server/cloudflare/email-authentication/**",
+        "apps/server/cloudflare/insights/**",
+        "apps/server/cloudflare/maintenance/**",
+        "apps/server/cloudflare/oauth-agents/**",
+        "apps/server/cloudflare/provider-authentication/**"
+      ],
+      "rules": {
+        "anti-slop-effect/no-manual-tag-comparison": "off",
+        "anti-slop-effect/no-manual-tagged-construction": "off",
+        "anti-slop-effect/no-manual-tagged-type": "off",
+        "anti-slop-effect/no-service-constructor-imports": "off",
+        "anti-slop-effect/prefer-yield-service": "off",
+        "anti-slop-effect/require-cause-when-narrowing": "off",
+        "anti-slop/no-array-filter-map": "off",
+        "anti-slop/no-conditional-spread": "off",
+        "anti-slop/no-instanceof": "off",
+        "anti-slop/no-known-value-widening": "off",
+        "anti-slop/no-object-parameters": "off",
+        "anti-slop/no-reflect-get": "off",
+        "anti-slop/no-reprovide-ambient-service": "off",
+        "anti-slop/no-runtime-typeof": "off",
+        "anti-slop/no-shape-in-symbol-names": "off",
+        "anti-slop/no-unknown-returns": "off",
+        "anti-slop/no-unsafe-dictionary-type": "off",
+        "enfect/avoid-expect-in-if": "off",
+        "enfect/avoid-option-getorthrow": "off",
+        "enfect/effect-run-in-body": "off",
+        "enfect/yield-in-for-loop": "off",
+        "landmines/no-flake-masking": "off"
+      }
+    },
+    {
+      "files": [
+        "apps/server/cloudflare/ai/**",
+        "apps/server/cloudflare/anonymous-admission/**",
+        "apps/server/cloudflare/bancolombia-authentication/**",
+        "apps/server/cloudflare/beta-pro/**",
+        "apps/server/cloudflare/browser-bootstrap.test-fixture.ts",
+        "apps/server/cloudflare/browser-login/**",
+        "apps/server/cloudflare/budgets/**",
+        "apps/server/cloudflare/canonical-admission/**",
+        "apps/server/cloudflare/canonical-operations/**",
+        "apps/server/cloudflare/canonical-work/**",
+        "apps/server/cloudflare/categories/**",
+        "apps/server/cloudflare/cli-distribution.test.ts",
+        "apps/server/cloudflare/cli-distribution/**",
+        "apps/server/cloudflare/connection-worker.test-fixture.ts",
+        "apps/server/cloudflare/connections/**",
+        "apps/server/cloudflare/consent/**",
+        "apps/server/cloudflare/core-http/**",
+        "apps/server/cloudflare/core-worker.ts",
+        "apps/server/cloudflare/dashboard/**",
+        "apps/server/cloudflare/directory/**",
+        "apps/server/cloudflare/documents/**",
+        "apps/server/cloudflare/erasure-store/**",
+        "apps/server/cloudflare/erasure-worker.test-fixture.ts",
+        "apps/server/cloudflare/erasure/**",
+        "apps/server/cloudflare/financial-user-store.test-fixture.ts",
+        "apps/server/cloudflare/fixture-fallback-core.ts",
+        "apps/server/cloudflare/fixture-fallback-ingress.ts",
+        "apps/server/cloudflare/http/**",
+        "apps/server/cloudflare/mcp/**",
+        "apps/server/cloudflare/memory/**",
+        "apps/server/cloudflare/oauth-confirmation/**",
+        "apps/server/cloudflare/openai.test-fixture.ts",
+        "apps/server/cloudflare/operational-canary-workflow.ts",
+        "apps/server/cloudflare/operator-access/**",
+        "apps/server/cloudflare/outbound-http/**",
+        "apps/server/cloudflare/private-objects/**",
+        "apps/server/cloudflare/public-worker-browser-entry.test.ts",
+        "apps/server/cloudflare/public-worker-erasure.test.ts",
+        "apps/server/cloudflare/public-worker-hosted-recovery.test.ts",
+        "apps/server/cloudflare/queue/**",
+        "apps/server/cloudflare/recovery/**",
+        "apps/server/cloudflare/recurring-plans/**",
+        "apps/server/cloudflare/recurring/**",
+        "apps/server/cloudflare/release-fixture/**",
+        "apps/server/cloudflare/release-isolation/**",
+        "apps/server/cloudflare/secret-material/**",
+        "apps/server/cloudflare/signed-whatsapp.test-fixture.ts",
+        "apps/server/cloudflare/storage-bootstrap/**",
+        "apps/server/cloudflare/store-migrations.test-fixture.ts",
+        "apps/server/cloudflare/test-shards.ts",
+        "apps/server/cloudflare/tokens/**",
+        "apps/server/cloudflare/user-store.test-fixture.ts",
+        "apps/server/cloudflare/user-store/**",
+        "apps/server/cloudflare/web-authentication/**",
+        "apps/server/cloudflare/web-session/**",
+        "apps/server/cloudflare/whatsapp/**",
+        "apps/server/tools/**"
+      ],
+      "rules": {
+        "anti-slop-effect/no-manual-tag-comparison": "off",
+        "anti-slop-effect/no-manual-tagged-construction": "off",
+        "anti-slop-effect/no-manual-tagged-type": "off",
+        "anti-slop-effect/no-service-constructor-imports": "off",
+        "anti-slop-effect/no-service-parameters": "off",
+        "anti-slop-effect/require-cause-when-narrowing": "off",
+        "anti-slop-effect/throw-in-effect-gen": "off",
+        "anti-slop/no-array-filter-map": "off",
+        "anti-slop/no-conditional-spread": "off",
+        "anti-slop/no-instanceof": "off",
+        "anti-slop/no-known-value-widening": "off",
+        "anti-slop/no-object-parameters": "off",
+        "anti-slop/no-reflect-get": "off",
+        "anti-slop/no-reprovide-ambient-service": "off",
+        "anti-slop/no-runtime-typeof": "off",
+        "anti-slop/no-shape-in-symbol-names": "off",
+        "anti-slop/no-unknown-returns": "off",
+        "anti-slop/no-unsafe-dictionary-type": "off",
+        "effect/noUnboundedConcurrency": "off",
+        "enfect/avoid-expect-in-if": "off",
+        "enfect/avoid-option-getorthrow": "off",
+        "enfect/effect-run-in-body": "off",
+        "enfect/prefer-duration-constructors": "off",
+        "enfect/yield-in-for-loop": "off",
+        "landmines/no-flake-masking": "off",
+        "oxc/no-accumulating-spread": "off"
+      }
+    },
+    {
+      "files": [
+        "apps/web/src/features/pats/**",
+        "apps/web/src/features/transactions/**",
+        "apps/web/src/transport/**"
+      ],
+      "rules": {
+        "ai-guard/no-undeclared-import": "off",
+        "anti-slop-effect/no-manual-effect-error-tag": "off",
+        "anti-slop-effect/no-manual-tag-comparison": "off",
+        "anti-slop-effect/no-manual-tagged-construction": "off",
+        "anti-slop-effect/no-manual-tagged-type": "off",
+        "anti-slop-effect/no-service-constructor-imports": "off",
+        "anti-slop-effect/no-test-code-in-src": "off",
+        "anti-slop-effect/require-cause-when-narrowing": "off",
+        "anti-slop-effect/require-service-make-layer": "off",
+        "anti-slop/no-conditional-spread": "off",
+        "anti-slop/no-instanceof": "off",
+        "anti-slop/no-known-value-widening": "off",
+        "anti-slop/no-object-parameters": "off",
+        "anti-slop/no-runtime-typeof": "off",
+        "anti-slop/no-shape-in-symbol-names": "off",
+        "anti-slop/no-unknown-returns": "off",
+        "anti-slop/no-unsafe-dictionary-type": "off",
+        "enfect/avoid-expect-in-if": "off",
+        "enfect/avoid-option-getorthrow": "off",
+        "enfect/effect-run-in-body": "off",
+        "enfect/yield-in-for-loop": "off",
+        "landmines/no-unsignaled-poll": "off"
+      }
+    },
+    {
+      "files": [
+        "apps/web/src/features/browser-login/**",
+        "apps/web/src/features/oauth-connections/**",
+        "apps/web/src/features/recurring/**",
+        "apps/web/src/features/subscription/**"
+      ],
+      "rules": {
+        "ai-guard/no-undeclared-import": "off",
+        "anti-slop-effect/no-manual-tag-comparison": "off",
+        "anti-slop-effect/no-manual-tagged-construction": "off",
+        "anti-slop-effect/no-manual-tagged-type": "off",
+        "anti-slop-effect/no-service-constructor-imports": "off",
+        "anti-slop-effect/no-test-code-in-src": "off",
+        "anti-slop-effect/prefer-tagged-error-handling": "off",
+        "anti-slop/no-conditional-spread": "off",
+        "anti-slop/no-instanceof": "off",
+        "anti-slop/no-known-value-widening": "off",
+        "anti-slop/no-reprovide-ambient-service": "off",
+        "anti-slop/no-runtime-typeof": "off",
+        "anti-slop/no-shape-in-symbol-names": "off",
+        "enfect/avoid-expect-in-if": "off",
+        "enfect/avoid-option-getorthrow": "off",
+        "enfect/effect-run-in-body": "off",
+        "enfect/yield-in-for-loop": "off"
+      }
+    },
+    {
+      "files": [
+        "apps/web/cloudflare/**",
+        "apps/web/scripts/**",
+        "apps/web/src/app/**",
+        "apps/web/src/browser/**",
+        "apps/web/src/features/agent/**",
+        "apps/web/src/features/budgets/**",
+        "apps/web/src/features/connections/**",
+        "apps/web/src/features/dashboard/**",
+        "apps/web/src/features/email-replacement/**",
+        "apps/web/src/features/needs-review/**",
+        "apps/web/src/features/privacy/**",
+        "apps/web/src/features/provider-authentication/**",
+        "apps/web/src/features/recovery/**",
+        "apps/web/src/features/recurring-digest/**",
+        "apps/web/src/features/signed-in/**",
+        "apps/web/src/session/**",
+        "apps/web/src/ui/**"
+      ],
+      "rules": {
+        "ai-guard/no-undeclared-import": "off",
+        "anti-slop-effect/no-manual-tag-comparison": "off",
+        "anti-slop-effect/no-manual-tagged-construction": "off",
+        "anti-slop-effect/no-manual-tagged-type": "off",
+        "anti-slop-effect/no-service-constructor-imports": "off",
+        "anti-slop-effect/no-test-code-in-src": "off",
+        "anti-slop-effect/prefer-tagged-error-handling": "off",
+        "anti-slop/no-array-filter-map": "off",
+        "anti-slop/no-conditional-spread": "off",
+        "anti-slop/no-instanceof": "off",
+        "anti-slop/no-known-value-widening": "off",
+        "anti-slop/no-runtime-typeof": "off",
+        "anti-slop/no-shape-in-symbol-names": "off",
+        "anti-slop/no-unknown-returns": "off",
+        "enfect/avoid-expect-in-if": "off",
+        "enfect/avoid-option-getorthrow": "off",
+        "enfect/effect-run-in-body": "off",
+        "enfect/yield-in-for-loop": "off",
+        "landmines/no-flake-masking": "off",
+        "landmines/no-unsignaled-poll": "off"
+      }
+    },
+    {
+      "files": ["infra/**"],
+      "rules": {
+        "ai-guard/no-undeclared-import": "off",
+        "anti-slop-effect/no-manual-tag-comparison": "off",
+        "anti-slop-effect/no-manual-tagged-construction": "off",
+        "anti-slop-effect/no-ordie-in-service-construction": "off",
+        "anti-slop-effect/require-cause-when-narrowing": "off",
+        "anti-slop-effect/stream-large-files": "off",
+        "anti-slop/no-array-filter-map": "off",
+        "anti-slop/no-conditional-spread": "off",
+        "anti-slop/no-instanceof": "off",
+        "anti-slop/no-known-value-widening": "off",
+        "anti-slop/no-reflect-get": "off",
+        "anti-slop/no-reprovide-ambient-service": "off",
+        "anti-slop/no-runtime-typeof": "off",
+        "anti-slop/no-shape-in-symbol-names": "off",
+        "anti-slop/no-unknown-returns": "off",
+        "anti-slop/no-unsafe-dictionary-type": "off",
+        "effect/noSilentCatchAll": "off",
+        "effect/requireForceKillAfter": "off",
+        "enfect/avoid-expect-in-if": "off",
+        "enfect/effect-run-in-body": "off",
+        "enfect/yield-in-for-loop": "off",
+        "landmines/no-flake-masking": "off"
+      }
+    },
+    {
+      "files": ["apps/cli/**"],
+      "rules": {
+        "anti-slop-effect/no-manual-tag-comparison": "off",
+        "anti-slop-effect/no-manual-tagged-construction": "off",
+        "anti-slop-effect/no-manual-tagged-type": "off",
+        "anti-slop-effect/no-service-constructor-imports": "off",
+        "anti-slop-effect/no-test-code-in-src": "off",
+        "anti-slop-effect/require-cause-when-narrowing": "off",
+        "anti-slop/no-array-filter-map": "off",
+        "anti-slop/no-conditional-spread": "off",
+        "anti-slop/no-instanceof": "off",
+        "anti-slop/no-known-value-widening": "off",
+        "anti-slop/no-reprovide-ambient-service": "off",
+        "anti-slop/no-unknown-returns": "off",
+        "enfect/avoid-expect-in-if": "off",
+        "enfect/prefer-duration-constructors": "off",
+        "enfect/yield-in-for-loop": "off"
+      }
+    },
+    {
+      "files": ["scripts/**"],
+      "rules": {
+        "ai-guard/no-undeclared-import": "off",
+        "anti-slop-effect/no-manual-effect-error-tag": "off",
+        "anti-slop-effect/no-manual-tag-comparison": "off",
+        "anti-slop-effect/no-manual-tagged-construction": "off",
+        "anti-slop-effect/no-service-constructor-imports": "off",
+        "anti-slop-effect/require-cause-when-narrowing": "off",
+        "anti-slop-effect/stream-large-files": "off",
+        "anti-slop-effect/throw-in-effect-gen": "off",
+        "anti-slop/no-array-filter-map": "off",
+        "anti-slop/no-conditional-spread": "off",
+        "anti-slop/no-instanceof": "off",
+        "anti-slop/no-known-value-widening": "off",
+        "anti-slop/no-reflect-get": "off",
+        "anti-slop/no-runtime-typeof": "off",
+        "anti-slop/no-shape-in-symbol-names": "off",
+        "anti-slop/no-unknown-returns": "off",
+        "anti-slop/no-unsafe-dictionary-type": "off",
+        "enfect/avoid-expect-in-if": "off",
+        "enfect/avoid-option-getorthrow": "off",
+        "enfect/effect-run-in-body": "off",
+        "enfect/prefer-duration-constructors": "off",
+        "enfect/yield-in-for-loop": "off",
+        "landmines/no-flake-masking": "off"
+      }
+    },
+    {
+      "files": ["apps/docs/**", "apps/site/**", "tools/depcruise/**", "tools/mcp-inspector/**"],
+      "rules": {
+        "anti-slop/no-array-filter-map": "off",
+        "anti-slop/no-conditional-spread": "off",
+        "anti-slop/no-instanceof": "off",
+        "anti-slop/no-known-value-widening": "off",
+        "anti-slop/no-runtime-typeof": "off",
+        "anti-slop/no-unknown-returns": "off"
       }
     }
   ]

@@ -8,8 +8,11 @@ import { build } from "vite";
 import { entryPreload } from "../entry-preload";
 
 const gitRevision = "0123456789abcdef0123456789abcdef01234567";
+
 const contractDigest = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+
 const temporaryDirectories: Array<string> = [];
+
 const encodeMetadata = Schema.encodeSync(
   Schema.fromJsonString(
     Schema.Struct({ contractDigest: Schema.String, gitRevision: Schema.String })
@@ -43,6 +46,7 @@ it.effect("preloads shared entry code without eagerly loading a dynamic workspac
         Bun.write(join(directory, "src/dashboard.ts"), 'console.log("deferred workspace");'),
       ])
     );
+
     const built = yield* Effect.tryPromise(() =>
       build({
         root: directory,
@@ -52,15 +56,19 @@ it.effect("preloads shared entry code without eagerly loading a dynamic workspac
         build: { write: false },
       })
     );
+
     if (Array.isArray(built) || !("output" in built)) {
       return yield* Effect.die("Expected one static build");
     }
+
     const html = built.output.find(
       (asset) => asset.type === "asset" && asset.fileName === "index.html"
     );
+
     if (html?.type !== "asset" || typeof html.source !== "string") {
       return yield* Effect.die("Expected built HTML");
     }
+
     const render = built.output.find((asset) => asset.fileName.startsWith("assets/render-"));
     const workspace = built.output.find((asset) => asset.fileName.startsWith("assets/dashboard-"));
     expect(render).toBeDefined();
@@ -102,6 +110,7 @@ const productionOutput = (
     yield* Effect.tryPromise(() =>
       Bun.write(join(directory, `assets/${assetName}`), "console.log('web')")
     );
+
     return directory;
   });
 
@@ -141,9 +150,11 @@ describe("production static release identity", () => {
     () =>
       Effect.gen(function* () {
         const directory = yield* productionOutput();
+
         for (const file of ["robots.txt", "_redirects"]) {
           yield* Effect.tryPromise(() => Bun.write(join(directory, file), "public discovery"));
         }
+
         yield* Effect.tryPromise(() => expect(validate(directory)).resolves.toBeUndefined());
         yield* Effect.tryPromise(() =>
           Bun.write(join(directory, "private.txt"), "not a public artifact")

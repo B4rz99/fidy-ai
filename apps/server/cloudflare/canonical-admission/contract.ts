@@ -20,6 +20,7 @@ export type LocalMutationResult = Readonly<{
 }>;
 
 export type LocalReviewFacts = { effect: string; revision: string };
+
 export type LocalMutationPlan = Readonly<{
   review: Option.Option<
     Effect.Effect<LocalReviewFacts, CanonicalAdmissionUnavailable, SqliteClient>
@@ -29,4 +30,5 @@ export type LocalMutationPlan = Readonly<{
   removedTarget: Option.Option<string>;
   commit: Effect.Effect<LocalMutationResult, CanonicalAdmissionUnavailable, SqliteClient>;
 }>;
+
 export type LocalMutationPreparation = LocalMutationResult | LocalMutationPlan;

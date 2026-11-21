@@ -17,9 +17,12 @@ type ConversationOwner = Readonly<{
   subscribe: (listener: () => void) => () => void;
   capture: () => ConversationLifetime;
 }>;
+
 type MountedLifetime = Readonly<{ active: () => boolean; retire: () => void }>;
+
 const mountedLifetime = (): MountedLifetime => {
   let retired = false;
+
   return {
     active: (): boolean => !retired,
     retire: (): void => {
@@ -27,22 +30,26 @@ const mountedLifetime = (): MountedLifetime => {
     },
   };
 };
+
 const conversationOwner = (clearAcceptedDraft: () => void): ConversationOwner => {
   let conversation = initialConversation;
   let lifetime = mountedLifetime();
   let active = false;
   const listeners = new Set<() => void>();
+
   const setConversation: SetConversation = (update) => {
     if (!active) return;
     conversation = typeof update === "function" ? update(conversation) : update;
     listeners.forEach((listener) => listener());
   };
+
   return {
     current: (): Conversation => conversation,
     setConversation,
     subscribe: (listener: () => void): (() => void) => {
       active = true;
       listeners.add(listener);
+
       return () => {
         listeners.delete(listener);
         active = false;
@@ -54,6 +61,7 @@ const conversationOwner = (clearAcceptedDraft: () => void): ConversationOwner =>
     capture: (): ConversationLifetime => {
       const admitted = lifetime;
       const isActive = (): boolean => active && admitted.active();
+
       return {
         active: isActive,
         setConversation: (update: Parameters<SetConversation>[0]): void => {
@@ -77,6 +85,7 @@ export const useHostedConversation = ({
   const progress = useAtomSet(commands.progress);
   const acknowledge = useAtomSet(commands.receipt);
   const conversation = useSyncExternalStore(owner.subscribe, owner.current);
+
   return presentHostedConversation({
     conversation,
     setConversation: owner.setConversation,

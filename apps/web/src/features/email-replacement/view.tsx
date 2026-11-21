@@ -35,10 +35,12 @@ const ReplacementForm = ({
   draftEmail,
 }: Pick<EmailReplacementViewProps, "request"> & Readonly<{ draftEmail: string }>): JSX.Element => {
   const [candidateEmail, setCandidateEmail] = useState(draftEmail);
+
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     request(candidateEmail);
   };
+
   return (
     <form className="settings-email-form" onSubmit={submit}>
       <div className="flex flex-col gap-2">
@@ -75,12 +77,14 @@ const ProofForm = ({
   restart: () => void;
 }>): JSX.Element => {
   const [combinedCode, setCombinedCode] = useState("");
+
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const submittedCode = combinedCode;
     setCombinedCode("");
     complete(submittedCode);
   };
+
   return (
     <form className="flex flex-col gap-4" onSubmit={submit}>
       {invalid ? (
@@ -154,6 +158,7 @@ const EditingForm = ({
     />
   </>
 );
+
 const ReplacementWaiting = ({
   restart,
 }: Pick<EmailReplacementViewProps, "restart">): JSX.Element => (
@@ -166,6 +171,7 @@ const ReplacementWaiting = ({
     </Button>
   </div>
 );
+
 const replacementContent = ({
   complete,
   request,
@@ -174,9 +180,11 @@ const replacementContent = ({
   state,
 }: Omit<EmailReplacementViewProps, "lifecycleRef">): JSX.Element => {
   if (state._tag === "Editing") return <EditingForm request={request} state={state} />;
+
   if (state._tag === "Requesting" || state._tag === "Completing") {
     return <ReplacementWaiting restart={restart} />;
   }
+
   if (state._tag === "AwaitingCode" || state._tag === "InvalidCode") {
     return (
       <ProofForm
@@ -188,8 +196,10 @@ const replacementContent = ({
       />
     );
   }
+
   return replacementOutcome(state);
 };
+
 const replacementOutcome = (
   state: Extract<
     EmailReplacementViewState,
@@ -217,6 +227,7 @@ const replacementOutcome = (
       </Alert>
     );
   }
+
   if (state._tag === "FreshPairingRequired") {
     return (
       <Alert variant="destructive">
@@ -231,10 +242,13 @@ const replacementOutcome = (
       </Alert>
     );
   }
+
   if (state._tag === "Uncertain" || state._tag === "Disposed") {
     return <ReplacementUnavailable />;
   }
+
   state satisfies Extract<EmailReplacementViewState, { _tag: "Replaced" }>;
+
   return (
     <Alert>
       <AlertTitle>Correo actualizado</AlertTitle>

@@ -7,6 +7,7 @@ import { Button } from "./button";
 const focusSearch: React.RefCallback<HTMLInputElement> = (element): void => {
   element?.focus();
 };
+
 export const HeaderSearch = ({
   value,
   onChange,

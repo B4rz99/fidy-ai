@@ -36,12 +36,14 @@ const rememberPolicy = operationPolicy({
   agentConfirmation: "not-required",
   kind: "mutation",
 });
+
 const destructiveWritePolicy = operationPolicy({
   access: userOwnedAgentScoped("write"),
   requiredTier: "free",
   agentConfirmation: "required",
   kind: "mutation",
 });
+
 const recallPolicy = operationPolicy({
   access: userOwnedAgentScoped("read"),
   requiredTier: "free",
@@ -112,6 +114,7 @@ export const memoryOperationIds = [
 ] as const satisfies ReadonlyArray<MemoryOperationId>;
 
 export type BrowserMemorySubject = Readonly<{ id: string; userId: string; digest: Uint8Array }>;
+
 export type MemoryAuditOperation = MemoryOperationId;
 
 export type MemoryAuditOutcome = "success" | "not_found" | "validation_failed" | "resource_limit";

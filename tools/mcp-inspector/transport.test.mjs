@@ -7,9 +7,12 @@ import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const directory = fileURLToPath(new URL(".", import.meta.url));
+
 let fixture = "";
+
 before(async () => {
   fixture = await mkdtemp(join(tmpdir(), "fidy-inspector-transport-"));
+
   const certificate = spawnSync(
     "openssl",
     [
@@ -31,13 +34,17 @@ before(async () => {
     ],
     { stdio: "ignore" }
   );
+
   assert.equal(certificate.status, 0, "openssl must create the disposable loopback certificate");
 });
+
 after(async () => rm(fixture, { recursive: true, force: true }));
+
 await Promise.all(
   ["cancel", "concurrent"].map((mode) =>
     test(`Inspector HTTP/2 ${mode} settles with the isolated dispatcher`, () => {
       const baseline = process.env.FIDY_INSPECTOR_BASELINE === "1";
+
       const result = spawnSync(
         process.execPath,
         [
@@ -57,6 +64,7 @@ await Promise.all(
           },
         }
       );
+
       assert.equal(
         result.error,
         undefined,

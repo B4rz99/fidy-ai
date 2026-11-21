@@ -16,12 +16,14 @@ type ApprovalInput = Readonly<{
   client: OAuthRegistration;
   choice: OAuthReviewChoice;
 }>;
+
 type ApprovalMaterial = Readonly<{
   connectionId: OAuthConnectionId;
   scopesJson: string;
   expiresAt: number;
   digest: Uint8Array;
 }>;
+
 export const grantStatement = ({
   input,
   material,
@@ -30,6 +32,7 @@ export const grantStatement = ({
   material: ApprovalMaterial;
 }): OwnedStatement => {
   const fresh = freshSessionConditions(input);
+
   return protectConsentStatement({
     subject: { _tag: "User", userId: input.session.user_id },
     requirement: "active",

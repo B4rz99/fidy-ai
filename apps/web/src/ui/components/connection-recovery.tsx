@@ -9,6 +9,7 @@ export const ConnectionRecovery = ({
   destination,
 }: Readonly<{ destination: "/login" | "/app/transactions" }>): JSX.Element => {
   const { mounted } = useTheme();
+
   return (
     <div ref={mounted} className="connection-recovery">
       <header className="connection-recovery-header">

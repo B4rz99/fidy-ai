@@ -29,6 +29,7 @@ const ListedTools = Schema.Struct({
     ),
   }),
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   for (const { scopes, tools, additionalDeclarations } of discoveryCases) {
     test.effect("projects private MCP discovery for " + scopes.join(" and "), () =>
@@ -36,28 +37,35 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const { runtime, credential } = yield* nativeGrantWithScopes(scopes);
         const response = yield* protocolFor(runtime)(credential.access_token, "tools/list");
         expect(response.status).toBe(200);
+
         const listed = yield* Schema.decodeUnknownEffect(ListedTools)(
           yield* native(() => response.json())
         );
+
         const expected = [...tools].sort();
         const names = listed.result.tools.map(({ name }) => name);
         expect(names, scopes.join(" ")).toEqual(expected);
+
         for (const excluded of excludedAccountSecurityDiscovery) {
           expect(names).not.toContain(excluded);
         }
+
         for (const tool of listed.result.tools) {
           expect(tool.annotations).toEqual({
             readOnlyHint: readDiscovery.includes(tool.name),
             destructiveHint: sensitiveDiscovery.has(tool.name),
           });
         }
+
         const schemas = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(
           listed.result.tools.map(({ inputSchema, outputSchema }) => ({
             inputSchema,
             outputSchema,
           }))
         );
+
         const allowedDeclarations = new Set([...tools, ...additionalDeclarations]);
+
         for (const operation of operationCatalog.operations.filter(
           ({ id }) => !allowedDeclarations.has(id)
         )) {
@@ -90,12 +98,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const { runtime, credential } = yield* nativeGrantWithScopes(["read"]);
+
         const headers = {
           "cf-connecting-ip": "192.0.2.75",
           authorization: `Bearer ${credential.access_token}`,
           "content-type": "application/json",
           accept: "application/json, text/event-stream",
         };
+
         const initialized = yield* native(() =>
           runtime.dispatchFetch("https://api.fidyapp.com/mcp", {
             method: "POST",
@@ -112,15 +122,18 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }),
           })
         );
+
         expect(initialized.status).toBe(200);
         const sessionId = initialized.headers.get("mcp-session-id");
         expect(sessionId).not.toBeNull();
         yield* native(() => initialized.text());
+
         const sessionHeaders = {
           ...headers,
           "mcp-protocol-version": "2025-11-25",
           "mcp-session-id": sessionId ?? "",
         };
+
         const notified = yield* native(() =>
           runtime.dispatchFetch("https://api.fidyapp.com/mcp", {
             method: "POST",
@@ -131,8 +144,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }),
           })
         );
+
         expect(notified.status).toBe(202);
         yield* native(() => notified.text());
+
         const discovery = yield* native(() =>
           runtime.dispatchFetch("https://api.fidyapp.com/mcp", {
             method: "POST",
@@ -145,13 +160,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }),
           })
         );
+
         expect(discovery.status).toBe(200);
+
         const listed = yield* Schema.decodeUnknownEffect(Listed2025Tools)(
           yield* native(() => discovery.json())
         );
+
         expect(listed.result.tools.map(({ name }) => name)).toEqual(
           [...readDiscovery, "operations.executeAtomicBatch"].sort()
         );
+
         for (const tool of listed.result.tools) {
           if (tool.name === "operations.executeAtomicBatch") {
             expect(tool.annotations.readOnlyHint).toBe(false);

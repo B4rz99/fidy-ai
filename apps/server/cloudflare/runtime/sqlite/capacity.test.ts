@@ -14,7 +14,9 @@ const capacityEvidence = Schema.Struct({
   padding: Schema.Int,
   originalDeadline: Schema.Int,
 });
+
 const encoded = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
+
 it.live(
   "protects required writes and retained deadlines at every owner capacity boundary",
   () =>
@@ -26,11 +28,15 @@ it.live(
           external: ["cloudflare:workers"],
         })
       );
+
       const output = built.outputs[0];
+
       if (!built.success || output === undefined) {
         return yield* Effect.die(new Error("Capacity probe build failed"));
       }
+
       const contents = yield* native(() => output.text());
+
       const runtime = yield* Effect.acquireRelease(
         Effect.sync(
           () =>
@@ -62,18 +68,24 @@ it.live(
         ),
         (mf) => native(() => mf.dispose())
       );
+
       const namespace = yield* native(() => runtime.getDurableObjectNamespace("PROBE"));
+
       for (const owner of ["user", "directory", "pricing", "maintenance", "erasure"] as const) {
         const stub = namespace.getByName(owner);
+
         const request = (action: string): Effect.Effect<Awaited<ReturnType<typeof stub.fetch>>> =>
           native(() => stub.fetch("https://capacity.test/" + action));
+
         const evidence = Effect.fnUntraced(function* (action: string) {
           const reply = yield* request(action);
           expect(reply.status).toBe(200);
+
           return yield* Schema.decodeUnknownEffect(capacityEvidence)(
             yield* native(() => reply.json())
           );
         });
+
         const normal = yield* evidence("status");
         expect(normal.band).toBe("normal");
         expect((yield* request("overflow")).status).toBe(503);

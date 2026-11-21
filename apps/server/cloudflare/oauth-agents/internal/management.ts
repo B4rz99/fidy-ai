@@ -16,19 +16,23 @@ export const ConnectionRow = Schema.Struct({
   expires_at_ms: Schema.DateTimeUtcFromMillis,
   revoked_at_ms: Schema.OptionFromNullOr(Schema.DateTimeUtcFromMillis),
 });
+
 const permissionCopy = (
   scope: PATScopes[number]
 ): OAuthConnectionMetadata["permissions"][number] => ({
   scope,
   ...oauthScopeCopy[scope],
 });
+
 const connectionState = (
   row: typeof ConnectionRow.Type,
   current: number
 ): "revoked" | "expired" | "active" => {
   if (Option.isSome(row.revoked_at_ms)) return "revoked";
+
   return DateTime.toEpochMillis(row.expires_at_ms) <= current ? "expired" : "active";
 };
+
 export const projectConnection = ({
   current,
   row,
@@ -40,6 +44,7 @@ export const projectConnection = ({
 }): Effect.Effect<OAuthConnectionMetadata, AuditUnavailable | Schema.SchemaError> =>
   Effect.gen(function* () {
     const scopes = yield* Schema.decodeEffect(Schema.fromJsonString(PATScopes))(row.scopes_json);
+
     return yield* Schema.decodeUnknownEffect(Schema.toType(OAuthConnectionMetadata))({
       connectionId: row.id,
       claimedClientName: row.claimed_client_name,

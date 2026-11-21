@@ -11,8 +11,11 @@ import { transactionFirstPage } from "./query";
 import { type HistoryState, transactionHistory } from "./history";
 
 const firstId = "25000000-0000-4000-8000-000000000001";
+
 const secondId = "25000000-0000-4000-8000-000000000002";
+
 const categoryId = "24000000-0000-4000-8000-000000000242";
+
 const initialRecord = {
   id: firstId,
   categoryId,
@@ -24,8 +27,11 @@ const initialRecord = {
   createdAt: "2026-10-23T12:00:00.000Z",
   revision: 1,
 };
+
 const record = (id: string): typeof initialRecord => ({ ...initialRecord, id });
+
 const resources: Array<() => void> = [];
+
 afterEach(() => {
   resources
     .splice(0)
@@ -33,9 +39,11 @@ afterEach(() => {
     .forEach((dispose) => dispose());
   vi.useRealTimers();
 });
+
 const advance = Effect.fnUntraced(function* (milliseconds: number = 0) {
   yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(milliseconds));
 });
+
 const readFixturePage = (
   records: ReadonlyArray<typeof initialRecord>,
   paginated: boolean,
@@ -59,6 +67,7 @@ const readFixturePage = (
         ]
       : [],
 });
+
 const fixtureDetail = Effect.fnUntraced(function* (
   path: string,
   detail: Readonly<{ outcome: string; delay: number }>,
@@ -66,12 +75,14 @@ const fixtureDetail = Effect.fnUntraced(function* (
 ) {
   lookups.push(path);
   yield* Effect.sleep(detail.delay);
+
   if (detail.outcome === "missing") {
     return {
       status: 404,
       data: { error: { code: "not_found", message: "Transaction not found" }, next: [] },
     };
   }
+
   return {
     status: detail.outcome === "failure" ? 503 : 200,
     data: {
@@ -85,8 +96,10 @@ const fixtureDetail = Effect.fnUntraced(function* (
     },
   };
 });
+
 const savedFixtureData = (path: string, records: ReadonlyArray<typeof initialRecord>): unknown =>
   path.endsWith("/corrections") ? { updated: records.length } : records[0];
+
 const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
   vi.useFakeTimers();
   const records = [record(firstId), record(secondId)];
@@ -95,11 +108,13 @@ const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
   const lookups: Array<string> = [];
   const detail = { outcome: "success", delay: 0 };
   let saved = 0;
+
   const http = HttpClient.make((request) =>
     Effect.gen(function* () {
       const path = new URL(request.url).pathname;
       let data: unknown;
       let status = 200;
+
       if (request.method !== "GET") {
         sent.push({
           path,
@@ -107,7 +122,9 @@ const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
             request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "",
         });
         yield* Effect.sleep(behavior.delay);
+
         if (behavior.write === "uncertain") status = 503;
+
         if (behavior.write === "rejected") {
           status = 400;
           data = {
@@ -123,7 +140,9 @@ const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
         }
       } else {
         yield* Effect.sleep(behavior.readDelay);
+
         if (behavior.failRead) status = 503;
+
         if (path.startsWith("/transactions/")) {
           const response = yield* fixtureDetail(path, detail, lookups);
           data = response.data;
@@ -138,6 +157,7 @@ const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
               );
         }
       }
+
       return HttpClientResponse.fromWeb(
         request,
         new Response(yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(data), {
@@ -147,25 +167,32 @@ const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
       );
     }).pipe(Effect.orDie)
   );
+
   const client = makeFidyClient({
     apiOrigin: "https://api.test.fidyapp.com",
     httpClient: Layer.succeed(HttpClient.HttpClient, http),
   });
+
   const registry = AtomRegistry.make();
   resources.push(() => registry.dispose());
+
   const period = {
     from: DateTime.makeUnsafe("2026-10-01T00:00:00Z"),
     to: DateTime.makeUnsafe("2026-11-01T00:00:00Z"),
   };
+
   const firstPage = transactionFirstPage({ client, period });
+
   const categories = makeFreshQuery({
     runtime: client.runtime,
     load: Effect.gen(function* () {
       const api = yield* client;
+
       return yield* api.categories.listCategories();
     }),
     decorate: revalidateWorkspaceQuery,
   });
+
   const history = transactionHistory({
     initialPages: 1,
     apiClient: client,
@@ -173,6 +200,7 @@ const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
     period,
     locate: Option.none(),
   });
+
   const atom = makeTransactionCorrections({
     client,
     firstPage,
@@ -183,6 +211,7 @@ const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
       saved += 1;
     },
   });
+
   resources.push(
     registry.mount(firstPage),
     registry.mount(categories),
@@ -194,7 +223,9 @@ const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
   yield* advance();
   const transactions = (yield* AtomRegistry.getResult(registry, firstPage)).data;
   const transaction = transactions[0];
+
   if (transaction === undefined) throw new Error("Missing fixture Transaction");
+
   return {
     view: (): TransactionCorrections => registry.get(atom),
     transaction,
@@ -215,12 +246,14 @@ it.effect("admits one revision-bound Correction synchronously and rereads after 
   Effect.gen(function* () {
     const test = yield* fixture();
     test.behavior.delay = 50;
+
     const correction = {
       kind: "single" as const,
       origin: "inline" as const,
       transaction: test.transaction,
       changes: { counterparty: "Updated" },
     };
+
     test.view().submit(correction);
     test.view().submit(correction);
     expect(test.view().status).toBe("saving");
@@ -265,8 +298,10 @@ it.effect("rejected recovery retains later history pages until their fresh reads
     test.more();
     yield* advance();
     const history = test.history().query;
+
     if (history._tag !== "Ready") throw new Error("Missing history");
     const later = history.value.data[1];
+
     if (later === undefined) throw new Error("Missing later Transaction");
     test.behavior.write = "rejected";
     test.behavior.readDelay = 50;
@@ -410,26 +445,33 @@ it.effect("disposal stops pending completion and an obsolete view cannot submit 
 it.live("reading and disposing history does not initialize the correction transport", () =>
   Effect.gen(function* () {
     let initialized = 0;
+
     const transport = Layer.effect(
       HttpClient.HttpClient,
       Effect.sync(() => {
         initialized += 1;
+
         return HttpClient.make(() => Effect.die(new Error("No request during read-only mounting")));
       })
     );
+
     const client = makeFidyClient({
       apiOrigin: "https://api.test.fidyapp.com",
       httpClient: transport,
     });
+
     const period = {
       from: DateTime.makeUnsafe("2026-10-01T00:00:00Z"),
       to: DateTime.makeUnsafe("2026-11-01T00:00:00Z"),
     };
+
     const firstPage = client.query("transactions", "listTransactions", {
       query: period,
       ...workspaceQueryRetention,
     });
+
     const categories = client.query("categories", "listCategories", workspaceQueryRetention);
+
     const history = transactionHistory({
       initialPages: 1,
       apiClient: client,
@@ -437,6 +479,7 @@ it.live("reading and disposing history does not initialize the correction transp
       period,
       locate: Option.none(),
     });
+
     const corrections = makeTransactionCorrections({
       client,
       firstPage,
@@ -445,8 +488,10 @@ it.live("reading and disposing history does not initialize the correction transp
       historyAction: history.action,
       saved: () => undefined,
     });
+
     const registry = AtomRegistry.make();
     const unmount = registry.mount(corrections);
+
     try {
       const dispose = registry.get(corrections).mount();
       yield* Effect.sleep("10 millis");
@@ -577,12 +622,14 @@ it.effect(
     Effect.gen(function* () {
       const test = yield* fixture();
       const captured = test.view();
+
       const correction = {
         kind: "single" as const,
         origin: "editor" as const,
         transaction: test.transaction,
         changes: { notes: "Reviewed action" },
       };
+
       captured.resetWorkspace();
       captured.submit(correction);
       yield* advance();

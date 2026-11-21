@@ -44,6 +44,7 @@ export const sessionDigestLookup = ({
       ...(Option.isSome(binding) ? [binding.value] : []),
     ],
   };
+
   const authority = requireConsent
     ? protectConsentAuthority({
         authority: requested,
@@ -51,6 +52,7 @@ export const sessionDigestLookup = ({
         requirement: "unrevoked",
       })
     : requested;
+
   return {
     digest,
     authority,

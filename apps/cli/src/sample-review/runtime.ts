@@ -7,15 +7,21 @@ import { authenticateAccess, makeProtectedClient } from "../direct-client/runtim
 import type { Reviewer } from "./operations";
 
 const url = `${apiOrigin}${sampleReviewPath}` as const;
+
 const maxRequestBytes = 1024;
+
 const okStatus = 200;
+
 const serverErrorStatus = 500;
+
 const maxReplyBytes = 2048;
+
 export const makeReviewer = Effect.fn(function* (
   terminalOutput: Pick<Reviewer, "interactive" | "write">
 ) {
   const terminal = yield* Terminal.Terminal;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
   const client = makeProtectedClient({
     client: yield* HttpClient.HttpClient,
     allowQuery: false,
@@ -25,6 +31,7 @@ export const makeReviewer = Effect.fn(function* (
     captureAllowance: () => {},
     captureTrace: () => {},
   });
+
   const reviewer: Reviewer = {
     ...terminalOutput,
     read: (prompt) =>
@@ -40,9 +47,11 @@ export const makeReviewer = Effect.fn(function* (
         new CliFailure({
           reason: command.action === "preview" ? "TransportUnavailable" : "MutationAmbiguous",
         });
+
       const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(SampleReviewCommand))(
         command
       ).pipe(Effect.mapError(uncertain));
+
       const response = yield* client
         .execute(
           HttpClientRequest.post(url).pipe(
@@ -51,15 +60,18 @@ export const makeReviewer = Effect.fn(function* (
           )
         )
         .pipe(Effect.mapError(uncertain));
+
       if (response.status !== okStatus) {
         return yield* response.status < serverErrorStatus
           ? new CliFailure({ reason: "OperationUnavailable" })
           : uncertain();
       }
+
       return yield* Schema.decodeEffect(Schema.fromJsonString(SampleReviewResult), {
         onExcessProperty: "error",
       })(yield* response.text.pipe(Effect.mapError(uncertain))).pipe(Effect.mapError(uncertain));
     }),
   };
+
   return reviewer;
 });

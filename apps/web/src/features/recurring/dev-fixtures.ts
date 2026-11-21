@@ -10,13 +10,21 @@ import type { RecurringWorkspace } from "./workspace";
 import type { Category, Filters, Occurrence, Plan, PlanInput, Workspace } from "./model";
 
 export type PreviewProps = ComponentProps<typeof RecurringWorkspace>;
+
 export type Dataset = "demo" | "worst" | "empty" | "one" | "many" | "stale";
+
 const planLimit = 100;
+
 const weeks = 5;
+
 const weekDays = 7;
+
 const uuidDigits = 12;
+
 const maxName = 120;
+
 const fixtureToday = "2026-10-15";
+
 type Seed = Readonly<{
   name: string;
   kind: PlanInput["kind"];
@@ -30,6 +38,7 @@ type Seed = Readonly<{
   account: boolean;
   card: boolean;
 }>;
+
 const base: Seed = {
   name: "Servicio",
   kind: "expense",
@@ -43,6 +52,7 @@ const base: Seed = {
   account: false,
   card: false,
 };
+
 const seeds: ReadonlyArray<Seed> = [
   {
     ...base,
@@ -131,6 +141,7 @@ const seeds: ReadonlyArray<Seed> = [
   { ...base, name: "Suscripción pausada", lifecycle: "paused" },
   { ...base, name: "Servicio dejado de seguir", lifecycle: "stopped" },
 ];
+
 const categoryLabels = [
   "Mantenimiento y administración de propiedades familiares rurales e internacional",
   "SeguroResponsabilidadCivilProfesionalInternacionalRenovaciónAnual",
@@ -138,8 +149,10 @@ const categoryLabels = [
   "家庭日用品・教育費・海外旅行の積立",
   "👨‍👩‍👧‍👦 Educación y cuidados familiares",
 ];
+
 const uid = (index: number): string =>
   `37000000-0000-4000-8000-${String(index + 1).padStart(uuidDigits, "0")}`;
+
 export const fixtureCategories = (categories: ReadonlyArray<Category>): ReadonlyArray<Category> =>
   categories.map((category, index) =>
     CategorySchema.make({
@@ -149,10 +162,12 @@ export const fixtureCategories = (categories: ReadonlyArray<Category>): Readonly
       ),
     })
   );
+
 const moneyFor = (currency: Currency, amount: string): Occurrence["completed"] => ({
   currency,
   amount: BigDecimal.fromStringUnsafe(amount),
 });
+
 const references = (
   seed: Seed,
   categories: ReadonlyArray<Category>,
@@ -164,10 +179,12 @@ const references = (
   ...(seed.account ? { accountId: uid(planLimit + index) } : {}),
   ...(seed.category ? { counterparty: seed.name } : {}),
 });
+
 const lifecycle = (seed: Seed): Pick<Plan, "pauses" | "stoppedOn"> => ({
   pauses: seed.lifecycle === "paused" ? [{ from: "2026-10-01" }] : [],
   ...(seed.lifecycle === "stopped" ? { stoppedOn: "2026-10-01" } : {}),
 });
+
 const makePlan = ({
   seed,
   index,
@@ -191,16 +208,20 @@ const makePlan = ({
     firstDate: many ? "2026-10-01" : seed.date.replace("2026-10", "2026-09"),
     timeZone: RecurringPlanInput.fields.timeZone.make("America/Bogota"),
   });
+
   return {
     id: RecurringPlanId.make(uid(index)),
     revisions: [{ from: input.firstDate, plan: input }],
     ...lifecycle(seed),
   };
 };
+
 const completedFor = (seed: Seed): Occurrence["completed"] => {
   if (seed.status === "completed") return moneyFor(seed.currency, seed.amount);
+
   return moneyFor(seed.currency, seed.status === "partial" ? "0.01" : "0");
 };
+
 const fulfillmentFor = (
   item: Omit<Occurrence, "fulfillments">,
   index: number
@@ -217,6 +238,7 @@ const fulfillmentFor = (
         },
       ]
     : [];
+
 const remainingFor = (
   plan: PlanInput,
   completed: Occurrence["completed"]
@@ -229,6 +251,7 @@ const remainingFor = (
           BigDecimal.format(BigDecimal.subtract(plan.money.amount, completed.amount))
         ),
       };
+
 const makeOccurrence = ({
   plan,
   seed,
@@ -245,6 +268,7 @@ const makeOccurrence = ({
   const date = many ? `2026-10-${String(1 + week * weekDays).padStart(2, "0")}` : seed.date;
   const input = { ...plan.revisions[0].plan, firstDate: date };
   const completed = completedFor(seed);
+
   const item = {
     planId: plan.id,
     date,
@@ -254,14 +278,17 @@ const makeOccurrence = ({
     completed,
     ...remainingFor(input, completed),
   };
+
   return { ...item, fulfillments: fulfillmentFor(item, index) };
 };
+
 const addToSummary = (
   prior: Workspace["summary"][number],
   item: Occurrence
 ): Workspace["summary"][number] => {
   const currency = item.plan.currency;
   const remaining = item.remaining?.amount ?? BigDecimal.make(0n, 0);
+
   return {
     ...prior,
     completed: { currency, amount: BigDecimal.sum(prior.completed.amount, item.completed.amount) },
@@ -276,11 +303,14 @@ const addToSummary = (
     unknown: prior.unknown + (item.remaining === undefined && item.status !== "completed" ? 1 : 0),
   };
 };
+
 const summaryFor = (items: ReadonlyArray<Occurrence>): Workspace["summary"] => {
   const groups = new Map<string, Workspace["summary"][number]>();
+
   for (const item of items.filter((entry) => entry.status !== "skipped")) {
     const { currency, kind } = item.plan;
     const zero = moneyFor(currency, "0");
+
     const prior = groups.get(`${kind}:${currency}`) ?? {
       kind,
       currency,
@@ -289,10 +319,13 @@ const summaryFor = (items: ReadonlyArray<Occurrence>): Workspace["summary"] => {
       estimated: zero,
       unknown: 0,
     };
+
     groups.set(`${kind}:${currency}`, addToSummary(prior, item));
   }
+
   return [...groups.values()];
 };
+
 const matchesFilters = (item: Occurrence, filters: Filters): boolean =>
   Object.entries(filters).every(([key, value]) => {
     if (key === "search") {
@@ -300,16 +333,21 @@ const matchesFilters = (item: Occurrence, filters: Filters): boolean =>
         .toLowerCase()
         .includes(value.toLowerCase());
     }
+
     if (key === "status") return item.status === value;
+
     return Object.entries(item.plan).some(([field, text]) => field === key && text === value);
   });
+
 const previousFor = (
   dataset: Dataset,
   items: ReadonlyArray<Occurrence>
 ): ReadonlyArray<Occurrence> => {
   const first = items[0];
+
   if (first === undefined || (dataset !== "worst" && dataset !== "stale")) return [];
   const date = "2026-09-16";
+
   return [
     {
       ...first,
@@ -320,6 +358,7 @@ const previousFor = (
     },
   ];
 };
+
 const counts: Readonly<Record<Dataset, number>> = {
   demo: 0,
   empty: 0,
@@ -328,6 +367,7 @@ const counts: Readonly<Record<Dataset, number>> = {
   worst: seeds.length,
   stale: seeds.length,
 };
+
 export const fixtureWorkspace = ({
   dataset,
   categories,
@@ -338,10 +378,13 @@ export const fixtureWorkspace = ({
   filters: Filters;
 }>): Workspace => {
   const many = dataset === "many";
+
   const selected = Array.from({ length: counts[dataset] }, (_, index) =>
     many ? base : (seeds[index] ?? base)
   );
+
   const plans = selected.map((seed, index) => makePlan({ seed, index, categories, many }));
+
   const all = plans.flatMap((plan, index) =>
     plan.pauses.length > 0 || plan.stoppedOn !== undefined
       ? []
@@ -349,7 +392,9 @@ export const fixtureWorkspace = ({
           makeOccurrence({ plan, seed: selected[index] ?? base, index, week, many })
         )
   );
+
   const occurrences = all.filter((item) => matchesFilters(item, filters));
+
   return {
     month: "2026-10",
     today: fixtureToday,

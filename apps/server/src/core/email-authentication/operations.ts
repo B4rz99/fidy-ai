@@ -7,6 +7,7 @@ import {
 } from "./contract";
 
 export const emailCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" as const;
+
 const maximumWrongProofAttempts = 5;
 
 export const emailWorkflowExpiry = (startedAt: DateTime.Utc): DateTime.Utc =>
@@ -42,13 +43,16 @@ export const decideEmailReplacementRequest = (input: {
         if (DateTime.isGreaterThanOrEqualTo(input.requestedAt, existing.expiresAt)) {
           return "ReplaceExpired";
         }
+
         if (existing.deliveryGeneration >= maximumEmailDeliveryGenerations) return "Reject";
+
         if (
           existing.candidateMatches &&
           DateTime.isGreaterThan(existing.resendAvailableAt, input.requestedAt)
         ) {
           return "Reject";
         }
+
         return "UseExisting";
       },
     })

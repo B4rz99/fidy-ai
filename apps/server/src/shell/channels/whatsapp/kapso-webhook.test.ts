@@ -12,8 +12,11 @@ import { InvalidWhatsAppSignature, maxWhatsAppWebhookBytes } from "./contract";
 import { authenticateDisclosureStatus, authenticateHostedStatus } from "./operations";
 
 const secret = `kapso-webhook-secret-${"f1d7c0de".repeat(2)}`;
+
 const correlationToken = "11111111-1111-4111-8111-111111111111";
+
 const providerMessageId = "wamid.lifecycle-test";
+
 const receivedAt = DateTime.makeUnsafe("2026-04-03T12:10:00.000Z");
 
 const encodedBody = (statuses: ReadonlyArray<unknown>, messageId = providerMessageId): Uint8Array =>
@@ -51,10 +54,12 @@ const decode = (
   const webhookSecret = override._tag === "Secret" ? override.value : secret;
   const messageId = override._tag === "MessageId" ? override.value : undefined;
   const body = override._tag === "Body" ? override.value : encodedBody(statuses, messageId);
+
   const signature =
     override._tag === "Signature"
       ? override.value
       : new Bun.CryptoHasher("sha256", webhookSecret).update(body).digest("hex");
+
   return authenticateDisclosureStatus({
     rawBody: body,
     secret: Redacted.make(webhookSecret),
@@ -69,6 +74,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const body = encodedBody([status("delivered", "1775217960")]);
+
       const evidence = yield* authenticateHostedStatus({
         rawBody: body,
         secret: Redacted.make(secret),
@@ -76,9 +82,11 @@ it.effect(
         eventName: "whatsapp.message.delivered",
         receivedAt,
       });
+
       expect(evidence.outcome).toBe("delivered");
       expect(evidence.messageEvidence.providerMessageId).toBe(providerMessageId);
       expect(evidence.correlationToken).toBe(correlationToken);
+
       const forged = yield* Effect.exit(
         authenticateHostedStatus({
           rawBody: body,
@@ -88,8 +96,10 @@ it.effect(
           receivedAt,
         })
       );
+
       expect(Exit.isFailure(forged)).toBe(true);
       const sent = encodedBody([status("sent", "1775217960")]);
+
       const sentEvidence = yield* authenticateHostedStatus({
         rawBody: sent,
         secret: Redacted.make(secret),
@@ -97,7 +107,9 @@ it.effect(
         eventName: "whatsapp.message.sent",
         receivedAt,
       });
+
       expect(sentEvidence.outcome).toBe("sent");
+
       const mismatchedEvent = yield* Effect.exit(
         authenticateHostedStatus({
           rawBody: sent,
@@ -107,6 +119,7 @@ it.effect(
           receivedAt,
         })
       );
+
       expect(Exit.isFailure(mismatchedEvent)).toBe(true);
     })
 );
@@ -144,12 +157,14 @@ it.effect(
         expect(evidence.correlationToken).toBe(correlationToken);
         expect(evidence.messageEvidence.providerMessageId).toBe(providerMessageId);
       }
+
       const stale = yield* Effect.flip(
         decode("whatsapp.message.delivered", [
           status("delivered", "1775217900"),
           status("sent", "1775217960"),
         ])
       );
+
       expect(stale._tag).toBe("InvalidWhatsAppPayload");
     })
 );
@@ -255,18 +270,22 @@ it.effect("keeps the webhook secret out of authentication failures", () =>
 it.effect("rejects oversized lifecycle bytes before decoding", () =>
   Effect.gen(function* () {
     const body = new Uint8Array(maxWhatsAppWebhookBytes + 1);
+
     const failure = yield* decode("whatsapp.message.delivered", [], {
       _tag: "Body",
       value: body,
     }).pipe(Effect.flip);
+
     expect(failure._tag).toBe("WhatsAppPayloadTooLarge");
   })
 );
 
 const vectorSecret = "test-webhook-secret-32-characters";
+
 const vectorBody = new TextEncoder().encode(
   '{"message":{"id":"wamid.lifecycle-test","kapso":{"statuses":[{"id":"wamid.lifecycle-test","status":"delivered","timestamp":"1775217900","biz_opaque_callback_data":"11111111-1111-4111-8111-111111111111"}]}},"phone_number_id":"123456789"}'
 );
+
 const vectorSignature = "5b1babb145b0a2550a9788dceaf627582c55be37590c7f3c8e38e421339ded42";
 
 const decodeVector = (
@@ -290,6 +309,7 @@ it.effect("authenticates a known HMAC-SHA256 vector and rejects malformed signat
     expect((yield* decodeVector(vectorSignature.toUpperCase())).outcome).toBe("accepted");
 
     const altered = `${vectorSignature.slice(0, -1)}${vectorSignature.endsWith("2") ? "3" : "2"}`;
+
     const malformed = [
       altered,
       vectorSignature.slice(0, -1),
@@ -298,6 +318,7 @@ it.effect("authenticates a known HMAC-SHA256 vector and rejects malformed signat
       "a".repeat(63),
       "",
     ];
+
     for (const signature of malformed) {
       assert.deepStrictEqual(
         Exit.match(yield* decodeVector(signature).pipe(Effect.exit), {
@@ -307,6 +328,7 @@ it.effect("authenticates a known HMAC-SHA256 vector and rejects malformed signat
         Exit.fail(new InvalidWhatsAppSignature())
       );
     }
+
     assert.deepStrictEqual(
       Exit.match(
         yield* decodeVector("not-hexadecimal", new TextEncoder().encode("not-json")).pipe(
@@ -332,7 +354,9 @@ it.effect.each([
     const recipient = phone
       ? { recipient_id: "573001234567" }
       : { recipient_user_id: "CO.13491208655302741918" };
+
     const statuses = [{ ...status("delivered", "1775217960"), ...recipient }];
+
     const body = lookup
       ? new TextEncoder().encode(
           yield* Schema.encodeEffect(UnknownJsonString)({
@@ -344,12 +368,15 @@ it.effect.each([
           })
         )
       : encodedBody(statuses);
+
     let reads = 0;
+
     const verifier = makeLifecycleVerifier({
       apiKey: Redacted.make("test-kapso-key"),
       admitLookup: () => Effect.void,
       httpClient: makeTestOutboundTransport((request) => {
         reads++;
+
         return Effect.succeed(
           testOutboundTransportResponse(
             request,
@@ -361,6 +388,7 @@ it.effect.each([
         );
       }),
     });
+
     const result = yield* verifier({
       rawBody: body,
       secret: Redacted.make(secret),
@@ -368,6 +396,7 @@ it.effect.each([
       eventName: "whatsapp.message.delivered",
       receivedAt,
     });
+
     expect(Option.isSome(result) && result.value).toMatchObject(
       phone
         ? { recipientPhone: Option.some("+573001234567") }
@@ -383,6 +412,7 @@ it.effect("refuses contradictory recipient identities within authenticated messa
       { ...status("sent", "1775217959"), recipient_user_id: "CO.13491208655302741918" },
       { ...status("delivered", "1775217960"), recipient_user_id: "CO.13491208655302741919" },
     ]);
+
     const result = yield* Effect.exit(
       authenticateHostedStatus({
         rawBody: body,
@@ -392,6 +422,7 @@ it.effect("refuses contradictory recipient identities within authenticated messa
         receivedAt,
       })
     );
+
     expect(Exit.isFailure(result)).toBe(true);
   })
 );

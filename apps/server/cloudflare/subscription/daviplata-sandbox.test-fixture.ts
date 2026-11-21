@@ -37,10 +37,12 @@ export const requireDaviplataSandboxPolicy = Effect.fnUntraced(function* (
   if (input.environment !== "sandbox") {
     return yield* new DaviplataSandboxProofFailure({ stage: "policy" });
   }
+
   const policy = yield* Schema.decodeUnknownEffect(DaviplataOtpPolicy)({
     sendUrl: Option.getOrNull(input.sendUrl),
     confirmUrl: Option.getOrNull(input.confirmUrl),
   }).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure({ stage: "policy" })));
+
   if (
     [policy.sendUrl, policy.confirmUrl].some(
       (url) =>
@@ -50,6 +52,7 @@ export const requireDaviplataSandboxPolicy = Effect.fnUntraced(function* (
   ) {
     return yield* new DaviplataSandboxProofFailure({ stage: "policy" });
   }
+
   return policy;
 });
 
@@ -57,6 +60,7 @@ export const requireDaviplataSandboxEnrollment = Effect.fnUntraced(function* (
   input: Readonly<{ enrollment: PaymentEnrollment; policy: DaviplataOtpPolicy }>
 ) {
   const { enrollment, policy } = input;
+
   if (
     enrollment.status !== "prepared" ||
     enrollment.method !== "daviplata" ||
@@ -65,15 +69,20 @@ export const requireDaviplataSandboxEnrollment = Effect.fnUntraced(function* (
   ) {
     return yield* new DaviplataSandboxProofFailure({ stage: "enrollment" });
   }
+
   return enrollment;
 });
 
 const maximumProofTokenCharacters = 4096;
+
 const successfulStatusMinimum = 200;
+
 const successfulStatusMaximumExclusive = 300;
+
 const secret = Schema.RedactedFromValue(
   Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(maximumProofTokenCharacters))
 );
+
 const tokenResponse = Schema.Struct({
   data: Schema.Struct({
     id: secret,
@@ -85,17 +94,20 @@ const tokenResponse = Schema.Struct({
     }),
   }),
 });
+
 const sentResponse = Schema.Struct({
   data: Schema.Struct({
     subscription: Schema.Struct({ PK: secret, status: Schema.Literal("PENDING") }),
     authorization: Schema.Struct({ access_token: secret }),
   }),
 });
+
 const confirmedResponse = Schema.Struct({
   data: Schema.Struct({
     subscription: Schema.Struct({ PK: secret, status: Schema.Literal("APPROVED") }),
   }),
 });
+
 const json = Effect.fnUntraced(function* (
   response: OutboundHttpResponse,
   stage: "tokenization-response" | "otp-send-response" | "otp-confirm-response"
@@ -106,6 +118,7 @@ const json = Effect.fnUntraced(function* (
   ) {
     return yield* new DaviplataSandboxProofFailure({ stage });
   }
+
   return yield* Schema.decodeEffect(UnknownJsonString)(
     new TextDecoder().decode(response.body)
   ).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure({ stage })));
@@ -160,6 +173,7 @@ const verifyDestinations = (
   policy: DaviplataOtpPolicy
 ): Effect.Effect<void, DaviplataSandboxProofFailure> => {
   const id = Redacted.value(token.data.id);
+
   return token.data.url_services.code_otp_send === destination(policy.sendUrl, id, "RESEND_OTP") &&
     token.data.url_services.code_otp_validate ===
       destination(policy.confirmUrl, id, "VALIDATE_OTP_API")
@@ -179,6 +193,7 @@ export const authorizeDaviplataSandbox = Effect.fnUntraced(function* (
     sendUrl: Option.some(input.policy.sendUrl),
     confirmUrl: Option.some(input.policy.confirmUrl),
   });
+
   const token = yield* execute(
     input.outbound,
     { _tag: "WompiDaviplataSandboxToken", outcome: input.outcome },
@@ -192,7 +207,9 @@ export const authorizeDaviplataSandbox = Effect.fnUntraced(function* (
         : new DaviplataSandboxProofFailure({ stage: "tokenization-response" })
     )
   );
+
   yield* verifyDestinations(token, policy);
+
   const sent = yield* otp({
     outbound: input.outbound,
     authorizationId: token.data.id,
@@ -206,9 +223,11 @@ export const authorizeDaviplataSandbox = Effect.fnUntraced(function* (
         : new DaviplataSandboxProofFailure({ stage: "otp-send-response" })
     )
   );
+
   if (Redacted.value(sent.data.subscription.PK) !== Redacted.value(token.data.id)) {
     return yield* new DaviplataSandboxProofFailure({ stage: "otp-send-identity" });
   }
+
   const confirmed = yield* otp({
     outbound: input.outbound,
     authorizationId: token.data.id,
@@ -222,8 +241,10 @@ export const authorizeDaviplataSandbox = Effect.fnUntraced(function* (
         : new DaviplataSandboxProofFailure({ stage: "otp-confirm-response" })
     )
   );
+
   if (Redacted.value(confirmed.data.subscription.PK) !== Redacted.value(token.data.id)) {
     return yield* new DaviplataSandboxProofFailure({ stage: "otp-confirm-identity" });
   }
+
   return token.data.id;
 });

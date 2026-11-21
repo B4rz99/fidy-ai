@@ -10,9 +10,12 @@ const statuses: Readonly<Record<RefundStartFailure, number>> = {
   limited: 429,
   unavailable: 503,
 };
+
 const headers = { "cache-control": "no-store" };
+
 export const refundFailureResponse = (failure: RefundStartFailure): Response =>
   Response.json({ error: { code: failure } }, { status: statuses[failure], headers });
+
 export const refundResultResponse = <R>(
   input: Readonly<{
     result: Effect.Effect<RefundAttempt, RefundStartFailure, R>;

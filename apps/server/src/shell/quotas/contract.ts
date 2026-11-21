@@ -35,6 +35,7 @@ export const CanonicalAllowance = Schema.Union([
     resetsAt: Schema.DateTimeUtc,
   }),
 ]);
+
 export type CanonicalAllowance = typeof CanonicalAllowance.Type;
 
 export const QuotasGroup = HttpApiGroup.make("quota").add(

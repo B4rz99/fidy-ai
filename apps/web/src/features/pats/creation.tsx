@@ -12,12 +12,15 @@ import { usePATIssuance } from "./issuance";
 import { ManualPATView } from "./view";
 
 type CreationProps = Readonly<{ apiClient: FidyClient; clipboard: SensitiveClipboard }>;
+
 const FreshPATCreation = (
   props: CreationProps & Readonly<{ initialDraft: Option.Option<PATDraft> }>
 ): JSX.Element => {
   const issuance = usePATIssuance(props);
+
   return <ManualPATView {...issuance} />;
 };
+
 export const ManualPATCreation = ({
   resuming,
   ...props
@@ -27,6 +30,7 @@ export const ManualPATCreation = ({
   ) : (
     <FreshPATCreation {...props} initialDraft={Option.none()} />
   );
+
 const ResumedPATCreation = (props: CreationProps): JSX.Element => {
   const [userQuery] = useState(() => props.apiClient.query("identity", "getCurrentUser", {}));
   const result = useAtomValue(userQuery);
@@ -35,6 +39,7 @@ const ResumedPATCreation = (props: CreationProps): JSX.Element => {
   const user = presentCanonicalQuery(result);
   const [draft, setDraft] = useState<Option.Option<Option.Option<PATDraft>>>(() => Option.none());
   const userId = user._tag === "Ready" ? Option.some(user.value.data.id) : Option.none();
+
   const mounted = useCallback<RefCallback<HTMLElement>>(
     (node) => {
       if (node !== null && Option.isSome(userId) && !consumed.current) {
@@ -44,6 +49,7 @@ const ResumedPATCreation = (props: CreationProps): JSX.Element => {
     },
     [userId, setDraft]
   );
+
   if (user._tag === "Failure") {
     return (
       <div role="alert">
@@ -54,6 +60,7 @@ const ResumedPATCreation = (props: CreationProps): JSX.Element => {
       </div>
     );
   }
+
   if (Option.isNone(draft)) {
     return (
       <div ref={mounted}>
@@ -61,5 +68,6 @@ const ResumedPATCreation = (props: CreationProps): JSX.Element => {
       </div>
     );
   }
+
   return <FreshPATCreation {...props} initialDraft={draft.value} />;
 };

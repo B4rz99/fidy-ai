@@ -4,8 +4,11 @@ import { type RefundAttemptId } from "../../../src/core/subscription/contract";
 import { WompiTransactionId } from "./wompi-model";
 
 const maximumReferenceLength = 128;
+
 const successMinimum = 200;
+
 const successMaximumExclusive = 300;
+
 const RefundBody = Schema.fromJsonString(
   Schema.Struct({
     transaction_id: WompiTransactionId,
@@ -14,6 +17,7 @@ const RefundBody = Schema.fromJsonString(
     reason: Schema.String,
   })
 );
+
 const RefundResponse = Schema.fromJsonString(
   Schema.Struct({
     data: Schema.Struct({
@@ -30,6 +34,7 @@ const RefundResponse = Schema.fromJsonString(
     }),
   })
 );
+
 const VoidResponse = Schema.fromJsonString(
   Schema.Struct({
     data: Schema.Struct({
@@ -42,6 +47,7 @@ const VoidResponse = Schema.fromJsonString(
     }),
   })
 );
+
 export type RefundSubmission = Readonly<{
   id: RefundAttemptId;
   kind: "refund" | "card-void";
@@ -52,11 +58,14 @@ export type RefundSubmission = Readonly<{
   sourceId: number;
   reason: string;
 }>;
+
 export type RefundEvidence = Readonly<{
   providerId: string;
   status: "APPROVED" | "DECLINED" | "CANCELLED" | "VOIDED";
 }>;
+
 const refundReference = (id: RefundAttemptId): string => `fidy-refund-${id}`;
+
 const parseRefund = (
   body: Uint8Array,
   input: RefundSubmission
@@ -70,11 +79,14 @@ const parseRefund = (
       ) {
         return Option.none();
       }
+
       if (data.status === "ERROR" || data.status === "PENDING") return Option.none();
+
       return Option.some({ providerId: data.v2_refund_id ?? String(data.id), status: data.status });
     }),
     Effect.orElseSucceed(Option.none)
   );
+
 const parseVoid = (
   body: Uint8Array,
   input: RefundSubmission
@@ -106,14 +118,17 @@ export const submitCorrection = ({
       reference: refundReference(input.id),
       reason: input.reason,
     });
+
     const response = yield* http.execute(
       input.kind === "refund"
         ? { _tag: "WompiSandboxRefund", body }
         : { _tag: "WompiSandboxCardVoid", transactionId: input.transactionId }
     );
+
     if (response.status < successMinimum || response.status >= successMaximumExclusive) {
       return Option.none();
     }
+
     return yield* input.kind === "refund"
       ? parseRefund(response.body, input)
       : parseVoid(response.body, input);

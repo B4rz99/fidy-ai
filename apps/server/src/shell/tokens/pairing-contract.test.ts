@@ -10,6 +10,7 @@ import {
 } from "./contract";
 
 const proof = { pairingId: "pairing", privateDeviceCode: "private-proof" };
+
 const sourceRefusal =
   '{"error":{"code":"rate_limited","message":"PAT pairing is temporarily unavailable. Try again later."}}';
 
@@ -30,6 +31,7 @@ describe("PAT pairing claim contract", () => {
           )
         ),
       });
+
       const failure = yield* Effect.flip(client.patPairing.claim({ payload: proof }));
       expect(failure).toBeInstanceOf(PATPairingRateLimitedApi);
       expect(failure).toMatchObject(patPairingUnavailableBody);
@@ -46,6 +48,7 @@ describe("PAT pairing claim contract", () => {
   it("publishes distinct polling and source admission bodies for claim's 429 response", () => {
     const spec = OpenApi.fromApi(PATPairingApi);
     const claim = spec.paths["/pat-pairings/claim"];
+
     if (claim?.post === undefined) throw new Error("PAT pairing claim must be published");
     const response = claim.post.responses["429"];
     expect(JSON.stringify(response)).toContain("PATPairingPollingRateLimitedApiEncoded");

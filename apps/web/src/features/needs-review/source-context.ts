@@ -13,24 +13,28 @@ import type { Filter } from "./view-navigation";
 
 export type SourceContext =
   CanonicalSuccess<"ingestion.getReviewPageContext">["data"]["items"][number];
+
 export type PageContexts = ReadonlyMap<string, SourceContext>;
 
 type ContextEndpoint = HttpApiEndpoint.WithIdentifier<
   HttpApiGroup.Endpoints<HttpApiGroup.WithIdentifier<FidyApiGroups, "ingestion">>,
   "getReviewPageContext"
 >;
+
 type ContextQuery = Atom.Atom<
   AsyncResult.AsyncResult<
     CanonicalSuccess<"ingestion.getReviewPageContext">,
     HttpApiEndpoint.Errors<ContextEndpoint>
   >
 >;
+
 const emptyContext: ContextQuery = Atom.make(
   AsyncResult.success<CanonicalSuccess<"ingestion.getReviewPageContext">>({
     data: { items: [] },
     next: [],
   })
 );
+
 export const reviewPageContextQuery = ({
   client,
   filter,
@@ -43,6 +47,7 @@ export const reviewPageContextQuery = ({
   ids: ReadonlyArray<string>;
 }>): ContextQuery => {
   if (ids.length === 0) return emptyContext;
+
   return client.query("ingestion", "getReviewPageContext", {
     query: {
       status: Option.some(filter),
@@ -57,11 +62,13 @@ const evidenceProjection = Atom.family((query: ContextQuery) =>
   Atom.make((get) => {
     const state = get(query).pipe(presentCanonicalQuery);
     const deadlines = new Map<string, Item["expiresAt"]>();
+
     if (state._tag === "Ready") {
       for (const entry of state.value.data.items) {
         deadlines.set(entry.id, get(originalDeadlineQuery(entry)));
       }
     }
+
     return { state, deadlines };
   })
 );
@@ -91,6 +98,7 @@ export const useReviewPageContext = ({
   const deadlines = projection.deadlines;
   useReviewPageExpiry([...items, ...[...deadlines.values()].map((expiresAt) => ({ expiresAt }))]);
   const current = DateTime.toEpochMillis(DateTime.nowUnsafe());
+
   return {
     deadlines,
     contexts: new Map(
@@ -147,7 +155,9 @@ export const sourceReference = ({
     onNone: () => `Elemento ${position}`,
     onSome: (entry) => entry.reference,
   });
+
   if (item.source !== "email") return reference;
+
   return Option.match(
     Option.flatMap(context, (entry) => entry.receivedAt),
     {

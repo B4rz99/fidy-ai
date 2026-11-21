@@ -53,14 +53,18 @@ const modelFailureCode = (reason: HostedInferenceFailureReason): TelemetryCode<"
 
 const classifiedModelFailure = (cause: Cause.Cause<unknown>): DeclaredOutcome => {
   const error = Cause.findErrorOption(cause);
+
   if (Option.exists(error, Cause.isTimeoutError)) {
     return { outcome: "failed", error: Option.some("timeout"), retryable: false };
   }
+
   if (Option.isNone(error) || !(error.value instanceof HostedInferenceError)) {
     return { outcome: "failed", error: Option.some("operational_failure"), retryable: false };
   }
+
   const failure = error.value;
   const code = modelFailureCode(failure.reason);
+
   return failure.reason._tag === "InvalidOutput" ||
     code === "model_response_rejected" ||
     code === "authentication_failed"
@@ -77,6 +81,7 @@ const finishApplication = (
   exit: Exit.Exit<unknown, unknown>
 ): Effect.Effect<void> => {
   if (Exit.isSuccess(exit)) return Effect.void;
+
   if (isPureInterruption(exit.cause)) {
     return telemetry.recordOutcome({
       outcome: "interrupted",
@@ -84,12 +89,16 @@ const finishApplication = (
       retryable: false,
     });
   }
+
   const outcome: DeclaredOutcome =
     descriptor.workKind === "model_round"
       ? classifiedModelFailure(exit.cause)
       : { outcome: "failed", error: Option.some("operational_failure"), retryable: false };
+
   const classified = telemetry.recordOutcome(outcome);
+
   if (outcome.outcome === "rejected") return classified;
+
   return classified.pipe(
     Effect.andThen(
       telemetry.captureFailure(
@@ -125,6 +134,7 @@ const observeApplicationOperationWork = <A, E, R>(
     if (Option.isNone(service)) return work;
     const telemetry = service.value;
     const observed = Effect.onExit(work, (exit) => finishApplication(telemetry, descriptor, exit));
+
     return Option.match(parent, {
       onNone: () => telemetry.span(descriptor, observed),
       onSome: (context) => telemetry.continueSpan(context, descriptor, observed),
@@ -132,14 +142,18 @@ const observeApplicationOperationWork = <A, E, R>(
   });
 
 const firstClientErrorStatus = 400;
+
 const firstServerErrorStatus = 500;
+
 const responseOutcome = (response: Response): DeclaredOutcome => {
   if (response.status >= firstServerErrorStatus) {
     return { outcome: "failed", error: Option.some("operational_failure"), retryable: false };
   }
+
   if (response.status >= firstClientErrorStatus) {
     return { outcome: "rejected", error: Option.none(), retryable: false };
   }
+
   return { outcome: "succeeded", error: Option.none(), retryable: false };
 };
 

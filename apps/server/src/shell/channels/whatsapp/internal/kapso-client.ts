@@ -30,6 +30,7 @@ import { classifyKapsoMetaFailureCode } from "./kapso-failure";
 const maximumReplyButtonBodyLength = 1024;
 
 const kapsoRequestTimeoutMilliseconds = 14_000;
+
 const firstNonSuccessStatus = 300;
 
 const isSuccessfulStatus = (status: number): boolean =>
@@ -76,6 +77,7 @@ const SendResponse = Schema.Struct({
 const MetaFailureResponse = Schema.Struct({
   error: Schema.Struct({ code: Schema.Finite }),
 });
+
 const KapsoFailureResponse = Schema.Struct({ error: Schema.String });
 
 const classifyFailureBody = (
@@ -84,11 +86,15 @@ const classifyFailureBody = (
 ): WhatsAppSendFailed => {
   const status = Option.some(responseStatus);
   const metaFailure = Schema.decodeUnknownOption(MetaFailureResponse)(body);
+
   if (Option.isSome(metaFailure)) {
     const disposition = classifyKapsoMetaFailureCode(metaFailure.value.error.code);
+
     return rejected(disposition.safeReason, disposition.automaticRetry, status);
   }
+
   const kapsoFailure = Schema.decodeUnknownOption(KapsoFailureResponse)(body);
+
   if (
     Option.isSome(kapsoFailure) &&
     [
@@ -98,26 +104,34 @@ const classifyFailureBody = (
   ) {
     return rejected("sandbox_bsuid_unsupported", false, status);
   }
+
   return rejected("invalid_response", false, status);
 };
 
 const classifyHttpStatus = (status: TelemetryHttpStatus): Option.Option<WhatsAppSendFailed> => {
   const responseStatus = Option.some(status);
+
   if (status === unauthorizedStatus || status === forbiddenStatus) {
     return Option.some(rejected("authentication_failed", false, responseStatus));
   }
+
   if (status === requestTimeoutStatus) return Option.some(ambiguous("timeout", responseStatus));
+
   if (status === tooManyRequestsStatus) {
     return Option.some(rejected("rate_limited", true, responseStatus));
   }
+
   if (status >= firstServerErrorStatus && status <= lastServerErrorStatus) {
     return Option.some(ambiguous("provider_unavailable", responseStatus));
   }
+
   return Option.none();
 };
 
 type KapsoDeliveryMode = "bsuid" | "sandbox-phone";
+
 type KapsoSendInput = Parameters<WhatsAppDelivery["sendText"]>[0];
+
 type KapsoRecipientAddress =
   | Readonly<{ recipient: WhatsAppBusinessScopedUserId }>
   | Readonly<{ to: string }>;
@@ -177,13 +191,16 @@ const classifyTransportError = (error: KapsoInvalidResponse): WhatsAppSendFailed
 
 const mapExternalKapsoFailure = (failure: OutboundHttpFailure): WhatsAppSendFailed => {
   if (failure.reason === "transport-failed") return ambiguous("provider_unavailable");
+
   const responseStatus = Option.flatMap(
     failure.responseStatus,
     Schema.decodeOption(TelemetryHttpStatus)
   );
+
   const deliveryCertainty = Option.exists(responseStatus, isSuccessfulStatus)
     ? "ambiguous"
     : "rejected";
+
   return classifyTransportError(invalidKapsoResponse(responseStatus, deliveryCertainty));
 };
 
@@ -195,6 +212,7 @@ const decodeSentMessage = (
     const decoded = yield* Schema.decodeUnknownEffect(SendResponse)(responseBody).pipe(
       Effect.mapError(() => ambiguous("invalid_response", Option.some(responseStatus)))
     );
+
     return {
       messageEvidence: {
         channel: "whatsapp",
@@ -222,6 +240,7 @@ export const makeWhatsAppDelivery = ({
         : deliveryMode,
       input.destination
     );
+
     if (
       Option.isSome(input.confirmation) &&
       (!Schema.is(HostedTurnConfirmation)(input.confirmation.value) ||
@@ -229,18 +248,21 @@ export const makeWhatsAppDelivery = ({
     ) {
       return yield* rejected("invalid_response");
     }
+
     const body = yield* encodeTextMessage({
       address,
       text: input.text,
       opaqueCallbackData: input.opaqueCallbackData,
       confirmation: input.confirmation,
     });
+
     return yield* sendKapsoMessage({
       outboundHttp,
       businessPhoneNumberId: input.businessPhoneNumberId,
       body,
     });
   });
+
   return KapsoClient.of({ sendText });
 };
 
@@ -257,19 +279,27 @@ export const sendKapsoMessage = ({
     const response = yield* outboundHttp
       .execute({ _tag: "KapsoMessages", businessPhoneNumberId, body })
       .pipe(Effect.mapError(mapExternalKapsoFailure));
+
     const decodedStatus = Schema.decodeOption(TelemetryHttpStatus)(response.status);
     const responseText = new TextDecoder().decode(response.body);
+
     if (Option.isNone(decodedStatus)) return yield* rejected("invalid_response");
     const responseStatus = decodedStatus.value;
+
     if (responseStatus === forbiddenStatus) {
       const body = Schema.decodeOption(UnknownJsonString)(responseText);
+
       if (Option.isSome(body)) {
         const failure = classifyFailureBody(body.value, responseStatus);
+
         if (failure.safeReason === "sandbox_bsuid_unsupported") return yield* failure;
       }
     }
+
     const statusFailure = classifyHttpStatus(responseStatus);
+
     if (Option.isSome(statusFailure)) return yield* statusFailure.value;
+
     const responseBody = yield* Schema.decodeEffect(UnknownJsonString)(responseText).pipe(
       Effect.mapError(() =>
         isSuccessfulStatus(response.status)
@@ -277,9 +307,11 @@ export const sendKapsoMessage = ({
           : rejected("invalid_response", false, Option.some(responseStatus))
       )
     );
+
     if (!isSuccessfulStatus(response.status)) {
       return yield* classifyFailureBody(responseBody, responseStatus);
     }
+
     return yield* decodeSentMessage(responseBody, responseStatus);
   }).pipe(
     Effect.timeoutOrElse({
@@ -295,10 +327,12 @@ export class KapsoClient extends Context.Service<KapsoClient, WhatsAppDelivery>(
     this,
     Effect.gen(function* () {
       const outboundHttp = yield* OutboundHttp;
+
       const deliveryMode = yield* Config.Literals(
         ["bsuid", "sandbox-phone"],
         "WHATSAPP_DELIVERY_MODE"
       ).pipe(Config.withDefault("bsuid"));
+
       return makeWhatsAppDelivery({
         deliveryMode,
         outboundHttp,

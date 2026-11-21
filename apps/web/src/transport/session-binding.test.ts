@@ -19,12 +19,15 @@ for (const interrupted of [false, true]) {
     `respects retry pacing and settles after ${interrupted ? "cancellation" : "completion"}`,
     () => {
       const lifetime = new AbortController();
+
       return Effect.gen(function* () {
         let attempts = 0;
         const started = yield* Deferred.make<void>();
+
         const respond = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
           attempts += 1;
           yield* Deferred.succeed(started, undefined);
+
           return HttpClientResponse.fromWeb(
             request,
             attempts === 1
@@ -35,12 +38,14 @@ for (const interrupted of [false, true]) {
               : Response.json({})
           );
         });
+
         const transport = HttpClient.makeWith<
           HttpClientError.HttpClientError,
           never,
           HttpClientError.HttpClientError,
           never
         >(Effect.flatMap(respond), Effect.succeed);
+
         const services = yield* Layer.build(
           bindBrowserSession({
             transport: Layer.succeed(HttpClient.HttpClient, transport).pipe(
@@ -49,14 +54,17 @@ for (const interrupted of [false, true]) {
             lifetime: { binding: "session-a", signal: lifetime.signal, recheck: vi.fn() },
           })
         );
+
         const work = yield* Effect.forkChild(
           Context.get(services, HttpClient.HttpClient).get(
             "https://api.test.fidyapp.com/categories"
           )
         );
+
         yield* Deferred.await(started);
         yield* TestClock.adjust("1 millis");
         expect(attempts).toBe(1);
+
         if (interrupted) {
           yield* Fiber.interrupt(work);
           yield* TestClock.adjust("1 second");
@@ -76,16 +84,21 @@ for (const aborted of [false, true]) {
     `shares request capacity across clients and ${aborted ? "cancels queued work on logout" : "releases queued work"}`,
     () => {
       const lifetime = new AbortController();
+
       return Effect.gen(function* () {
         const held = yield* Deferred.make<void>();
         const occupied = yield* Deferred.make<void>();
         let started = 0;
+
         const respond = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
           started++;
+
           if (started === 2) yield* Deferred.succeed(occupied, undefined);
           yield* Deferred.await(held);
+
           return HttpClientResponse.fromWeb(request, Response.json({}));
         });
+
         const transport = Layer.succeed(
           HttpClient.HttpClient,
           HttpClient.makeWith<
@@ -95,6 +108,7 @@ for (const aborted of [false, true]) {
             never
           >(Effect.flatMap(respond), Effect.succeed)
         );
+
         const clients = yield* Effect.forEach([0, 1], () =>
           Layer.build(
             bindBrowserSession({
@@ -105,9 +119,12 @@ for (const aborted of [false, true]) {
             })
           ).pipe(Effect.map((context) => Context.get(context, HttpClient.HttpClient)))
         );
+
         const first = clients[0];
         const second = clients[1];
+
         if (first === undefined || second === undefined) throw new Error("Missing test clients");
+
         const work = yield* Effect.forkChild(
           Effect.all(
             [
@@ -118,9 +135,11 @@ for (const aborted of [false, true]) {
             { concurrency: "unbounded" }
           )
         );
+
         yield* Deferred.await(occupied);
         yield* Effect.yieldNow;
         expect(started).toBe(2);
+
         if (aborted) lifetime.abort();
         yield* Deferred.succeed(held, undefined);
         expect(Exit.isSuccess(yield* Fiber.await(work))).toBe(!aborted);
@@ -132,10 +151,12 @@ for (const aborted of [false, true]) {
 
 it.effect("retires a streamed response and refuses further requests from the old session", () => {
   const lifetime = new AbortController();
+
   return Effect.gen(function* () {
     const headersReceived = yield* Deferred.make<void>();
     const canceled = vi.fn();
     const requests = vi.fn();
+
     const transport = HttpClient.makeWith<
       HttpClientError.HttpClientError,
       never,
@@ -146,16 +167,20 @@ it.effect("retires a streamed response and refuses further requests from the old
         Effect.gen(function* () {
           requests();
           expect(request.headers["fidy-session-binding"]).toBe("session-a");
+
           const response = HttpClientResponse.fromWeb(
             request,
             new Response(new ReadableStream<Uint8Array>({ cancel: canceled }))
           );
+
           yield* Deferred.succeed(headersReceived, undefined);
+
           return response;
         })
       ),
       Effect.succeed
     );
+
     const services = yield* Layer.build(
       bindBrowserSession({
         transport: Layer.succeed(HttpClient.HttpClient, transport).pipe(
@@ -164,10 +189,13 @@ it.effect("retires a streamed response and refuses further requests from the old
         lifetime: { binding: "session-a", signal: lifetime.signal, recheck: vi.fn() },
       })
     );
+
     const client = Context.get(services, HttpClient.HttpClient);
+
     const pending = yield* Effect.forkChild(
       client.get("https://api.test.fidyapp.com/transactions")
     );
+
     yield* Deferred.await(headersReceived);
     yield* Effect.yieldNow;
     lifetime.abort();
@@ -191,6 +219,7 @@ for (const scenario of [
       const lifetime = new AbortController();
       const recheck = vi.fn();
       const requests = vi.fn();
+
       return Effect.gen(function* () {
         const transport = HttpClient.makeWith<
           HttpClientError.HttpClientError,
@@ -202,6 +231,7 @@ for (const scenario of [
             requests();
             expect(request.method).toBe("POST");
             expect(request.headers["fidy-session-binding"]).toBe(scenario.binding);
+
             return HttpClientResponse.fromWeb(
               request,
               new Response(null, { status: scenario.status })
@@ -209,16 +239,19 @@ for (const scenario of [
           }),
           Effect.succeed
         );
+
         const services = yield* Layer.build(
           bindBrowserSession({
             transport: Layer.succeed(HttpClient.HttpClient, transport),
             lifetime: { binding: scenario.binding, signal: lifetime.signal, recheck },
           })
         );
+
         const reply = yield* Context.get(services, HttpClient.HttpClient).post(
           "https://api.test.fidyapp.com/transactions",
           { headers: { "Fidy-Session-Binding": "untrusted-override" } }
         );
+
         expect(reply.status).toBe(scenario.status);
         expect(requests).toHaveBeenCalledOnce();
         expect(recheck).toHaveBeenCalledTimes(scenario.rechecks);
@@ -232,6 +265,7 @@ it.effect("bootstraps a session identity and signed-out identity through credent
     .fn<typeof globalThis.fetch>()
     .mockResolvedValueOnce(Response.json({ binding: "20000000-0000-4000-8000-000000000003" }))
     .mockResolvedValueOnce(Response.json({ binding: null }));
+
   return Effect.gen(function* () {
     expect(yield* loadBrowserSessionBinding({ apiOrigin: "https://api.test.fidyapp.com" })).toBe(
       "20000000-0000-4000-8000-000000000003"
@@ -250,6 +284,7 @@ it.effect("bootstraps a session identity and signed-out identity through credent
 it.effect("rejects a response completed synchronously as its session is retired", () => {
   const lifetime = new AbortController();
   const recheck = vi.fn();
+
   return Effect.gen(function* () {
     const transport = HttpClient.makeWith<
       HttpClientError.HttpClientError,
@@ -259,16 +294,19 @@ it.effect("rejects a response completed synchronously as its session is retired"
     >(
       Effect.map((request) => {
         lifetime.abort();
+
         return HttpClientResponse.fromWeb(request, new Response(null));
       }),
       Effect.succeed
     );
+
     const services = yield* Layer.build(
       bindBrowserSession({
         transport: Layer.succeed(HttpClient.HttpClient, transport),
         lifetime: { binding: "session-a", signal: lifetime.signal, recheck },
       })
     );
+
     expect(
       Exit.isFailure(
         yield* Effect.exit(

@@ -24,7 +24,9 @@ type BulkDraft = Readonly<{
   amount: string;
   date: string;
 }>;
+
 type Changes = CanonicalInput<"transactions.updateTransaction">["payload"]["changes"];
+
 type BulkProps = Readonly<{
   transactions: Arr.NonEmptyReadonlyArray<Transaction>;
   categories: ReadonlyArray<Category>;
@@ -32,6 +34,7 @@ type BulkProps = Readonly<{
   onCancel: () => void;
   renderForm: (form: JSX.Element) => JSX.Element;
 }>;
+
 const draftFacts = (draft: BulkDraft, props: BulkProps): Changes => ({
   ...Option.match(
     Option.fromNullishOr(props.categories.find((category) => category.id === draft.categoryId)),
@@ -43,21 +46,26 @@ const draftFacts = (draft: BulkDraft, props: BulkProps): Changes => ({
   ...(draft.counterparty.trim() !== "" ? { counterparty: draft.counterparty.trim() } : {}),
   ...(draft.notes.trim() !== "" ? { notes: draft.notes.trim() } : {}),
 });
+
 const draftMoney = (draft: BulkDraft, props: BulkProps): Option.Option<Changes> => {
   if (draft.amount === "") return Option.some({});
   const first = Option.fromNullishOr(props.transactions[0]);
+
   if (
     Option.isNone(first) ||
     new Set(props.transactions.map((record) => record.money.currency)).size !== 1
   ) {
     return Option.none();
   }
+
   return parseMoneyInput({ text: draft.amount, currency: first.value.money.currency }).pipe(
     Option.map((money) => ({ money }))
   );
 };
+
 const draftDate = (draft: BulkDraft, timeZone: string): Option.Option<Changes> => {
   if (draft.date === "") return Option.some({});
+
   return DateTime.makeZoned(`${draft.date}T00:00:00.000Z`, {
     timeZone,
     adjustForTimeZone: true,
@@ -66,10 +74,12 @@ const draftDate = (draft: BulkDraft, timeZone: string): Option.Option<Changes> =
     Option.map((value) => ({ occurredAt: DateTime.toUtc(value) }))
   );
 };
+
 const draftChanges = (draft: BulkDraft, props: BulkProps): Option.Option<Changes> =>
   Option.all({ money: draftMoney(draft, props), date: draftDate(draft, props.timeZone) }).pipe(
     Option.map(({ money, date }) => ({ ...draftFacts(draft, props), ...money, ...date }))
   );
+
 const BulkAmount = ({
   draft,
   onChange,
@@ -81,6 +91,7 @@ const BulkAmount = ({
 }>): JSX.Element => {
   const mixedCurrencies =
     new Set(props.transactions.map((record) => record.money.currency)).size > 1;
+
   return (
     <div className="flex flex-col gap-2">
       <MoneyField
@@ -101,12 +112,14 @@ const BulkAmount = ({
     </div>
   );
 };
+
 type BulkFieldProps = Readonly<{
   draft: BulkDraft;
   onChange: (draft: BulkDraft) => void;
   props: BulkProps;
   locked: boolean;
 }>;
+
 const BulkFields = ({ draft, onChange, props, locked }: BulkFieldProps): JSX.Element => (
   <fieldset disabled={locked} data-transaction-slot="transaction-bulk-fields">
     <legend className="sr-only">Cambios para las transacciones seleccionadas</legend>
@@ -158,6 +171,7 @@ const BulkFields = ({ draft, onChange, props, locked }: BulkFieldProps): JSX.Ele
     <BulkTextFields draft={draft} onChange={onChange} props={props} />
   </fieldset>
 );
+
 const BulkTextFields = ({
   draft,
   onChange,
@@ -197,18 +211,22 @@ const BulkTextFields = ({
     </div>
   </>
 );
+
 const BulkFeedback = ({ status }: Readonly<{ status: CorrectionStatus }>): JSX.Element => (
   <>{status === "invalid" ? <p role="alert">Revisa los campos que quieres cambiar.</p> : null}</>
 );
+
 const BulkHeading = ({ count }: Readonly<{ count: number }>): JSX.Element => (
   <header>
     <h2>Editar transacciones</h2>
     <p data-transaction-slot="transaction-panel-note">{count} transacciones seleccionadas</p>
   </header>
 );
+
 export const BulkTransactionCorrection = (input: BulkProps): JSX.Element => {
   const [transactions] = useState(() => input.transactions);
   const props = { ...input, transactions };
+
   const [draft, setDraft] = useState<BulkDraft>({
     categoryId: "keep",
     direction: "keep",
@@ -217,24 +235,33 @@ export const BulkTransactionCorrection = (input: BulkProps): JSX.Element => {
     amount: "",
     date: "",
   });
+
   const corrections = useTransactionCorrections();
   const [submit] = useState(() => corrections.submit);
   const [submission, setSubmission] = useState<"pristine" | "invalid" | "submitted">("pristine");
   const feedback = corrections.status === "recovering" ? "saving" : corrections.status;
+
   const status: CorrectionStatus =
     !corrections.locked && submission === "invalid" ? "invalid" : feedback;
+
   const locked = corrections.locked;
+
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
+
     if (locked) return;
     const changes = draftChanges(draft, props);
+
     if (Option.isNone(changes) || Object.keys(changes.value).length === 0) {
       setSubmission("invalid");
+
       return;
     }
+
     setSubmission("submitted");
     submit({ kind: "bulk", transactions: props.transactions, changes: changes.value });
   };
+
   return props.renderForm(
     <form
       aria-label="Editar transacciones seleccionadas"

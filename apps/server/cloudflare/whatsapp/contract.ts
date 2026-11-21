@@ -27,6 +27,7 @@ export const WhatsAppInboundEvidence = Schema.Struct({
   replyToMessageId: Model.optionalOption(WhatsAppProviderMessageId),
   sandboxPhone: Model.optionalOption(E164PhoneNumber),
 });
+
 export type WhatsAppInboundEvidence = typeof WhatsAppInboundEvidence.Type;
 
 export const WhatsAppTurnAdmission = Schema.Struct({
@@ -36,13 +37,16 @@ export const WhatsAppTurnAdmission = Schema.Struct({
   ...WhatsAppInboundEvidence.fields,
   text: TranscriptText,
 });
+
 export type WhatsAppTurnAdmission = typeof WhatsAppTurnAdmission.Type;
 
 export const WhatsAppDocumentAdmission = Schema.Struct({
   ...WhatsAppTurnAdmission.fields,
   document: WhatsAppDocument,
 });
+
 export type WhatsAppDocumentAdmission = typeof WhatsAppDocumentAdmission.Type;
+
 export const WhatsAppInboundAdmission = Schema.Union([
   WhatsAppDocumentAdmission,
   WhatsAppTurnAdmission,
@@ -83,10 +87,13 @@ export const DeliveryFamily = Schema.Literals([
   "weekly-question",
   "disclosure",
 ]);
+
 const maximumDeliveryOperationLength = 128;
+
 const deliveryOperation = Schema.NonEmptyString.check(
   Schema.isMaxLength(maximumDeliveryOperationLength)
 );
+
 export const DeliverySend = Schema.Struct({
   userId: UserId,
   family: DeliveryFamily,
@@ -99,6 +106,7 @@ export const DeliverySend = Schema.Struct({
   deadline: Schema.NullOr(Schema.Int),
   contentDigest: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
 });
+
 export const WhatsAppLifecycleWork = Schema.TaggedStruct("WhatsAppLifecycleEvent", {
   portfolio: WhatsAppBusinessPortfolioId,
   correlationToken: HostedDeliveryCorrelationToken,
@@ -110,12 +118,14 @@ export const WhatsAppLifecycleWork = Schema.TaggedStruct("WhatsAppLifecycleEvent
   occurredAtMs: Schema.Int,
   receivedAtMs: Schema.Int,
 });
+
 export const DeliveredObservation = Schema.Struct({
   userId: UserId,
   operationId: deliveryOperation,
   family: DeliveryFamily,
   evidence: WhatsAppLifecycleWork,
 });
+
 export const SendReply = Schema.Struct({
   userId: UserId,
   operationId: deliveryOperation,
@@ -125,7 +135,9 @@ export const SendReply = Schema.Struct({
   state: Schema.Literals(["accepted", "rejected", "ambiguous"]),
   message: Schema.NullOr(WhatsAppProviderMessageId),
 });
+
 export const voiceRefusalUrl = "https://user.invalid/work/whatsapp/voice-refusal";
+
 export const VoiceRefusal = Schema.Struct({
   userId: UserId,
   caller: WhatsAppCaller,
@@ -133,7 +145,11 @@ export const VoiceRefusal = Schema.Struct({
   endpoint: WhatsAppBusinessPhoneNumberId,
   occurredAt: Schema.Int,
 });
+
 export const reserveDeliveryUrl = "https://user.invalid/work/whatsapp/reserve";
+
 export const claimDeliveryUrl = "https://user.invalid/work/whatsapp/claim";
+
 export const statusDeliveryUrl = "https://user.invalid/work/whatsapp/status";
+
 export const replyDeliveryUrl = "https://user.invalid/work/whatsapp/reply";

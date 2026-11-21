@@ -29,6 +29,7 @@ export const TransactionsReference = (): JSX.Element => {
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState("COP");
   const [type, onType] = useState<"inflow" | "outflow">("outflow");
+
   return (
     <section aria-label="Composición aprobada de transacciones">
       <TransactionSurface panelOpen={false}>
@@ -117,6 +118,7 @@ const ReferenceMoneyFields = ({
 const CaptureRecoveryReference = (): JSX.Element => {
   const [checked, setChecked] = useState(false);
   const [message, setMessage] = useState("");
+
   return (
     <section
       aria-label="Recuperación de registro de ejemplo"

@@ -19,12 +19,14 @@ it("refuses a full Free meter at the exact next Bogotá month boundary", () => {
   const period = allowancePeriod(now);
   expect(DateTime.formatIso(period.startsAt)).toBe("2026-07-01T05:00:00.000Z");
   expect(DateTime.formatIso(period.resetsAt)).toBe("2026-08-01T05:00:00.000Z");
+
   const decision = decideConsumption({
     allowance: "canonical_call",
     accessTier: "free",
     consumed: 50,
     now,
   });
+
   expect(decision).toEqual({
     _tag: "Exhausted",
     allowance: "canonical_call",
@@ -41,10 +43,12 @@ it.each([
   "counts one accepted %s against its independent Free allowance",
   (allowance, limit, key) => {
     const now = DateTime.makeUnsafe("2026-08-01T05:00:00Z");
+
     const period = {
       startsAt: DateTime.makeUnsafe("2026-08-01T05:00:00Z"),
       resetsAt: DateTime.makeUnsafe("2026-09-01T05:00:00Z"),
     };
+
     for (const consumed of [0, limit - 1]) {
       const input = { allowance, accessTier: "free" as const, consumed, now };
       expect(
@@ -61,6 +65,7 @@ it.each([
         remaining: limit - consumed - 1,
       });
     }
+
     for (const consumed of [limit, limit + 1]) {
       const input = { allowance, accessTier: "free" as const, consumed, now };
       expect(
@@ -78,6 +83,7 @@ it.each([
         resetsAt: period.resetsAt,
       });
     }
+
     const pro = { allowance, accessTier: "pro" as const, consumed: limit + 1, now };
     expect(projectQuotaStatus({ ...pro, consumed: consumption(allowance, limit + 1) })).toEqual({
       accessTier: "pro",

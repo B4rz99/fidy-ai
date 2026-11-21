@@ -55,6 +55,7 @@ const RotationFeedback = ({ state }: { state: RotationState }): JSX.Element => (
 
 const actionLabel = (state: RotationState): string => {
   if (state._tag === "Rotating") return "Creando código…";
+
   return "Crear un código nuevo";
 };
 
@@ -66,6 +67,7 @@ const RotationAction = (props: {
   onCancel: () => void;
 }): JSX.Element => {
   if (props.state._tag === "Disposed") return <></>;
+
   if (props.state._tag === "Reviewing") {
     return (
       <div className="flex flex-wrap gap-2">
@@ -78,6 +80,7 @@ const RotationAction = (props: {
       </div>
     );
   }
+
   if (
     props.state._tag === "FreshSessionRequired" ||
     props.state._tag === "Unauthenticated" ||
@@ -94,6 +97,7 @@ const RotationAction = (props: {
       </div>
     );
   }
+
   return (
     <div className="flex flex-wrap gap-2">
       {props.state._tag === "Disclosed" ? (

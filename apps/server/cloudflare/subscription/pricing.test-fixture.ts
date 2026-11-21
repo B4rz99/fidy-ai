@@ -2,7 +2,9 @@ import type { StoreReleaseEnvironment } from "../runtime/sqlite/contract";
 import { Pricing } from "./runtime";
 
 const restrictAt = 0.8;
+
 const unavailable = 503;
+
 const unexpected = 500;
 
 export class PricingFixture extends Pricing {
@@ -19,12 +21,14 @@ export class PricingFixture extends Pricing {
         "SELECT request,price_id,outcome,next_check_ms FROM price_registrations ORDER BY operation_id"
       )
       .toArray();
+
     return this.storage.getAlarm().then((alarm) => Response.json({ alarm, rows }));
   }
   private recoveryFixture(request: Request): Promise<Response> {
     switch (new URL(request.url).pathname) {
       case "/fixture/forget-registration-wake":
         this.storage.sql.exec("UPDATE price_registrations SET next_check_ms=NULL");
+
         return this.storage.deleteAlarm().then(() => new Response(null, { status: 204 }));
       case "/fixture/drop-alarm":
         return this.storage.deleteAlarm().then(() => new Response(null, { status: 204 }));
@@ -52,15 +56,18 @@ export class PricingFixture extends Pricing {
           const sql = this.storage.sql;
           const healthyBytes = sql.databaseSize;
           let index = 0;
+
           while (sql.databaseSize < this.ceilingBytes * restrictAt) {
             const id =
               "98000000-0000-4000-8000-" + String(++index).padStart("000000000000".length, "0");
+
             sql.exec(
               "INSERT INTO prices(id,terms) SELECT ?,json_set(terms,'$.id',?) FROM prices WHERE id='22700000-0000-4000-8000-000000000001'",
               id,
               id
             );
           }
+
           return Response.json({
             healthyBytes,
             pressureBytes: sql.databaseSize,
@@ -68,10 +75,12 @@ export class PricingFixture extends Pricing {
           });
         });
       }
+
       case "/fixture/fail-before-receipt":
         this.storage.sql.exec(
           "CREATE TRIGGER fixture_abort BEFORE INSERT ON price_publications BEGIN SELECT RAISE(ABORT, 'fixture'); END"
         );
+
         return super.fetch(new Request("https://pricing.internal/publish", request)).finally(() => {
           this.storage.sql.exec("DROP TRIGGER fixture_abort");
         });
@@ -82,6 +91,7 @@ export class PricingFixture extends Pricing {
             (response) => new Response(null, { status: response.ok ? unavailable : unexpected })
           );
       }
+
       default:
         return this.recoveryFixture(request);
     }

@@ -4,7 +4,9 @@ import { makePublicWorker } from "./public-worker";
 import { makeWorkerTelemetry } from "./runtime/telemetry/operations";
 
 const override = 'private-core="12740000-0000-4000-8000-000000000001"';
+
 const refusedStatus = 403;
+
 const cases = [
   { path: "/internal/titular-erasure", assertion: "", origin: "", forwarded: true },
   { path: "/internal/support-recovery", assertion: "untrusted", origin: "", forwarded: true },
@@ -28,6 +30,7 @@ it.each(cases)(
     Effect.runPromise(
       Effect.gen(function* () {
         let reachedCore = false;
+
         const response = yield* Effect.tryPromise(() =>
           makePublicWorker(makeWorkerTelemetry(() => undefined)).fetch(
             new Request(`https://api.fidyapp.com${path}`, {
@@ -51,12 +54,14 @@ it.each(cases)(
                   expect(
                     new Request(input).headers.get("cloudflare-workers-version-overrides")
                   ).toBeNull();
+
                   return Promise.resolve(new Response(null, { status: refusedStatus }));
                 },
               },
             }
           )
         );
+
         expect(reachedCore).toBe(forwarded);
         expect(response.status).toBe(refusedStatus);
       })

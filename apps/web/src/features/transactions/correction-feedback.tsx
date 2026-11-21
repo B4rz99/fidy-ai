@@ -6,11 +6,13 @@ const retainedCopy = {
   single: "Conservamos tus cambios.",
   bulk: "Conservamos tus cambios y la selección.",
 };
+
 export const CorrectionRecoveryFeedback = ({
   kind,
 }: Readonly<{ kind: "single" | "bulk" }>): JSX.Element => {
   const corrections = useTransactionCorrections();
   const retained = retainedCopy[kind];
+
   switch (corrections.status) {
     case "refreshing":
       return (

@@ -9,7 +9,9 @@ import { BancolombiaAuthenticationFailed } from "./contract";
 import { authenticateBancolombiaSandbox } from "./operations";
 
 const issuer = "https://auth1-api-open-finance-sandbox.ambientesbc.com";
+
 const token = "https://as1-api-open-finance-sandbox.ambientesbc.com/token";
+
 const clientId = "10000000-0000-4000-8000-000000000001";
 
 class SyntheticAssertionFailed extends Data.TaggedError("SyntheticAssertionFailed") {}
@@ -36,16 +38,20 @@ it.effect(
       const secureRandom = Context.get(services, SecureRandom.SecureRandom);
       const digest = Context.get(services, Digest.Digest);
       const key = yield* Effect.tryPromise(() => generateKeyPair("RS256", { extractable: true }));
+
       const publicKey = {
         ...(yield* Effect.tryPromise(() => exportJWK(key.publicKey))),
         kid: "synthetic-bank-key",
         alg: "RS256",
       };
+
       const privateKey = Redacted.make(yield* Effect.tryPromise(() => exportPKCS8(key.privateKey)));
       const requests: string[] = [];
+
       const httpClient = HttpClient.make((request) =>
         Effect.gen(function* () {
           requests.push(request.url);
+
           if (request.method === "GET") {
             return HttpClientResponse.fromWeb(
               request,
@@ -59,19 +65,23 @@ it.effect(
               })
             );
           }
+
           expect(request.body._tag).toBe("Uint8Array");
+
           if (request.body._tag !== "Uint8Array") throw new Error("Expected form body");
           const form = new URLSearchParams(new TextDecoder().decode(request.body.body));
           expect(form.get("grant_type")).toBe("client_credentials");
           expect(form.get("scope")).toBe("accounts");
           const assertion = form.get("client_assertion");
           expect(assertion).toBeTypeOf("string");
+
           if (assertion === null) throw new Error("Missing assertion");
           const checked = yield* verifyAssertion(assertion, key.publicKey);
           expect(checked.protectedHeader.kid).toBe("synthetic-bank-key");
           expect(checked.payload.exp).toBe(300);
           expect(checked.payload.iat).toBe(0);
           expect(checked.payload.jti).toMatch(/^[0-9a-f-]{36}$/u);
+
           return HttpClientResponse.fromWeb(
             request,
             Response.json({
@@ -83,6 +93,7 @@ it.effect(
           );
         })
       );
+
       const result = yield* authenticateBancolombiaSandbox({
         secureRandom,
         digest,
@@ -91,6 +102,7 @@ it.effect(
         publicKey,
         httpClient,
       });
+
       expect(result).toBeUndefined();
       expect(requests).toEqual([`${issuer}/.well-known/openid-configuration`, token]);
     })
@@ -101,18 +113,23 @@ it.effect("refuses a signing key that does not match registration before sending
     const services = yield* Layer.build(TestCrypto);
     const secureRandom = Context.get(services, SecureRandom.SecureRandom);
     const digest = Context.get(services, Digest.Digest);
+
     const registered = yield* Effect.tryPromise(() =>
       generateKeyPair("RS256", { extractable: true })
     );
+
     const unrelated = yield* Effect.tryPromise(() =>
       generateKeyPair("RS256", { extractable: true })
     );
+
     let calls = 0;
+
     const publicKey = {
       ...(yield* Effect.tryPromise(() => exportJWK(registered.publicKey))),
       kid: "registered",
       alg: "RS256",
     };
+
     const result = yield* authenticateBancolombiaSandbox({
       secureRandom,
       digest,
@@ -121,9 +138,11 @@ it.effect("refuses a signing key that does not match registration before sending
       privateKey: Redacted.make(yield* Effect.tryPromise(() => exportPKCS8(unrelated.privateKey))),
       httpClient: HttpClient.make((request) => {
         calls += 1;
+
         return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({})));
       }),
     }).pipe(Effect.exit);
+
     expect(yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result)).not.toContain(
       "PRIVATE KEY"
     );
@@ -147,18 +166,22 @@ it.effect("refuses issuer or token-endpoint drift before any credential-bearing 
     const secureRandom = Context.get(services, SecureRandom.SecureRandom);
     const digest = Context.get(services, Digest.Digest);
     const key = yield* Effect.tryPromise(() => generateKeyPair("RS256", { extractable: true }));
+
     const publicKey = {
       ...(yield* Effect.tryPromise(() => exportJWK(key.publicKey))),
       kid: "registered",
       alg: "RS256",
     };
+
     const privateKey = Redacted.make(yield* Effect.tryPromise(() => exportPKCS8(key.privateKey)));
+
     for (const metadata of [
       { issuer: "https://foreign.example", token_endpoint: token },
       { issuer, token_endpoint: "http://127.0.0.1/token" },
       { issuer, token_endpoint: token, token_endpoint_auth_signing_alg_values_supported: ["none"] },
     ]) {
       let calls = 0;
+
       const result = yield* authenticateBancolombiaSandbox({
         secureRandom,
         digest,
@@ -167,6 +190,7 @@ it.effect("refuses issuer or token-endpoint drift before any credential-bearing 
         privateKey,
         httpClient: HttpClient.make((request) => {
           calls += 1;
+
           return Effect.succeed(
             HttpClientResponse.fromWeb(
               request,
@@ -181,6 +205,7 @@ it.effect("refuses issuer or token-endpoint drift before any credential-bearing 
           );
         }),
       }).pipe(Effect.exit);
+
       expect(calls).toBe(1);
       assert.deepStrictEqual(
         result,
@@ -196,12 +221,15 @@ it.effect("does not retry bank rejection or expose its body or a malformed token
     const secureRandom = Context.get(services, SecureRandom.SecureRandom);
     const digest = Context.get(services, Digest.Digest);
     const key = yield* Effect.tryPromise(() => generateKeyPair("RS256", { extractable: true }));
+
     const publicKey = {
       ...(yield* Effect.tryPromise(() => exportJWK(key.publicKey))),
       kid: "registered",
       alg: "RS256",
     };
+
     const privateKey = Redacted.make(yield* Effect.tryPromise(() => exportPKCS8(key.privateKey)));
+
     for (const rejection of [
       { status: 401, body: { error: "synthetic-secret-provider-body" } },
       {
@@ -214,6 +242,7 @@ it.effect("does not retry bank rejection or expose its body or a malformed token
       },
     ]) {
       let posts = 0;
+
       const result = yield* authenticateBancolombiaSandbox({
         secureRandom,
         digest,
@@ -236,7 +265,9 @@ it.effect("does not retry bank rejection or expose its body or a malformed token
               )
             );
           }
+
           posts += 1;
+
           return Effect.succeed(
             HttpClientResponse.fromWeb(
               request,
@@ -245,6 +276,7 @@ it.effect("does not retry bank rejection or expose its body or a malformed token
           );
         }),
       }).pipe(Effect.exit);
+
       expect(posts).toBe(1);
       assert.deepStrictEqual(
         result,

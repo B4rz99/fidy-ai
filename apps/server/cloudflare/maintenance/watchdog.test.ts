@@ -6,8 +6,10 @@ import { expect } from "vitest";
 import { native, nativeBrowserPlatform, nativeUserPlatform } from "../user-store.test-fixture";
 
 const user = "22530000-0000-4000-8000-000000000001";
+
 const maintenance = Effect.fn(function* (runtime: Miniflare) {
   const namespace = yield* native(() => runtime.getDurableObjectNamespace("MAINTENANCE", "core"));
+
   return namespace.getByName("core-maintenance-v1");
 });
 
@@ -22,9 +24,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const users = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
         const now = yield* Clock.currentTimeMillis;
         yield* native(() => users.getByName(user).fetch("https://user.invalid/transactions"));
+
         const local = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: user })
         );
+
         expect(
           (yield* native(() =>
             executor.fetch("https://maintenance.invalid/lifetime/register", {
@@ -47,18 +51,22 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             "b".repeat(64)
           )
         );
+
         const tick = (): ReturnType<typeof executor.fetch> =>
           executor.fetch("https://maintenance.invalid/watchdog", {
             method: "POST",
             headers: { "x-maintenance-scheduled-at": String(now) },
           });
+
         const responses = yield* native(() => Promise.all([tick(), tick()]));
         expect(responses.map((response) => response.status)).toEqual([204, 204]);
+
         const registry = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("core", "Maintenance", {
             name: "core-maintenance-v1",
           })
         );
+
         expect(
           yield* native(() =>
             registry.exec(
@@ -95,23 +103,30 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const start = yield* nativeUserPlatform;
         const runtime = yield* start();
         const now = yield* Clock.currentTimeMillis;
+
         const directory = (yield* native(() =>
           runtime.getDurableObjectNamespace("DIRECTORY", "core")
         )).getByName("directory-v1");
+
         const pricing = (yield* native(() =>
           runtime.getDurableObjectNamespace("PRICING", "core")
         )).getByName("pricing");
+
         const erasure = (yield* native(() =>
           runtime.getDurableObjectNamespace("ERASURE", "core")
         )).getByName("erasure-registry-v1");
+
         const check = (
           owner: typeof directory
         ): Effect.Effect<Awaited<ReturnType<typeof owner.fetch>>> =>
           native(() => owner.fetch("https://owner.internal/work/check", { method: "POST" }));
+
         expect((yield* check(directory)).status).toBe(204);
+
         const local = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
         );
+
         yield* native(() =>
           local.exec(
             "INSERT INTO unresolved_source_buckets(subject,virtual_at_ms) VALUES (?,?)",
@@ -122,6 +137,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect((yield* check(directory)).headers.get("fidy-alarm-repaired")).toBe("1");
         expect((yield* check(directory)).headers.get("fidy-alarm-repaired")).toBe("0");
         expect((yield* check(pricing)).status).toBe(204);
+
         const registration = {
           operationId: "22530000-0000-4000-8000-000000000002",
           userId: user,
@@ -133,6 +149,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           inputsDigest: "a".repeat(64),
           deadlineMs: now + 60000,
         };
+
         const response = yield* native(() =>
           pricing.fetch("https://pricing.invalid/register", {
             method: "POST",
@@ -140,6 +157,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             body: JSON.stringify(registration),
           })
         );
+
         expect(response.status).toBe(200);
         expect(yield* native(() => response.json())).toMatchObject(registration);
         const scheduled = yield* check(pricing);
@@ -165,18 +183,22 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             headers: { "x-maintenance-scheduled-at": String(now) },
           })
         );
+
         const registry = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("core", "Maintenance", {
             name: "core-maintenance-v1",
           })
         );
+
         const maintenanceNamespace = yield* native(() =>
           runtime.getDurableObjectNamespace("MAINTENANCE", "core")
         );
+
         const id = "22550000-0000-4000-8000-000000000088";
         yield* native(() =>
           registry.exec("INSERT INTO lifetime_registry(user_id,registered_ms) VALUES(?,1)", id)
         );
+
         for (const [age, severity] of [
           [299000, "none"],
           [300000, "warning"],
@@ -198,6 +220,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               now
             )
           );
+
           const tick = yield* native(() =>
             maintenanceNamespace
               .getByName("core-maintenance-v1")
@@ -206,6 +229,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
                 headers: { "x-maintenance-scheduled-at": String(now) },
               })
           );
+
           expect(tick.status).toBe(204);
           expect(
             logs.some((line) =>
@@ -216,6 +240,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             )
           ).toBe(true);
         }
+
         expect(
           logs.filter((line) => line.includes("fidy.operational")).some((line) => line.includes(id))
         ).toBe(false);

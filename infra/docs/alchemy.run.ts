@@ -22,6 +22,7 @@ export default Alchemy.Stack(
     yield* Schema.decodeUnknownEffect(Schema.Literal("production"))(stage).pipe(
       Effect.mapError((cause) => new Config.ConfigError(cause))
     );
+
     const docs = yield* Cloudflare.Website.StaticSite("Docs", {
       name: "fidy-docs",
       memo: false,
@@ -33,6 +34,7 @@ export default Alchemy.Stack(
       workersDev: false,
       observability: { enabled: false },
     });
+
     return { docsUrl: docs.url };
   })
 );

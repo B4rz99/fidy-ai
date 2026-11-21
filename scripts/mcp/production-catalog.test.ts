@@ -16,6 +16,7 @@ it("accepts Codex's nameless built-in web search but still rejects an absent Fid
         );
         const result = yield* Effect.result(validateCatalog(root, "codex"));
         expect(Result.isFailure(result)).toBe(true);
+
         if (Result.isFailure(result)) {
           expect(result.failure.message).toBe(
             "Native restricted catalog did not match the permission contract"
@@ -37,6 +38,7 @@ it("rejects an unrecognized nameless catalog entry instead of silently ignoring 
         );
         const result = yield* Effect.result(validateCatalog(root, "codex"));
         expect(Result.isFailure(result)).toBe(true);
+
         if (Result.isFailure(result)) {
           expect(result.failure.message).toBe("Invalid verification state");
         }

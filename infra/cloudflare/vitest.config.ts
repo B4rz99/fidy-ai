@@ -7,10 +7,12 @@ const nativeFileMilliseconds: Readonly<Record<string, number>> = {
   "release-controller.test.ts": 13_200,
   "diagnose-smoke-routing.test.ts": 7_600,
 };
+
 class InfrastructureTestSequencer extends BaseSequencer {
   override sort(files: TestSpecification[]): Promise<TestSpecification[]> {
     const cost = (file: TestSpecification): number =>
       nativeFileMilliseconds[file.moduleId.split("/").at(-1) ?? ""] ?? 0;
+
     return super
       .sort(files)
       .then((ordered) => ordered.sort((left, right) => cost(right) - cost(left)));

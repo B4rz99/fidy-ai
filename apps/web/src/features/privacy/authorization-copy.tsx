@@ -15,7 +15,9 @@ const AuthorizationRecord = ({
   if (value.authorization === null) {
     return <p>No hay una autorización de tratamiento registrada.</p>;
   }
+
   const record = value.authorization;
+
   return (
     <section aria-label="Copia de autorización" className="flex flex-col gap-3">
       <p className="break-words">Referencia: {record.reference}</p>
@@ -43,8 +45,10 @@ export const AuthorizationCopy = ({ client }: Readonly<{ client: WebAuthClient }
       )
     )
   );
+
   const result = useAtomValue(operation);
   const load = useAtomSet(operation);
+
   return (
     <section className="settings-section">
       <div className="settings-section-icon">

@@ -24,6 +24,7 @@ it.effect(
           400
         )
       );
+
       const result = yield* Effect.result(
         invalid.start({
           recipientLabel: PATRecipientLabel.make("Mi agente"),
@@ -31,6 +32,7 @@ it.effect(
           lifetimeDays: 7,
         })
       );
+
       expect(result).toMatchObject({ failure: { reason: "PairingInvalid" } });
     })
 );

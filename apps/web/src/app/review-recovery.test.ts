@@ -13,6 +13,7 @@ import { type CanonicalSuccess, makeFidyClient, makeWebAuthClient } from "@/tran
 import { makeHostedTurnClient } from "@/transport/hosted-turn-client";
 
 const reactWork = (work: () => void): Promise<void> => Promise.resolve(act(work));
+
 const expiredReview = (
   source: CanonicalSuccess<"ingestion.getReviewWorkspace">["data"]["items"][number]["source"] = "statement",
   status: "expired" | "created" = "expired",
@@ -30,6 +31,7 @@ const expiredReview = (
     removeEventListener: (): void => undefined,
   }));
   const requests: string[] = [];
+
   const item = {
     id: "24000000-0000-4000-8000-000000001794",
     source,
@@ -42,10 +44,12 @@ const expiredReview = (
     ...(status === "created" ? { transactionId: "24000000-0000-4000-8000-000000001795" } : {}),
     preview: { counterparty: "Expired private counterparty", amount: "1234", currency: "COP" },
   };
+
   const http = HttpClient.make((request) => {
     const path = new URL(request.url).pathname;
     requests.push(`${request.method} ${path}`);
     let data: unknown;
+
     if (path.endsWith("review-workspace")) {
       data = { pendingCount: 0, total: 1, items: [item], selectedDetail: { item, revision: 0 } };
     } else if (path.endsWith("/context")) {
@@ -55,6 +59,7 @@ const expiredReview = (
     } else if (path.endsWith("/categories")) {
       data = [];
     }
+
     return Effect.succeed(
       HttpClientResponse.fromWeb(
         request,
@@ -62,11 +67,14 @@ const expiredReview = (
       )
     );
   });
+
   const options = {
     apiOrigin: "https://api.test.fidyapp.com",
     httpClient: Layer.succeed(HttpClient.HttpClient, http),
   };
+
   const registry = AtomRegistry.make();
+
   const router = createWebRouter({
     apiClient: makeFidyClient(options),
     webAuthClient: makeWebAuthClient(options),
@@ -77,9 +85,11 @@ const expiredReview = (
       createMemoryHistory({ initialEntries: ["/app/needs-review?status=history"] })
     ),
   });
+
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
+
   return {
     container,
     requests,
@@ -126,6 +136,7 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const page = expiredReview();
+
         try {
           yield* Effect.tryPromise(page.render);
           yield* Effect.tryPromise(() =>
@@ -157,6 +168,7 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const page = expiredReview("statement", "expired", true);
+
         try {
           yield* Effect.tryPromise(page.render);
           yield* Effect.tryPromise(() =>
@@ -182,6 +194,7 @@ it.each([
     Effect.runPromise(
       Effect.gen(function* () {
         const page = expiredReview(source);
+
         try {
           yield* Effect.tryPromise(page.render);
           yield* Effect.tryPromise(() =>
@@ -190,6 +203,7 @@ it.each([
               const link = page.container.querySelector('a[aria-label="Abrir WhatsApp"]');
               expect(link?.getAttribute("href") ?? null).toBe(destination);
               expect(page.container.textContent).toContain("Este elemento seguirá vencido");
+
               if (source === "email") {
                 expect(page.container.textContent).toContain("manualmente en Transacciones");
                 expect(page.container.textContent).not.toContain("inicias una nueva revisión");
@@ -210,6 +224,7 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const page = expiredReview("statement", "created");
+
         try {
           yield* Effect.tryPromise(page.render);
           yield* Effect.tryPromise(() =>
@@ -217,6 +232,7 @@ it(
               const transaction = page.container.querySelector(
                 'a[href*="24000000-0000-4000-8000-000000001795"]'
               );
+
               expect(transaction?.textContent).toBe("Ver transacción");
               expect(page.container.querySelector('a[aria-label="Abrir WhatsApp"]')).toBeNull();
               expect(page.container.textContent).not.toContain("inicias una nueva revisión");

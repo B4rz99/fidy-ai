@@ -23,10 +23,13 @@ export const publishPrice = (
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const { request, environment } = input;
+
     if (!validRequest(request)) {
       return new Response(null, { status: 403 });
     }
+
     const issuer = environment.CLOUDFLARE_ACCESS_ISSUER;
+
     const operator = yield* authenticateOperator({
       request,
       configuration: {
@@ -42,11 +45,15 @@ export const publishPrice = (
       },
       http: input.http,
     });
+
     if (Option.isNone(operator)) return new Response(null, { status: 401 });
     const body = yield* boundedJsonBody({ request, policy, schema: PricePublication });
+
     if (Option.isNone(body)) return new Response(null, { status: 400 });
     const owner = environment.PRICING;
+
     if (owner === undefined) return new Response(null, { status: 503 });
+
     const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(AdmittedPricePublication))({
       ...body.value,
       authority: {
@@ -55,6 +62,7 @@ export const publishPrice = (
         expiresAtMs: operator.value.expiresAtMs,
       },
     });
+
     return yield* Effect.tryPromise(() =>
       owner.getByName(pricingName).fetch("https://pricing.internal/publish", {
         method: "POST",

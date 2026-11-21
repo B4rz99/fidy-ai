@@ -12,12 +12,16 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const db = yield* makeNativeTransactionJourney(undefined, nativePurgePlatform);
         let leapYear = DateTime.getPartUtc(yield* DateTime.now, "year");
+
         while (DateTime.getPartUtc(DateTime.makeUnsafe(Date.UTC(leapYear, 1, 29)), "day") !== 29) {
           leapYear++;
         }
+
         const closed = Date.UTC(leapYear, 1, 29, 12, 1, 2, 345),
           deadline = Date.UTC(leapYear + 2, 1, 28, 12, 1, 2, 345);
+
         const cases = "SELECT id FROM support_recovery_cases ORDER BY id";
+
         for (const person of [alice, bob]) {
           const store = db.owner(person.user);
           yield* native(() =>
@@ -38,9 +42,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             )
           );
         }
+
         const owner = (yield* native(() =>
           db.runtime.getDurableObjectNamespace("USER_STORE", "core")
         )).getByName(alice.user);
+
         const alarm = (now: number): Effect.Effect<number> =>
           native(() =>
             owner.fetch("https://fixture.invalid/user-alarm", {
@@ -48,6 +54,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               headers: { "fixture-clock": String(now) },
             })
           ).pipe(Effect.map((reply) => reply.status));
+
         expect(yield* alarm(deadline - 1)).toBe(204);
         expect(yield* native(() => db.exec(cases))).toEqual([{ id: "case" }]);
         yield* native(() =>

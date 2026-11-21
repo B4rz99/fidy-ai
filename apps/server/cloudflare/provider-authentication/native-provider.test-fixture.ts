@@ -9,12 +9,19 @@ import { UserId } from "../../src/core/identity/contract";
 import type { AuthenticationProvider } from "../../src/shell/provider-authentication/contract";
 
 const invalidStatus = 400;
+
 const unavailableStatus = 503;
+
 const pendingStatus = 202;
+
 const redirectStatus = 303;
+
 const verifierLength = 43;
+
 const common = ["nonce", "audience", "issuer", "expiry", "signature", "deny", "emptySubject"];
+
 const microsoftOnly = ["invalidTenant", "foreignTenant", "keyIssuer", "version", "future"];
+
 const refusedProvider = Effect.fn(function* (provider: AuthenticationProvider, scenario: string) {
   const runtime = yield* (yield* nativeBrowserPlatform)();
   const { login, post } = browser(runtime);
@@ -23,9 +30,11 @@ const refusedProvider = Effect.fn(function* (provider: AuthenticationProvider, s
   const denied = yield* post(`/web/providers/${provider}/complete`, attempt.proof);
   expect(denied.status).toBe(invalidStatus);
   yield* native(() => denied.arrayBuffer());
+
   const directory = yield* native(() =>
     runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
   );
+
   expect(yield* native(() => directory.exec("SELECT count(*) AS n FROM provider_routes"))).toEqual([
     { n: 0 },
   ]);
@@ -34,6 +43,7 @@ const refusedProvider = Effect.fn(function* (provider: AuthenticationProvider, s
   expect(pending.headers.get("set-cookie")).toBeNull();
   yield* native(() => pending.arrayBuffer());
 });
+
 const failures = [
   "BEFORE INSERT ON users",
   "BEFORE INSERT ON provider_credentials",
@@ -46,27 +56,36 @@ const rollbackEnrollment = Effect.fn(function* (provider: AuthenticationProvider
   const runtime = yield* (yield* nativeBrowserPlatform)();
   const { login, post } = browser(runtime);
   const { proof } = yield* login("atomic-rollback", { provider, scenario: "valid" });
+
   const directory = yield* native(() =>
     runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
   );
+
   yield* native(() =>
     directory.exec(
       "CREATE TRIGGER pause_recovery BEFORE INSERT ON recovery_routes BEGIN SELECT RAISE(ABORT,'pause'); END"
     )
   );
+
   const complete = (): ReturnType<typeof post> =>
     post(`/web/providers/${provider}/complete`, proof);
+
   const paused = yield* complete();
   expect(paused.status).toBe(unavailableStatus);
   yield* native(() => paused.arrayBuffer());
+
   const [user] = yield* Schema.decodeUnknownEffect(
     Schema.Array(Schema.Struct({ user_id: UserId }))
   )(yield* native(() => directory.exec("SELECT user_id FROM provider_routes")));
+
   if (user === undefined) return yield* Effect.die("Missing reservation");
+
   const store = yield* native(() =>
     runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: user.user_id })
   );
+
   yield* native(() => directory.exec("DROP TRIGGER pause_recovery"));
+
   for (const failure of failures) {
     yield* native(() =>
       store.exec("CREATE TRIGGER fail_enroll " + failure + " BEGIN SELECT RAISE(IGNORE); END")
@@ -83,6 +102,7 @@ const rollbackEnrollment = Effect.fn(function* (provider: AuthenticationProvider
     ).toEqual([{ users: 0, credentials: 0, consents: 0, recovery: 0 }]);
     yield* native(() => store.exec("DROP TRIGGER fail_enroll"));
   }
+
   const success = yield* complete();
   expect(yield* native(() => success.json())).toMatchObject({ status: "created" });
   yield* native(() =>
@@ -102,11 +122,13 @@ const rollbackEnrollment = Effect.fn(function* (provider: AuthenticationProvider
     { user_id: user.user_id },
   ]);
 });
+
 const requireConsent = Effect.fn(function* (provider: AuthenticationProvider) {
   const runtime = yield* (yield* nativeBrowserPlatform)();
   const { pair, post, begin } = browser(runtime);
   const proof = yield* pair;
   const start = `/web/providers/${provider}/start`;
+
   for (const data of [
     { ...proof, intent: "signup", consentRevision: "outdated" },
     {
@@ -121,17 +143,21 @@ const requireConsent = Effect.fn(function* (provider: AuthenticationProvider) {
     expect(refused.headers.get("set-cookie")).toBeNull();
     yield* native(() => refused.arrayBuffer());
   }
+
   const challenge = yield* begin(provider);
   expect(challenge.cookie).toContain("__Host-fidy_" + provider + "=");
   expect(challenge.authorization.searchParams.get("code_challenge_method")).toBe("S256");
   expect(challenge.authorization.searchParams.get("scope")).toBe("openid email");
+
   const directory = yield* native(() =>
     runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
   );
+
   expect(yield* native(() => directory.exec("SELECT count(*) AS n FROM provider_routes"))).toEqual([
     { n: 0 },
   ]);
 });
+
 const originalBrowser = Effect.fn(function* (provider: AuthenticationProvider) {
   const runtime = yield* (yield* nativeBrowserPlatform)();
   const { api, headers, post, begin, login } = browser(runtime);
@@ -139,9 +165,11 @@ const originalBrowser = Effect.fn(function* (provider: AuthenticationProvider) {
   const state = challenge.authorization.searchParams.get("state") ?? "";
   const nonce = challenge.authorization.searchParams.get("nonce") ?? "";
   const other = provider === "google" ? "microsoft" : "google";
+
   const directory = yield* native(() =>
     runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
   );
+
   for (const [destination, actualState, cookie] of [
     [other, state, challenge.cookie],
     [provider, state, ""],
@@ -160,10 +188,12 @@ const originalBrowser = Effect.fn(function* (provider: AuthenticationProvider) {
         { headers: { ...headers, cookie: cookie ?? "" }, redirect: "manual" }
       )
     );
+
     expect(callback.status).toBe(redirectStatus);
     expect(callback.headers.get("set-cookie")).toBeNull();
     yield* native(() => callback.arrayBuffer());
   }
+
   expect(yield* native(() => directory.exec("SELECT state FROM provider_attempts"))).toEqual([
     { state: "pending" },
   ]);
@@ -175,11 +205,13 @@ const originalBrowser = Effect.fn(function* (provider: AuthenticationProvider) {
   const created = yield* post(`/web/providers/${provider}/complete`, fresh.proof);
   expect(yield* native(() => created.json())).toMatchObject({ status: "created" });
 });
+
 const competingBrowsers = Effect.fn(function* (provider: AuthenticationProvider) {
   const runtime = yield* (yield* nativeBrowserPlatform)();
   const { login, post } = browser(runtime);
   const first = yield* login("contended", { provider, scenario: "valid" });
   const second = yield* login("contended", { provider, scenario: "valid" });
+
   const calls = yield* Effect.all(
     [
       post(`/web/providers/${provider}/complete`, first.proof),
@@ -187,17 +219,21 @@ const competingBrowsers = Effect.fn(function* (provider: AuthenticationProvider)
     ],
     { concurrency: 2 }
   );
+
   const results = yield* Effect.forEach(calls, (response) => native(() => response.json()));
   expect(
     results.filter(Schema.is(Schema.Struct({ backupRecoveryCode: Schema.String })))
   ).toHaveLength(1);
+
   const directory = yield* native(() =>
     runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
   );
+
   expect(yield* native(() => directory.exec("SELECT count(*) AS n FROM provider_routes"))).toEqual([
     { n: 1 },
   ]);
 });
+
 export const nativeProviderRefusals = (provider: AuthenticationProvider): void => {
   it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     for (const scenario of provider === "google" ? common : common.concat(microsoftOnly)) {
@@ -207,6 +243,7 @@ export const nativeProviderRefusals = (provider: AuthenticationProvider): void =
     }
   });
 };
+
 export const nativeProviderRollback = (provider: AuthenticationProvider): void => {
   it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     test.effect(

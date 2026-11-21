@@ -13,21 +13,34 @@ import {
 } from "~/shell/outbound-http/contract";
 
 const cloudflareAccessSupportRecoveryUrl = "https://api.fidyapp.com/internal/support-recovery";
+
 const kapsoMessagesBaseUrl = "https://api.kapso.ai/meta/whatsapp/v24.0";
+
 const resendApiBaseUrl = "https://api.resend.com";
+
 const wompiSandboxOrigin = "https://sandbox.wompi.co";
+
 const wompiProductionOrigin = "https://production.wompi.co";
+
 const bytesPerKibibyte = 1_024;
+
 const maximumKapsoResponseKibibytes = 64;
 
 const maximumKapsoMediaMebibytes = 10;
+
 const maximumKapsoMediaResponseBytes =
   maximumKapsoMediaMebibytes * bytesPerKibibyte * bytesPerKibibyte;
+
 const maximumWompiResponseKibibytes = 16;
+
 const maximumResendDeliveryResponseKibibytes = 4;
+
 const maximumKapsoResponseBytes = maximumKapsoResponseKibibytes * bytesPerKibibyte;
+
 const maximumWompiResponseBytes = maximumWompiResponseKibibytes * bytesPerKibibyte;
+
 const maximumCloudflareAccessResponseBytes = 1_024;
+
 const maximumResendDeliveryResponseBytes =
   maximumResendDeliveryResponseKibibytes * bytesPerKibibyte;
 
@@ -61,7 +74,9 @@ type OutboundHttpConfig = Readonly<{
 }>;
 
 type ResendRequest = Extract<OutboundHttpRequest, { readonly _tag: `Resend${string}` }>;
+
 type StandardOutboundHttpRequest = OutboundHttpRequest;
+
 type WompiRequest = Extract<OutboundHttpRequest, { readonly _tag: `Wompi${string}` }>;
 
 const unavailableTransport = (): OutboundHttpFailure =>
@@ -93,6 +108,7 @@ const makeResendRequest = (
   apiKey: Redacted.Redacted<string>
 ): Effect.Effect<Omit<PreparedRequest, "http">, OutboundHttpFailure> => {
   const authorization = resendAuthorization(apiKey);
+
   return Effect.succeed({
     request: HttpClientRequest.post(`${resendApiBaseUrl}/emails`, {
       headers: {
@@ -132,6 +148,7 @@ const walletApprovalRequest = (
   const origin = { sandbox: wompiSandboxOrigin, production: wompiProductionOrigin }[
     config.environment
   ];
+
   return HttpClientRequest.get(
     `${origin}/v1/tokens/${method}/${encodeURIComponent(Redacted.value(token))}`,
     {
@@ -192,16 +209,21 @@ const daviplataSandboxRequest = (
           )
         );
       }
+
       const endpoint = request.step === "send" ? policy.sendUrl : policy.confirmUrl;
       const id = Redacted.value(request.authorizationId);
+
       if (!/^daviplata_(?:test|devtest|devint)_[A-Za-z0-9_]{1,200}$/u.test(id)) {
         return rejectRequest();
       }
+
       const url =
         endpoint === daviplataSandboxEndpoint
           ? `${endpoint}?token=${id}&operation=${request.step === "send" ? "RESEND_OTP" : "VALIDATE_OTP_API"}`
           : endpoint;
+
       const headers = { authorization: `Bearer ${Redacted.value(request.token)}` };
+
       return Effect.succeed(
         request.step === "send"
           ? HttpClientRequest.post(url, { headers })
@@ -236,6 +258,7 @@ const makeSandboxCorrectionRequest = (
 ): Effect.Effect<HttpClientRequest.HttpClientRequest, OutboundHttpFailure> => {
   if (config.environment !== "sandbox") return rejectRequest();
   const authorization = `Bearer ${Redacted.value(config.privateKey)}`;
+
   return Effect.succeed(
     request._tag === "WompiSandboxRefund"
       ? jsonRequest(`${wompiSandboxOrigin}/v1/refunds`, request.body, { authorization })
@@ -252,6 +275,7 @@ const makeSignedTransactionRequest = (
   body: WompiTransactionBody
 ): Effect.Effect<HttpClientRequest.HttpClientRequest, OutboundHttpFailure> => {
   const origin = config.environment === "sandbox" ? wompiSandboxOrigin : wompiProductionOrigin;
+
   return transactionSignature(digest, config.integritySecret, body).pipe(
     Effect.map((signature) =>
       jsonRequest(`${origin}/v1/transactions`, signedTransactionBody(body, signature), {
@@ -269,7 +293,9 @@ const makeWompiRequest = (
   const origin = { sandbox: wompiSandboxOrigin, production: wompiProductionOrigin }[
     config.environment
   ];
+
   const authorization = `Bearer ${Redacted.value(config.privateKey)}`;
+
   return Match.value(request).pipe(
     Match.tagsExhaustive({
       WompiMerchant: () =>
@@ -345,6 +371,7 @@ const prepareResend = (
   context: RequestPreparationContext
 ): Effect.Effect<PreparedRequest, OutboundHttpFailure> => {
   const apiKey = context.config.resendEmailDeliveryApiKey;
+
   return Option.match(apiKey, {
     onNone: () => Effect.fail(unavailableTransport()),
     onSome: (key) =>
@@ -396,6 +423,7 @@ const prepareNonProviderGroup = (
   context: RequestPreparationContext
 ): Effect.Effect<PreparedRequest, OutboundHttpFailure> => {
   const config = context.config;
+
   switch (request._tag) {
     case "KapsoMessageStatus":
       return prepareKapsoStatus(request, context);
@@ -500,6 +528,7 @@ export const makeOutboundHttp = (config: OutboundHttpConfig): PrivateOutboundHtt
     resendHttp: makeProviderTransport("resend")(config.httpClient),
     wompiHttp: makeProviderTransport("wompi")(config.httpClient),
   };
+
   return {
     execute: (request) => prepareRequest(request, context).pipe(Effect.flatMap(executePrepared)),
   };
@@ -513,6 +542,7 @@ export const makeCloudflareAccessSigningKeysHttp = ({
   httpClient: HttpClient.HttpClient;
 }>): PrivateOutboundHttpService => {
   const http = makeProviderTransport("cloudflare-access")(httpClient);
+
   return makeService((request) =>
     request._tag === "CloudflareAccessSigningKeys" &&
     /^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/u.test(issuer)
@@ -534,6 +564,7 @@ export const makeCloudflareAccessOutboundHttp = ({
   httpClient: HttpClient.HttpClient;
 }>): PrivateOutboundHttpService => {
   const http = makeProviderTransport("cloudflare-access")(httpClient);
+
   return makeService((request) =>
     request._tag === "CloudflareAccessSupportRecovery"
       ? Effect.succeed({ ...makeCloudflareAccessRequest(request, accessToken), http })

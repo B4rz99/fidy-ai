@@ -9,8 +9,11 @@ import { native, workerManifest } from "../user-store.test-fixture";
 import { SharedStoreMarkers, bootstrapQuery, compatibilityQuery } from "./contract";
 
 const origin = "https://api.fidyapp.com";
+
 const proof = "a".repeat(64);
+
 const user = "10000000-0000-4000-8000-000000000051";
+
 const objectTypes = {
   USER_STORE: "UserStore",
   DIRECTORY: "Directory",
@@ -18,24 +21,29 @@ const objectTypes = {
   MAINTENANCE: "Maintenance",
   ERASURE: "Erasure",
 };
+
 const text = (value: string): { type: "text"; value: string } => ({ type: "text" as const, value });
+
 const objects = Object.fromEntries(
   Object.entries(objectTypes).map(([key, exportName]) => [
     key,
     { type: "durable-object" as const, worker: "owners", exportName },
   ])
 );
+
 const classes = Object.fromEntries(
   Object.values(objectTypes).map((name) => [
     name,
     { type: "durable-object" as const, storage: "sqlite" as const },
   ])
 );
+
 const common = {
   type: "worker" as const,
   compatibilityDate: "2026-09-08",
   compatibilityFlags: ["nodejs_compat"],
 };
+
 const identity = {
   RECOVERY_ISOLATION: text("isolated"),
   SMOKE_PROOF: text(proof),
@@ -48,30 +56,37 @@ const identity = {
 const openStorageProof = Effect.fn(function* (runtime: Miniflare) {
   const ingress = yield* native(() => runtime.getWorker("ingress"));
   const headers = { [smokeProofHeader]: proof };
+
   const compatible = yield* native(() =>
     ingress.fetch(origin + smokePath + compatibilityQuery, { headers })
   );
+
   expect(compatible.status).toBe(200);
   yield* Schema.decodeUnknownEffect(
     Schema.Struct({ core: SmokeIdentity, markers: SharedStoreMarkers })
   )(yield* native(() => compatible.json()));
+
   const bootstrap = yield* native(() =>
     ingress.fetch(origin + smokePath + bootstrapQuery, { method: "POST", headers })
   );
+
   expect(bootstrap.status).toBe(404);
   const unproved = yield* native(() => ingress.fetch(origin + smokePath + compatibilityQuery));
   expect(unproved.status).toBe(404);
+
   const alias = yield* native(() =>
     ingress.fetch("https://storage-acceptance.fidyapp.com" + smokePath + compatibilityQuery, {
       headers,
     })
   );
+
   expect(alias.status).toBe(503);
 });
 
 const rehearse = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* fs.makeTempDirectoryScoped({ prefix: "fidy-storage-release-" });
+
   const [ingress, core, advanced] = yield* Effect.all(
     [
       workerManifest("./public-worker.ts"),
@@ -80,6 +95,7 @@ const rehearse = Effect.gen(function* () {
     ],
     { concurrency: 3 }
   );
+
   const phase = Effect.fn(function* (
     ownerModule: typeof core,
     {
@@ -92,6 +108,7 @@ const rehearse = Effect.gen(function* () {
     const releaseIdentity = opening
       ? { ...identity, RECOVERY_ISOLATION: text(""), NATIVE_STORAGE_ADMISSION: text("open") }
       : identity;
+
     const mf = yield* Effect.acquireRelease(
       Effect.sync(
         () =>
@@ -149,70 +166,91 @@ const rehearse = Effect.gen(function* () {
       ),
       (mf) => native(() => mf.dispose())
     );
+
     if (opening) {
       yield* openStorageProof(mf);
+
       return;
     }
+
     if (first) {
       const readiness = yield* native(() =>
         mf.dispatchFetch(origin + smokePath + "?readiness=1", {
           headers: { [smokeProofHeader]: proof },
         })
       );
+
       expect(readiness.status).toBe(200);
       const health = yield* native(() => mf.dispatchFetch(origin + "/health"));
       expect(health.status).toBe(200);
     }
+
     const ordinary = yield* native(() => mf.dispatchFetch(origin + "/transactions"));
     expect(ordinary.status).toBe(503);
+
     const denied = yield* native(() =>
       mf.dispatchFetch(origin + smokePath + bootstrapQuery, { method: "POST" })
     );
+
     expect(denied.status).toBe(503);
+
     const probe = yield* native(() =>
       mf.dispatchFetch(origin + smokePath + bootstrapQuery, {
         method: "POST",
         headers: { [smokeProofHeader]: proof },
       })
     );
+
     if (!readable) {
       expect(probe.status).toBe(503);
+
       return;
     }
+
     expect(probe.status).toBe(200);
+
     const body = yield* Schema.decodeUnknownEffect(
       Schema.Struct({
         core: SmokeIdentity,
         markers: SharedStoreMarkers,
       })
     )(yield* native(() => probe.json()));
+
     expect(probe.headers.get("x-fidy-smoke-worker-version")).not.toBe(body.core.workerVersionId);
+
     const overlap = yield* native(() =>
       mf.dispatchFetch(origin + smokePath + compatibilityQuery, {
         headers: { [smokeProofHeader]: proof },
       })
     );
+
     expect(overlap.status).toBe(200);
     expect(yield* native(() => overlap.json())).toEqual(body);
+
     const mapping = yield* native(() =>
       mf
         .getWorker("mapping")
         .then((worker) => worker.fetch("https://mapping.invalid"))
         .then((response) => response.text())
     );
+
     const local = yield* native(() =>
       mf.unsafeGetDurableObjectStorage("owners", "UserStore", { name: user })
     );
+
     const directory = yield* native(() =>
       mf.unsafeGetDurableObjectStorage("owners", "Directory", { name: "directory-v1" })
     );
+
     const offers = yield* native(() =>
       mf
         .getWorker("mapping")
         .then((worker) => worker.fetch("https://mapping.invalid/offers"))
         .then((response) => response.json())
     );
+
     expect(offers).toHaveLength(3);
+
     if (first) {
       yield* native(() =>
         local.exec(
@@ -221,6 +259,7 @@ const rehearse = Effect.gen(function* () {
         )
       );
     }
+
     expect(yield* native(() => local.exec("SELECT id FROM users"))).toEqual([{ id: user }]);
     expect(
       yield* native(() =>
@@ -228,18 +267,24 @@ const rehearse = Effect.gen(function* () {
       )
     ).toEqual([{ n: advancedState ? 1 : 0 }]);
     expect(body.markers.directory.workerVersionId).not.toBe(body.core.workerVersionId);
+
     return { mapping, markers: body.markers.directory.history };
   });
+
   const initial = yield* Effect.scoped(
     phase(core, { advancedState: false, first: true, readable: true, opening: false })
   );
+
   const compatible = yield* Effect.scoped(
     phase(core, { advancedState: false, first: false, readable: true, opening: false })
   );
+
   expect(compatible).toEqual(initial);
+
   const upgrade = yield* Effect.scoped(
     phase(advanced, { advancedState: true, first: false, readable: true, opening: false })
   );
+
   expect(upgrade?.mapping).toBe(initial?.mapping);
   expect(upgrade?.markers.slice(0, -1)).toEqual(initial?.markers);
   yield* Effect.scoped(

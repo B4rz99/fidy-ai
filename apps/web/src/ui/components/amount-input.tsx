@@ -2,7 +2,9 @@ import type { ComponentProps, JSX } from "react";
 import { Input } from "./input";
 
 const minimumCharacters = 12;
+
 const characterPadding = 3;
+
 type AmountInputProps = Omit<
   ComponentProps<typeof Input>,
   "type" | "inputMode" | "variant" | "value"

@@ -11,6 +11,7 @@ import "@/ui/components/application.css";
 
 const PlanStatusExample = (): JSX.Element => {
   const [paused, setPaused] = useState(false);
+
   return (
     <RecurringPlanStatus
       status={paused ? "paused" : "active"}
@@ -28,6 +29,7 @@ export const RecurringReference = ({
   toggleTheme,
 }: Readonly<{ dark: boolean; toggleTheme: () => void }>): JSX.Element => {
   const [open, setOpen] = useState(false);
+
   return (
     <section
       aria-label="Composición aprobada de recurrentes"

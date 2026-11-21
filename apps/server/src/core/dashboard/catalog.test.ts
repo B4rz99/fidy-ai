@@ -11,7 +11,9 @@ it("provides one valid direct-launch preset for every closed widget type", () =>
     "f1d1a000-0000-4000-8000-000000000503",
     "f1d1a000-0000-4000-8000-000000000504",
   ].map((id) => WidgetId.make(id));
+
   const fallbackId = WidgetId.make("f1d1a000-0000-4000-8000-000000000500");
+
   const dashboardCatalog = makeDashboardCatalog({
     restaurantCategoryId: CategoryId.make("10000000-0000-4000-8000-000000000001"),
   });
@@ -26,6 +28,7 @@ it("provides one valid direct-launch preset for every closed widget type", () =>
     "transaction-list",
     "custom-metric",
   ]);
+
   for (const widget of widgets) {
     expect(() => Schema.encodeSync(Widget)(widget)).not.toThrow();
   }
@@ -44,14 +47,18 @@ it("creates a valid four-Widget first-use DashboardDocument in a two-by-two layo
 
   expect(document.title).toBe("Tablero");
   expect(document.layout.kind).toBe("split");
+
   if (document.layout.kind !== "split") throw new Error("Expected the default row stack");
   expect(document.layout.axis).toBe("column");
   expect(document.layout.children).toHaveLength(2);
+
   for (const row of document.layout.children) {
     expect(row.node.kind).toBe("split");
+
     if (row.node.kind !== "split") throw new Error("Expected a default Widget row");
     expect(row.node.axis).toBe("row");
     expect(row.node.children).toHaveLength(2);
   }
+
   expect(() => Schema.encodeSync(DashboardDocument)(document)).not.toThrow();
 });

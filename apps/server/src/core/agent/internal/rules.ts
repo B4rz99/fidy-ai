@@ -15,27 +15,34 @@ type DeepReadonly<Value> =
     : Value extends object
       ? { readonly [Key in keyof Value]: DeepReadonly<Value[Key]> }
       : Value;
+
 type ReadonlyJson = DeepReadonly<Schema.Json>;
 
 type WindowTextEntry =
   | Pick<typeof UserTranscriptEntry.Encoded, "_tag" | "turnId" | "text">
   | Pick<typeof AssistantTranscriptEntry.Encoded, "_tag" | "turnId" | "text">;
+
 type SucceededOutcome = Extract<CanonicalToolOutcome, { readonly _tag: "Succeeded" }>;
+
 type CommittedOutcome = Extract<
   CanonicalToolOutcome,
   { readonly _tag: "CommittedOutputUnavailable" }
 >;
+
 type FailedOutcome = Exclude<CanonicalToolOutcome, SucceededOutcome | CommittedOutcome>;
+
 type WindowOutcome =
   | { readonly _tag: SucceededOutcome["_tag"]; readonly output: ReadonlyJson }
   | { readonly _tag: CommittedOutcome["_tag"] }
   | { readonly _tag: FailedOutcome["_tag"]; readonly failure: ReadonlyJson };
+
 type WindowCallEntry = Pick<
   typeof CanonicalToolCallEntry.Encoded,
   "_tag" | "turnId" | "toolCallId" | "operation"
 > & {
   readonly input: ReadonlyJson;
 };
+
 type WindowResultEntry = Pick<
   typeof CanonicalToolResultEntry.Encoded,
   "_tag" | "turnId" | "toolCallId" | "operation"
@@ -44,9 +51,11 @@ type WindowResultEntry = Pick<
 };
 
 export type TranscriptWindowEntry = WindowTextEntry | WindowCallEntry | WindowResultEntry;
+
 type LifecycleWindowEntry =
   | Pick<typeof FailedTurnTranscriptEntry.Encoded, "_tag" | "turnId">
   | Pick<typeof InterruptedTurnTranscriptEntry.Encoded, "_tag" | "turnId">;
+
 export type TranscriptSelectionEntry = TranscriptWindowEntry | LifecycleWindowEntry;
 
 export const isTranscriptWindowEntry = (
@@ -59,6 +68,7 @@ export const TranscriptWindowTurnLimit = Schema.Int.check(
 )
   .pipe(Schema.brand("TranscriptWindowTurnLimit"))
   .annotate({ identifier: "TranscriptWindowTurnLimit" });
+
 export type TranscriptWindowTurnLimit = typeof TranscriptWindowTurnLimit.Type;
 
 export const TranscriptWindowCharacterLimit = Schema.Int.check(
@@ -66,6 +76,7 @@ export const TranscriptWindowCharacterLimit = Schema.Int.check(
 )
   .pipe(Schema.brand("TranscriptWindowCharacterLimit"))
   .annotate({ identifier: "TranscriptWindowCharacterLimit" });
+
 export type TranscriptWindowCharacterLimit = typeof TranscriptWindowCharacterLimit.Type;
 
 const entryCharacters = (entry: TranscriptWindowEntry): number => {
@@ -78,9 +89,11 @@ const entryCharacters = (entry: TranscriptWindowEntry): number => {
     case "CanonicalToolResultEntry": {
       const outcome = entry.outcome;
       let evidence: ReadonlyJson;
+
       if (outcome._tag === "Succeeded") evidence = outcome.output;
       else if (outcome._tag === "CommittedOutputUnavailable") evidence = outcome;
       else evidence = outcome.failure;
+
       return JSON.stringify(evidence).length;
     }
   }
@@ -92,19 +105,24 @@ const groupTurns = (
   entries: ReadonlyArray<TranscriptWindowEntry>
 ): ReadonlyArray<ReadonlyArray<TranscriptWindowEntry>> => {
   const turns: Array<NonEmptyTurn> = [];
+
   for (const entry of entries) {
     const current = turns.at(-1);
+
     if (current !== undefined && current[0].turnId === entry.turnId) current.push(entry);
     else turns.push([entry]);
   }
+
   return turns;
 };
 
 type WindowUserEntry = Extract<WindowTextEntry, { readonly _tag: "UserTranscriptEntry" }>;
+
 type WindowCallEntryValue = Extract<
   TranscriptWindowEntry,
   { readonly _tag: "CanonicalToolCallEntry" }
 >;
+
 type WindowResultEntryValue = Extract<
   TranscriptWindowEntry,
   { readonly _tag: "CanonicalToolResultEntry" }
@@ -115,6 +133,7 @@ const activeTurnUser = (
   maxCharacters: TranscriptWindowCharacterLimit
 ): Option.Option<WindowUserEntry> => {
   const lastEntry = Option.getOrThrow(Option.fromUndefinedOr(turn.at(-1)));
+
   return Option.fromUndefinedOr(turn[0]).pipe(
     Option.filter((entry): entry is WindowUserEntry => entry._tag === "UserTranscriptEntry"),
     Option.filter((user) => entryCharacters(user) <= maxCharacters),
@@ -138,6 +157,7 @@ const trailingTurnUnit = (
   index: number
 ): ReadonlyArray<TranscriptWindowEntry> => {
   const entry = Option.getOrThrow(Option.fromUndefinedOr(turn[index]));
+
   return entry._tag === "CanonicalToolResultEntry"
     ? matchingTrailingCall(Option.fromUndefinedOr(turn[index - 1]), entry).pipe(
         Option.match({
@@ -161,6 +181,7 @@ const boundedActiveTurn = (
   maxCharacters: TranscriptWindowCharacterLimit
 ): ReadonlyArray<TranscriptWindowEntry> => {
   const user = activeTurnUser(turn, maxCharacters);
+
   if (Option.isNone(user)) return [];
 
   const state: {
@@ -172,20 +193,26 @@ const boundedActiveTurn = (
     characters: entryCharacters(user.value),
     stopped: false,
   };
+
   const [, ...trailing] = turn;
   const newestFirstIndexes = Array.from(trailing.keys(), (index) => turn.length - 1 - index);
   newestFirstIndexes.forEach((index) => {
     if (state.stopped) return;
+
     if (pairedWithFollowingResult(turn, index)) return;
     const unit = trailingTurnUnit(turn, index);
     const unitCharacters = unit.reduce((total, member) => total + entryCharacters(member), 0);
+
     if (state.characters + unitCharacters > maxCharacters) {
       state.stopped = true;
+
       return;
     }
+
     state.suffix.unshift(...unit);
     state.characters += unitCharacters;
   });
+
   return [user.value, ...state.suffix];
 };
 
@@ -222,8 +249,10 @@ const continueNewestTurns = (
   maxCharacters: TranscriptWindowCharacterLimit
 ): ReadonlyArray<TranscriptWindowEntry> => {
   const turn = state.remaining[0];
+
   if (turn === undefined) return state.selected.flat();
   const turnCharacters = turn.reduce((total, entry) => total + entryCharacters(entry), 0);
+
   return exceedsWindow({
     selectedTurns: state.selected.length,
     characters: state.characters,

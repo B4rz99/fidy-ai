@@ -11,6 +11,7 @@ export type InitialSessionWork = Readonly<{
   >;
   cancel: () => void;
 }>;
+
 export type InitialBrowserSession = Readonly<{
   apiOrigin: string;
   ready: Promise<void>;
@@ -54,14 +55,17 @@ export const beginInitialBrowserSession = ({
   request: InitialBrowserRequest;
 }>): InitialBrowserSession => {
   const controller = new AbortController();
+
   const observe = loadBrowserSessionEntry({
     apiOrigin,
     context,
     request: Option.some(request),
   });
+
   const result = Effect.runPromiseExit(observe, {
     signal: AbortSignal.any([controller.signal, request.signal]),
   });
+
   let completed =
     Option.none<
       Exit.Exit<
@@ -69,29 +73,37 @@ export const beginInitialBrowserSession = ({
         Effect.Error<ReturnType<typeof loadBrowserSessionEntry>> | Cause.UnknownError
       >
     >();
+
   let work = Option.none<InitialSessionWork>();
+
   const cancel = (): void => {
     completed = Option.none();
     work = Option.none();
     controller.abort();
     request.cancel();
   };
+
   const ready = result.then((exit) => {
     if (request.isCurrent()) completed = Option.some(exit);
   });
+
   const prepared = preparedResult(() => completed, result);
   work = Option.some({ result: prepared, cancel });
   let owner = Option.none<object>();
+
   return {
     apiOrigin,
     ready,
     cancel,
     take: (next) => {
       request.release();
+
       if (!request.isCurrent() || (Option.isSome(owner) && owner.value !== next)) {
         cancel();
       }
+
       owner = Option.some(next);
+
       return work;
     },
   };

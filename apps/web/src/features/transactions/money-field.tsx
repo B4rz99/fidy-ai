@@ -27,11 +27,14 @@ export const MoneyField = ({
   revealErrors,
 }: MoneyFieldProps): JSX.Element => {
   const [visited, setVisited] = useState(false);
+
   const error =
     disabled || (!required && value === "") || !(visited || revealErrors)
       ? Option.none()
       : moneyInputError({ text: value, currency });
+
   const invalid = Option.isSome(error);
+
   return (
     <div className="flex flex-col gap-2">
       <Label htmlFor={id}>{label}</Label>

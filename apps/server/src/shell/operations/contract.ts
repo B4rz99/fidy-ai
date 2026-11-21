@@ -16,6 +16,7 @@ import {
 } from "~/shell/canonical-policy/contract";
 
 const operationsGroupName = "operations";
+
 const atomicBatchEndpointName = "executeAtomicBatch";
 
 export const atomicBatchOperation = Schema.Literal(
@@ -35,6 +36,7 @@ export const AtomicBatchAdmission = Schema.Struct({
 export const AtomicBatchCallId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("AtomicBatchCallId"))
   .annotate({ identifier: "AtomicBatchCallId" });
+
 export type AtomicBatchCallId = typeof AtomicBatchCallId.Type;
 
 export type AtomicBatchCall = Readonly<{
@@ -42,6 +44,7 @@ export type AtomicBatchCall = Readonly<{
   operation: string;
   input: unknown;
 }>;
+
 type NonEmptyMutationCalls = readonly [AtomicBatchCall, ...ReadonlyArray<AtomicBatchCall>];
 
 export type AtomicBatchInput = Readonly<{ calls: NonEmptyMutationCalls }>;
@@ -51,6 +54,7 @@ export type AtomicBatchResult = Readonly<{
   operation: string;
   output: unknown;
 }>;
+
 type NonEmptyMutationResults = readonly [AtomicBatchResult, ...ReadonlyArray<AtomicBatchResult>];
 
 export type AtomicBatchOutput = Readonly<{ results: NonEmptyMutationResults }>;
@@ -73,6 +77,7 @@ export class AtomicBatchRejected extends Schema.Error<
 ) {}
 
 let boundAtomicBatchCall = Option.none<Schema.Codec<AtomicBatchCall, Schema.Json>>();
+
 let boundAtomicBatchInput = Option.none<AtomicBatchInputSchema>();
 
 export const getAtomicBatchCallSchema = (): Schema.Codec<AtomicBatchCall, Schema.Json> =>
@@ -121,21 +126,28 @@ const catalogUnion = (
   member: (operation: CatalogOperation) => Schema.Top
 ): Schema.Top => {
   const members = operations.map(member);
+
   if (!Arr.isReadonlyArrayNonEmpty(members)) {
     throw new Error("Atomic batch derivation requires at least one canonical mutation");
   }
+
   return Schema.Union(members);
 };
 
 type AtomicBatchCallSchema = Schema.Codec<AtomicBatchCall, Schema.Json>;
+
 type AtomicBatchResultSchema = Schema.Codec<AtomicBatchResult, Schema.Json>;
+
 type AtomicBatchInputSchema = Schema.Struct<{
   readonly calls: Schema.NonEmptyArray<AtomicBatchCallSchema>;
 }>;
+
 type AtomicBatchOutputSchema = Schema.Struct<{
   readonly results: Schema.NonEmptyArray<AtomicBatchResultSchema>;
 }>;
+
 type AtomicBatchResponseSchema = ReturnType<typeof OperationResponse<AtomicBatchOutputSchema>>;
+
 type AtomicBatchEndpoint = HttpApiEndpoint.HttpApiEndpoint<
   "executeAtomicBatch",
   "POST",
@@ -147,6 +159,7 @@ type AtomicBatchEndpoint = HttpApiEndpoint.HttpApiEndpoint<
   Schema.toCodecJson<AtomicBatchResponseSchema>,
   Schema.toCodecJson<typeof AtomicBatchRejected>
 >;
+
 type OperationsGroup = HttpApiGroup.HttpApiGroup<"operations", AtomicBatchEndpoint>;
 
 const makeAtomicBatchSchemas = (
@@ -162,14 +175,17 @@ const makeAtomicBatchSchemas = (
       catalogUnion(mutations, mutationCallMember).ast
     )
   );
+
   const result = Schema.suspend(() =>
     Schema.make<Schema.Codec<AtomicBatchResult, Schema.Json>>(
       catalogUnion(mutations, mutationResultMember).ast
     )
   );
+
   const input = Schema.Struct({
     calls: Schema.NonEmptyArray(call).check(Schema.isMaxLength(maximumAtomicBatchCalls)),
   });
+
   const output = Schema.Struct({
     results: Schema.NonEmptyArray(result).check(Schema.isMaxLength(maximumAtomicBatchCalls)),
   });
@@ -186,6 +202,7 @@ export const projectAtomicBatchSchemas = (
   const { input, output } = makeAtomicBatchSchemas(
     atomicBatchChildOperations(options.catalog).filter(options.includeChild)
   );
+
   return { input: Schema.Struct({ payload: input }), output: OperationResponse(output) };
 };
 
@@ -194,6 +211,7 @@ export const makeOperationsGroup = (ordinaryCatalog: OperationCatalog): Operatio
   const { call, input, output } = makeAtomicBatchSchemas(mutations);
   boundAtomicBatchCall = Option.some(call);
   boundAtomicBatchInput = Option.some(input);
+
   return HttpApiGroup.make(operationsGroupName).add(
     HttpApiEndpoint.post(atomicBatchEndpointName, "/operations/atomic-batch", {
       payload: input,

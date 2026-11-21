@@ -15,8 +15,10 @@ const closeProviderReturn = (): void => {
 
 export const tryMountProviderReturn = (): boolean => {
   if (!providerReturnPaths.has(window.location.pathname)) return false;
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", closeProviderReturn, { once: true });
   } else closeProviderReturn();
+
   return true;
 };

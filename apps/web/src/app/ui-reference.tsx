@@ -6,6 +6,7 @@ import "@/index.css";
 
 if (import.meta.env.DEV) {
   const root = document.querySelector("#root");
+
   if (root === null) throw new Error("UI reference root is missing");
   const router = createRouter({ routeTree: createRootRoute() });
   createRoot(root).render(

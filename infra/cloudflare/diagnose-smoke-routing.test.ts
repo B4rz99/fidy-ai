@@ -14,10 +14,15 @@ import {
 } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 
 const publicCandidate = "dc8dcd28-271b-4367-9840-6c244f84cb40";
+
 const publicStable = "db7cd8d3-4425-4fe7-8c81-01bf963b6067";
+
 const coreCandidate = "f1161596-2645-4788-bc57-c6008b6418d1";
+
 const coreStable = "39105473-af9c-4eec-8147-f14112775f77";
+
 const digest = "a".repeat(64);
+
 const config = {
   PUBLIC_VERSION_ID: publicCandidate,
   CORE_VERSION_ID: coreCandidate,
@@ -28,6 +33,7 @@ const config = {
   CORE_WORKER_NAME: "fidy-core",
   SMOKE_PROOF: "b".repeat(64),
 };
+
 const runDiagnostic = (
   env: unknown,
   mockedFetch: typeof fetch
@@ -38,6 +44,7 @@ const runDiagnostic = (
   Effect.scoped(
     Effect.gen(function* () {
       const services = yield* Layer.build(FetchHttpClient.layer);
+
       return yield* diagnoseSmokeRouting(env).pipe(
         Effect.provideService(HttpClient.HttpClient, Context.get(services, HttpClient.HttpClient)),
         Effect.provideService(FetchHttpClient.Fetch, mockedFetch),
@@ -54,6 +61,7 @@ const rejectedPostResponse = (
     const body = Schema.decodeSync(Schema.fromJsonString(SmokeRequest))(text);
     expect(body.expectedGitRevision).toBe(smokeDiagnosticRevision);
     expect(body.expectedCoreVersionId).toBe(coreStable);
+
     return new Response("secret-response-body", {
       status: 503,
       headers: {
@@ -72,6 +80,7 @@ describe("read-only smoke routing diagnosis", () => {
       (_, index) => {
         const pairing = index % 8 < 4 ? "candidate" : "intermediate";
         const method = index % 2 === 0 ? "GET" : "POST";
+
         return {
           round: Math.floor(index / 8) + 1,
           pairing,
@@ -85,7 +94,9 @@ describe("read-only smoke routing diagnosis", () => {
         };
       }
     );
+
     expect(settledRoutingAccepted({ env: config, observations })).toBe(true);
+
     for (const invalid of [
       [],
       observations.slice(1),
@@ -99,6 +110,7 @@ describe("read-only smoke routing diagnosis", () => {
     ]) {
       expect(settledRoutingAccepted({ env: config, observations: invalid })).toBe(false);
     }
+
     expect(
       settledRoutingAccepted({ env: { ...config, CORE_VERSION_ID: "invalid" }, observations })
     ).toBe(false);
@@ -109,14 +121,18 @@ describe("read-only smoke routing diagnosis", () => {
     () =>
       Effect.gen(function* () {
         let requests = 0;
+
         const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation(() => {
           requests++;
+
           return Promise.resolve(new Response(null, { status: 503 }));
         });
+
         try {
           const fiber = yield* Effect.forkChild(
             runDiagnostic({ ...config, SMOKE_ROUTING_WINDOW: "settled" }, mockedFetch)
           );
+
           yield* TestClock.adjust("59 seconds");
           expect(requests).toBe(0);
           yield* TestClock.adjust("10 seconds");
@@ -138,21 +154,27 @@ describe("read-only smoke routing diagnosis", () => {
       Effect.runPromise(
         Effect.gen(function* () {
           const requests: Request[] = [];
+
           const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
             const request = new Request(input, init);
             requests.push(request);
+
             const intermediate =
               request.headers
                 .get("cloudflare-workers-version-overrides")
                 ?.includes(publicCandidate) !== true;
+
             const publicVersion = intermediate ? publicStable : publicCandidate;
+
             const headers = {
               "cache-control": "no-store",
               "x-fidy-smoke-worker-version": publicVersion,
             };
+
             if (request.method === "POST") {
               return rejectedPostResponse(request, headers);
             }
+
             return Promise.resolve(
               Response.json(
                 {
@@ -174,6 +196,7 @@ describe("read-only smoke routing diagnosis", () => {
               )
             );
           });
+
           try {
             const observations = yield* runDiagnostic(config, mockedFetch);
             expect(observations).toHaveLength(48);
@@ -191,6 +214,7 @@ describe("read-only smoke routing diagnosis", () => {
                   (value) => value.coreVersion === coreStable && value.coreSource === "equality"
                 )
             ).toBe(true);
+
             for (const request of requests) {
               expect(request.url).toBe(
                 "https://api.fidyapp.com/internal/release-smoke?readiness=1"
@@ -209,9 +233,11 @@ describe("read-only smoke routing diagnosis", () => {
                 )
               ).toBe(true);
             }
+
             const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
               observations
             );
+
             expect(encoded).not.toContain("secret");
             expect(encoded).not.toContain(config.SMOKE_PROOF);
           } finally {
@@ -226,10 +252,12 @@ describe("read-only smoke routing diagnosis", () => {
     Effect.runPromise(
       Effect.gen(function* () {
         const mockedFetch = vi.spyOn(globalThis, "fetch");
+
         try {
           const exit = yield* Effect.exit(
             runDiagnostic({ ...config, STABLE_CORE_VERSION_ID: "foreign-text" }, mockedFetch)
           );
+
           expect(Exit.isFailure(exit)).toBe(true);
           expect(mockedFetch).not.toHaveBeenCalled();
         } finally {
@@ -245,6 +273,7 @@ describe("read-only smoke routing diagnosis", () => {
         Effect.gen(function* () {
           const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
             const request = new Request(input, init);
+
             return Promise.resolve(
               request.method === "GET"
                 ? new Response("x".repeat(4097), { status: 200 })
@@ -257,6 +286,7 @@ describe("read-only smoke routing diagnosis", () => {
                   })
             );
           });
+
           try {
             const exit = yield* Effect.exit(runDiagnostic(config, mockedFetch));
             expect(Exit.isFailure(exit)).toBe(true);

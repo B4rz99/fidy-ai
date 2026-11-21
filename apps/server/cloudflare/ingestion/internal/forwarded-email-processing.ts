@@ -7,6 +7,7 @@ import { CapturedInterpretationContext } from "../../../src/core/interpretation-
 import { interpretNotificationEmail } from "../../../src/shell/ingestion/operations";
 
 const maximumTimeZoneCharacters = 128;
+
 export const Receipt = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
   object_key: PrivateObjectKey,
@@ -16,16 +17,20 @@ export const Receipt = Schema.Struct({
   expires_at_ms: Schema.Int,
   time_zone: Schema.String.check(Schema.isBetweenLength(1, maximumTimeZoneCharacters)),
 });
+
 type Receipt = typeof Receipt.Type;
+
 type EmailOutcome =
   | NotificationEmailOutcome
   | Readonly<{
       _tag: "NeedsReview";
       reason: "canonical-validation-failed";
     }>;
+
 const maximumTagCount = 9999;
 
 const structuralTags = ["table", "tr", "td", "p", "span", "div"] as const;
+
 export const anonymizeStructure = (html: string): string => {
   const counts: Record<(typeof structuralTags)[number], number> = {
     table: 0,
@@ -35,12 +40,15 @@ export const anonymizeStructure = (html: string): string => {
     span: 0,
     div: 0,
   };
+
   for (const match of html.matchAll(/<([a-z]+)(?=[\s/>])/giu)) {
     const tag = match[1]?.toLowerCase();
+
     for (const allowed of structuralTags) {
       if (tag === allowed) counts[allowed] = Math.min(maximumTagCount, counts[allowed] + 1);
     }
   }
+
   return JSON.stringify(counts);
 };
 
@@ -62,6 +70,7 @@ export const decideEmail = ({
       inlineImages: [],
       createdAt: DateTime.formatIso(DateTime.makeUnsafe(receipt.received_at_ms)),
     };
+
     return yield* interpretNotificationEmail({
       content,
       context: yield* Schema.decodeEffect(CapturedInterpretationContext)({

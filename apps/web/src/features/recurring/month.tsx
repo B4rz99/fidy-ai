@@ -9,6 +9,7 @@ import { useOccurrencePage } from "./use-occurrence-page";
 import { type Occurrence, type Workspace, expectedAmount, statuses } from "./model";
 
 type CalendarProps = Readonly<{ view: Workspace; open: (item: Occurrence) => void }>;
+
 type DayProps = Readonly<{
   date: string;
   items: ReadonlyArray<Occurrence>;
@@ -16,10 +17,15 @@ type DayProps = Readonly<{
   open: CalendarProps["open"];
   agenda: (date: string) => void;
 }>;
+
 const dayDigits = 2;
+
 const weekLength = 7;
+
 const calendarCells = 42;
+
 const dayPreviewSize = 3;
+
 const CalendarItem = ({
   item,
   open,
@@ -43,6 +49,7 @@ const CalendarItem = ({
     )}
   </button>
 );
+
 const DayItems = ({ date, items, open, agenda }: DayProps): JSX.Element => (
   <div className="grid min-w-0 gap-1">
     {items.slice(0, dayPreviewSize).map((item) => (
@@ -62,6 +69,7 @@ const DayItems = ({ date, items, open, agenda }: DayProps): JSX.Element => (
     ) : null}
   </div>
 );
+
 const CalendarDay = (props: DayProps & Readonly<{ month: string }>): JSX.Element => (
   <section
     aria-label={props.date}
@@ -105,8 +113,10 @@ const CalendarDay = (props: DayProps & Readonly<{ month: string }>): JSX.Element
     </div>
   </section>
 );
+
 const DayAgenda = ({ date, items, open }: Omit<DayProps, "today" | "agenda">): JSX.Element => {
   const page = useOccurrencePage(items);
+
   return (
     <>
       <SheetHeader>
@@ -122,6 +132,7 @@ const DayAgenda = ({ date, items, open }: Omit<DayProps, "today" | "agenda">): J
     </>
   );
 };
+
 const CalendarGrid = ({
   view,
   open,
@@ -130,6 +141,7 @@ const CalendarGrid = ({
   const first = DateTime.makeUnsafe(`${view.month}-01`);
   const offset = (DateTime.toPartsUtc(first).weekDay + weekLength - 1) % weekLength;
   const start = DateTime.subtract(first, { days: offset });
+
   return (
     <div className="grid grid-cols-7">
       {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((day) => (
@@ -139,6 +151,7 @@ const CalendarGrid = ({
       ))}
       {Array.from({ length: calendarCells }, (_, index) => {
         const date = DateTime.formatIsoDateUtc(DateTime.add(start, { days: index }));
+
         return (
           <CalendarDay
             key={date}
@@ -154,6 +167,7 @@ const CalendarGrid = ({
     </div>
   );
 };
+
 const dayLabel = (date: string): string =>
   DateTime.format(DateTime.makeUnsafe(date), {
     locale: "es-CO",
@@ -165,15 +179,20 @@ export const MonthCalendar = ({ view, open }: CalendarProps): JSX.Element => {
   const active = useRouterState({
     select: (state) => state.location.pathname === "/app/recurring",
   });
+
   const [selected, setSelected] = useState<Option.Option<string>>(() => Option.none());
+
   const changeAgenda = (opened: boolean): void => {
     if (!opened) setSelected(Option.none());
   };
+
   const agenda = (date: string): void => setSelected(Option.some(date));
+
   const openItem = (item: Occurrence): void => {
     setSelected(Option.none());
     open(item);
   };
+
   return (
     <div
       data-recurring-slot="calendar"

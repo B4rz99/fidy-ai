@@ -15,6 +15,7 @@ export const PlanLifecycle = ({
   disabled: boolean;
 }>): JSX.Element => {
   const pause = plan.pauses.find((entry) => entry.through === undefined);
+
   return (
     <RecurringPlanStatus
       status={status}
@@ -54,5 +55,6 @@ const lifecycleLabel = ({
   if (disabled && status !== planStatus(plan)) {
     return status === "paused" ? "Reanudar plan" : "Pausar plan";
   }
+
   return plan.pauses.some((pause) => pause.through === undefined) ? "Reanudar plan" : "Pausar plan";
 };

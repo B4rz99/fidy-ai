@@ -44,6 +44,7 @@ await test("closed fixture recovery entrypoints may reuse only their correspondi
       "cloudflare/core-worker.ts",
     ],
   ];
+
   for (const [from, own, other] of paired) {
     assert.deepEqual(inspect(from, own), []);
     assert.ok(inspect(from, other).some((violation) => violation.name === "published-only"));
@@ -139,6 +140,7 @@ await test("future portable and native owners share one privacy and direction po
   for (const tree of ["src/core", "src/shell", "cloudflare"]) {
     const owner = `${tree}/future-owner`;
     const peer = `${tree}/another-owner`;
+
     /** @param {string} from - Caller. @param {string} to - Resolved target. */
     const violations = (from, to) =>
       boundaryViolations(
@@ -153,6 +155,7 @@ await test("future portable and native owners share one privacy and direction po
         },
         "/synthetic/apps/server"
       ).map(({ name }) => name);
+
     assert.deepEqual(violations(`${peer}/operations.ts`, `${owner}/contract.ts`), []);
     assert.deepEqual(violations(`${peer}/operations.ts`, `${owner}/operations.ts`), []);
     assert.deepEqual(violations(`${owner}/operations.ts`, `${owner}/internal/read.ts`), []);
@@ -199,6 +202,7 @@ await test("only the telemetry declaration admits its exact generated diagnostic
   const contract = "src/shell/observability/contract.ts";
   const metadata = "src/shell/observability/canonical-metadata.generated.json";
   assert.deepEqual(inspect(contract, metadata), []);
+
   for (const target of [
     "src/shell/observability/operations.ts",
     "src/shell/observability/other.generated.json",
@@ -207,6 +211,7 @@ await test("only the telemetry declaration admits its exact generated diagnostic
       inspect(contract, target).some(({ name }) => name === "contract-imports-implementation")
     );
   }
+
   assert.ok(
     inspect("src/shell/example/contract.ts", metadata).some(
       ({ name }) => name === "contract-imports-implementation"

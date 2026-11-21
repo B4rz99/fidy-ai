@@ -15,6 +15,7 @@ const consent = Schema.decodeSync(HostedAgentSessionConsentBasis)({
   policyRevision: "policy-2026-01",
   policySha256: "b".repeat(64),
 });
+
 const session = {
   id: HostedAgentSessionId.make("f1d1a000-0000-4000-8000-000000000281"),
   userId: UserId.make("f1d1a000-0000-4000-8000-000000000282"),
@@ -23,6 +24,7 @@ const session = {
   lastActivityAtMs: Option.some(1_000_020),
   status: "active" as const,
 };
+
 const admission = (): HostedAdmissionRequest => ({
   userId: session.userId,
   nowMs: 1_000_030,
@@ -44,6 +46,7 @@ it("starts a new Hosted Agent Session at the idle boundary with the current Cons
     policyRevision: "policy-2026-02",
     policySha256: "c".repeat(64),
   });
+
   expect(
     decideHostedAdmission({
       ...admission(),
@@ -95,12 +98,14 @@ it("refuses invalid clocks and inconsistent retained session activity before gra
       reason: "InvalidState",
     });
   }
+
   expect(
     decideHostedAdmission({
       ...admission(),
       state: { session: Option.none(), pendingStartedAtMs: Option.some(1_000_025) },
     })
   ).toEqual({ _tag: "Refused", reason: "InvalidState" });
+
   for (const timestamp of [999_999, 1_000_031]) {
     for (const state of [
       {
@@ -115,6 +120,7 @@ it("refuses invalid clocks and inconsistent retained session activity before gra
       });
     }
   }
+
   expect(
     decideHostedAdmission({
       ...admission(),
@@ -128,10 +134,12 @@ it("refuses invalid clocks and inconsistent retained session activity before gra
 
 it("uses session opening until terminal activity exists and accepts activity exactly at the clock bounds", () => {
   const fresh = { ...session, lastActivityAtMs: Option.none() };
+
   const request = {
     ...admission(),
     state: { session: Option.some(fresh), pendingStartedAtMs: Option.none() },
   };
+
   expect(decideHostedAdmission({ ...request, nowMs: 1_899_999 })).toEqual({
     _tag: "ContinueSession",
     sessionId: session.id,
@@ -146,6 +154,7 @@ it("uses session opening until terminal activity exists and accepts activity exa
       state: { session: Option.none(), pendingStartedAtMs: Option.none() },
     })
   ).toEqual({ _tag: "BeginSession", consentBasis: consent });
+
   for (const timestamp of [session.startedAtMs, admission().nowMs]) {
     expect(
       decideHostedAdmission({
@@ -170,6 +179,7 @@ it("validates an initial clock even without a retained session and permits the z
     session: Option.none<typeof session>(),
     pendingStartedAtMs: Option.none<number>(),
   };
+
   expect(decideHostedAdmission({ ...admission(), state, nowMs: -1 })).toEqual({
     _tag: "Refused",
     reason: "InvalidState",

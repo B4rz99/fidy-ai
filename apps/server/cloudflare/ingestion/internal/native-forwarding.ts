@@ -26,14 +26,18 @@ const addressOperations = Schema.Literals([
   "ingestion.getEmailForwarding",
   "ingestion.enableEmailForwarding",
 ]);
+
 export const isLocalForwardingOperation = Schema.is(addressOperations);
+
 const Address = Schema.Struct({
   id: EmailForwardingAddressId,
   local_part: EmailForwardingLocalPart,
   issued_at_ms: Schema.Int,
 });
+
 const addressFor = Effect.fn(function* (userId: UserId) {
   const sql = yield* SqliteClient;
+
   const query = protectConsentStatement({
     subject: { _tag: "User", userId },
     requirement: "active",
@@ -42,22 +46,29 @@ const addressFor = Effect.fn(function* (userId: UserId) {
       params: [userId],
     },
   });
+
   const [stored] = yield* sql.unsafe(query.sql, query.params);
+
   return yield* Schema.decodeUnknownEffect(Address)(stored);
 });
+
 const forwardingAllowance = Effect.fn(function* (userId: UserId, current: number) {
   const pro = activeProUserCondition({ userId, nowEpochMs: current });
   const used = allowanceConsumptionCount({ userId, current, allowance: "forwarded_email" });
   const sql = yield* SqliteClient;
+
   const [raw] = yield* sql.unsafe(
     `SELECT ${pro.sql} AS pro, (${used.sql}) AS used,(SELECT count(*) FROM forwarded_email_receipts WHERE user_id=? AND deferred_checked_at_ms IS NOT NULL) AS deferred`,
     [...pro.params, ...used.params, userId]
   );
+
   const stats = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ pro: Schema.Int, used: Schema.Int, deferred: Schema.Int })
   )(raw);
+
   return stats;
 });
+
 const registerAddress = Effect.fn(function* (
   user: Option.Option<UserId>,
   directory: UserStoreBindings["DIRECTORY"]
@@ -77,11 +88,13 @@ const registerAddress = Effect.fn(function* (
 
         const sql = yield* SqliteClient;
         yield* sql`UPDATE forwarding_addresses SET route_registered=1 WHERE id=${address.id} AND user_id=${userId} AND local_part=${address.local_part}`;
+
         return address;
       })
     )
   );
 });
+
 const forwardingStatus = Effect.fn(function* ({
   userId,
   current,
@@ -92,6 +105,7 @@ const forwardingStatus = Effect.fn(function* ({
   data: { id: string; address: string; createdAt: string };
 }) {
   const stats = yield* forwardingAllowance(userId, current);
+
   return {
     status: 200,
     outcome: "success",
@@ -111,11 +125,15 @@ const forwardingStatus = Effect.fn(function* ({
     },
   } as const;
 });
+
 export const readForwarding = Effect.fnUntraced(function* (userId: UserId, current: number) {
   const address = yield* addressFor(userId);
+
   const [registered] =
     yield* (yield* SqliteClient)`SELECT 1 FROM forwarding_addresses WHERE user_id=${userId} AND id=${address.id} AND route_registered=1`;
+
   if (registered === undefined) return yield* new DirectoryWriteUnavailable();
+
   return yield* forwardingStatus({
     userId,
     current,
@@ -126,6 +144,7 @@ export const readForwarding = Effect.fnUntraced(function* (userId: UserId, curre
     },
   });
 });
+
 export const dispatchLocalForwarding = Effect.fn(
   function* (unit: {
     request: Request;
@@ -136,23 +155,28 @@ export const dispatchLocalForwarding = Effect.fn(
   }) {
     const user = yield* localPreparationSubject(unit.request, unit.owns, unit.operation);
     const selected = yield* registerAddress(user, unit.directory);
+
     return yield* runLocalMutation({
       ...unit,
       input: Effect.succeed(selected),
       work: (reserved, userId, current) =>
         Effect.gen(function* () {
           const address = yield* addressFor(userId);
+
           if (address.id !== reserved.id || address.local_part !== reserved.local_part) {
             return yield* new DirectoryWriteUnavailable();
           }
+
           const data = {
             id: address.id,
             address: address.local_part + "@fidyapp.com",
             createdAt: DateTime.formatIso(DateTime.makeUnsafe(address.issued_at_ms)),
           };
+
           if (unit.operation.id === "ingestion.enableEmailForwarding") {
             return { status: 200, outcome: "success", body: { data, next: [] } } as const;
           }
+
           return yield* forwardingStatus({ userId, current, data });
         }),
     });
@@ -166,12 +190,16 @@ export const reserveBatchForwarding = Effect.fn(function* (
 ) {
   yield* registerAddress(Option.some(user), directory);
 });
+
 export const prepareLocalForwardingEnable = Effect.fn(function* (userId: UserId) {
   const sql = yield* SqliteClient;
   const address = yield* addressFor(userId);
+
   const [ready] =
     yield* sql`SELECT 1 FROM forwarding_addresses WHERE user_id=${userId} AND id=${address.id} AND route_registered=1`;
+
   if (ready === undefined) return yield* new DirectoryWriteUnavailable();
+
   return prepareLocalWrite({
     targets: ["forwarding"],
     commit: Effect.succeed({

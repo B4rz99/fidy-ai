@@ -147,6 +147,7 @@ export const HostedToolCallMaximum = Schema.Int.check(
   Schema.isGreaterThan(0),
   Schema.isLessThanOrEqualTo(maximumToolCallsPerTurn)
 ).pipe(Schema.brand("HostedToolCallMaximum"));
+
 export type HostedToolCallMaximum = typeof HostedToolCallMaximum.Type;
 
 export type HostedTextToolPolicy = Readonly<{
@@ -214,6 +215,7 @@ const approvedOpenAiModelId = "gpt-6-luna" as const;
 export const ApprovedOpenAiModel = Schema.Literal(approvedOpenAiModelId).pipe(
   Schema.brand("ApprovedOpenAiModel")
 );
+
 export type ApprovedOpenAiModel = typeof ApprovedOpenAiModel.Type;
 
 export const approvedOpenAiModel = ApprovedOpenAiModel.make(approvedOpenAiModelId);

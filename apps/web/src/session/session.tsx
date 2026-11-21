@@ -18,17 +18,20 @@ type SessionRegistryProviderProps = Readonly<{
 
 const QueryLifetime = (): React.JSX.Element => {
   const registry = useContext(RegistryContext);
+
   const initialize = useCallback(
     (_node: HTMLSpanElement): (() => void) => {
       queryLifetime(registry);
       const retire = (): void => retireQueryLifetime(registry);
       window.addEventListener(authenticationEndedEvent, retire);
+
       return () => {
         window.removeEventListener(authenticationEndedEvent, retire);
       };
     },
     [registry]
   );
+
   return <span ref={initialize} hidden />;
 };
 
@@ -37,17 +40,21 @@ export const SessionRegistryProvider = ({
 }: SessionRegistryProviderProps): React.JSX.Element => {
   const [authenticationEpoch, setAuthenticationEpoch] = useState<AuthenticationLifetime>(0);
   const [authentication, setAuthentication] = useState<BrowserAuthentication>("signed-out");
+
   const replaceAuthenticationLifetime = (): void => {
     window.dispatchEvent(new Event(authenticationEndedEvent));
     setAuthenticationEpoch((currentEpoch) => currentEpoch + 1);
   };
+
   const transitionAuthentication = (next: typeof authentication): void => {
     announceAuthenticationTransition();
     setAuthentication(next);
     replaceAuthenticationLifetime();
   };
+
   const completeLogin = (): void => transitionAuthentication("signed-in");
   const completeLogout = (): void => transitionAuthentication("signed-out");
+
   const expireAuthentication = (): void => {
     if (authentication !== "expired") transitionAuthentication("expired");
   };

@@ -1,29 +1,51 @@
 import type { RuleTester } from "oxlint/plugins-dev";
 
 export type Rule = Parameters<RuleTester["run"]>[1];
+
 export type RuleContext = Parameters<NonNullable<Rule["create"]>>[0];
+
 type Visitors = ReturnType<NonNullable<Rule["create"]>>;
+
 type VisitorNode<Key extends keyof Visitors> = Parameters<NonNullable<Visitors[Key]>>[0];
 
 export type Node = VisitorNode<"MemberExpression">["parent"];
+
 export type Program = VisitorNode<"Program">;
+
 export type MemberExpression = VisitorNode<"MemberExpression">;
+
 export type CallExpression = VisitorNode<"CallExpression">;
+
 export type ArrowFunctionExpression = VisitorNode<"ArrowFunctionExpression">;
+
 export type FunctionExpression = VisitorNode<"FunctionExpression">;
+
 export type VariableDeclarator = VisitorNode<"VariableDeclarator">;
+
 export type ImportDeclaration = VisitorNode<"ImportDeclaration">;
+
 export type ExportNamedDeclaration = VisitorNode<"ExportNamedDeclaration">;
+
 export type ImportSpecifier = VisitorNode<"ImportSpecifier">;
+
 export type TSTypeAnnotation = VisitorNode<"TSTypeAnnotation">;
+
 export type TSType = TSTypeAnnotation["typeAnnotation"];
+
 export type TSTypeReference = VisitorNode<"TSTypeReference">;
+
 export type TSTypeAliasDeclaration = VisitorNode<"TSTypeAliasDeclaration">;
+
 export type TSInterfaceDeclaration = VisitorNode<"TSInterfaceDeclaration">;
+
 export type TSInterfaceBody = VisitorNode<"TSInterfaceBody">;
+
 export type TSTypeLiteral = VisitorNode<"TSTypeLiteral">;
+
 export type TSIndexSignature = VisitorNode<"TSIndexSignature">;
+
 export type TSParameterProperty = VisitorNode<"TSParameterProperty">;
+
 export type Parameter = VisitorNode<"ArrowFunctionExpression">["params"][number];
 
 export type TypeEnvironment = {

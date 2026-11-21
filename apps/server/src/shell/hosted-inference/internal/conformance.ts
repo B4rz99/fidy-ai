@@ -20,6 +20,7 @@ import {
 } from "~/shell/hosted-inference/contract";
 
 const makeInitialContext = Brand.nominal<HostedInitialTextContext>();
+
 const representativeAmount = 42_000;
 
 const conformanceFailure = (): HostedInferenceError =>
@@ -78,7 +79,9 @@ export const verifyCanonicalQuery = (
       toolChoice: "auto",
       maximumToolCalls: HostedToolCallMaximum.make(1),
     });
+
     const queryResult = yield* query.execute;
+
     if (
       queryResult.toolCalls.length !== 1 ||
       queryResult.toolCalls[0]?.operation !== "transactions.listTransactions"
@@ -90,6 +93,7 @@ export const verifyCanonicalQuery = (
   });
 
 const MutationArguments = Schema.Struct({ payload: CreateTransactionInput });
+
 type MutationArguments = typeof MutationArguments.Type;
 
 export const verifyCanonicalMutation = (
@@ -104,8 +108,10 @@ export const verifyCanonicalMutation = (
       toolChoice: "auto",
       maximumToolCalls: HostedToolCallMaximum.make(1),
     });
+
     const mutationResult = yield* mutation.execute;
     const mutationCall = mutationResult.toolCalls[0];
+
     if (
       mutationResult.toolCalls.length !== 1 ||
       mutationCall?.operation !== "transactions.createTransaction"
@@ -114,6 +120,7 @@ export const verifyCanonicalMutation = (
         return yield* conformanceFailure();
       }
     }
+
     return yield* Schema.decodeUnknownEffect(MutationArguments)(mutationCall.params).pipe(
       Effect.mapError(() => conformanceFailure())
     );
@@ -152,18 +159,23 @@ export const verifyTransactionCorrection = (
       toolChoice: "auto",
       maximumToolCalls: HostedToolCallMaximum.make(1),
     });
+
     const result = yield* prepared.execute;
     const call = result.toolCalls[0];
+
     if (result.toolCalls.length !== 1 || call?.operation !== "transactions.updateTransaction") {
       return yield* conformanceFailure();
     }
+
     const args = yield* Schema.decodeUnknownEffect(
       Schema.Struct({
         params: Schema.Struct({ id: TransactionId }),
         payload: UpdateTransactionInput,
       })
     )(call.params).pipe(Effect.mapError(conformanceFailure));
+
     const money = args.payload.changes.money;
+
     if (money === undefined) {
       return yield* conformanceFailure();
     }
@@ -189,20 +201,25 @@ export const verifyTransactionDeletion = (
       toolChoice: "auto",
       maximumToolCalls: HostedToolCallMaximum.make(1),
     });
+
     const result = yield* prepared.execute;
     const call = result.toolCalls[0];
+
     if (result.toolCalls.length !== 1 || call?.operation !== "transactions.deleteTransaction") {
       return yield* conformanceFailure();
     }
+
     const args = yield* Schema.decodeUnknownEffect(
       Schema.Struct({ params: Schema.Struct({ id: TransactionId }) })
     )(call.params).pipe(Effect.mapError(conformanceFailure));
+
     if (args.params.id !== representativeTransactionId) {
       return yield* conformanceFailure();
     }
   });
 
 const representativePlanId = "00000000-0000-4000-8000-000000000002";
+
 const expectedRecurringLifecycle = Schema.Struct({
   expectedRevision: Schema.Literal(2),
   edit: Schema.Struct({
@@ -266,11 +283,13 @@ const representativeRecurringWorkspace = (
       excludedTransactionIds: [],
       suggestions: [],
     });
+
     const occurrences = projectRecurringMonth({
       document,
       month,
       now: DateTime.makeUnsafe("2026-09-22T12:00:00Z"),
     });
+
     return yield* Schema.encodeEffect(Schema.toCodecJson(RecurringWorkspace))({
       document,
       month,
@@ -290,11 +309,13 @@ const verifyRecurringReadAnswer = (answer: unknown): Effect.Effect<void, HostedI
     const text = yield* Schema.decodeUnknownEffect(Schema.String)(answer).pipe(
       Effect.mapError(conformanceFailure)
     );
+
     yield* requireTextEvidence(text, "activo");
     yield* requireTextEvidence(text, "plan de prueba");
     yield* requireTextEvidence(text, "18 de octubre de 2026");
     yield* forbidTextEvidence(text, "pago posterior");
     yield* forbidTextEvidence(text, "20 de octubre");
+
     if (
       /[`*]|^\s*[[{#]|\b(?:state|nextDate|unconfirmed)\b|no\s+(?:está|sigue)\s+activo|inactivo|sin confirmar|pausado|detenido|2026-09-18|18 de septiembre/imu.test(
         text
@@ -309,6 +330,7 @@ export const verifyRecurringPlanRead = (
 ): Effect.Effect<void, HostedInferenceError> =>
   Effect.gen(function* () {
     const maximumReads = 2;
+
     const prepared = yield* inference.prepareText({
       context: context(
         "¿Sigue activo mi plan «Plan de prueba»? ¿Cuál es mi próximo pago recurrente? Estamos en septiembre de 2026. Solo quiero consultar, sin hacer cambios."
@@ -320,14 +342,17 @@ export const verifyRecurringPlanRead = (
       toolChoice: "auto",
       maximumToolCalls: HostedToolCallMaximum.make(maximumReads),
     });
+
     let result = yield* prepared.execute;
     let reads = 0;
+
     for (let round = 0; round < maximumReads && result.toolCalls.length > 0; round++) {
       const outputs = yield* Effect.forEach(result.toolCalls, (call) =>
         Effect.gen(function* () {
           if (call.operation !== "recurringPlans.getRecurringWorkspace") {
             return yield* conformanceFailure();
           }
+
           const args = yield* Schema.decodeUnknownEffect(
             Schema.Struct({
               query: Schema.Struct({
@@ -335,10 +360,12 @@ export const verifyRecurringPlanRead = (
               }),
             })
           )(call.params).pipe(Effect.mapError(conformanceFailure));
+
           const output = yield* representativeRecurringWorkspace(
             args.query.month ?? "2026-09",
             "2026-09-18"
           );
+
           return {
             _tag: "ToolResult" as const,
             toolCallId: yield* Schema.decodeEffect(ToolCallId)(call.id).pipe(
@@ -349,10 +376,12 @@ export const verifyRecurringPlanRead = (
           };
         })
       );
+
       reads += outputs.length;
       const next = yield* result.continuation.prepare(outputs);
       result = yield* next.execute;
     }
+
     if (reads === 0 || result.toolCalls.length !== 0) return yield* conformanceFailure();
     yield* verifyRecurringReadAnswer(result.text);
   });
@@ -372,18 +401,22 @@ export const verifyRecurringLifecycle = (
       toolChoice: "auto",
       maximumToolCalls: HostedToolCallMaximum.make(2),
     });
+
     const discovery = yield* prepared.execute;
     const query = discovery.toolCalls[0];
+
     if (
       discovery.toolCalls.length !== 1 ||
       query?.operation !== "recurringPlans.getRecurringWorkspace"
     ) {
       return yield* conformanceFailure();
     }
+
     yield* Schema.decodeUnknownEffect(
       Schema.Struct({ query: Schema.Struct({ month: Schema.Literal("2026-09") }) })
     )(query.params).pipe(Effect.mapError(conformanceFailure));
     const output = yield* representativeRecurringWorkspace();
+
     const next = yield* discovery.continuation.prepare([
       {
         _tag: "ToolResult",
@@ -394,14 +427,18 @@ export const verifyRecurringLifecycle = (
         outcome: { _tag: "Succeeded", output: { data: output, next: [] } },
       },
     ]);
+
     const result = yield* next.execute;
     const call = result.toolCalls[0];
+
     if (result.toolCalls.length !== 1 || call?.operation !== "recurringPlans.applyRecurringEdit") {
       return yield* conformanceFailure();
     }
+
     const args = yield* Schema.decodeUnknownEffect(Schema.Struct({ payload: RecurringCommand }))(
       call.params
     ).pipe(Effect.mapError(conformanceFailure));
+
     if (!Schema.is(expectedRecurringLifecycle)(args.payload)) {
       return yield* conformanceFailure();
     }
@@ -419,14 +456,18 @@ export const verifyDateOnlyMutation = (
       toolChoice: "auto",
       maximumToolCalls: HostedToolCallMaximum.make(1),
     });
+
     const result = yield* prepared.execute;
     const call = result.toolCalls[0];
+
     if (result.toolCalls.length !== 1 || call?.operation !== "transactions.createTransaction") {
       return yield* conformanceFailure();
     }
+
     const args = yield* Schema.decodeUnknownEffect(MutationArguments)(call.params).pipe(
       Effect.mapError(conformanceFailure)
     );
+
     if (DateTime.formatIso(args.payload.occurredAt) !== "2026-09-21T05:00:00.000Z") {
       return yield* conformanceFailure();
     }
@@ -441,9 +482,11 @@ export const verifyInvalidOutputRecovery = (
       availableOperations: [],
       toolChoice: "none",
     });
+
     const first = yield* prepared.execute;
     yield* requireTextEvidence(first.text, "inválido");
     yield* forbidTextEvidence(first.text, "pesos colombianos");
+
     const corrected = yield* first.continuation.prepare([
       {
         _tag: "InvalidOutputFeedback",
@@ -451,6 +494,7 @@ export const verifyInvalidOutputRecovery = (
           "La respuesta anterior no fue válida. Corrígela e incluye exactamente la frase: pesos colombianos.",
       },
     ]);
+
     const result = yield* corrected.execute;
     yield* requireTextEvidence(result.text, "pesos colombianos");
   });
@@ -475,6 +519,7 @@ export const verifyStructuredColombianSpanish = (
     );
 
 const subscriptionStatusCodec = Schema.toCodecJson(SubscriptionStatus);
+
 const representativeProStatus = Schema.decodeEffect(subscriptionStatusCodec)({
   accessTier: "pro",
   hasProGrant: true,
@@ -502,23 +547,30 @@ const representativeProStatus = Schema.decodeEffect(subscriptionStatusCodec)({
 
 const isFinishedReply = (answer: HostedTextResult): boolean =>
   answer.toolCalls.length === 0 && answer.finishReason === "stop";
+
 const maximumConversationalReplyLength = 500;
+
 export const verifyConversationalSpanish = (
   inference: HostedInferenceService
 ): Effect.Effect<void, HostedInferenceError> =>
   Effect.gen(function* () {
     const operation = CanonicalOperationId.make("subscription.getSubscriptionStatus");
+
     const prepared = yield* inference.prepareText({
       context: context("¿Tengo Pro? ¿Hay alguna suscripción de pago que pueda cancelar?"),
       availableOperations: [operation],
       toolChoice: "auto",
       maximumToolCalls: HostedToolCallMaximum.make(1),
     });
+
     const requested = yield* prepared.execute;
+
     if (requested.toolCalls.length !== 1 || requested.toolCalls[0]?.operation !== operation) {
       return yield* conformanceFailure();
     }
+
     const call = requested.toolCalls[0];
+
     const next = yield* requested.continuation.prepare([
       {
         _tag: "ToolResult",
@@ -533,10 +585,13 @@ export const verifyConversationalSpanish = (
         },
       },
     ]);
+
     const answer = yield* next.execute;
+
     const text = yield* Schema.decodeUnknownEffect(Schema.String)(answer.text).pipe(
       Effect.mapError(conformanceFailure)
     );
+
     if (
       !isFinishedReply(answer) ||
       /[`*]|^\s*[[{#]|\b(?:ManualProGrant|hasProGrant|paidSubscription|accessTier|trialPeriod|recentAttempts|cancellation|API|JSON|UUID|ID)\b|[0-9a-f]{8}-[0-9a-f-]{27}|subscription\.|intento.{0,40}(?:cobro|pago)|9[.,]900|10 de agosto/imu.test(
@@ -545,10 +600,13 @@ export const verifyConversationalSpanish = (
     ) {
       return yield* conformanceFailure();
     }
+
     if (text.length > maximumConversationalReplyLength) {
       return yield* conformanceFailure();
     }
+
     yield* requireTextEvidence(text, "pro");
+
     if (!/(?:no (?:tienes|hay|aparece)|ninguna).{0,70}suscripci[oó]n/iu.test(text)) {
       return yield* conformanceFailure();
     }

@@ -15,6 +15,7 @@ export const reviewPageSelection = ({
   params: ReadonlyArray<string | number>;
 }> => {
   const status = Option.getOrElse(query.status, () => "pending");
+
   return status === "pending"
     ? { filter: "status = 'pending' AND expires_at_ms > ?", params: [current] }
     : {

@@ -19,7 +19,9 @@ import { completesHostedTurn, decideOperationAccess, isHostedVisible } from "./o
 const pat = (
   capabilities: ReadonlyArray<"read" | "write" | "dashboard">
 ): OperationAccessCaller => ({ _tag: "PAT", capabilities });
+
 const web = (fresh: boolean): OperationAccessCaller => ({ _tag: "WebSession", fresh });
+
 const hosted = (
   authorityRoot: "verified-whatsapp" | "no-verified-whatsapp-authority"
 ): OperationAccessCaller => ({ _tag: "HostedAgentSession", authorityRoot });
@@ -89,6 +91,7 @@ it("decides every canonical caller class from one access requirement", () => {
 
   expect(decideOperationAccess(webSessionOnly, web(false))).toEqual({ _tag: "Allowed" });
   expect(decideOperationAccess(webSessionOnly, web(true))).toEqual({ _tag: "Allowed" });
+
   for (const caller of [
     pat(["read", "write", "dashboard"]),
     hosted("verified-whatsapp"),
@@ -99,6 +102,7 @@ it("decides every canonical caller class from one access requirement", () => {
       reason: "caller_ineligible",
     });
   }
+
   expect(decideOperationAccess(webOrHosted, web(false))).toEqual({ _tag: "Allowed" });
   expect(decideOperationAccess(webOrHosted, hosted("no-verified-whatsapp-authority"))).toEqual({
     _tag: "Allowed",

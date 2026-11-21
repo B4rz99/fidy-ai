@@ -28,6 +28,7 @@ const inspect = Effect.gen(function* () {
     entrypoint: "alchemy-drift.run.ts",
     stage: "production",
   }).pipe(Effect.mapError(() => new DriftInspectionFailed()));
+
   return workerDriftReport(snapshot.repairPlan.native).join("\n");
 }).pipe(
   Effect.timeout("45 seconds"),

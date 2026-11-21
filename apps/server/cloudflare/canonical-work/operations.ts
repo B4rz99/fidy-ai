@@ -4,7 +4,9 @@ import { newId } from "../secret-material/operations";
 
 export const boundaryFailure = (cause: unknown): TransactionBoundaryFailure =>
   new TransactionBoundaryFailure({ cause });
+
 export const transactionNow = (): number => Effect.runSync(Clock.currentTimeMillis);
+
 export const transactionId = (): string => newId();
 
 export const transactionUnavailable = (): Response =>
@@ -36,6 +38,7 @@ export type {
   QueryAuthority,
   TransactionAuthority,
 } from "./contract";
+
 export {
   TransactionBoundaryFailure,
   transactionNoStore,

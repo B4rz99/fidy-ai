@@ -5,9 +5,13 @@ import { createServer } from "vite";
 class ApiProcessFailure extends Data.TaggedError("ApiProcessFailure") {}
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+
 const directory = fileURLToPath(new URL("../.local/browser/", import.meta.url));
+
 const certificate = `${directory}cert.pem`;
+
 const key = `${directory}key.pem`;
+
 const server = await createServer({
   root: `${root}apps/web`,
   define: { "import.meta.env.VITE_API_ORIGIN": JSON.stringify("https://127.0.0.1:4174") },
@@ -19,6 +23,7 @@ const server = await createServer({
     https: { key: await Bun.file(key).text(), cert: await Bun.file(certificate).text() },
   },
 });
+
 const api = Bun.spawn([process.execPath, "scripts/dev-browser-api.ts"], {
   cwd: root,
   env: {
@@ -30,15 +35,18 @@ const api = Bun.spawn([process.execPath, "scripts/dev-browser-api.ts"], {
   stdout: "inherit",
   stderr: "inherit",
 });
+
 const interrupted = Effect.callback<number>((resume) => {
   const finish = (): void => resume(Effect.succeed(0));
   process.once("SIGTERM", finish);
   process.once("SIGINT", finish);
+
   return Effect.sync(() => {
     process.removeListener("SIGTERM", finish);
     process.removeListener("SIGINT", finish);
   });
 });
+
 try {
   await server.listen();
   server.printUrls();

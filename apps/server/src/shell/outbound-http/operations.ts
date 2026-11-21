@@ -103,14 +103,17 @@ export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpServ
       const resendEmailDeliveryApiKey = yield* loadResendEmailDeliveryApiKey;
       const wompiEnvironment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
       const environmentPrefix = wompiEnvironment === "sandbox" ? "test" : "prod";
+
       const wompiPublicKey = yield* Config.schema(
         WompiPublicKey.check(Schema.isStartingWith(`pub_${environmentPrefix}_`)),
         "WOMPI_PUBLIC_KEY"
       );
+
       const wompiPrivateKey = yield* loadWompiPrivateKey(wompiEnvironment);
       const wompiIntegritySecret = yield* loadWompiIntegritySecret(wompiEnvironment);
       const httpClient = yield* HttpClient.HttpClient;
       const digest = yield* Digest.Digest;
+
       return makeOutboundHttp({
         kapsoApiKey,
         resendEmailDeliveryApiKey: Option.some(resendEmailDeliveryApiKey),

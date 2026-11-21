@@ -37,10 +37,12 @@ const view = {
     },
   },
 };
+
 const requiredGate = (
   gates: readonly Deferred.Deferred<void>[],
   index: number
 ): Deferred.Deferred<void> => Option.getOrThrow(Array.get(gates, index));
+
 const retireAuthentication = Effect.fnUntraced(function* (
   registry: AtomRegistry.AtomRegistry,
   attempts: readonly DashboardReadAttempt[],
@@ -52,10 +54,12 @@ const retireAuthentication = Effect.fnUntraced(function* (
   yield* Effect.yieldNow;
   expect(attempts.every((attempt) => !attempt.completed())).toBe(true);
 });
+
 it.live("only the requested new Dashboard load certifies recovery, even with equal content", () =>
   Effect.gen(function* () {
     const events = Object.assign(new EventTarget(), { Uint8Array });
     vi.stubGlobal("window", events);
+
     const gates = yield* Effect.all([
       Deferred.make<void>(),
       Deferred.make<void>(),
@@ -66,7 +70,9 @@ it.live("only the requested new Dashboard load certifies recovery, even with equ
       Deferred.make<void>(),
       Deferred.make<void>(),
     ]);
+
     let reads = 0;
+
     const client = makeFidyClient({
       apiOrigin: "https://api.test.fidyapp.com",
       httpClient: Layer.succeed(
@@ -74,7 +80,9 @@ it.live("only the requested new Dashboard load certifies recovery, even with equ
         HttpClient.make((request) => {
           const index = reads++;
           const gate = gates[index];
+
           if (gate === undefined) return Effect.die("Unexpected Dashboard read");
+
           return Deferred.await(gate).pipe(
             Effect.as(
               HttpClientResponse.fromWeb(
@@ -88,13 +96,16 @@ it.live("only the requested new Dashboard load certifies recovery, even with equ
         })
       ),
     });
+
     const router = createRouter({
       routeTree: createRootRoute(),
       history: createMemoryHistory({ initialEntries: ["/app/dashboard"] }),
     });
+
     const query = dashboardQuery({ apiClient: client, router });
     const registry = AtomRegistry.make();
     const unmount = registry.mount(query.result);
+
     try {
       yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(1)));
       const first = requiredGate(gates, 0);
@@ -109,9 +120,11 @@ it.live("only the requested new Dashboard load certifies recovery, even with equ
       yield* Deferred.succeed(old, undefined);
       expect(registry.get(query.result).waiting).toBe(true);
       yield* Deferred.succeed(fresh, undefined);
+
       const recovered = yield* AtomRegistry.getResult(registry, query.result, {
         suspendOnWaiting: true,
       }).pipe(Effect.orDie);
+
       expect(recovered.data).toEqual(baseline.data);
       expect(attempt.completed()).toBe(true);
       const superseded = query.refresh(registry);
@@ -123,9 +136,11 @@ it.live("only the requested new Dashboard load certifies recovery, even with equ
       yield* Deferred.succeed(abandoned, undefined);
       expect(registry.get(query.result).waiting).toBe(true);
       yield* Deferred.succeed(replacement, undefined);
+
       const later = yield* AtomRegistry.getResult(registry, query.result, {
         suspendOnWaiting: true,
       }).pipe(Effect.orDie);
+
       expect(later.data).toEqual(baseline.data);
       expect(superseded.completed()).toBe(false);
       expect(attempt.completed()).toBe(true);
@@ -149,6 +164,7 @@ it.live("only the requested new Dashboard load certifies recovery, even with equ
       registry.dispose();
       const replacementRegistry = AtomRegistry.make();
       const detach = replacementRegistry.mount(query.result);
+
       try {
         yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(8)));
         const retiredGate = requiredGate(gates, 6);
@@ -156,9 +172,11 @@ it.live("only the requested new Dashboard load certifies recovery, even with equ
         yield* Deferred.succeed(retiredGate, undefined);
         expect(replacementRegistry.get(query.result).waiting).toBe(true);
         yield* Deferred.succeed(replacementGate, undefined);
+
         const current = yield* AtomRegistry.getResult(replacementRegistry, query.result, {
           suspendOnWaiting: true,
         }).pipe(Effect.orDie);
+
         expect(current.data).toEqual(baseline.data);
         expect(retired.completed()).toBe(false);
       } finally {

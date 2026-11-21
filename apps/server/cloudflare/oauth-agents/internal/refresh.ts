@@ -6,14 +6,18 @@ import { newId, newSecret, secretDigest } from "../../secret-material/operations
 import { oauthResponse } from "./response";
 
 const secondMs = 1000;
+
 export const invalidGrant = (): Response =>
   oauthResponse({ body: { error: "invalid_grant" }, status: 400 });
+
 const GrantRow = Schema.Struct({
   expires_at_ms: Schema.Int,
   scopes_json: Schema.String,
   consumed_at_ms: Schema.OptionFromNullOr(Schema.Int),
 });
+
 type GrantRow = typeof GrantRow.Type;
+
 const TokenResponse = Schema.Struct({
   access_token: Schema.String,
   refresh_token: Schema.String,
@@ -21,6 +25,7 @@ const TokenResponse = Schema.Struct({
   expires_in: Schema.Int,
   scope: Schema.String,
 });
+
 type Issuance = OAuthCredentialExpirations &
   Readonly<{
     accessDigest: Uint8Array;
@@ -29,6 +34,7 @@ type Issuance = OAuthCredentialExpirations &
     scopesJson: string;
     body: typeof TokenResponse.Type;
   }>;
+
 export const prepareIssuance = (
   input: Readonly<{ current: number; grant: GrantRow; scopes: PATScopes }>
 ): Effect.Effect<Issuance, Schema.SchemaError | PlatformError.PlatformError> =>
@@ -37,10 +43,12 @@ export const prepareIssuance = (
     const refresh = yield* newSecret;
     const accessDigest = yield* secretDigest({ purpose: "oauth-access", value: access });
     const refreshDigest = yield* secretDigest({ purpose: "oauth-refresh", value: refresh });
+
     const expirations = decideOAuthCredentialExpirations({
       current: input.current,
       grantExpiresAt: input.grant.expires_at_ms,
     });
+
     const body = yield* Schema.encodeEffect(TokenResponse)({
       access_token: Redacted.value(access),
       refresh_token: Redacted.value(refresh),
@@ -48,6 +56,7 @@ export const prepareIssuance = (
       expires_in: Math.floor((expirations.accessExpiresAt - input.current) / secondMs),
       scope: input.scopes.join(" "),
     });
+
     return {
       ...expirations,
       accessDigest,

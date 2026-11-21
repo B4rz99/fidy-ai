@@ -4,14 +4,18 @@ import { expect } from "vitest";
 import { continueFleetCleanup } from "./native-fleet-pilot";
 
 const hash = (value: string): string => new Bun.CryptoHasher("sha256").update(value).digest("hex");
+
 type Input = Parameters<typeof continueFleetCleanup>[0];
+
 const fixture = (): { rows: Map<string, boolean>; stages: string[]; input: Input } => {
   const rows = new Map([
     ["prior", true],
     ["old", false],
     ["target", true],
   ]);
+
   const stages: string[] = [];
+
   const input: Input = {
     target: "target",
     targetSha256: hash("target"),
@@ -43,6 +47,7 @@ const fixture = (): { rows: Map<string, boolean>; stages: string[]; input: Input
         stages.push(String(event["stage"]));
       }),
   };
+
   return { rows, stages, input };
 };
 
@@ -72,6 +77,7 @@ it.effect(
         expect(verdict._tag).toBe("Failure");
         expect(stages).not.toContain("posted");
       }
+
       const { input, rows, stages } = fixture();
       rows.set("old", true);
       expect((yield* continueFleetCleanup(input).pipe(Effect.result))._tag).toBe("Failure");
@@ -97,6 +103,7 @@ it.effect("rejects storage that reappears while verifying the erased provider pa
   Effect.gen(function* () {
     const { input, rows, stages } = fixture();
     rows.set("target", false);
+
     const verdict = yield* continueFleetCleanup({
       ...input,
       refused: () =>
@@ -104,6 +111,7 @@ it.effect("rejects storage that reappears while verifying the erased provider pa
           rows.set("target", true);
         }),
     }).pipe(Effect.result);
+
     expect(verdict._tag).toBe("Failure");
     expect(stages).not.toContain("physical-rechecked");
   })
@@ -112,10 +120,12 @@ it.effect("rejects storage that reappears while verifying the erased provider pa
 it.effect("stops before submitting erasure when the fresh meter refuses", () =>
   Effect.gen(function* () {
     const { input, stages } = fixture();
+
     const verdict = yield* continueFleetCleanup({
       ...input,
       budget: () => Effect.fail(Error("cleanup reserve exceeded")),
     }).pipe(Effect.result);
+
     expect(verdict._tag).toBe("Failure");
     expect(stages).not.toContain("posted");
   })

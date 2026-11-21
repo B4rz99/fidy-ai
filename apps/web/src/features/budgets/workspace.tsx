@@ -43,13 +43,16 @@ type ViewProps = Readonly<{
   props: WorkspaceProps;
   controller: BudgetEditing;
 }>;
+
 const BudgetToolbar = ({ props, controller }: ViewProps): JSX.Element => {
   const navigate = useNavigate();
+
   const move = (month: string): void => {
     controller.moveMonth(() => {
       navigate({ to: "/app/budgets", search: { month } }).catch(() => undefined);
     });
   };
+
   return (
     <WorkspaceHeader
       title="Presupuestos"
@@ -93,6 +96,7 @@ const BudgetToolbar = ({ props, controller }: ViewProps): JSX.Element => {
     </WorkspaceHeader>
   );
 };
+
 const BudgetFeedback = ({ props, controller }: ViewProps): JSX.Element => (
   <div className="px-5 empty:hidden [&:not(:empty)]:pt-4" aria-live="polite">
     {Option.isSome(controller.draft) ? null : (
@@ -120,6 +124,7 @@ const BudgetFeedback = ({ props, controller }: ViewProps): JSX.Element => (
     ) : null}
   </div>
 );
+
 const BudgetInlineRecovery = ({ controller }: Pick<ViewProps, "controller">): JSX.Element =>
   Option.match(controller.inlineRecovery, {
     onNone: () => <></>,
@@ -195,6 +200,7 @@ const BudgetPanel = ({
     })}
   </WorkspacePanel>
 );
+
 const BudgetHead = (): JSX.Element => (
   <div className="budget-head budget-tracks gap-4 rounded-md bg-muted px-4 py-2 text-sm text-muted-foreground">
     <span>Categorías con presupuesto</span>
@@ -203,12 +209,14 @@ const BudgetHead = (): JSX.Element => (
     <span className="text-right">Disponible</span>
   </div>
 );
+
 type GroupHeadingProps = Readonly<{
   group: string;
   currencies: ReadonlyArray<BudgetStatus["budget"]["cap"]["currency"]>;
   statuses: ReadonlyArray<BudgetStatus>;
   locale: string;
 }>;
+
 const GroupHeading = ({
   group,
   currencies,
@@ -260,6 +268,7 @@ const GroupHeading = ({
     <GroupFigures statuses={statuses} locale={locale} />
   </header>
 );
+
 const Unbudgeted = ({
   group,
   props,
@@ -270,9 +279,11 @@ const Unbudgeted = ({
       defaultBudgetGroup(category.label) === group &&
       !props.report.statuses.some((status) => status.budget.categoryId === category.id)
   );
+
   if (categories.length === 0) {
     return <></>;
   }
+
   return (
     <details className="budget-unbudgeted group/unbudgeted border-t">
       <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm text-muted-foreground [&::-webkit-details-marker]:hidden">
@@ -306,6 +317,7 @@ const Unbudgeted = ({
     </details>
   );
 };
+
 const GroupRename = ({
   group,
   disabled,
@@ -326,16 +338,20 @@ const GroupRename = ({
     <HugeiconsIcon icon={Settings01Icon} strokeWidth={1.5} />
   </Button>
 );
+
 const BudgetGroup = ({
   group,
   props,
   controller,
 }: ViewProps & Readonly<{ group: string }>): JSX.Element => {
   const [open, setOpen] = useState(props.report.statuses.length <= expandedRowLimit);
+
   const statuses = props.report.statuses.filter(
     (status) => groupFor({ status, categories: props.categories }) === group
   );
+
   const currencies = [...new Set(statuses.map((status) => status.budget.cap.currency))];
+
   return (
     <section
       aria-label={`Grupo ${group} ${currencies.join(" ")}`.trim()}
@@ -358,6 +374,7 @@ const BudgetGroup = ({
               categories: props.categories,
               id: status.budget.categoryId,
             });
+
             return (
               <BudgetRow
                 key={controller.rowKey(status)}
@@ -379,9 +396,11 @@ const BudgetGroup = ({
     </section>
   );
 };
+
 export const BudgetWorkspace = (props: WorkspaceProps): JSX.Element => {
   const controller = props.editing;
   const groups = workspaceGroups(props);
+
   return (
     <>
       <BudgetToolbar props={props} controller={controller} />

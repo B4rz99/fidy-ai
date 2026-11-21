@@ -13,35 +13,46 @@ import { makeFidyClient } from "@/transport/client";
 import { ManualPATCreation } from "./creation";
 
 const bearer = "fin_abcdefgh_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
 const reactWork = (work: () => void): Promise<void> =>
   Promise.resolve(act(() => Promise.resolve(work())));
+
 const reactAssertion = (assertion: () => void): Promise<void> =>
   Promise.resolve(act(() => vi.waitFor(assertion)));
+
 const button = (container: HTMLElement, label: string): HTMLButtonElement => {
   const found = Array.from(container.querySelectorAll("button")).find(
     (candidate) => candidate.textContent === label
   );
+
   if (found === undefined) throw new Error(`Missing ${label}`);
+
   return found;
 };
+
 const click = (container: HTMLElement, label: string): Promise<void> =>
   reactWork(() => button(container, label).click());
+
 const editGrant = (container: HTMLElement): Promise<void> =>
   reactWork(() => {
     const input = container.querySelector("input#pat-recipient");
     const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+
     if (!(input instanceof HTMLInputElement) || descriptor?.set === undefined) {
       throw new Error("Missing recipient input");
     }
+
     descriptor.set.call(input, "Mi agente");
     input.dispatchEvent(new Event("input", { bubbles: true }));
   }).then(() =>
     reactWork(() => {
       const scope = container.querySelector("#pat-scope-read");
+
       if (!(scope instanceof HTMLElement)) throw new Error("Missing read scope");
       scope.click();
     })
   );
+
 const makeClient = (): ReturnType<typeof makeFidyClient> => {
   const http = HttpClient.make((request) =>
     Effect.succeed(
@@ -69,6 +80,7 @@ const makeClient = (): ReturnType<typeof makeFidyClient> => {
       )
     )
   );
+
   return makeFidyClient({
     apiOrigin: "https://api.test.fidyapp.com",
     httpClient: Layer.succeed(HttpClient.HttpClient, http),
@@ -85,11 +97,13 @@ for (const retirement of ["reset", "pagehide", "expiry"] as const) {
           const pending = Promise.withResolvers<void>();
           let text = "";
           const nativeWrites = vi.fn();
+
           const native = yield* makeSensitiveClipboard(
             Option.some({
               readText: () => Promise.resolve(text),
               writeText: (value) => {
                 nativeWrites(value);
+
                 return value === bearer
                   ? pending.promise.then(() => {
                       text = unrelated ? "unrelated text" : value;
@@ -101,8 +115,10 @@ for (const retirement of ["reset", "pagehide", "expiry"] as const) {
             }),
             "10 minutes"
           );
+
           const released = vi.fn();
           const copied = vi.fn();
+
           const clipboard: SensitiveClipboard = {
             reveal: native.reveal,
             copy: (value, onCopied) => {
@@ -110,6 +126,7 @@ for (const retirement of ["reset", "pagehide", "expiry"] as const) {
                 copied();
                 onCopied?.();
               });
+
               return {
                 release: () => {
                   released();
@@ -118,11 +135,13 @@ for (const retirement of ["reset", "pagehide", "expiry"] as const) {
               };
             },
           };
+
           const context = yield* Effect.context<never>();
           const registry = AtomRegistry.make();
           const container = document.createElement("div");
           document.body.append(container);
           const root = createRoot(container);
+
           try {
             yield* Effect.tryPromise(() =>
               reactWork(() =>
@@ -147,14 +166,17 @@ for (const retirement of ["reset", "pagehide", "expiry"] as const) {
             );
             yield* Effect.tryPromise(() => click(container, "Copiar token"));
             expect(nativeWrites).toHaveBeenCalledWith(bearer);
+
             if (retirement === "reset") {
               yield* Effect.tryPromise(() => click(container, "Crear otro token"));
             }
+
             if (retirement === "pagehide") {
               yield* Effect.tryPromise(() =>
                 reactWork(() => window.dispatchEvent(new Event("pagehide")))
               );
             }
+
             if (retirement === "expiry") {
               yield* Effect.tryPromise(() =>
                 Promise.resolve(
@@ -162,6 +184,7 @@ for (const retirement of ["reset", "pagehide", "expiry"] as const) {
                 )
               );
             }
+
             expect(container.textContent).not.toContain(bearer);
             expect(released).toHaveBeenCalledTimes(1);
             pending.resolve();

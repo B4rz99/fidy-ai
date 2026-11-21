@@ -25,6 +25,7 @@ const paymentSubmissionFixture = (
   billingAttemptOverrides: Partial<Readonly<{ status: "pending" | "failed" | "succeeded" }>> = {}
 ): Extract<PaymentSubmission, { status: "payment-pending" }> => {
   const fixture = { ...defaultBillingAttemptFixture, ...billingAttemptOverrides };
+
   const commonBillingAttempt = {
     id: fixture.id,
     priceId: fixture.priceId,
@@ -35,7 +36,9 @@ const paymentSubmissionFixture = (
     timeZone: fixture.timeZone,
     createdAt: fixture.createdAt,
   };
+
   let submission: PaymentSubmission;
+
   if (fixture.status === "succeeded") {
     submission = Schema.decodeSync(PaymentSubmission)({
       status: "payment-pending",
@@ -65,9 +68,11 @@ const paymentSubmissionFixture = (
       billingAttempt: { ...commonBillingAttempt, status: "pending" },
     });
   }
+
   if (submission.status !== "payment-pending") {
     throw new Error("payment submission fixture did not decode");
   }
+
   return submission;
 };
 

@@ -11,6 +11,7 @@ const decode = <A, E>(
   Schema.decodeUnknownEffect(schema)(value).pipe(
     Effect.mapError((cause) => new BillingCollectionFailure({ cause: Option.some(cause) }))
   );
+
 const Source = Schema.Struct({
   data: Schema.Struct({
     id: WompiSourceId,
@@ -18,7 +19,9 @@ const Source = Schema.Struct({
     status: Schema.Literals(["AVAILABLE", "VOIDED"]),
   }),
 });
+
 const httpSuccessMinimum = 200;
+
 const httpSuccessMaximum = 300;
 
 export const verifyVoidedSource = Effect.fnUntraced(function* (
@@ -28,13 +31,17 @@ export const verifyVoidedSource = Effect.fnUntraced(function* (
   const response = yield* http
     .execute({ _tag: "WompiVerifyPaymentSource", sourceId })
     .pipe(Effect.mapError((cause) => new BillingCollectionFailure({ cause: Option.some(cause) })));
+
   if (response.status < httpSuccessMinimum || response.status >= httpSuccessMaximum) {
     return yield* new BillingCollectionFailure({ cause: Option.none() });
   }
+
   const body = yield* decode(UnknownJsonString, new TextDecoder().decode(response.body));
   const verified = yield* decode(Source, body);
+
   if (verified.data.id !== sourceId) {
     return yield* new BillingCollectionFailure({ cause: Option.none() });
   }
+
   return verified.data.status === "VOIDED";
 });

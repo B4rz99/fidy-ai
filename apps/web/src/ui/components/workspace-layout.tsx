@@ -30,6 +30,7 @@ export const WorkspaceColumns = ({
   variant: "default" | "container";
 }>): JSX.Element => {
   const { desktop, measure } = useWorkspaceSize();
+
   if (variant === "default") {
     return (
       <div className="grid items-stretch xl:grid-cols-[minmax(0,1fr)_24rem]">
@@ -38,6 +39,7 @@ export const WorkspaceColumns = ({
       </div>
     );
   }
+
   return (
     <WorkspaceDesktop value={Option.some(desktop)}>
       <div ref={measure} className="min-w-0">

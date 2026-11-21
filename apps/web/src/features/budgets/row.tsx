@@ -28,6 +28,7 @@ type RowProps = Readonly<{
   onSave: (status: BudgetStatus, amount: string) => void;
   onSettings: () => void;
 }>;
+
 export const BudgetRow = ({
   status,
   category,
@@ -40,9 +41,11 @@ export const BudgetRow = ({
   saveState,
 }: RowProps): JSX.Element => {
   const initial = BigDecimal.format(status.budget.cap.amount);
+
   const submit = (): void => {
     if (!disabled && amount !== initial) onSave(status, amount);
   };
+
   return (
     <div className="budget-row border-t">
       <div className="budget-tracks items-center gap-4 px-4 py-4">

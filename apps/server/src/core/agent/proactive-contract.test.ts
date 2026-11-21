@@ -8,7 +8,9 @@ it("round-trips actual proactive transcript entries without inventing a requeste
     occurredAt: "2026-10-22T12:00:00.000Z",
     text: "Your reminder is ready",
   };
+
   const codec = Schema.toCodecJson(ProactiveTranscriptEntry);
+
   const entries = [
     { ...identity, _tag: "ProactiveInsightTranscriptEntry", insightEventId: identity.id },
     ...["budget-offer", "reminder-offer", "recurring-offer", "reminder-question"].map((role) => ({
@@ -18,6 +20,7 @@ it("round-trips actual proactive transcript entries without inventing a requeste
       role,
     })),
   ];
+
   for (const value of entries) {
     expect(Schema.encodeSync(codec)(Schema.decodeSync(codec)(value))).toEqual(value);
   }

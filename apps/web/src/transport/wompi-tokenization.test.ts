@@ -10,6 +10,7 @@ import {
 
 const holdFetch = (signal: AbortSignal): Promise<Response> =>
   Effect.runPromise(Effect.never, { signal });
+
 const neverCancellation = Promise.withResolvers<void>().promise;
 
 const card = {
@@ -23,13 +24,17 @@ const card = {
 describe("Wompi browser tokenization", () => {
   it("refuses a provider rejection promptly and cancels its unread body", () => {
     let cancellations = 0;
+
     const body = new ReadableStream<Uint8Array>({
       cancel(): Promise<void> {
         cancellations++;
+
         return neverCancellation;
       },
     });
+
     const fetchStub = vi.fn<WompiFetch>().mockResolvedValue(new Response(body, { status: 422 }));
+
     return expect(Effect.runPromise(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub)))
       .rejects.toBeInstanceOf(CardTokenizationFailed)
       .then(() => {
@@ -125,6 +130,7 @@ describe("Wompi browser tokenization", () => {
     ["dishonest smaller content length", { "content-length": "1" }],
   ])("stops a chunked %s response at the browser-owned byte limit", (_label, headers) => {
     let cancelled = false;
+
     const fetchStub = vi.fn<WompiFetch>().mockResolvedValue(
       new Response(
         new ReadableStream<Uint8Array>({
@@ -149,6 +155,7 @@ describe("Wompi browser tokenization", () => {
 
   it("rejects a declared oversized response before buffering and cancels its reader", () => {
     let cancelled = false;
+
     const fetchStub = vi.fn<WompiFetch>().mockResolvedValue(
       new Response(
         new ReadableStream<Uint8Array>({
@@ -171,6 +178,7 @@ describe("Wompi browser tokenization", () => {
   it("accepts a provider response exactly at the browser-owned byte limit", () => {
     const body = JSON.stringify({ data: { id: "x".repeat(4_096), brand: "VISA" } });
     const padding = " ".repeat(16_384 - body.length);
+
     const fetchStub = vi
       .fn<WompiFetch>()
       .mockResolvedValue(new Response(`${body}${padding}`, { status: 200 }));
@@ -184,6 +192,7 @@ describe("Wompi browser tokenization", () => {
     Effect.gen(function* () {
       const { promise: cancelled, resolve: resolveCancellation } = Promise.withResolvers<void>();
       const { promise: neverPull } = Promise.withResolvers<void>();
+
       const fetchStub = vi.fn<WompiFetch>().mockResolvedValue(
         new Response(
           new ReadableStream<Uint8Array>({
@@ -194,10 +203,12 @@ describe("Wompi browser tokenization", () => {
           { status: 200 }
         )
       );
+
       const fiber = yield* Effect.forkChild(
         tokenizeCardWithWompi("pub_test_12345678", card, fetchStub),
         { startImmediately: true }
       );
+
       yield* Effect.tryPromise(() => Promise.resolve());
 
       yield* Fiber.interrupt(fiber);
@@ -222,17 +233,21 @@ describe("Wompi browser tokenization", () => {
     Effect.gen(function* () {
       const { promise: started, resolve: readingStarted } = Promise.withResolvers<void>();
       const cancel = vi.fn(() => Promise.reject(new Error("reader already closed")));
+
       const response = new Response(
         new ReadableStream<Uint8Array>({
           pull: (): void => readingStarted(),
           cancel,
         })
       );
+
       const fetchStub = vi.fn<WompiFetch>().mockResolvedValue(response);
+
       const fiber = yield* Effect.forkChild(
         tokenizeCardWithWompi("pub_test_12345678", card, fetchStub),
         { startImmediately: true }
       );
+
       yield* Effect.tryPromise(() => started);
 
       yield* Fiber.interrupt(fiber);
@@ -248,24 +263,30 @@ describe("Wompi browser tokenization", () => {
     Effect.gen(function* () {
       const ready = yield* Deferred.make<void>();
       let signal = Option.none<AbortSignal>();
+
       const fetchStub: WompiFetch = (_input, init) => {
         signal = Option.fromNullishOr(init?.signal);
         Deferred.doneUnsafe(ready, Effect.void);
+
         return holdFetch(Option.getOrThrow(signal));
       };
+
       const fiber = yield* tokenizeCardWithWompi("pub_test_12345678", card, fetchStub).pipe(
         Effect.exit,
         Effect.forkScoped
       );
+
       yield* Deferred.await(ready);
       yield* TestClock.adjust("15 seconds");
       const exit = yield* Fiber.join(fiber);
       expect(Exit.isFailure(exit)).toBe(true);
+
       if (Exit.isFailure(exit)) {
         expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toBeInstanceOf(
           CardTokenizationFailed
         );
       }
+
       expect(Option.getOrThrow(signal).aborted).toBe(true);
     }).pipe(Effect.scoped)
   );
@@ -277,6 +298,7 @@ describe("Wompi browser tokenization", () => {
         const ready = yield* Deferred.make<void>();
         let signal = Option.none<AbortSignal>();
         let cancelled = false;
+
         const response = new Response(
           new ReadableStream<Uint8Array>({
             start(controller): void {
@@ -284,31 +306,39 @@ describe("Wompi browser tokenization", () => {
             },
             pull(): Promise<void> {
               Deferred.doneUnsafe(ready, Effect.void);
+
               return neverCancellation;
             },
             cancel(): Promise<void> {
               cancelled = true;
+
               return neverCancellation;
             },
           })
         );
+
         const fetchStub: WompiFetch = (_input, init) => {
           signal = Option.fromNullishOr(init?.signal);
+
           return Promise.resolve(response);
         };
+
         const fiber = yield* tokenizeCardWithWompi("pub_test_12345678", card, fetchStub).pipe(
           Effect.exit,
           Effect.forkScoped
         );
+
         yield* Deferred.await(ready);
         yield* TestClock.adjust("15 seconds");
         const exit = yield* Fiber.join(fiber);
         expect(Exit.isFailure(exit)).toBe(true);
+
         if (Exit.isFailure(exit)) {
           expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toBeInstanceOf(
             CardTokenizationFailed
           );
         }
+
         expect(cancelled).toBe(true);
         expect(response.body?.locked).toBe(false);
         expect(Option.getOrThrow(signal).aborted).toBe(true);

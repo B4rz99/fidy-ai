@@ -30,11 +30,13 @@ export type TransactionCaller =
   | AuthorizedPAT
   | OAuthCaller
   | HostedCanonicalCaller;
+
 export type CanonicalCaller = TransactionCaller;
 
 export const transactionNoStore = { "cache-control": "no-store" };
 
 export const maximumTransactionInputBytes = 4096;
+
 export const maximumTransactionGroupInputBytes = 524288;
 
 export const missingTransactionMessage = "Transaction unavailable.";
@@ -52,4 +54,5 @@ export type TransactionAuthority =
   | WebSessionAuthority
   | OAuthAuthority
   | HostedCanonicalCaller["authority"];
+
 export type QueryAuthority = TransactionAuthority;

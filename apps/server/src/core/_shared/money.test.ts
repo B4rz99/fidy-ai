@@ -14,7 +14,9 @@ import {
 } from "./money";
 
 const decodeCurrency = Schema.decodeUnknownResult(Currency);
+
 const decodeMoney = Schema.decodeUnknownResult(Money);
+
 const encodeMoney = Schema.encodeSync(Money);
 
 const money = (amount: string, currency: Currency = Currency.make("COP")): Money =>
@@ -23,6 +25,7 @@ const money = (amount: string, currency: Currency = Currency.make("COP")): Money
 const nonNegativeCoefficient = Arbitrary.schema(
   Schema.BigInt.check(Schema.isGreaterThanOrEqualToBigInt(0n))
 );
+
 const moneyArbitrary = Arbitrary.schema(Schema.Literals(["JPY", "COP", "KWD", "UYW"])).pipe(
   Arbitrary.flatMap((currency) =>
     Arbitrary.all([
@@ -123,6 +126,7 @@ it("adds and compares Money with equal Currency exactly", () => {
 it("returns typed CurrencyMismatch before constructing an invalid cross-Currency sum", () => {
   const jpy = money("1", Currency.make("JPY"));
   const usd = money("0.01", Currency.make("USD"));
+
   for (const operands of [
     { left: jpy, right: usd },
     { left: usd, right: jpy },
@@ -228,6 +232,7 @@ it("accepts only Currency-consistent, non-zero Money groups", () => {
   expect(Schema.encodeSync(MoneyGroups)(Schema.decodeUnknownSync(MoneyGroups)(wire))).toEqual(wire);
 
   const group = encodedGroup("COP");
+
   const cases = [
     [{ ...group, inflow: { amount: "1", currency: "USD" } }, '[0]["inflow"]["currency"]'],
     [{ ...group, outflow: { amount: "0", currency: "USD" } }, '[0]["outflow"]["currency"]'],

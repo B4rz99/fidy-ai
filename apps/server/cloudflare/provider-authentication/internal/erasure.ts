@@ -52,6 +52,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
 
     candidates: (userId) => {
       const pairings = browserPairingsForErasureQuery(userId);
+
       return {
         sql: `SELECT CAST(r.rowid AS TEXT) AS rowRef FROM whatsapp_provider_handoffs r WHERE r.pairing_id IN (${pairings.sql})`,
         params: pairings.params,
@@ -59,6 +60,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     },
     remaining: (userId) => {
       const pairings = browserPairingsForErasureQuery(userId);
+
       return {
         sql: `SELECT 1 FROM whatsapp_provider_handoffs r WHERE r.pairing_id IN (${pairings.sql})`,
         params: pairings.params,
@@ -66,6 +68,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     },
     remove: (scope) => {
       const pairings = browserPairingsForErasureQuery(scope.userId);
+
       return [
         {
           sql: `DELETE FROM whatsapp_provider_handoffs AS r WHERE r.pairing_id IN (${pairings.sql}) AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))`,
@@ -82,6 +85,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
 
     candidates: (userId) => {
       const pairings = browserPairingsForErasureQuery(userId);
+
       return {
         sql: `SELECT CAST(r.rowid AS TEXT) AS rowRef FROM whatsapp_signup_invitations r WHERE r.pairing_id IN (${pairings.sql})`,
         params: pairings.params,
@@ -89,6 +93,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     },
     remaining: (userId) => {
       const pairings = browserPairingsForErasureQuery(userId);
+
       return {
         sql: `SELECT 1 FROM whatsapp_signup_invitations r WHERE r.pairing_id IN (${pairings.sql})`,
         params: pairings.params,
@@ -96,6 +101,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     },
     remove: (scope) => {
       const pairings = browserPairingsForErasureQuery(scope.userId);
+
       return [
         {
           sql: `DELETE FROM whatsapp_signup_invitations AS r WHERE r.pairing_id IN (${pairings.sql}) AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))`,

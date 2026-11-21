@@ -9,7 +9,9 @@ const WorkspaceView = Schema.Struct({
   filters: RecurringFilters,
   previous: Schema.optional(RecurringMonth),
 });
+
 const HistoryView = Schema.Struct({ recurringWorkspace: WorkspaceView });
+
 type WorkspaceView = typeof WorkspaceView.Type;
 
 export const useRecurringWorkspaceView = (): Readonly<{
@@ -22,21 +24,26 @@ export const useRecurringWorkspaceView = (): Readonly<{
   const router = useRouter();
   const state = useRouterState({ select: (value) => value.location.state });
   const binding = router.options.context.sessionBinding;
+
   const restored = Schema.decodeUnknownOption(HistoryView)(state).pipe(
     Option.map(({ recurringWorkspace }) => recurringWorkspace),
     Option.filter((value) => value.binding === binding)
   );
+
   const [retained, retain] = useState(() => restored);
+
   if (
     Option.isSome(restored) &&
     !Option.exists(retained, (value) => JSON.stringify(value) === JSON.stringify(restored.value))
   ) {
     retain(restored);
   }
+
   const view = restored.pipe(
     Option.orElse(() => Option.filter(retained, (value) => value.binding === binding)),
     Option.getOrElse((): WorkspaceView => ({ binding, filters: {} }))
   );
+
   const save = (next: WorkspaceView): void => {
     router
       .navigate({
@@ -48,6 +55,7 @@ export const useRecurringWorkspaceView = (): Readonly<{
       })
       .catch(() => undefined);
   };
+
   return {
     selectMonth: (month) => {
       router

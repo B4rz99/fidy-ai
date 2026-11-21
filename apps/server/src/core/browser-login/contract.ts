@@ -4,6 +4,7 @@ import { UtcTimestamp } from "~/core/_shared/time";
 export const BrowserLoginPairingId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("BrowserLoginPairingId"))
   .annotate({ identifier: "BrowserLoginPairingId" });
+
 export type BrowserLoginPairingId = typeof BrowserLoginPairingId.Type;
 
 export const browserLoginPollingIntervalSeconds = 5;
@@ -11,6 +12,7 @@ export const browserLoginPollingIntervalSeconds = 5;
 export const browserLoginPublicCodeAlphabet = "BCDFGHJKLMNPQRSTVWXZ" as const;
 
 const browserLoginPublicCodePattern = /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/u;
+
 const browserLoginPublicCodeSymbolsPattern = /^[BCDFGHJKLMNPQRSTVWXZ]{8}$/u;
 
 export const BrowserLoginPublicCode = Schema.String.check(
@@ -18,6 +20,7 @@ export const BrowserLoginPublicCode = Schema.String.check(
 )
   .pipe(Schema.brand("BrowserLoginPublicCode"))
   .annotate({ identifier: "BrowserLoginPublicCode" });
+
 export type BrowserLoginPublicCode = typeof BrowserLoginPublicCode.Type;
 
 export const browserLoginPairingLifetime = "10 minutes" as const;
@@ -25,6 +28,7 @@ export const browserLoginPairingLifetime = "10 minutes" as const;
 export const BrowserLoginPublicCodeSymbols = Schema.String.check(
   Schema.isPattern(browserLoginPublicCodeSymbolsPattern)
 ).pipe(Schema.brand("BrowserLoginPublicCodeSymbols"));
+
 export type BrowserLoginPublicCodeSymbols = typeof BrowserLoginPublicCodeSymbols.Type;
 
 export const BrowserLoginPairingLifecycle = Schema.Literals([
@@ -35,6 +39,7 @@ export const BrowserLoginPairingLifecycle = Schema.Literals([
   "consumed",
   "invalidated",
 ]);
+
 export type BrowserLoginPairingLifecycle = typeof BrowserLoginPairingLifecycle.Type;
 
 export type RedemptionInput = Readonly<{
@@ -87,6 +92,7 @@ export type PendingBrowserLoginProofInput = Readonly<{
 
 const normalizePublicCodeText = (input: string): string => {
   const upper = input.replace(/^[\t\n\r ]+|[\t\n\r ]+$/gu, "").toUpperCase();
+
   return browserLoginPublicCodeSymbolsPattern.test(upper)
     ? `${upper.slice(0, 4)}-${upper.slice(4)}`
     : upper;
@@ -107,6 +113,7 @@ export const BrowserLoginPrivateVerifier = Schema.String.check(
 )
   .pipe(Schema.brand("BrowserLoginPrivateVerifier"))
   .annotate({ identifier: "BrowserLoginPrivateVerifier" });
+
 export type BrowserLoginPrivateVerifier = typeof BrowserLoginPrivateVerifier.Type;
 
 export const StartedBrowserLoginPairing = Schema.Struct({
@@ -116,6 +123,7 @@ export const StartedBrowserLoginPairing = Schema.Struct({
   expiresAt: UtcTimestamp,
   pollingIntervalSeconds: Schema.Literal(browserLoginPollingIntervalSeconds),
 }).annotate({ identifier: "StartedBrowserLoginPairing" });
+
 export type StartedBrowserLoginPairing = typeof StartedBrowserLoginPairing.Type;
 
 export const maximumWrongVerifierAttempts = 5;

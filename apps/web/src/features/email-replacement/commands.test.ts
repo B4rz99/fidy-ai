@@ -11,13 +11,16 @@ import { makeReplacement } from "./commands";
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 
 const resources: Array<() => void> = [];
+
 afterEach(() => {
   resources.reverse().forEach((dispose) => dispose());
   resources.length = 0;
   vi.useRealTimers();
   sessionStorage.clear();
 });
+
 const binding = "10000000-0000-4000-8000-000000000001";
+
 const fixture = (
   {
     observedBinding,
@@ -33,12 +36,14 @@ const fixture = (
 }> => {
   vi.useFakeTimers();
   const sent: Array<{ path: string; body: string }> = [];
+
   const http = HttpClient.make((request) => {
     const path = new URL(request.url).pathname;
     sent.push({
       path,
       body: request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "",
     });
+
     return (
       path === "/web/session/binding"
         ? Effect.tryPromise({
@@ -71,11 +76,14 @@ const fixture = (
       )
     );
   });
+
   const apiClient = makeFidyClient({
     apiOrigin: "https://api.test.fidyapp.com",
     httpClient: Layer.succeed(HttpClient.HttpClient, http),
   });
+
   const registry = AtomRegistry.make();
+
   const interaction = makeReplacement({
     apiClient,
     webAuthClient: makeWebAuthClient({
@@ -87,13 +95,16 @@ const fixture = (
     onUncertain: () => undefined,
     binding,
   });
+
   const dispatch: Parameters<typeof interaction.actions>[0] = (input) =>
     registry.set(interaction.atom, input);
+
   resources.push(
     () => registry.dispose(),
     registry.mount(interaction.atom),
     interaction.mount(dispatch)
   );
+
   return { interaction, dispatch, sent };
 };
 
@@ -139,10 +150,12 @@ it.effect(
       const foreignBinding = "10000000-0000-4000-8000-000000000002";
       const marker = encodeJson({ version: 1, binding: foreignBinding });
       sessionStorage.setItem("fidy:email-replacement-admission-v1", marker);
+
       const { interaction, dispatch, sent } = fixture({
         observedBinding: foreignBinding,
         bindingWait: Promise.resolve(),
       });
+
       expect(sessionStorage.getItem("fidy:email-replacement-admission-v1")).toBe(marker);
       interaction.actions(dispatch).request("candidate@example.test");
       yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(0));
@@ -163,10 +176,12 @@ it.effect(
       const marker = encodeJson({ version: 1, binding: "10000000-0000-4000-8000-000000000002" });
       sessionStorage.setItem("fidy:email-replacement-admission-v1", marker);
       const reply = Promise.withResolvers<void>();
+
       const { interaction, dispatch, sent } = fixture({
         observedBinding: binding,
         bindingWait: reply.promise,
       });
+
       interaction.actions(dispatch).request("candidate@example.test");
       yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(0));
       interaction.actions(dispatch).complete("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ");

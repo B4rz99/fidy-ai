@@ -56,9 +56,12 @@ export const assembleWorkingContext = ({
     )
     .toSorted((left, right) => {
       if (left.sequence < right.sequence) return -1;
+
       if (left.sequence > right.sequence) return 1;
+
       return 0;
     });
+
   return makeInitialContext({
     sections: hostedContextSections({
       user,

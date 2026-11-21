@@ -4,6 +4,7 @@ import { UserId } from "~/core/identity/contract";
 import { prepareCurrentUser, prepareSelectedCurrentUser } from "./operations";
 
 const userId = UserId.make("10000000-0000-4000-8000-000000000001");
+
 const row = {
   id: userId,
   service_market: "CO",
@@ -33,11 +34,13 @@ it.effect("decodes the complete canonical metadata selected by a live browser re
 it.effect("a resolved User read refuses a different User's otherwise valid metadata", () =>
   Effect.gen(function* () {
     const prepared = yield* prepareCurrentUser(userId);
+
     const refused = yield* prepared
       .decode([{ ...row, id: "10000000-0000-4000-8000-000000000002" }])
       .pipe(
         Effect.match({ onSuccess: () => "disclosed", onFailure: (failure) => failure.error.code })
       );
+
     expect(refused).toBe("unavailable");
     expect((yield* prepared.decode([row])).data.id).toBe(userId);
   })
@@ -46,6 +49,7 @@ it.effect("a resolved User read refuses a different User's otherwise valid metad
 it.effect("missing or malformed selected metadata never becomes a partial profile", () =>
   Effect.gen(function* () {
     const prepared = prepareSelectedCurrentUser({ sql: "SELECT ? AS userId", params: [userId] });
+
     for (const rows of [
       [],
       [{ ...row, id: "invalid" }],
@@ -57,6 +61,7 @@ it.effect("missing or malformed selected metadata never becomes a partial profil
         .pipe(
           Effect.match({ onSuccess: () => "disclosed", onFailure: (failure) => failure.error.code })
         );
+
       expect(refused).toBe("unavailable");
     }
   })

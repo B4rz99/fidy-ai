@@ -15,14 +15,17 @@ export const readNativeConfirmation = (
   | Readonly<{ _tag: "Valid"; attempt: Option.Option<OAuthConfirmationAttempt> }> => {
   if (Option.isSome(input.supplied)) return { _tag: "Valid", attempt: input.supplied };
   const context = input.context;
+
   if (context.requestState !== undefined) {
     const attempt = Schema.decodeUnknownOption(OAuthConfirmationAttempt)({
       _tag: "Decision",
       reference: context.requestState,
       response: context.inputResponses?.review ?? null,
     });
+
     return Option.isNone(attempt) ? { _tag: "Invalid" } : { _tag: "Valid", attempt };
   }
+
   return {
     _tag: "Valid",
     attempt:
@@ -36,6 +39,7 @@ type NativeConfirmation =
   | Readonly<{ _tag: "InputRequired"; result: McpSchema.InputRequired }>
   | Readonly<{ _tag: "Unavailable" }>
   | Readonly<{ _tag: "Decision"; attempt: OAuthConfirmationAttempt }>;
+
 type NativeConfirmationFailure =
   | Effect.Error<ReturnType<typeof readBoundedRequestBody>>
   | Schema.SchemaError
@@ -57,9 +61,11 @@ export const requestNativeConfirmation = (
       }),
       input.responsePolicy
     );
+
     const review = yield* Schema.decodeEffect(Schema.fromJsonString(OAuthNativeReview))(
       new TextDecoder().decode(bytes)
     );
+
     const params = McpSchema.ElicitRequestFormParams.make({
       mode: "form",
       message: review.message,
@@ -69,6 +75,7 @@ export const requestNativeConfirmation = (
         required: ["confirm"],
       },
     });
+
     if (input.context.protocolVersion === McpProtocol.v2026_07_28.protocolVersion) {
       return {
         _tag: "InputRequired" as const,
@@ -83,11 +90,14 @@ export const requestNativeConfirmation = (
         }),
       };
     }
+
     const legacy = yield* Effect.serviceOption(McpSchema.McpServerClient);
+
     if (Option.isNone(legacy)) return { _tag: "Unavailable" as const };
     const client = yield* legacy.value.getClient;
     const remaining = Math.max(1, review.expiresAtMilliseconds - (yield* Clock.currentTimeMillis));
     const decision = yield* client.elicit(params).pipe(Effect.timeout(remaining));
+
     return {
       _tag: "Decision" as const,
       attempt: OAuthConfirmationAttempt.make({

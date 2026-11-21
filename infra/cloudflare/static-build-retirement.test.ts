@@ -25,12 +25,14 @@ layer(BunServices.layer)((it) => {
       const hashInput = hashDirectory({ cwd }).pipe(
         Effect.provideService(AlchemyContext, { dotAlchemy: root, dev: false, adopt: false })
       );
+
       const beforeProbes = yield* hashInput;
 
       for (const directory of ["test-results", "playwright-report", ".astro"]) {
         yield* fs.makeDirectory(`${cwd}/${directory}`, { recursive: true });
         yield* fs.writeFileString(`${cwd}/${directory}/generated.json`, '{"status":"passed"}');
       }
+
       expect(yield* hashInput).toBe(beforeProbes);
       yield* fs.writeFileString(`${cwd}/src/index.ts`, "export const revision = 2;");
       expect(yield* hashInput).not.toBe(beforeProbes);

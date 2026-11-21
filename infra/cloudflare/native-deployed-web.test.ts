@@ -4,6 +4,7 @@ import { installedHeaders } from "./native-deployed-web";
 
 const canonicalConnect =
   "https://api.fidyapp.com https://sandbox.wompi.co https://production.wompi.co https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox";
+
 const verifiedHeaders = (api: string, connect: string): Record<string, string> => ({
   "content-security-policy": "default-src 'none'; frame-ancestors 'none'; connect-src " + connect,
   link: "<" + api + ">; rel=preconnect; crossorigin=use-credentials",

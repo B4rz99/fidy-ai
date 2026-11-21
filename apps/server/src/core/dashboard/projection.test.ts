@@ -5,6 +5,7 @@ import { Widget } from "./contract";
 import { dashboardProjectionRanges } from "./operations";
 
 const zone = Schema.decodeSync(IanaTimeZone)("America/New_York");
+
 const dayWidget = Schema.decodeSync(Widget)({
   id: "30000000-0000-4000-8000-000000000001",
   type: "spending-chart",
@@ -36,6 +37,7 @@ it("selects one complete local month for a monthly chart bucket", () => {
     groupBy: "month",
     period: "last-month",
   });
+
   if (widget.type === "transaction-list") throw new Error("Expected an aggregate Widget");
   expect(
     dashboardProjectionRanges(widget, DateTime.makeUnsafe(Date.parse("2026-04-02T12:00:00Z")), zone)
@@ -55,6 +57,7 @@ it("uses one complete local month for Budget bars without a configurable period"
     categoryId: "10000000-0000-4000-8000-000000000001",
     currency: "COP",
   });
+
   if (widget.type !== "budget-bar") throw new Error("Expected Budget bar");
   expect(
     dashboardProjectionRanges(
@@ -78,6 +81,7 @@ it("uses one complete period for a Category chart rather than calendar buckets",
     groupBy: "category",
     period: "last-month",
   });
+
   if (widget.type !== "spending-chart") throw new Error("Expected spending chart");
   expect(
     dashboardProjectionRanges(widget, DateTime.makeUnsafe("2026-04-02T12:00:00Z"), zone)

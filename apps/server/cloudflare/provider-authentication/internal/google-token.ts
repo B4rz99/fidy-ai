@@ -22,16 +22,23 @@ import {
 } from "./token-contract";
 
 const successStatus = 200;
+
 const maximumTokenLength = 16384;
+
 const maximumSubjectLength = 255;
+
 const maximumEmailLength = 320;
+
 const millisecondsPerSecond = 1000;
+
 const TokenResponse = Schema.Struct({
   id_token: Schema.String.check(Schema.isMaxLength(maximumTokenLength)),
 });
+
 const TokenRefusal = Schema.Struct({
   error: Schema.Literals(["invalid_client", "invalid_grant"]),
 });
+
 const Claims = Schema.Struct({
   iss: Schema.Literals(["https://accounts.google.com", "accounts.google.com"]),
   sub: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(maximumSubjectLength)),
@@ -41,6 +48,7 @@ const Claims = Schema.Struct({
   email: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(maximumEmailLength))),
   azp: Schema.optionalKey(Schema.String),
 });
+
 const validClaims = ({
   claims,
   attempt,
@@ -57,17 +65,21 @@ const validClaims = ({
   if (claims.nonce !== attempt.nonce) {
     return Effect.fail(new ProviderVerificationFailure({ reason: "nonce_mismatch" }));
   }
+
   if (claims.iat * millisecondsPerSecond > current) {
     return Effect.fail(new ProviderVerificationFailure({ reason: "issued_in_future" }));
   }
+
   if (
     (claims.azp !== undefined && claims.azp !== clientId) ||
     (multipleAudiences && claims.azp !== clientId)
   ) {
     return Effect.fail(new ProviderVerificationFailure({ reason: "authorized_party_mismatch" }));
   }
+
   return Effect.void;
 };
+
 const googleHttp = (
   environment: ProviderConfiguration
 ): Effect.Effect<
@@ -79,6 +91,7 @@ const googleHttp = (
     const clientSecret = yield* loadGoogleClientSecret.pipe(
       Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown(environment))
     );
+
     return makeGoogleOutboundHttp({
       clientId: environment.GOOGLE_CLIENT_ID ?? "",
       clientSecret,
@@ -100,6 +113,7 @@ const SigningKeys = Schema.Struct({
     })
   ),
 });
+
 const signingKeys = (
   http: ReturnType<typeof makeGoogleOutboundHttp>
 ): Effect.Effect<
@@ -110,12 +124,15 @@ const signingKeys = (
 > =>
   Effect.gen(function* () {
     const response = yield* http.execute({ _tag: "SigningKeys" });
+
     if (response.status !== successStatus) {
       return yield* Effect.fail("invalid" as const);
     }
+
     const decoded = yield* Schema.decodeEffect(Schema.fromJsonString(SigningKeys))(
       new TextDecoder().decode(response.body)
     );
+
     return createLocalJWKSet({
       keys: [...decoded.keys].map((key) => ({
         ...key,
@@ -123,27 +140,35 @@ const signingKeys = (
       })),
     });
   });
+
 const tokenVerificationFailure = (failure: unknown): ProviderVerificationFailure => {
   if (failure instanceof errors.JWTExpired) {
     return new ProviderVerificationFailure({ reason: "token_expired" });
   }
+
   if (failure instanceof errors.JWTClaimValidationFailed) {
     if (failure.claim === "aud") {
       return new ProviderVerificationFailure({ reason: "audience_mismatch" });
     }
+
     if (failure.claim === "iss") {
       return new ProviderVerificationFailure({ reason: "issuer_mismatch" });
     }
+
     return new ProviderVerificationFailure({ reason: "claims_invalid" });
   }
+
   if (failure instanceof errors.JWKSNoMatchingKey) {
     return new ProviderVerificationFailure({ reason: "signing_key_unmatched" });
   }
+
   if (failure instanceof errors.JWSSignatureVerificationFailed) {
     return new ProviderVerificationFailure({ reason: "signature_invalid" });
   }
+
   return new ProviderVerificationFailure({ reason: "token_verification_failed" });
 };
+
 const exchangeToken = (
   http: ProviderOidcHttpService,
   code: string,
@@ -159,10 +184,12 @@ const exchangeToken = (
       .pipe(
         Effect.mapError(() => new ProviderVerificationFailure({ reason: "token_transport_failed" }))
       );
+
     if (response.status !== successStatus) {
       const refusal = Schema.decodeOption(Schema.fromJsonString(TokenRefusal))(
         new TextDecoder().decode(response.body)
       );
+
       if (Option.isSome(refusal)) {
         return yield* new ProviderVerificationFailure({
           reason:
@@ -171,14 +198,17 @@ const exchangeToken = (
               : "token_invalid_grant",
         });
       }
+
       return yield* new ProviderVerificationFailure({ reason: "token_refused" });
     }
+
     return yield* Schema.decodeEffect(Schema.fromJsonString(TokenResponse))(
       new TextDecoder().decode(response.body)
     ).pipe(
       Effect.mapError(() => new ProviderVerificationFailure({ reason: "token_response_invalid" }))
     );
   });
+
 export const validateGoogleToken = (
   input: Validation
 ): Effect.Effect<
@@ -188,18 +218,25 @@ export const validateGoogleToken = (
 > =>
   Effect.gen(function* () {
     const code = input.query.get("code");
+
     if (code === null) {
       return yield* Effect.fail("invalid" as const);
     }
+
     const clientId = input.environment.GOOGLE_CLIENT_ID ?? "";
+
     const http = yield* googleHttp(input.environment).pipe(
       Effect.mapError(() => new ProviderVerificationFailure({ reason: "configuration_invalid" }))
     );
+
     const token = yield* exchangeToken(http, code, input.verifier);
+
     const keys = yield* signingKeys(http).pipe(
       Effect.mapError(() => new ProviderVerificationFailure({ reason: "signing_keys_failed" }))
     );
+
     const current = yield* Clock.currentTimeMillis;
+
     const verified = yield* Effect.tryPromise({
       try: () =>
         jwtVerify(token.id_token, keys, {
@@ -212,9 +249,11 @@ export const validateGoogleToken = (
         }),
       catch: tokenVerificationFailure,
     });
+
     const claims = yield* Schema.decodeUnknownEffect(Claims)(verified.payload).pipe(
       Effect.mapError(() => new ProviderVerificationFailure({ reason: "claims_invalid" }))
     );
+
     yield* validClaims({
       claims,
       attempt: input.attempt,
@@ -222,6 +261,7 @@ export const validateGoogleToken = (
       clientId,
       multipleAudiences: Array.isArray(verified.payload.aud) && verified.payload.aud.length > 1,
     });
+
     return {
       issuer: "https://accounts.google.com",
       subject: claims.sub,

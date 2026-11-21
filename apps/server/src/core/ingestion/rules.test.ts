@@ -32,6 +32,7 @@ const TestExtraction = Schema.Struct({
     BigDecimal.isPositive(extraction.money.amount) ? undefined : "Expected positive Money"
   )
 );
+
 type TestExtraction = typeof TestExtraction.Type;
 
 const interpretCanonicalRows = (
@@ -128,6 +129,7 @@ it("activates deferred email from a locked allowance snapshot", () => {
 it("changes deferred email eligibility at the exact reset instant", () => {
   const now = DateTime.makeUnsafe("2026-09-01T05:00:00Z");
   const nextResumeAt = DateTime.makeUnsafe("2026-10-01T05:00:00Z");
+
   for (const consumed of [0, 30]) {
     const input = { access: "free" as const, consumed, now, nextResumeAt };
     const future = DateTime.add(now, { milliseconds: 1 });
@@ -141,6 +143,7 @@ it("changes deferred email eligibility at the exact reset instant", () => {
         : { _tag: "RemainDeferred", resumeAt: nextResumeAt }
     );
   }
+
   expect(
     decideForwardedEmailAdmission({ access: "free", consumed: 0, deferred: 0, outstanding: 0 })
   ).toEqual({
@@ -199,6 +202,7 @@ it("reduces an email to value-free structural evidence", () => {
   const candidate = redactEmailCandidate(
     "Hola Ana Pérez, compra por $45.900 COP en Restaurante El Sol, tarjeta 1234, ana@example.com"
   );
+
   expect(candidate).toContain("[TEXT]");
   expect(candidate).toContain("[MONEY]");
   expect(candidate).toContain("[DIGITS]");
@@ -241,6 +245,7 @@ it("rejects contradictory mapping strategies", () => {
     decimalSeparator: "." as const,
     groupingSeparator: Option.none(),
   };
+
   expect(
     Schema.is(StatementColumnMapping)({
       ...base,
@@ -266,20 +271,24 @@ it("rejects contradictory mapping strategies", () => {
   ).toBe(false);
 
   const decodeMapping = Schema.decodeUnknownResult(Schema.toType(StatementColumnMapping));
+
   const invalidCurrency = decodeMapping({
     ...base,
     currencyColumn: Option.none(),
     currencyLiteral: Option.none(),
   });
+
   expect(Result.isFailure(invalidCurrency) ? String(invalidCurrency.failure) : "").toContain(
     "currencyColumn"
   );
+
   const invalidDirection = decodeMapping({
     ...base,
     currencyColumn: Option.none(),
     currencyLiteral: Option.some(Currency.make("COP")),
     outflowMarkers: ["DEBIT"],
   });
+
   expect(Result.isFailure(invalidDirection) ? String(invalidDirection.failure) : "").toContain(
     "directionColumn"
   );
@@ -325,6 +334,7 @@ it.effect("accounts for every row through the canonical Transaction and Money ga
     ]);
 
     const accepted = Option.getOrThrow(Option.fromUndefinedOr(interpreted.outcomes[0]));
+
     if (accepted.outcome !== "accepted") return;
     expect(accepted.extraction.money.currency).toBe("COP");
     expect(
@@ -341,10 +351,12 @@ it.effect("accounts for every row through the canonical Transaction and Money ga
     );
 
     const overPrecision = Option.getOrThrow(Option.fromUndefinedOr(interpreted.outcomes[1]));
+
     if (overPrecision.outcome === "needs-review") {
       expect(overPrecision.reason).toBe("canonical-validation-failed");
       expect(Option.isSome(overPrecision.knownMoney)).toBe(false);
     }
+
     expect(interpreted.outcomes[2]).toMatchObject({
       outcome: "needs-review",
       reason: "missing-required-fact",
@@ -364,6 +376,7 @@ it.effect("omits unsafe spreadsheet suggestions even when cached values look val
       inflowMarkers: [],
       outflowMarkers: [],
     });
+
     const result = yield* interpretCanonicalRows({
       rows: [
         {
@@ -387,7 +400,9 @@ it.effect("omits unsafe spreadsheet suggestions even when cached values look val
       mapping: { ...mapping, dateFormat: "yyyy-MM-dd" },
       timeZone: "America/Bogota",
     });
+
     const row = result.outcomes[0];
+
     if (row?.outcome !== "needs-review") throw new Error("Expected review outcome");
     expect(row.suggestions).toEqual(
       Option.some({
@@ -414,6 +429,7 @@ it.effect("bounds review text and keeps missing amounts and unknown Currency unr
       inflowMarkers: [],
       outflowMarkers: [],
     });
+
     const result = yield* interpretCanonicalRows({
       rows: [
         csvRow(1, ["invalid", "100", "???", "x".repeat(121)]),
@@ -423,6 +439,7 @@ it.effect("bounds review text and keeps missing amounts and unknown Currency unr
       mapping,
       timeZone: "America/Bogota",
     });
+
     for (const [index, row] of result.outcomes.entries()) {
       if (row.outcome !== "needs-review") throw new Error("Expected review outcome");
       expect(row.suggestions).toEqual(
@@ -458,6 +475,7 @@ it.effect(
         decimalSeparator: ".",
         groupingSeparator: Option.none(),
       });
+
       const signed = yield* interpretCanonicalRows({
         rows: [
           csvRow(1, ["02/05/2026", "+25.00", "cop"]),
@@ -471,6 +489,7 @@ it.effect(
         mapping: signedMapping,
         timeZone: "America/Bogota",
       });
+
       expect(signed.outcomes).toMatchObject([
         { outcome: "accepted", extraction: { direction: "inflow" } },
         { outcome: "accepted", extraction: { direction: "outflow" } },
@@ -490,6 +509,7 @@ it.effect(
         outflowMarkers: ["debit"],
         dateFormat: "yyyy-MM-dd",
       });
+
       const marked = yield* interpretCanonicalRows({
         rows: [
           csvRow(1, ["2026-02-05", "25", "COP", "", " CREDIT "]),
@@ -501,6 +521,7 @@ it.effect(
         mapping: markerMapping,
         timeZone: "America/Bogota",
       });
+
       expect(marked.outcomes[1]).toMatchObject({
         suggestions: {
           _tag: "Some",
@@ -542,6 +563,7 @@ it.effect("distinguishes whitespace and anchored parsing from malformed values",
       decimalSeparator: ".",
       groupingSeparator: Option.none(),
     });
+
     const interpreted = yield* interpretCanonicalRows({
       rows: [
         csvRow(1, [" 02/09/2026 ", " 2.50 ", " COP "]),
@@ -562,6 +584,7 @@ it.effect("distinguishes whitespace and anchored parsing from malformed values",
       { outcome: "needs-review", reason: "missing-required-fact" },
     ]);
     const accepted = interpreted.outcomes[0];
+
     if (accepted?.outcome === "accepted") {
       expect(accepted.extraction.occurredAt).toEqual(
         DateTime.toUtc(
@@ -591,6 +614,7 @@ it.effect("rejects a local calendar date skipped by its time zone", () =>
       decimalSeparator: ".",
       groupingSeparator: Option.none(),
     });
+
     const interpreted = yield* interpretCanonicalRows({
       rows: [csvRow(1, ["2011-12-30", "1"])],
       mapping,
@@ -619,6 +643,7 @@ it.effect("inspects mapped currency cells before decoding", () =>
       decimalSeparator: ".",
       groupingSeparator: Option.none(),
     });
+
     const interpreted = yield* interpretCanonicalRows({
       rows: [
         {
@@ -673,11 +698,13 @@ it.effect("covers opposite signed direction and absent mapped cells", () =>
       decimalSeparator: ".",
       groupingSeparator: Option.none(),
     });
+
     const signed = yield* interpretCanonicalRows({
       rows: [csvRow(1, ["2026-02-05", "1"]), csvRow(2, ["2026-02-05", "-1"])],
       mapping: signedMapping,
       timeZone: "America/Bogota",
     });
+
     expect(signed.outcomes).toMatchObject([
       { outcome: "accepted", extraction: { direction: "outflow" } },
       { outcome: "accepted", extraction: { direction: "inflow" } },
@@ -692,6 +719,7 @@ it.effect("covers opposite signed direction and absent mapped cells", () =>
       }),
       timeZone: "America/Bogota",
     });
+
     expect(absentMarker.outcomes).toMatchObject([
       { outcome: "needs-review", reason: "ambiguous-direction" },
     ]);
@@ -719,6 +747,7 @@ it.effect("covers opposite signed direction and absent mapped cells", () =>
       }),
       timeZone: "America/Bogota",
     });
+
     expect(absentCurrency.outcomes).toMatchObject([
       { outcome: "needs-review", reason: "ambiguous-currency" },
     ]);
@@ -728,6 +757,7 @@ it.effect("covers opposite signed direction and absent mapped cells", () =>
       mapping: signedMapping,
       timeZone: "Not/AZone",
     });
+
     expect(invalidZone.outcomes).toMatchObject([
       {
         outcome: "needs-review",
@@ -754,6 +784,7 @@ it.effect("routes formula-backed financial cells to review without using cached 
       decimalSeparator: ".",
       groupingSeparator: Option.none(),
     });
+
     const financialCellCases: ReadonlyArray<
       readonly [
         XlsxCellEvidence["cellType"],
@@ -767,6 +798,7 @@ it.effect("routes formula-backed financial cells to review without using cached 
       ["number", "error", "number", Option.none()],
       ["number", "number", "boolean", Option.none()],
     ];
+
     const rows = financialCellCases.map(
       ([dateType, amountType, directionType, formula], index): ParsedStatementRow => ({
         recordNumber: index + 1,
@@ -786,6 +818,7 @@ it.effect("routes formula-backed financial cells to review without using cached 
         },
       })
     );
+
     const safeRow: ParsedStatementRow = {
       recordNumber: 5,
       fields: ["2020-02-05", "25000", "Mercado", "DEBIT"],
@@ -801,6 +834,7 @@ it.effect("routes formula-backed financial cells to review without using cached 
         ],
       },
     };
+
     const interpreted = yield* interpretCanonicalRows({
       rows: [...rows, safeRow],
       mapping,
@@ -832,6 +866,7 @@ it("mechanically maps only the exact normalized four-column statement declaratio
     dateFormat: "yyyy-MM-dd",
     decimalSeparator: ".",
   });
+
   for (const headers of [
     [],
     ["fecha", "valor", "moneda"],
@@ -841,6 +876,7 @@ it("mechanically maps only the exact normalized four-column statement declaratio
   ]) {
     expect(mechanicalMappingFor(headers)).toEqual(Option.none());
   }
+
   const row = csvRow(7, ["unmapped", "100"]);
   expect(unmappedStatementRow(row)).toEqual({
     outcome: "needs-review",
@@ -855,6 +891,7 @@ it("mechanically maps only the exact normalized four-column statement declaratio
 
 it("rejects conflicting Currency sources and direction markers without a mapped direction column", () => {
   const decode = Schema.decodeUnknownResult(StatementColumnMapping);
+
   const value = {
     dateColumn: 0,
     amountColumn: 1,
@@ -865,6 +902,7 @@ it("rejects conflicting Currency sources and direction markers without a mapped 
     dateFormat: "yyyy-MM-dd",
     decimalSeparator: ".",
   };
+
   expect(Result.isSuccess(decode(value))).toBe(true);
   const { currencyLiteral: _, ...withoutCurrency } = value;
   expect(Result.isFailure(decode(withoutCurrency))).toBe(true);
@@ -887,8 +925,10 @@ it.effect(
         mapping: copDebitMapping(),
         timeZone: "America/Bogota",
       });
+
       const row = result.outcomes[0];
       expect(row?.outcome).toBe("needs-review");
+
       if (row?.outcome !== "needs-review") throw new Error("Expected review outcome");
       expect(row.suggestions).toEqual(
         Option.some({

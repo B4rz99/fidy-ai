@@ -9,9 +9,11 @@ const maximumInputBytes = 4096;
 const program = Effect.gen(function* () {
   const args = process.argv.slice(2);
   const directory = args[0];
+
   if (args.length !== 1 || directory === undefined) {
     return yield* new RegisterFailure({ reason: "InvalidInput" });
   }
+
   const request: unknown = yield* readPrivateJsonInput(maximumInputBytes);
   const result = yield* runCaseRegister({ directory, request });
   const text = yield* Schema.encodeEffect(Schema.fromJsonString(CaseReceipt))(result);
@@ -26,13 +28,16 @@ if (import.meta.main) {
           const failure = cause.reasons.find(
             (reason) => reason._tag === "Fail" && reason.error instanceof RegisterFailure
           );
+
           const reason =
             failure?._tag === "Fail" && failure.error instanceof RegisterFailure
               ? failure.error.reason
               : "Unavailable";
+
           const encoded = yield* Schema.encodeEffect(
             Schema.fromJsonString(Schema.Struct({ error: Schema.String }))
           )({ error: reason });
+
           yield* Effect.tryPromise(() => Bun.write(Bun.stderr, encoded + "\n"));
           process.exitCode = 1;
         })

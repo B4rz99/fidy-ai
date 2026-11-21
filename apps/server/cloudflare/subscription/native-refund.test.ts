@@ -7,9 +7,13 @@ import { alice, bob, seed } from "../financial-user-store.test-fixture";
 import { native, nativeBillingPlatform } from "../user-store.test-fixture";
 
 const attempt = "40000000-0000-4000-8000-000000000001";
+
 const subscription = "40000000-0000-4000-8000-000000000002";
+
 const price = "40000000-0000-4000-8000-000000000003";
+
 const requestId = "50000000-0000-4000-8000-000000000001";
+
 const submitTo =
   (ns: Awaited<ReturnType<Miniflare["getDurableObjectNamespace"]>>) =>
   (
@@ -35,6 +39,7 @@ const submitTo =
             : { kind: "refund", money: { amount, currency: "COP" } },
         },
       };
+
       const response = yield* native(() =>
         ns.getByName(target).fetch("https://user.invalid/billing/refund-support", {
           method: "POST",
@@ -42,8 +47,10 @@ const submitTo =
           body: JSON.stringify(data),
         })
       );
+
       return new Response(yield* native(() => response.text()), { status: response.status });
     });
+
 const runVoidStep = (
   users: Awaited<ReturnType<Miniflare["getDurableObjectNamespace"]>>,
   id: string
@@ -60,6 +67,7 @@ const runVoidStep = (
         }),
       })
     );
+
     expect(response.status).toBe(204);
   });
 
@@ -86,19 +94,23 @@ const paidOwner = Effect.fn(function* (runtime: Miniflare) {
     owner.now,
     owner.now
   );
+
   return owner;
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "binds sandbox refund acceptance, exact replay and bounded reservations to the original paid User",
     () =>
       Effect.gen(function* () {
         const runtime = yield* (yield* nativeBillingPlatform)();
+
         const provider = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("wompi-fixture", "ProviderState", {
             name: "provider",
           })
         );
+
         yield* native(() =>
           provider.exec(
             "CREATE TABLE refund_requests(reference TEXT NOT NULL,amount INTEGER NOT NULL)"
@@ -110,15 +122,19 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const expires = owner.now + 600000;
         expect((yield* submit(bob.user, expires)).status).toBe(403);
         expect((yield* submit(alice.user, owner.now - 1)).status).toBe(403);
+
         const [first, replay] = yield* Effect.all(
           [submit(alice.user, expires), submit(alice.user, expires)],
           { concurrency: 2 }
         );
+
         expect(first.status).toBe(202);
         expect(replay.status).toBe(202);
+
         const accepted = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.Struct({ id: Schema.String, status: Schema.String }) })
         )(yield* native(() => first.json()));
+
         expect(yield* native(() => replay.json())).toMatchObject({
           data: { id: accepted.data.id },
         });
@@ -152,6 +168,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             alice.user
           )
         ).toEqual([{ count: 1 }]);
+
         const receipt = yield* native(() =>
           ns.getByName(alice.user).fetch("https://user.invalid/billing/refund-support", {
             method: "POST",
@@ -167,12 +184,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }),
           })
         );
+
         const replayWork = {
           _tag: "RunUserRefund",
           userId: alice.user,
           refundAttemptId: accepted.data.id,
           verification: 0,
         };
+
         for (const named of [alice.user, bob.user]) {
           const retry = yield* native(() =>
             ns.getByName(named).fetch("https://user.invalid/work/refund", {
@@ -180,8 +199,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               body: JSON.stringify(replayWork),
             })
           );
+
           expect(retry.status).toBe(204);
         }
+
         expect(
           yield* native(() => provider.exec("SELECT count(*) AS count FROM refund_requests"))
         ).toEqual([{ count: 1 }]);
@@ -200,11 +221,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const runtime = yield* (yield* nativeBillingPlatform)(),
           owner = yield* paidOwner(runtime);
+
         const provider = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("wompi-fixture", "ProviderState", {
             name: "provider",
           })
         );
+
         yield* native(() =>
           provider.exec(
             "CREATE TABLE card_void_control(posts INTEGER,checks INTEGER,amount INTEGER,reference TEXT); INSERT INTO card_void_control VALUES(0,0,1,'foreign')"
@@ -213,9 +236,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const users = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
         const receipt = yield* submitTo(users)(alice.user, owner.now + 600000, { voidCard: true });
         expect(receipt.status).toBe(202);
+
         const accepted = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.Struct({ id: Schema.String }) })
         )(yield* native(() => receipt.json()));
+
         const id = accepted.data.id;
         yield* owner
           .exec("SELECT id FROM refund_attempts WHERE id=? AND progress='outcome-unknown'", id)

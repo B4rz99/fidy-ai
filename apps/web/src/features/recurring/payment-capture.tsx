@@ -24,17 +24,22 @@ import {
 } from "./payment-association";
 
 type Captured = CanonicalSuccess<"transactions.createTransaction">["data"];
+
 type CapturedPayment = Readonly<{ transaction: Captured }> & PaymentAssociation;
+
 type CaptureState = Readonly<{
   intent: number;
   transaction: Option.Option<CapturedPayment>;
 }>;
+
 class CaptureKey extends Data.Class<
   Readonly<{ client: FidyClient; planId: Occurrence["planId"]; date: string }>
 > {}
+
 const captures = Atom.family((_key: CaptureKey) =>
   Atom.make<CaptureState>({ intent: 0, transaction: Option.none() }).pipe(Atom.keepAlive)
 );
+
 type Props = Readonly<{
   item: Occurrence;
   categories: ReadonlyArray<Category>;
@@ -60,24 +65,30 @@ const CapturePayment = ({ item, categories, save, disabled, today }: Props): JSX
   const resource = captures(new CaptureKey({ client, planId: item.planId, date: item.date }));
   const state = useAtomValue(resource);
   const setState = useAtomSet(resource);
+
   const [refreshCommand] = useState(() =>
     client.runtime.fn<void>()(() => Reactivity.invalidate([recurringWorkspaceKey]))
   );
+
   const refresh = useAtomSet(refreshCommand);
   const [draft, setDraft] = useState(() => defaultAssociation(item));
   const association = Option.getOrElse(state.transaction, () => draft);
+
   const linked = Option.exists(state.transaction, (captured) =>
     item.fulfillments.some((mark) => mark.transactionId === captured.transaction.id)
   );
+
   const change = (next: PaymentAssociation): void => {
     if (Option.isSome(state.transaction)) {
       setState({ ...state, transaction: Option.some({ ...state.transaction.value, ...next }) });
     } else setDraft(next);
   };
+
   const restart = (): void => {
     setDraft(defaultAssociation(item));
     setState({ intent: state.intent + 1, transaction: Option.none() });
   };
+
   return (
     <>
       {linked || Option.isNone(state.transaction) ? null : (
@@ -154,6 +165,7 @@ type EntryProps = Props &
     setState: (value: CaptureState | ((previous: CaptureState) => CaptureState)) => void;
     refresh: () => void;
   }>;
+
 const CaptureEntry = ({
   item,
   categories,
@@ -168,6 +180,7 @@ const CaptureEntry = ({
   refresh,
 }: EntryProps): JSX.Element => {
   const { navigate } = useRouter();
+
   return Option.isSome(state.transaction) ? (
     <CreatedPayment
       item={item}
@@ -212,6 +225,7 @@ const CaptureEntry = ({
     />
   );
 };
+
 const remainingMoney = (item: Occurrence): Option.Option<Occurrence["completed"]> =>
   Option.fromUndefinedOr(item.remaining ?? item.plan.money);
 
@@ -223,6 +237,7 @@ const captureInitial = ({
   Readonly<{ replaces: string }>): CaptureEditorProps["initial"] => {
   const mark = manualMarks(item).find((entry) => entry.id === replaces);
   const actual = mark === undefined ? remainingMoney(item) : Option.some(mark.money);
+
   return {
     amount: Option.match(actual, {
       onNone: () => "",
@@ -250,6 +265,7 @@ const CreatedPayment = ({
     restart: () => void;
   }>): JSX.Element => {
   const linked = item.fulfillments.some((mark) => mark.transactionId === transaction.id);
+
   return (
     <div className="grid gap-3 py-3">
       <output>

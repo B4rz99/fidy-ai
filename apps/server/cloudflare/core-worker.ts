@@ -18,18 +18,27 @@ import { type WorkerTelemetryEnvironment } from "./runtime/telemetry/contract";
 import { cloudflareWorkerTelemetry, observeWorkerExecution } from "./runtime/telemetry/operations";
 
 export { Erasure } from "./erasure-store/runtime";
+
 export { Maintenance } from "./maintenance/runtime";
+
 export { ConnectionSynchronizationWorkflow } from "./connections/runtime";
+
 export { Directory } from "./directory/runtime";
+
 export { UserStore } from "./user-store/runtime";
+
 export { BrowserPairingEmailWorkflowV1 } from "./email-authentication/runtime";
+
 export { OperationalCanaryWorkflowV1 } from "./operational-canary-workflow";
+
 export {
   Pricing,
   BillingCollectionWorkflowV1,
   BillingRefundWorkflowV1,
 } from "./subscription/runtime";
+
 export { ProactivityDeliveryWorkflow } from "./insights/runtime";
+
 export { StatementExtractionWorkflowV1 } from "./ingestion/runtime";
 
 type CoreEnvironment = CoreHttpEnvironment &
@@ -76,6 +85,7 @@ const maintenanceTick = (
         ),
       catch: () => new ScheduledWorkFailed(),
     });
+
     if (response.status !== completedCheckStatus) return yield* new ScheduledWorkFailed();
   });
 
@@ -87,12 +97,14 @@ export const makeCoreWorker = ({
   queue: (batch, environment) =>
     Effect.runPromise(backgroundWorkAllowed(environment)).then((allowed) => {
       if (allowed) return makeCoreQueue(telemetry)(batch, environment);
+
       return batch.retryAll({ delaySeconds: 60 });
     }),
   scheduled: (controller, environment) =>
     Effect.gen(function* () {
       if (!(yield* backgroundWorkAllowed(environment))) return;
       const tick = maintenanceTick(controller.scheduledTime);
+
       const results = yield* Effect.all(
         [
           inspectNativeQueues(environment).pipe(Effect.mapError(() => new ScheduledWorkFailed())),
@@ -100,9 +112,11 @@ export const makeCoreWorker = ({
             ? Effect.tryPromise({
                 try: (signal) => {
                   const queue = environment.OPERATIONAL_CANARY_QUEUE;
+
                   if (queue === undefined) {
                     return Promise.reject(Error("Missing operational canary Queue"));
                   }
+
                   return sendCanary({ queue, now: controller.scheduledTime, signal });
                 },
                 catch: () => new ScheduledWorkFailed(),
@@ -124,6 +138,7 @@ export const makeCoreWorker = ({
         ],
         { concurrency: 3, mode: "result" }
       );
+
       if (results.some(Result.isFailure)) return yield* new ScheduledWorkFailed();
     }).pipe(
       (work) =>

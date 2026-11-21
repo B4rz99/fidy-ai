@@ -10,9 +10,13 @@ export type OperatorAccessConfiguration = Readonly<{
 }>;
 
 const maximumAssertionBytes = 8192;
+
 const maximumLifetimeSeconds = 900;
+
 const millisecondsPerSecond = 1000;
+
 const maximumSubjectLength = 256;
+
 const Claims = Schema.Struct({
   type: Schema.Literal("app"),
   aud: Schema.Union([
@@ -24,6 +28,7 @@ const Claims = Schema.Struct({
   iat: Schema.Int,
   exp: Schema.Int,
 });
+
 const configured = (config: OperatorAccessConfiguration): boolean =>
   /^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/u.test(config.issuer) &&
   config.audience.length > 0 &&
@@ -62,6 +67,7 @@ export const authenticateOperator = (
 ): Effect.Effect<Option.Option<Readonly<{ operatorRef: string; expiresAtMs: number }>>> =>
   Effect.gen(function* () {
     const assertion = input.request.headers.get("cf-access-jwt-assertion");
+
     if (
       !configured(input.configuration) ||
       assertion === null ||
@@ -69,8 +75,10 @@ export const authenticateOperator = (
     ) {
       return Option.none();
     }
+
     const clock = yield* Clock.Clock;
     const keys = signingKeys(input);
+
     const verified = yield* Effect.tryPromise(() =>
       jwtVerify(assertion, keys, {
         issuer: input.configuration.issuer,
@@ -81,8 +89,10 @@ export const authenticateOperator = (
         },
       })
     );
+
     const claims = yield* Schema.decodeUnknownEffect(Claims)(verified.payload);
     const now = Math.floor(clock.currentTimeMillisUnsafe() / millisecondsPerSecond);
+
     if (
       !currentClaims(claims, now) ||
       "common_name" in verified.payload ||
@@ -90,6 +100,7 @@ export const authenticateOperator = (
     ) {
       return Option.none();
     }
+
     return Option.some({
       operatorRef: claims.sub,
       expiresAtMs: claims.exp * millisecondsPerSecond,

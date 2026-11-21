@@ -24,6 +24,7 @@ export const BudgetSummary = ({
   const [currency, setCurrency] = useState("");
   const figures = summaryFigures({ report, locale: user.locale });
   const figure = figures.find((item) => item.currency === currency) ?? figures[0];
+
   return (
     <div className="flex flex-col gap-4">
       <h2 className="sr-only">Resumen del mes</h2>
@@ -70,6 +71,7 @@ const SummaryTabs = ({
       className="w-full flex-wrap justify-around"
       onValueChange={(values) => {
         const next = values[0];
+
         if (next === "summary" || next === "income" || next === "expenses") {
           onChange(next);
         }
@@ -150,6 +152,7 @@ const SummaryCurrency = ({
       />
     );
   }
+
   return (
     <ToggleGroup
       aria-label="Moneda del resumen"
@@ -169,5 +172,6 @@ const SummaryCurrency = ({
 
 const allocationLabel = (figure: SummaryFigure): string =>
   figure.overallocated ? "El plan supera los ingresos recibidos" : "Ingresos sin asignar";
+
 const allocationTone = (figure: SummaryFigure): "negative" | "positive" =>
   figure.overallocated ? "negative" : "positive";

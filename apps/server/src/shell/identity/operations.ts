@@ -54,6 +54,7 @@ export const getCurrentUser = (
     const sql = yield* SqlClient.SqlClient;
     const read = yield* prepareCurrentUser(userId);
     const rows = yield* sql.unsafe(read.statement.sql, read.statement.params);
+
     return yield* read.decode(rows);
   }).pipe(Effect.mapError(userUnavailable));
 
@@ -61,6 +62,7 @@ export const liveWebSessionAuthority = (
   input: Readonly<{ subject: WebSessionSubject; current: number }>
 ): WebSessionAuthority => {
   const credential = webSessionCredentialAuthority(input);
+
   return protectConsentAuthority({
     authority: credential,
     subject: { _tag: "Owner", column: "web_sessions.user_id" },

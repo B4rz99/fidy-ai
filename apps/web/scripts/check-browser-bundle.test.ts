@@ -5,6 +5,7 @@ import { expect, it } from "@effect/vitest";
 import { checkBrowserBundle } from "./check-browser-bundle";
 
 const webRoot = process.cwd();
+
 const workspaceRoot = join(webRoot, "..", "..");
 
 it.effect.each(["dynamic", "static"] as const)(
@@ -40,12 +41,14 @@ it.effect.each(["dynamic", "static"] as const)(
               'import { deepStrictEqual } from "node:assert";\nexport const compare = deepStrictEqual;\n'
             )
           );
+
           const checked = checkBrowserBundle({
             entrypoint: "src/main.tsx",
             outdir: join(fixtureRoot, "bundle"),
             webRoot: fixtureRoot,
             workspaceRoot,
           });
+
           yield* Effect.tryPromise(() =>
             kind === "static"
               ? expect(checked).rejects.toThrow(

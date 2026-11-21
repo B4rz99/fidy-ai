@@ -15,6 +15,7 @@ import {
 } from "./artifacts";
 
 const serverRoot = Bun.fileURLToPath(new URL("../..", import.meta.url)).replace(/\/$/u, "");
+
 const defaultOutputDirectory = `${serverRoot}/contracts`;
 
 const literalReferenceCostScale = 32;
@@ -31,16 +32,21 @@ const hasShareableStructure = (ast: SchemaAST.AST): boolean => {
   ) {
     return true;
   }
+
   return ast._tag === "Union" && ast.types.some(hasShareableStructure);
 };
 
 const inlineReferenceCost = (ast: SchemaAST.AST): Option.Option<number> => {
   if (ast._tag === "Union") return Option.some(ast.types.length + 1);
+
   if (ast._tag === "Enum") return Option.some(ast.enums.length + 1);
+
   if (ast._tag === "TemplateLiteral") return Option.some(ast.parts.length + 1);
+
   if (ast._tag === "Literal" && typeof ast.literal === "string") {
     return Option.some(ast.literal.length / literalReferenceCostScale + 1);
   }
+
   return Option.none();
 };
 
@@ -54,10 +60,13 @@ const contractReferencePolicy = ({
   readonly occurrences: number;
 }): Option.Option<string> => {
   if (Option.isSome(identifier)) return identifier;
+
   if (occurrences <= 1) return Option.none();
+
   if (hasShareableStructure(ast)) return Option.some(`${ast._tag}_`);
 
   const cost = inlineReferenceCost(ast);
+
   return Option.isSome(cost) && isWorthReferencing(cost.value, occurrences)
     ? Option.some(`${ast._tag}_`)
     : Option.none();
@@ -119,12 +128,15 @@ const parseArguments = (
 ): { readonly check: boolean; readonly outputDirectory: string } => {
   let check = false;
   let outputDirectory = defaultOutputDirectory;
+
   for (let index = 0; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
+
     if (argument === "--check") {
       check = true;
     } else if (argument === "--output-dir") {
       const value = arguments_[index + 1];
+
       if (value === undefined) throw new Error("--output-dir requires a path");
       outputDirectory = value;
       index += 1;
@@ -132,6 +144,7 @@ const parseArguments = (
       throw new Error(`Unknown contract generation argument: ${argument}`);
     }
   }
+
   return { check, outputDirectory };
 };
 
@@ -141,14 +154,18 @@ const checkArtifact = (
   check: boolean
 ): Effect.Effect<boolean, Cause.UnknownError> => {
   const path = `${outputDirectory}/${name}`;
+
   if (!check) {
     return Effect.tryPromise(() => Bun.write(path, contents, { createPath: true })).pipe(
       Effect.as(false)
     );
   }
+
   const file = Bun.file(path);
+
   return Effect.gen(function* () {
     if (!(yield* Effect.tryPromise(() => file.exists()))) return true;
+
     return (yield* Effect.tryPromise(() => file.text())) !== contents;
   });
 };
@@ -157,19 +174,23 @@ const main = Effect.gen(function* () {
   const { check, outputDirectory } = parseArguments(Bun.argv.slice(2));
   const artifacts = makeContractArtifacts();
   const files = artifactFiles(artifacts);
+
   const stale = yield* Effect.forEach(
     files,
     (file) => checkArtifact(file, outputDirectory, check),
     { concurrency: "unbounded" }
   );
+
   const stalePaths = files
     .filter((_, index) => stale[index])
     .map(({ name }) => `${outputDirectory}/${name}`);
+
   if (stalePaths.length > 0) {
     throw new Error(
       `Generated server contracts are stale:\n${stalePaths.map((path) => `  - ${path}`).join("\n")}\nRun \`bun run contracts:generate\`.`
     );
   }
+
   process.stdout.write(
     `${check ? "fresh" : "generated"} server contracts (${contractDigest(artifacts)})\n`
   );

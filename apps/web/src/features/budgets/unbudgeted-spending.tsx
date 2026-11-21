@@ -18,6 +18,7 @@ export const UnbudgetedSpending = ({ props }: Readonly<{ props: WorkspaceProps }
       </p>
       {props.report.unbudgetedExpenses.map((expense) => {
         const category = categoryFor({ categories: props.categories, id: expense.categoryId });
+
         return (
           <div
             key={`${category.id}:${expense.spent.currency}`}

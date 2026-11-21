@@ -25,26 +25,33 @@ type ReviewFailure =
   | Schema.SchemaError
   | ResourceAdmissionRefused
   | ResourceAdmissionUnavailable;
+
 const successStatus = 200;
+
 const Row = Schema.Struct({
   request_json: Schema.String,
   metadata_json: Schema.String,
   expires_at_ms: Schema.DateTimeUtcFromMillis,
 });
+
 const Reference = Schema.Struct({ requestId: OAuthRequestId });
+
 export const readReference = (
   request: Request
 ): Effect.Effect<typeof Reference.Type | OAuthReviewChoice, ReviewFailure> => {
   const path = new URL(request.url).pathname;
+
   if (path === oauthPaths.review) {
     return Schema.decodeUnknownEffect(Reference, { onExcessProperty: "error" })(
       Object.fromEntries(new URL(request.url).searchParams)
     );
   }
+
   return path === oauthPaths.cancel
     ? decodePayload({ request, schema: Reference, onExcessProperty: "error" })
     : decodePayload({ request, schema: OAuthReviewChoice, onExcessProperty: "error" });
 };
+
 export const projectReview = (
   input: Readonly<{ row: typeof Row.Type; requestId: string; scopes: PATScopes; current: number }>
 ): Effect.Effect<Response, Schema.SchemaError> =>
@@ -52,6 +59,7 @@ export const projectReview = (
     const client = yield* Schema.decodeEffect(Schema.fromJsonString(OAuthRegistration))(
       input.row.metadata_json
     );
+
     const review = yield* Schema.decodeUnknownEffect(OAuthReview)({
       requestId: input.requestId,
       claimedClientName: client.client_name,
@@ -65,6 +73,7 @@ export const projectReview = (
       reviewedAt: DateTime.formatIso(DateTime.makeUnsafe(input.current)),
       connectAvailable: true,
     });
+
     return response({
       body: yield* Schema.encodeEffect(OAuthReview)(review),
       status: successStatus,

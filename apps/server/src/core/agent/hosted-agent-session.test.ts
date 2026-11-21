@@ -12,6 +12,7 @@ it("accepts only canonical UUID Hosted Agent Session identities", () => {
 
 it("decodes each Hosted Agent Session lifecycle status and rejects an unknown status", () => {
   const decode = Schema.decodeUnknownResult(HostedAgentSession);
+
   const session = {
     id: "f1d1a000-0000-4000-8000-000000000281",
     subjectUserId: "f1d1a000-0000-4000-8000-000000000282",

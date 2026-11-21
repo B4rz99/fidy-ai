@@ -19,6 +19,7 @@ import { TransactionReview } from "./transaction-review";
 import type { CanonicalSuccess } from "@/transport/client";
 
 type Transaction = CanonicalSuccess<"transactions.listTransactions">["data"][number];
+
 type Props = Readonly<{
   item: Occurrence;
   disabled: boolean;
@@ -27,6 +28,7 @@ type Props = Readonly<{
   notice: ReactNode;
   navigation: Option.Option<TransactionBrowserControl>;
 }>;
+
 export const TransactionLink = ({
   item,
   disabled,
@@ -38,11 +40,13 @@ export const TransactionLink = ({
   const active = useRouterState({
     select: (state) => state.location.pathname === "/app/recurring",
   });
+
   const initial: TransactionFilters = {
     ...emptyTransactionFilters,
     currency: item.plan.currency,
     direction: item.plan.kind === "income" ? "inflow" : "outflow",
   };
+
   return (
     <RecurringSurface>
       <main aria-label="Vincular transacción" className="min-w-0 [overflow-wrap:anywhere]">
@@ -84,6 +88,7 @@ export const TransactionLink = ({
     </RecurringSurface>
   );
 };
+
 const LinkHeader = ({
   item,
   disabled,
@@ -108,8 +113,10 @@ const LinkHeader = ({
     </WorkspaceHeader>
   </div>
 );
+
 type ReviewProps = Pick<Props, "item" | "save" | "disabled" | "notice"> &
   Readonly<{ selected: Option.Option<Transaction>; clear: () => void }>;
+
 const LinkReview = ({
   item,
   selected,
@@ -148,6 +155,7 @@ const LinkReview = ({
     )}
   </div>
 );
+
 const OccurrenceSummary = ({ item }: Pick<Props, "item">): JSX.Element => (
   <div className="grid min-w-0 gap-2 bg-secondary p-5 dark:bg-muted">
     <p className="text-xs text-muted-foreground">

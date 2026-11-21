@@ -17,6 +17,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
+
 const profile = {
   data: {
     id: "10000000-0000-4000-8000-000000000001",
@@ -29,10 +30,12 @@ const profile = {
   next: [],
   categories: [],
 };
+
 const entry = Schema.decodeUnknownSync(BrowserSessionBindingSchema)({
   binding: "20000000-0000-4000-8000-000000000001",
   initial: { status: "Granted", withdrawal: null, profile },
 });
+
 it.live(
   "initial metadata hydrates the existing owner without HTTP; refreshing still reads canonical metadata",
   () =>
@@ -46,8 +49,10 @@ it.live(
         })
       );
       let reads = 0;
+
       const http = HttpClient.make((request) => {
         reads += 1;
+
         return Effect.succeed(
           HttpClientResponse.fromWeb(
             request,
@@ -55,15 +60,19 @@ it.live(
           )
         );
       });
+
       const transport = Layer.succeed(HttpClient.HttpClient, http);
+
       const apiClient = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: transport,
       });
+
       const webAuthClient = makeWebAuthClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: transport,
       });
+
       const registry = AtomRegistry.make({
         initialValues: initialApplicationValues({
           apiClient,
@@ -75,7 +84,9 @@ it.live(
           },
         }),
       });
+
       yield* Effect.sleep("5 millis");
+
       try {
         const query = workspaceProfileQuery(apiClient);
         expect(
@@ -92,6 +103,7 @@ it.live(
       }
     })
 );
+
 it.live(
   "only the initial entry consumes its fresh bootstrap Consent; the next entry reads fresh status",
   () =>
@@ -107,8 +119,10 @@ it.live(
         })
       );
       let reads = 0;
+
       const http = HttpClient.make((request) => {
         reads += 1;
+
         return Effect.succeed(
           HttpClientResponse.fromWeb(
             request,
@@ -122,15 +136,19 @@ it.live(
           )
         );
       });
+
       const transport = Layer.succeed(HttpClient.HttpClient, http);
+
       const apiClient = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: transport,
       });
+
       const webAuthClient = makeWebAuthClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: transport,
       });
+
       const registry = AtomRegistry.make({
         initialValues: initialApplicationValues({
           apiClient,
@@ -142,7 +160,9 @@ it.live(
           },
         }),
       });
+
       yield* Effect.sleep("5 millis");
+
       try {
         const query = transactionEntryConsent(webAuthClient);
         expect(consumeInitialTransactionConsent(registry)).toBe(true);

@@ -41,6 +41,7 @@ it.effect("fails closed when the configured web origin is missing", () =>
         PUBLIC_API_ORIGIN: "https://api.fidyapp.com",
       },
     });
+
     const exit = yield* Effect.exit(externalEndpoints.parse(provider));
 
     expect(Exit.isFailure(exit)).toBe(true);

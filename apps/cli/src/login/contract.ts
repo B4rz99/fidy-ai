@@ -10,7 +10,9 @@ import { type CliFailure, type CredentialStore, type managementUrl } from "../cr
 export const approvalPageUrl = "https://app.fidyapp.com/connect/cli";
 
 export const LoginRequest = StartPATPairingPayload;
+
 export type LoginRequest = typeof LoginRequest.Type;
+
 export type PublicProgress =
   | Readonly<{
       _tag: "ApprovalRequired";
@@ -23,6 +25,7 @@ export type PublicProgress =
 export class PollingDelayed extends Data.TaggedError("PollingDelayed")<{
   readonly retryAfterSeconds: number;
 }> {}
+
 export type PairingClient = Readonly<{
   start: (request: LoginRequest) => Effect.Effect<StartedPATPairing, CliFailure>;
   claim: (
@@ -33,6 +36,7 @@ export type PairingClient = Readonly<{
     CliFailure | PollingDelayed
   >;
 }>;
+
 export type LoginDependencies = Readonly<{
   store: CredentialStore;
   verifyStorage: Effect.Effect<void, CliFailure>;

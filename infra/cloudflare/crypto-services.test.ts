@@ -19,12 +19,15 @@ it.layer(PlatformServices)((test) =>
           localCallbackUri: "http://localhost:12345/callback",
           auth: { kind: "pkce" },
         });
+
         const authorization = yield* client.authorize(["read"]);
         expect(authorization.verifier).toBeDefined();
         const url = new URL(authorization.url);
+
         const challenge = yield* Effect.tryPromise(() =>
           crypto.subtle.digest("SHA-256", new TextEncoder().encode(authorization.verifier))
         ).pipe(Effect.orDie);
+
         expect(url.searchParams.get("code_challenge")).toBe(
           Base64Url.encode(new Uint8Array(challenge))
         );

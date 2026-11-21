@@ -12,30 +12,38 @@ import {
 import { makeDaviplataChallenge } from "./daviplata-challenge";
 
 class TestBoundaryFailure extends Data.TaggedError("TestBoundaryFailure")<{}> {}
+
 const fromPromise = <A>(thunk: () => Promise<A>): Effect.Effect<A, TestBoundaryFailure> =>
   Effect.tryPromise({ try: thunk, catch: () => new TestBoundaryFailure() });
+
 const clients: Array<ReturnType<typeof makeSubscriptionEnrollmentClient>> = [];
+
 afterEach(() =>
   Effect.runPromise(
     Effect.forEach(clients.splice(0), (client) => fromPromise(() => client.dispose()))
   )
 );
+
 const submission: PaymentSubmissionType = {
   status: "source-verifying",
   enrollmentId: PaymentEnrollmentId.make("23200000-0000-4000-8000-000000000001"),
 };
+
 const approval = (): DaviplataProviderOutcome => ({
   status: "approved",
   token: Redacted.make("synthetic-approved-token"),
 });
+
 type ChallengeFixture = Readonly<{
   client: ReturnType<typeof makeSubscriptionEnrollmentClient>;
   provider: DaviplataProviderChallenge;
   submitApproved: Mock<(token: Redacted.Redacted<string>) => Promise<PaymentSubmissionType>>;
 }>;
+
 const fixture = (overrides: Partial<DaviplataProviderChallenge> = {}): ChallengeFixture => {
   const client = makeSubscriptionEnrollmentClient({ apiOrigin: "https://api.test.fidyapp.com" });
   clients.push(client);
+
   const provider: DaviplataProviderChallenge = {
     signal: new AbortController().signal,
     resend: vi.fn(() => Effect.succeed({ status: "retry-allowed" } as const)),
@@ -44,7 +52,9 @@ const fixture = (overrides: Partial<DaviplataProviderChallenge> = {}): Challenge
     dispose: vi.fn(),
     ...overrides,
   };
+
   const submitApproved = vi.fn((_token: Redacted.Redacted<string>) => Promise.resolve(submission));
+
   return { client, provider, submitApproved };
 };
 
@@ -70,6 +80,7 @@ it("disables recovery when a defective provider cannot inspect retained approval
       const input = fixture({
         retrySubmission: () => Effect.die(new Error("Synthetic authority failure")),
       });
+
       input.submitApproved.mockRejectedValue(new TestBoundaryFailure());
       const challenge = makeDaviplataChallenge(input);
       expect(yield* fromPromise(() => challenge.confirm(Redacted.make("574829")))).toEqual({
@@ -112,6 +123,7 @@ it("keeps a lost approved submission uncertain when its retry authority later ex
       const retry = vi.fn<DaviplataProviderChallenge["retrySubmission"]>(() =>
         Effect.succeed(approval())
       );
+
       const input = fixture({ retrySubmission: retry });
       input.submitApproved.mockRejectedValue(new TestBoundaryFailure());
       const challenge = makeDaviplataChallenge(input);
@@ -143,6 +155,7 @@ it("consumes supplied OTP immediately and fences a submitted result after dispos
       challenge.dispose();
       const ownedOtp = vi.mocked(input.provider.confirm).mock.calls[0]?.[0];
       expect(ownedOtp).toBeDefined();
+
       if (ownedOtp !== undefined) expect(() => Redacted.value(ownedOtp)).toThrow();
       pending.resolve(submission);
       expect(yield* fromPromise(() => confirming)).toEqual({ status: "refused" });

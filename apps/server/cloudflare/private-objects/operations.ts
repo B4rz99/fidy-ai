@@ -11,10 +11,15 @@ import {
 export const userPrivateObjectPrefix = (userId: UserId): string => `users/${userId}/`;
 
 const maximumEtagLength = 128;
+
 const controlLifetimeMs = 600000;
+
 const Etag = Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(maximumEtagLength));
+
 const Stored = Schema.Struct({ etag: Etag });
+
 const PayloadPredecessor = Schema.Struct({ etag: Etag, purpose: Schema.NonEmptyString });
+
 const validateTarget = (
   input: Readonly<{ userId: string; key: string }>
 ): Effect.Effect<void, PrivateObjectUnavailable> =>
@@ -22,14 +27,18 @@ const validateTarget = (
     const userId = yield* Schema.decodeEffect(UserId)(input.userId).pipe(
       Effect.mapError(() => new PrivateObjectUnavailable())
     );
+
     const key = yield* Schema.decodeEffect(PrivateObjectKey)(input.key).pipe(
       Effect.mapError(() => new PrivateObjectUnavailable())
     );
+
     const prefix = userPrivateObjectPrefix(userId);
+
     if (!key.startsWith(prefix) || key.length === prefix.length) {
       return yield* new PrivateObjectUnavailable();
     }
   });
+
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, PrivateObjectUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new PrivateObjectUnavailable() });
 
@@ -46,8 +55,10 @@ const publishPrivateObject = <E, R>(
 ): Effect.Effect<void, E | PrivateObjectUnavailable, R> =>
   Effect.gen(function* () {
     yield* validateTarget(input);
+
     if (Option.isSome(input.predecessor)) {
       const previous = input.predecessor.value;
+
       if (
         Option.isNone(Schema.decodeOption(PayloadPredecessor)(previous)) ||
         previous.purpose === "private-object-placeholder" ||
@@ -56,8 +67,10 @@ const publishPrivateObject = <E, R>(
         return yield* new PrivateObjectUnavailable();
       }
     }
+
     const nonce = yield* Effect.sync(newId);
     const current = yield* Clock.currentTimeMillis;
+
     const placeholder = yield* input.put(input.key, new TextEncoder().encode(nonce), {
       onlyIf: Option.match(input.predecessor, {
         onNone: () => ({ etagDoesNotMatch: "*" }),
@@ -69,19 +82,24 @@ const publishPrivateObject = <E, R>(
         expiresAtMs: String(current + controlLifetimeMs),
       },
     });
+
     const stored = yield* Schema.decodeUnknownEffect(Stored)(placeholder).pipe(
       Effect.mapError(() => new PrivateObjectUnavailable())
     );
+
     if (!(yield* input.authorise)) return yield* new PrivateObjectUnavailable();
+
     const checksum = Option.match(input.digest, {
       onNone: () => ({}),
       onSome: (digest) => ({ sha256: Uint8Array.from(digest).buffer }),
     });
+
     const published = yield* input.put(input.key, input.bytes, {
       onlyIf: { etagMatches: stored.etag },
       customMetadata: { ...input.metadata },
       ...checksum,
     });
+
     yield* Schema.decodeUnknownEffect(Stored)(published).pipe(
       Effect.mapError(() => new PrivateObjectUnavailable())
     );
@@ -105,20 +123,25 @@ export const resumePrivateUpload = Effect.fn(function* <E, R>(
   ) {
     return yield* publishPrivateObject(work);
   }
+
   yield* validateTarget(work);
   const metadata = observed.value.customMetadata;
+
   if (metadata.sha256 !== work.metadata.sha256 || !(yield* work.authorise)) {
     return yield* new PrivateObjectUnavailable();
   }
+
   const checksum = Option.match(work.digest, {
     onNone: () => ({}),
     onSome: (value) => ({ sha256: Uint8Array.from(value).buffer }),
   });
+
   const written = yield* work.put(work.key, work.bytes, {
     onlyIf: { etagMatches: observed.value.etag },
     customMetadata: { ...work.metadata },
     ...checksum,
   });
+
   yield* Schema.decodeUnknownEffect(Stored)(written).pipe(
     Effect.mapError(() => new PrivateObjectUnavailable())
   );

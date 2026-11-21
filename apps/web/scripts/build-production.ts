@@ -4,10 +4,12 @@ import { validateProductionArtifact } from "../cloudflare/production-policy/arti
 import { releaseMetadata } from "./release-metadata";
 
 const webRoot = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/u, "");
+
 const serverRoot = Bun.fileURLToPath(new URL("../../server", import.meta.url)).replace(/\/$/u, "");
 
 if (import.meta.main) {
   const gitRevision = Bun.env.RELEASE_GIT_SHA;
+
   if (gitRevision === undefined) throw new Error("RELEASE_GIT_SHA is required");
 
   const digestResult = Bun.spawnSync(["bun", "run", "contracts:digest"], {
@@ -15,6 +17,7 @@ if (import.meta.main) {
     stderr: "inherit",
     stdout: "pipe",
   });
+
   if (digestResult.exitCode !== 0) throw new Error("Contract digest calculation failed");
   const contractDigest = new TextDecoder().decode(digestResult.stdout).trim();
   const metadata = releaseMetadata({ gitRevision, contractDigest });
@@ -24,7 +27,9 @@ if (import.meta.main) {
       typeof value === "string" ? [[name, value]] : []
     )
   );
+
   environment.VITE_API_ORIGIN = "installed";
+
   const build = Bun.spawnSync(["bun", "--bun", "vite", "build", "--mode", "production"], {
     cwd: webRoot,
     env: environment,
@@ -32,6 +37,7 @@ if (import.meta.main) {
     stdout: "inherit",
     stderr: "inherit",
   });
+
   if (build.exitCode !== 0) throw new Error("Vite Production build failed");
 
   const outputDirectory = `${webRoot}/dist`;
@@ -39,6 +45,7 @@ if (import.meta.main) {
     `${outputDirectory}/deployment-metadata.json`,
     `${JSON.stringify(metadata, null, 2)}\n`
   );
+
   const installers = Bun.spawnSync(
     ["bash", "../../scripts/cli-release/stage-installers.sh", outputDirectory],
     {
@@ -47,6 +54,7 @@ if (import.meta.main) {
       stdout: "inherit",
     }
   );
+
   if (installers.exitCode !== 0) throw new Error("CLI installer staging failed");
   await validateProductionArtifact({
     directory: outputDirectory,

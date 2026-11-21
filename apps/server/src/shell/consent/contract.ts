@@ -12,6 +12,7 @@ export const ProactivityOptInKind = Schema.Literals([
   "manual-entry-reminder",
   "new-recurring-series",
 ]);
+
 export type ProactivityOptInKind = typeof ProactivityOptInKind.Type;
 
 export { E164PhoneNumber } from "~/core/identity/contract";
@@ -23,6 +24,7 @@ export {
   PATRevocationOrigin,
   type ConsentIngressMessage,
 } from "~/core/consent/contract";
+
 export {
   ConsentRecordId,
   DisclosureRevision,
@@ -30,18 +32,22 @@ export {
   PolicyRevision,
   Sha256Digest,
 } from "~/core/consent/contract";
+
 export {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
 } from "~/core/identity/contract";
+
 export { WhatsAppProviderMessageId } from "~/core/provider-evidence/contract";
+
 export {
   DisclosureDeliveryCorrelationToken,
   WhatsAppDeliveryKey,
   maxWhatsAppFutureTimestampMinutes,
   maxWhatsAppWebhookBytes,
 } from "~/shell/channels/whatsapp/contract";
+
 export type {
   WhatsAppInboundEvent,
   WhatsAppSendFailed,

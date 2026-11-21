@@ -24,6 +24,7 @@ export const noAuthority = (): Response =>
     },
     { status: 401 }
   );
+
 export const scopeMissing = (): Response =>
   Response.json(
     {
@@ -35,11 +36,13 @@ export const scopeMissing = (): Response =>
     },
     { status: 403 }
   );
+
 export const invalid = (message: string): Response =>
   Response.json(
     { error: { code: "validation_failed", message, fields: [] }, next: [] },
     { status: 400 }
   );
+
 export const rateLimited = (): Response =>
   Response.json(
     {
@@ -55,6 +58,7 @@ export const rateLimited = (): Response =>
       headers: { "retry-after": String(canonicalRequestProtection.retryAfterSeconds) },
     }
   );
+
 export const exhausted = (current: number): Response =>
   Response.json(
     {
@@ -68,6 +72,7 @@ export const exhausted = (current: number): Response =>
     },
     { status: 429 }
   );
+
 export const attachStanding = ({
   response,
   status,
@@ -88,5 +93,6 @@ export const attachStanding = ({
     canonicalAllowanceHeaders.resetsAt,
     DateTime.formatIso(allowancePeriod(DateTime.makeUnsafe(current)).resetsAt)
   );
+
   return new Response(response.body, { status: response.status, headers });
 };

@@ -9,9 +9,11 @@ export const SmokeWork = Schema.Struct({
   coreVersionId: SmokeIdentity.fields.workerVersionId,
   expiresAtMs: Schema.Int,
 });
+
 export type SmokeWork = typeof SmokeWork.Type;
 
 export const smokeLifetimeMs = 300_000;
+
 export const smokeExecutionId = (
   work: Readonly<{ probeId: string; coreVersionId: string }>
 ): string => `smoke-v2-${work.coreVersionId}-${work.probeId}`;

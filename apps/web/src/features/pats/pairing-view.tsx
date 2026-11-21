@@ -16,6 +16,7 @@ const formatter = new Intl.DateTimeFormat("es-CO", {
   timeStyle: "short",
   timeZone: "America/Bogota",
 });
+
 const format = (value: DateTime.Utc): JSX.Element => (
   <time dateTime={DateTime.formatIso(value)}>{formatter.format(DateTime.toDate(value))}</time>
 );
@@ -93,6 +94,7 @@ const PairingReviewCard = ({
   reset: () => void;
 }>): JSX.Element => {
   const busy = state._tag === "Approving";
+
   return (
     <Card>
       <CardHeader>
@@ -142,10 +144,13 @@ const PairingCodeSection = ({
   update: (publicCode: string) => void;
 }>): JSX.Element => {
   const busy = state._tag === "Inspecting";
+
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
+
     if (!busy && state.publicCode.trim().length > 0) inspect();
   };
+
   return (
     <section className="flex min-w-0 flex-col gap-5">
       <div className="flex flex-col gap-1">
@@ -194,6 +199,7 @@ export const PATPairingView = ({
   if (state._tag === "Invalid") {
     return <InvalidPairingCard reset={actions.reset} publicCode={state.publicCode} />;
   }
+
   if (state._tag === "ApprovalUnknown") {
     return (
       <Card>
@@ -215,10 +221,13 @@ export const PATPairingView = ({
       </Card>
     );
   }
+
   if (state._tag === "Approved") return <ApprovedPairingCard />;
+
   if (state._tag === "Reviewing" || state._tag === "Approving") {
     return <PairingReviewCard approve={actions.approve} reset={actions.reset} state={state} />;
   }
+
   return (
     <PairingCodeSection
       state={state}

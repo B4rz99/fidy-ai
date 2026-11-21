@@ -9,9 +9,11 @@ import { native } from "../../user-store.test-fixture";
 
 const criticalMigration = (message: string): boolean =>
   message.includes("component=sqlite operation=user state=migration-failed severity=critical");
+
 const probe = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const directory = yield* fs.makeTempDirectoryScoped({ prefix: "fidy-native-migrations-" });
+
   const build = yield* native(() =>
     Bun.build({
       entrypoints: [new URL("../../store-migrations.test-fixture.ts", import.meta.url).pathname],
@@ -19,13 +21,18 @@ const probe = Effect.gen(function* () {
       external: ["cloudflare:workers"],
     })
   );
+
   const output = build.outputs[0];
+
   if (!build.success || output === undefined) {
     return yield* Effect.die(new Error("Native migration probe failed to build"));
   }
+
   const contents = yield* native(() => output.text());
+
   const activate = Effect.fnUntraced(function* (mode: string, release: string, now = 1000) {
     const messages: string[] = [];
+
     const mf = new Miniflare({
       handleStructuredLogs: (log): void => {
         messages.push(log.message);
@@ -55,11 +62,15 @@ const probe = Effect.gen(function* () {
         },
       ],
     });
+
     yield* Effect.addFinalizer(() => native(() => mf.dispose()));
+
     const storage = yield* native(() =>
       mf.unsafeGetDurableObjectStorage("schema", "MigrationProbe", { name: "retained" })
     );
+
     const namespace = yield* native(() => mf.getDurableObjectNamespace("PROBE"));
+
     const request = native(() =>
       namespace
         .getByName("retained")
@@ -69,18 +80,23 @@ const probe = Effect.gen(function* () {
           () => 503
         )
     );
+
     const exec = (statement: string): Effect.Effect<Awaited<ReturnType<typeof storage.exec>>> =>
       native(() => storage.exec(statement));
+
     const measure = native(() =>
       namespace
         .getByName("retained")
         .fetch("https://schema.test/metrics")
         .then((reply) => reply.json())
     );
+
     return { request, exec, measure, messages };
   });
+
   return activate;
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("upgrades an idle store across skipped releases while preserving retained data", () =>
     Effect.gen(function* () {
@@ -174,6 +190,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("preserves committed steps and a deterministic refusal across reconstruction", () =>
     Effect.gen(function* () {
       const activate = yield* probe;
+
       for (const startup of ["first", "restart"]) {
         yield* Effect.scoped(
           Effect.gen(function* () {
@@ -199,6 +216,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           })
         );
       }
+
       yield* Effect.scoped(
         Effect.gen(function* () {
           const fixed = yield* activate("latest", "corrected");
@@ -212,6 +230,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("waits one and five minutes between durably bounded transient attempts", () =>
     Effect.gen(function* () {
       const activate = yield* probe;
+
       for (const [time, attempts] of [
         [1000, 1],
         [60999, 1],
@@ -240,6 +259,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           })
         );
       }
+
       yield* Effect.scoped(
         Effect.gen(function* () {
           const corrected = yield* activate("latest", "fixed", 999999);
@@ -294,6 +314,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           expect(yield* current.request).toBe(200);
         })
       );
+
       for (const release of ["missing", "mismatch", "oldest"]) {
         yield* Effect.scoped(
           Effect.gen(function* () {
@@ -302,6 +323,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           })
         );
       }
+
       yield* Effect.scoped(
         Effect.gen(function* () {
           const compatible = yield* activate("latest", "compatible");
@@ -324,6 +346,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       })
     );
   }
+
   if (
     Effect.runSync(Config.String("FIDY_STORE_MIGRATION_MEASURE").pipe(Config.withDefault("0"))) ===
     "1"
@@ -333,11 +356,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       () =>
         Effect.gen(function* () {
           const activate = yield* probe;
+
           for (const mode of ["userOldest", "userCurrent"]) {
             yield* Effect.scoped(
               Effect.gen(function* () {
                 const store = yield* activate(mode, "measurement");
                 const started = performance.now();
+
                 const sizes = yield* Schema.decodeUnknownEffect(
                   Schema.Struct({
                     initialBytes: Schema.Int,
@@ -345,10 +370,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
                     finalBytes: Schema.Int,
                   })
                 )(yield* store.measure);
+
                 const durationMs = performance.now() - started;
+
                 const transactions = yield* store.exec(
                   "SELECT count(*) AS transactions FROM transactions"
                 );
+
                 expect(transactions).toEqual([
                   { transactions: mode === "userOldest" ? 0 : 100000 },
                 ]);
@@ -358,6 +386,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
                 process.stdout.write(
                   `MIGRATION_ACTIVATION ${yield* encode({ mode, transactions, durationMs, ...sizes })}\n`
                 );
+
                 if (mode === "userOldest") {
                   yield* store.exec(
                     "INSERT INTO users (id,service_market,locale,time_zone,created_at_ms) VALUES('10000000-0000-4000-8000-000000000051','CO','es-CO','America/Bogota',0)"

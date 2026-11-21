@@ -9,11 +9,14 @@ const statusFacts = BudgetStatus.mapMembers(
   ],
   { unsafePreserveChecks: true }
 );
+
 const workspaceFacts = Schema.Struct({
   ...BudgetWorkspace.fields,
   statuses: Schema.Array(statusFacts),
 });
+
 const encodeFacts = Schema.encodeEffect(workspaceFacts);
+
 const encodeComplete = Schema.encodeEffect(Schema.toCodecJson(BudgetWorkspace));
 
 export const encodeBudgetWorkspace = (
@@ -22,11 +25,14 @@ export const encodeBudgetWorkspace = (
   if (workspace.statuses.some((status) => status.period !== workspace.period)) {
     return encodeComplete(workspace);
   }
+
   return encodeFacts({
     ...workspace,
     statuses: workspace.statuses.map((status) => {
       if (status.type === "under") return Struct.omit(status, ["period"]);
+
       if (status.type === "reached") return Struct.omit(status, ["period"]);
+
       return Struct.omit(status, ["period"]);
     }),
   }).pipe(

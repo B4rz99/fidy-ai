@@ -18,6 +18,7 @@ it.effect("consumes transient enrollment work once without replaying it on an em
     command.offer(
       Effect.sync(() => {
         calls += 1;
+
         return "prepared";
       })
     );
@@ -26,9 +27,11 @@ it.effect("consumes transient enrollment work once without replaying it on an em
       "prepared"
     );
     registry.set(command.atom, undefined);
+
     const result = yield* Effect.exit(
       AtomRegistry.getResult(registry, command.atom, { suspendOnWaiting: true })
     );
+
     expect(Exit.isFailure(result) && Cause.hasInterrupts(result.cause)).toBe(true);
     expect(calls).toBe(1);
   })

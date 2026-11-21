@@ -9,11 +9,13 @@ it("retains evidence at each Consent ingress phase", () => {
     businessPhoneNumberId: "12345",
     expiresAtMs: 10000,
   };
+
   const proof = {
     disclosureMessageId: "disclosure",
     disclosedAtMs: 1000,
     decisionNotBeforeMs: 2000,
   };
+
   const phases = [
     ...["awaiting_delivery", "outbound_started"].map((stage) => ({
       _tag: "BeforeDelivery",
@@ -23,6 +25,7 @@ it("retains evidence at each Consent ingress phase", () => {
     { _tag: "AwaitingDecision", ...proof },
     ...["accepted", "declined"].map((decision) => ({ _tag: "Settled", decision, ...proof })),
   ];
+
   for (const phase of phases) {
     const value = { ...identity, phase };
     expect(
@@ -31,6 +34,7 @@ it("retains evidence at each Consent ingress phase", () => {
       )
     ).toEqual(value);
   }
+
   for (const origin of [
     "user-revoke-one",
     "user-revoke-all",

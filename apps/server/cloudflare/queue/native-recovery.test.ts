@@ -3,20 +3,27 @@ import { Miniflare } from "miniflare";
 import { expect, it } from "vitest";
 
 const userId = "10000000-0000-4000-8000-000000000001";
+
 const identity = (index: number): string =>
   `20000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
+
 type Store = Awaited<ReturnType<Miniflare["unsafeGetDurableObjectStorage"]>>;
+
 const count = (db: Store, table: string): Promise<number> =>
   db.exec(`SELECT count(*) AS n FROM ${table}`).then((rows) => Number(rows[0]?.n));
+
 const waitForCount = Effect.fn(function* (db: Store, table: string, expected: number) {
   for (let attempt = 0; attempt < 200; attempt += 1) {
     if ((yield* Effect.tryPromise(() => count(db, table))) >= expected) return;
     yield* Effect.sleep(100);
   }
+
   throw new Error(`Native Queue did not settle ${table}`);
 });
+
 const measureQueueGrowth =
   Effect.runSync(Config.String("INFRA_PERFORMANCE_MEASURE").pipe(Config.withDefault("0"))) === "1";
+
 const queueMeasurement = Schema.fromJsonString(
   Schema.Struct({
     scenario: Schema.Literal("native-queue-recovery"),
@@ -29,6 +36,7 @@ const queueMeasurement = Schema.fromJsonString(
     handoffP99Ms: Schema.Finite,
   })
 );
+
 it(
   "recovers a native Queue backlog despite local batch retries without duplicate handoffs",
   () =>
@@ -41,9 +49,12 @@ it(
             external: ["cloudflare:workers"],
           })
         );
+
         const output = built.outputs[0];
+
         if (!built.success || output === undefined) throw new Error("Queue proof bundle failed");
         const contents = yield* Effect.tryPromise(() => output.text());
+
         for (const backlog of measureQueueGrowth ? [10, 100, 1000] : [100]) {
           const runtime = yield* Effect.acquireRelease(
             Effect.sync(
@@ -94,11 +105,13 @@ it(
             ),
             (value) => Effect.tryPromise(() => value.dispose()).pipe(Effect.orDie)
           );
+
           const db = yield* Effect.tryPromise(() =>
             runtime.unsafeGetDurableObjectStorage("native-recovery-proof", "QueueRecorder", {
               name: userId,
             })
           );
+
           const now = yield* Clock.currentTimeMillis;
           yield* Effect.tryPromise(() =>
             db.exec(
@@ -144,17 +157,21 @@ it(
           yield* waitForCount(db, "deliveries", 2 * backlog + 30);
           expect(yield* Effect.tryPromise(() => count(db, "handoffs"))).toBe(backlog);
           expect(performance.now() - started).toBeLessThan(40_000);
+
           if (measureQueueGrowth) {
             const rows = yield* Effect.tryPromise(() =>
               db.exec(
                 "SELECT h.completed_at_ms-s.queued_at_ms AS delay FROM handoffs h JOIN statement_submissions s ON h.id=s.id ORDER BY delay"
               )
             );
+
             const delays = yield* Schema.decodeUnknownEffect(
               Schema.Array(Schema.Struct({ delay: Schema.Finite }))
             )(rows);
+
             const quantile = (fraction: number): number =>
               delays[Math.ceil(delays.length * fraction) - 1]?.delay ?? 0;
+
             const encoded = yield* Schema.encodeEffect(queueMeasurement)({
               scenario: "native-queue-recovery",
               backlog,
@@ -165,6 +182,7 @@ it(
               handoffP95Ms: quantile(0.95),
               handoffP99Ms: quantile(0.99),
             });
+
             yield* Effect.sync(() => process.stdout.write(`INFRA_QUEUE ${encoded}\n`));
           }
         }

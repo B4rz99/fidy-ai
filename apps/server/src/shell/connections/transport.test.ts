@@ -33,6 +33,7 @@ it("rejects contradictory handoff states and expiry beyond the original attempt"
     url: "https://auth1-api-open-finance-sandbox.ambientesbc.com/auth?client_id=10000000-0000-4000-8000-000000000001&response_type=code&scope=accounts&request_uri=urn:ietf:params:oauth:request_uri:synthetic",
     expiresAt: "2026-10-27T12:01:00.000Z",
   };
+
   const base = {
     connection: {
       id: "12670000-0000-4000-8000-000000000001",
@@ -43,11 +44,13 @@ it("rejects contradictory handoff states and expiry beyond the original attempt"
     expiresAt: "2026-10-27T12:10:00.000Z",
     authorization,
   };
+
   for (const phase of ["ready", "preparing", "failed"]) {
     expect(
       Option.isNone(Schema.decodeUnknownOption(ConnectionContinuationReview)({ ...base, phase }))
     ).toBe(true);
   }
+
   expect(
     Option.isSome(
       Schema.decodeUnknownOption(ConnectionContinuationReview)({ ...base, phase: "prepared" })

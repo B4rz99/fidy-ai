@@ -10,6 +10,7 @@ const status = ({
   const capMoney = { amount: BigDecimal.fromStringUnsafe(cap), currency };
   const spentMoney = { amount: BigDecimal.fromStringUnsafe(spent), currency };
   const difference = BigDecimal.subtract(capMoney.amount, spentMoney.amount);
+
   const common = {
     budget: {
       id: Schema.decodeSync(Schema.String.pipe(Schema.brand("BudgetId")))(
@@ -29,12 +30,15 @@ const status = ({
       timeZone: Schema.decodeSync(Schema.String.pipe(Schema.brand("IanaTimeZone")))("UTC"),
     },
   };
+
   if (BigDecimal.isNegative(difference)) {
     return { ...common, type: "over", overBy: { amount: BigDecimal.negate(difference), currency } };
   }
+
   if (BigDecimal.isZero(difference)) {
     return { ...common, type: "reached" };
   }
+
   return { ...common, type: "under", remaining: { amount: difference, currency } };
 };
 
@@ -44,6 +48,7 @@ it("identifies each Currency while preserving exact cents and separate Budget to
     status({ cap: "50.25", spent: "10.1", currency: "USD" }),
     status({ cap: "10", spent: "50.3", currency: "USD" }),
   ];
+
   const figures = budgetFigures({ statuses, locale: "es-CO" });
   expect(
     figures.map((figure) => ({
@@ -63,6 +68,7 @@ it("identifies each Currency while preserving exact cents and separate Budget to
 
 it("counts uncapped expenses and recorded income with exact currency balances", () => {
   const cap = status({ cap: "50.25", spent: "10.1", currency: "USD" });
+
   const figures = summaryFigures({
     locale: "es-CO",
     report: {
@@ -78,6 +84,7 @@ it("counts uncapped expenses and recorded income with exact currency balances", 
       },
     },
   });
+
   expect(
     figures.map(({ currency, balance, remaining, allocationAmount }) => ({
       currency,
@@ -103,6 +110,7 @@ it("counts uncapped expenses and recorded income with exact currency balances", 
 
 it("calculates unallocated income from planned caps rather than actual spending", () => {
   const cap = status({ cap: "3880000", spent: "3203000", currency: "COP" });
+
   const figure = summaryFigures({
     locale: "es-CO",
     report: {
@@ -115,6 +123,7 @@ it("calculates unallocated income from planned caps rather than actual spending"
       },
     },
   })[0];
+
   expect(figure).toMatchObject({
     unallocated: "COP 2.320.000,00",
     balance: "COP 2.877.000,00",

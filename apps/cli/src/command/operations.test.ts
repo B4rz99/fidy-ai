@@ -9,7 +9,9 @@ import { type CommandDependencies, PublicOutput } from "./contract";
 import { formatCommandFailure, formatFailure, formatOutput, runCommand } from "./operations";
 
 const secretLength = 43;
+
 const secret = `fin_abcd1234_${"s".repeat(secretLength)}`;
+
 const issued = Schema.decodeSync(Schema.toCodecJson(IssuedPAT))({
   bearer: secret,
   pat: {
@@ -25,6 +27,7 @@ const issued = Schema.decodeSync(Schema.toCodecJson(IssuedPAT))({
     expiresAt: "1969-12-27T00:00:00.000Z",
   },
 });
+
 const saved: Credential = { grant: { origin: apiOrigin, pat: issued.pat }, bearer: issued.bearer };
 
 it.effect(
@@ -33,6 +36,7 @@ it.effect(
     Effect.gen(function* () {
       let local = Option.some(saved);
       const output: Array<PublicOutput> = [];
+
       const dependencies: CommandDependencies = {
         verifyStorage: Effect.void,
         pairing: {
@@ -52,8 +56,10 @@ it.effect(
             output.push(event);
           }),
       };
+
       yield* runCommand(["status"], dependencies);
       expect(output[0]).toMatchObject({ _tag: "LocalStatus", availability: "expired" });
+
       for (const event of output) {
         const human = yield* formatOutput(event, false);
         const json = yield* formatOutput(event, true);
@@ -61,6 +67,7 @@ it.effect(
         expect(human.includes("\u001b") || json.includes("\u001b")).toBe(false);
         expect(/[\u007f-\u009f\u202e]/u.test(human + json)).toBe(false);
       }
+
       yield* runCommand(["logout"], dependencies);
       expect(Option.isNone(local)).toBe(true);
       const logout = yield* formatOutput({ _tag: "LoggedOut" }, false);
@@ -71,15 +78,18 @@ it.effect(
 it.effect("rejects impossible local status representations at the published output seam", () =>
   Effect.gen(function* () {
     const grant = yield* Schema.encodeEffect(Schema.toCodecJson(SavedGrant))(saved.grant);
+
     const invalid = [
       { _tag: "LocalStatus", availability: "absent", grant },
       { _tag: "LocalStatus", availability: "available", grant: null },
       { _tag: "LocalStatus", availability: "expired", grant: null },
     ];
+
     for (const input of invalid) {
       const result = yield* Schema.decodeEffect(Schema.toCodecJson(PublicOutput), {
         onExcessProperty: "error",
       })(input).pipe(Effect.exit);
+
       expect(Exit.isFailure(result)).toBe(true);
     }
   })
@@ -100,7 +110,9 @@ it.effect(
         const opened: Array<string> = [];
         const emitted: Array<PublicOutput> = [];
         const args = ["login", "--recipient", "Mi agente", "--scopes", "read", "--lifetime", "7"];
+
         if (noBrowser) args.push("--no-browser");
+
         const fiber = yield* runCommand(
           args,
           {
@@ -116,6 +128,7 @@ it.effect(
               opened.push(url);
             })
         ).pipe(Effect.forkChild);
+
         yield* TestClock.adjust("5 seconds");
         yield* Fiber.join(fiber);
         expect(opened).toEqual(
@@ -125,14 +138,18 @@ it.effect(
           publicCode: "BCDF-GHJK",
           approvalUrl: "https://app.fidyapp.com/connect/cli?cliCode=BCDF-GHJK",
         });
+
         const encoded = yield* Schema.encodeEffect(
           Schema.fromJsonString(Schema.Array(PublicOutput))
         )(emitted);
+
         expect(encoded).not.toContain(privateProof);
         expect(encoded).not.toContain(secret);
         expect(fixture.saved).toHaveLength(1);
       }
+
       const fixture = makeLoginFixture();
+
       const invalid = yield* runCommand(
         ["login", "--no-browser", "--no-browser"],
         {
@@ -142,17 +159,20 @@ it.effect(
         },
         () => Effect.die("unexpected browser")
       ).pipe(Effect.exit);
+
       expect(Exit.isFailure(invalid)).toBe(true);
       expect(fixture.saved).toHaveLength(0);
     })
 );
 
 const privateProof = "p".repeat(secretLength);
+
 const makeLoginFixture = (): Readonly<{
   dependencies: LoginDependencies;
   saved: Array<Credential>;
 }> => {
   const saved: Array<Credential> = [];
+
   const pairing = Schema.decodeSync(Schema.toCodecJson(StartedPATPairing))({
     pairingId: "01900000-0000-4000-8000-000000000002",
     privateDeviceCode: privateProof,
@@ -160,6 +180,7 @@ const makeLoginFixture = (): Readonly<{
     expiresAt: "1970-01-01T00:10:00.000Z",
     pollingIntervalSeconds: 5,
   });
+
   return {
     saved,
     dependencies: {
@@ -185,6 +206,7 @@ it.effect("interrupted saving settles local persistence without success output o
     const output: Array<PublicOutput> = [];
     let local = Option.none<Credential>();
     let clears = 0;
+
     const dependencies: CommandDependencies = {
       ...fixture.dependencies,
       store: {
@@ -209,19 +231,24 @@ it.effect("interrupted saving settles local persistence without success output o
           output.push(event);
         }),
     };
+
     const fiber = yield* runCommand(
       ["login", "--recipient", "Mi agente", "--scopes", "read", "--lifetime", "7", "--no-browser"],
       dependencies
     ).pipe(Effect.forkChild);
+
     yield* TestClock.adjust("5 seconds");
     yield* Deferred.await(saving);
+
     const interrupted = yield* Fiber.interrupt(fiber).pipe(
       Effect.forkChild({ startImmediately: true })
     );
+
     yield* Deferred.succeed(release, undefined);
     yield* Fiber.join(interrupted);
     const exit = yield* Fiber.await(fiber);
     expect(Exit.isFailure(exit)).toBe(true);
+
     if (Exit.isFailure(exit)) {
       expect(Cause.hasInterrupts(exit.cause)).toBe(true);
       expect(exit.cause.reasons.filter(Cause.isFailReason)).toHaveLength(1);
@@ -239,6 +266,7 @@ it.effect("interrupted saving settles local persistence without success output o
           )
         )
       );
+
       for (const json of [false, true]) {
         const failure = formatCommandFailure({ cause: exit.cause, json });
         expect(failure.interrupted).toBe(true);
@@ -246,6 +274,7 @@ it.effect("interrupted saving settles local persistence without success output o
         expect(failure.message).toContain("fidy status");
         expect(failure.message).not.toContain(secret);
         expect(failure.message).not.toContain(privateProof);
+
         if (json) {
           expect(
             yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(failure.message)
@@ -253,6 +282,7 @@ it.effect("interrupted saving settles local persistence without success output o
         }
       }
     }
+
     expect(output.some((event) => event._tag === "LoggedIn")).toBe(false);
     expect(clears).toBe(0);
     yield* runCommand(["status"], dependencies);
@@ -268,6 +298,7 @@ it.effect(
       const dispatched = yield* Deferred.make<void>();
       let claims = 0;
       const output: Array<PublicOutput> = [];
+
       const fiber = yield* runCommand(
         [
           "login",
@@ -298,11 +329,13 @@ it.effect(
             }),
         }
       ).pipe(Effect.forkChild);
+
       yield* TestClock.adjust("5 seconds");
       yield* Deferred.await(dispatched);
       yield* Fiber.interrupt(fiber);
       const exit = yield* Fiber.await(fiber);
       expect(Exit.isFailure(exit)).toBe(true);
+
       if (Exit.isFailure(exit)) {
         for (const json of [false, true]) {
           const failure = formatCommandFailure({ cause: exit.cause, json });
@@ -311,6 +344,7 @@ it.effect(
           expect(failure.message).toContain("revoca");
           expect(failure.message).not.toContain(secret);
           expect(failure.message).not.toContain(privateProof);
+
           if (json) {
             expect(
               yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(failure.message)
@@ -318,6 +352,7 @@ it.effect(
           }
         }
       }
+
       yield* TestClock.adjust("10 minutes");
       expect(claims).toBe(1);
       expect(output.some((event) => event._tag === "LoggedIn")).toBe(false);

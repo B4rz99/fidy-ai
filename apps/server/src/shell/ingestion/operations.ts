@@ -15,6 +15,7 @@ export const readWhatsAppStatementMedia: typeof readStatementMedia = (input) =>
   readStatementMedia(input);
 
 const zipFirstByte = 0x50;
+
 const zipSecondByte = 0x4b;
 
 const unsupportedSignatures = ["JVBERg==", "iVBORw==", "/9j/", "R0lGOA==", "Qk0=", "UklGRg=="].map(
@@ -45,24 +46,29 @@ export const parseStatementFile = (
     yield* Effect.try({
       try: () => {
         if (bytes.length === 0) throw new StatementParseFailed({ safeReason: "malformed-file" });
+
         if (bytes.length > maximumStatementBytes) {
           throw new StatementParseFailed({ safeReason: "resource-limit" });
         }
+
         if (knownUnsupportedStatementBytes(bytes)) {
           throw new StatementParseFailed({ safeReason: "unsupported-format" });
         }
       },
       catch: statementParseFailure,
     });
+
     const parser = yield* Effect.tryPromise(() => import("~/shell/ingestion/internal/parser")).pipe(
       Effect.orDie
     );
+
     return yield* Effect.try({
       try: () => {
         const parsed =
           statementSourceFormat(bytes) === "xlsx"
             ? parser.parseXlsx(bytes)
             : parser.parseCsv(bytes);
+
         return { sourceFormat: parsed.sourceFormat, headers: parsed.headers, rows: parsed.rows };
       },
       catch: statementParseFailure,
@@ -77,8 +83,10 @@ export const interpretNotificationEmail = (
 ): Effect.Effect<NotificationEmailOutcome> =>
   Effect.gen(function* () {
     const content = Schema.decodeUnknownOption(ReceivedEmailContent)(input.content);
+
     if (Option.isNone(content)) {
       return { _tag: "NeedsReview", reason: "canonical-validation-failed" };
     }
+
     return yield* interpretDecodedEmail({ content: content.value, context: input.context });
   });

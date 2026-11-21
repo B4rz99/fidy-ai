@@ -103,12 +103,16 @@ type AcceptedSessionOperation =
       AuditCredentialOperation,
       `${"consent" | "privacy" | "connections" | "budgets" | "dashboard" | "insights" | "subscription" | "recurring" | "quota"}.${string}`
     >;
+
 type CategoryOperation = Extract<AuditCredentialOperation, `categories.${string}`>;
+
 type LegacySessionOperation = Exclude<
   AuditCredentialOperation,
   AcceptedSessionOperation | CategoryOperation | "ingestion.listNeedsReviewItems"
 >;
+
 type AcceptedOutcome = "accepted" | "rejected";
+
 type LegacyOutcome = "success" | "not_found" | "validation_failed" | "resource_limit";
 
 type SessionDecision =
@@ -190,6 +194,7 @@ export class AuditUnavailable extends Data.TaggedError("AuditUnavailable") {}
 export const AuditPublicationEvidence = AuditLogEntry.mapFields(Struct.omit(["caller"])).annotate({
   identifier: "AuditPublicationEvidence",
 });
+
 export type AuditPublicationEvidence = typeof AuditPublicationEvidence.Type;
 
 export { AuditLogEntry };

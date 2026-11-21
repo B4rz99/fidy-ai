@@ -11,6 +11,7 @@ it.each([
   const money = Schema.decodeSync(Schema.toCodecJson(Money))({ amount, currency });
   expect(formatWhatsAppMoney(money)).toBe(expected);
 });
+
 it("uses the User's local day rather than the UTC date", () => {
   expect(
     formatWhatsAppLocalDate({

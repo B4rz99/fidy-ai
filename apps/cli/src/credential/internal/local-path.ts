@@ -7,8 +7,10 @@ export const checkLocalPath = Effect.fn(function* (path: string, kind: "file" | 
     try: () => lstat(path),
     catch: () => new CliFailure({ reason: "StorageUnavailable" }),
   });
+
   const privatePermissionMask = 0o077;
   const validKind = kind === "file" ? info.isFile() : info.isDirectory();
+
   if (
     !validKind ||
     info.isSymbolicLink() ||

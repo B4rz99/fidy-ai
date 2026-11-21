@@ -17,6 +17,7 @@ describe("browser API origin", () => {
     expect(
       browserApiOrigin({ configured: "installed", browserOrigin: "https://app.fidyapp.com" })
     ).toBe("https://api.fidyapp.com");
+
     for (const origin of [
       "http://app.fidyapp.com",
       "https://other.fidyapp.com",

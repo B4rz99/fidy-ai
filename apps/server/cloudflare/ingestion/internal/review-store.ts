@@ -21,9 +21,11 @@ export const ReviewRow = Schema.Struct({
   draft_json: Schema.OptionFromNullOr(Schema.String),
   suggestions_json: Schema.OptionFromNullOr(Schema.String),
 });
+
 export const reviewProjection = `id, source, reason, time_zone AS timeZone,
   CASE WHEN status != 'created' AND expires_at_ms <= ? THEN 'expired' ELSE status END AS status,
   created_at_ms AS createdAt, expires_at_ms AS expiresAt, transaction_id AS transactionId,revision,draft_json,suggestions_json`;
+
 export const reviewDraftJson = Schema.fromJsonString(Schema.toCodecJson(ReviewDraft));
 
 export const projectReviewDetailFromSnapshot = <E, R = never>({
@@ -44,14 +46,17 @@ export const projectReviewDetailFromSnapshot = <E, R = never>({
             Schema.decodeEffect(reviewDraftJson)(json)
           ).pipe(Effect.map((values) => Option.fromUndefinedOr(values[0])))
         : Option.none();
+
     const retainedSuggestions =
       DateTime.toEpochMillis(row.expiresAt) > current
         ? yield* Effect.forEach(Option.toArray(row.suggestions_json), (json) =>
             Schema.decodeEffect(reviewDraftJson)(json)
           ).pipe(Effect.map((values) => Option.fromUndefinedOr(values[0])))
         : Option.none();
+
     const suggestions = yield* suggestReviewCategory({ categorize, draft: retainedSuggestions });
     const item = yield* projectReviewSummary({ row, current });
+
     return { item, revision: row.revision, draft, suggestions };
   }).pipe(Effect.mapError(() => new ReviewUnavailable()));
 
@@ -67,9 +72,11 @@ export const projectReviewSummary = ({
       DateTime.toEpochMillis(row.expiresAt) > current
         ? Option.orElse(row.draft_json, () => row.suggestions_json)
         : Option.none();
+
     const preview = yield* Effect.forEach(Option.toArray(retained), (json) =>
       Schema.decodeEffect(reviewDraftJson)(json)
     );
+
     return yield* Schema.decodeEffect(Schema.toCodecJson(ReviewSummary))({
       ...(preview[0] === undefined
         ? {}
@@ -110,6 +117,7 @@ const suggestReviewCategory = <E, R = never>({
   Effect.gen(function* () {
     if (Option.isNone(draft) || Option.isNone(draft.value.direction)) return draft;
     const suggestion = draft.value;
+
     const categories = yield* categorize([
       {
         caller: suggestion.categoryId,
@@ -118,5 +126,6 @@ const suggestReviewCategory = <E, R = never>({
         direction: draft.value.direction.value,
       },
     ]);
+
     return Option.some({ ...suggestion, categoryId: Option.fromUndefinedOr(categories[0]) });
   }).pipe(Effect.mapError(() => new ReviewUnavailable()));

@@ -6,12 +6,19 @@ import { StatementParseFailed } from "./contract";
 import { parseStatementFile } from "./operations";
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
+
 const BufferDecoder = Schema.Struct({ toString: Schema.declare(Predicate.isFunction) });
+
 const resourceLimit = Exit.fail(new StatementParseFailed({ safeReason: "resource-limit" }));
+
 const maximumColumns = 200;
+
 const maximumCells = 250_000;
+
 const maximumRows = 20_000;
+
 const maximumBytes = 5 * 1024 * 1024;
+
 const fullRow = Array.from({ length: maximumColumns }, () => "").join(",");
 
 it.effect("rejects delimiter-only maximum-byte uploads as resource limits", () =>
@@ -29,6 +36,7 @@ it.effect("stops on the first surplus header or data field before a malformed ta
       const result = yield* Effect.exit(
         parseStatementFile(encode(`${prefix}${",".repeat(maximumColumns + 1)}"unterminated`))
       );
+
       assert.deepStrictEqual(result, resourceLimit);
     }
   })
@@ -82,6 +90,7 @@ it.effect("keeps empty-line, ragged-record, delimiter tie and string-value seman
     const tied = yield* parseStatementFile(
       encode('A;B,C\n"";00123\n\n"a;b"\ntrue;2026-01-01;extra')
     );
+
     expect(tied.headers).toEqual(["A", "B,C"]);
     expect(tied.rows.map((row) => row.fields)).toEqual([
       ["", "00123"],
@@ -112,21 +121,28 @@ it.effect("bounds decoding work for long leading fields followed by many empty c
     const rawRecord = `${leadingField}${fullRow}\n`;
     const bytes = encode(`${fullRow}\n${rawRecord.repeat(20)}`);
     const constructor: unknown = Buffer;
+
     if (!Predicate.isFunction(constructor)) return yield* Effect.die("Missing Buffer constructor");
     const prototype: unknown = Reflect.get(constructor, "prototype");
+
     if (!Schema.is(BufferDecoder)(prototype)) return yield* Effect.die("Missing Buffer decoder");
     const decodeBuffer = prototype.toString;
     let decodedCharacters = 0;
+
     const observeDecoding = function (this: unknown, ...args: Array<unknown>): string {
       const result: unknown = Reflect.apply(decodeBuffer, this, args);
       const decoded = Schema.decodeUnknownSync(Schema.String)(result);
       decodedCharacters += decoded.length;
+
       return decoded;
     };
+
     assert.ok(Reflect.set(prototype, "toString", observeDecoding));
+
     const parsed = yield* parseStatementFile(bytes).pipe(
       Effect.ensuring(Effect.sync(() => Reflect.set(prototype, "toString", decodeBuffer)))
     );
+
     expect(parsed.rows).toHaveLength(20);
     expect(parsed.rows.every((row) => row.fields.length === maximumColumns)).toBe(true);
     expect(parsed.rows[0]?.fields).toEqual([

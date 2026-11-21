@@ -10,9 +10,11 @@ import { WebSessionId } from "~/core/web-session/contract";
 export const AuditLogEntryId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("AuditLogEntryId"))
   .annotate({ identifier: "AuditLogEntryId" });
+
 export type AuditLogEntryId = typeof AuditLogEntryId.Type;
 
 export const AuditOutcome = Schema.Literals(["succeeded", "rejected", "failed"]);
+
 export type AuditOutcome = typeof AuditOutcome.Type;
 
 export const AuditCaller = Schema.Union([
@@ -25,6 +27,7 @@ export const AuditCaller = Schema.Union([
   Schema.TaggedStruct("HostedAgentSession", { hostedAgentSessionId: HostedAgentSessionId }),
   Schema.TaggedStruct("HostedTurn", { turnId: TranscriptTurnId }),
 ]).annotate({ identifier: "AuditCaller" });
+
 export type AuditCaller = typeof AuditCaller.Type;
 
 export const AuditLogEntry = Schema.Struct({
@@ -35,6 +38,7 @@ export const AuditLogEntry = Schema.Struct({
   outcome: AuditOutcome,
   occurredAt: UtcTimestamp,
 }).annotate({ identifier: "AuditLogEntry" });
+
 export type AuditLogEntry = typeof AuditLogEntry.Type;
 
 export const OAuthRecentActivity = Schema.Array(
@@ -45,6 +49,7 @@ export const OAuthRecentActivity = Schema.Array(
     occurredAt: AuditLogEntry.fields.occurredAt,
   })
 ).check(Schema.isMaxLength(3));
+
 export type OAuthRecentActivity = typeof OAuthRecentActivity.Type;
 
 export const maximumPATActivityEntries = 50;
@@ -60,4 +65,5 @@ export const PATActivityHistory = Schema.Struct({
   hasMore: Schema.Boolean,
   retainedSince: UtcTimestamp,
 }).annotate({ identifier: "PATActivityHistory" });
+
 export type PATActivityHistory = typeof PATActivityHistory.Type;

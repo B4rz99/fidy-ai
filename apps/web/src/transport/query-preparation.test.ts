@@ -8,10 +8,13 @@ it.live("fresh entry rereads a retained result and leaves failures available to 
   Effect.gen(function* () {
     let reads = 0;
     let failing = false;
+
     const source = Atom.make(
       Effect.suspend(() => (failing ? Effect.fail("refused") : Effect.succeed(++reads)))
     ).pipe(Atom.setIdleTTL("400 millis"));
+
     const registry = AtomRegistry.make();
+
     try {
       yield* Effect.tryPromise(() =>
         prepareQuery({
@@ -43,19 +46,25 @@ it.live("fresh entry rereads a retained result and leaves failures available to 
     }
   })
 );
+
 it.live("cached display remains available while a fresh observation is in flight", () =>
   Effect.gen(function* () {
     let reads = 0;
     let held = false;
     const gate = yield* Deferred.make<void>();
+
     const source = Atom.make(
       Effect.gen(function* () {
         reads += 1;
+
         if (held) yield* Deferred.await(gate);
+
         return reads;
       })
     ).pipe(Atom.setIdleTTL("400 millis"));
+
     const registry = AtomRegistry.make();
+
     try {
       yield* Effect.tryPromise(() =>
         prepareQuery({

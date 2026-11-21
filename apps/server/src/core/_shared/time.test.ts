@@ -3,7 +3,9 @@ import { DateTime, Result, Schema } from "effect";
 import { UtcTimestamp } from "./time";
 
 const decode = Schema.decodeUnknownResult(UtcTimestamp);
+
 const encode = Schema.encodeSync(UtcTimestamp);
+
 const validateType = Schema.decodeUnknownResult(Schema.toType(UtcTimestamp));
 
 it("reads an offset spelling and a UTC spelling as the same instant", () => {
@@ -54,6 +56,7 @@ it("accepts every supported four-digit year", () => {
   for (const year of ["0001", "0009", "0010", "0099", "0100", "0999", "1000", "9999"]) {
     expect(Result.isSuccess(decode(`${year}-01-01T00:00:00Z`))).toBe(true);
   }
+
   expect(Result.isFailure(decode("0000-01-01T00:00:00Z"))).toBe(true);
 });
 
@@ -117,6 +120,7 @@ it("marks calendar validation as approximate when exporting an exclusive schema 
   const document = Schema.toJsonSchemaDocument(
     Schema.Union([UtcTimestamp, Schema.Literal("2026-02-30T00:00:00Z")], { mode: "oneOf" })
   );
+
   expect(document.schema).toHaveProperty("anyOf");
   expect(document.schema).not.toHaveProperty("oneOf");
 });

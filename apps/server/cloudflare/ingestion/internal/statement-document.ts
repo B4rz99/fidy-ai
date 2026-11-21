@@ -3,6 +3,7 @@ import { readWhatsAppStatementMedia } from "../../../src/shell/ingestion/operati
 import { Effect } from "effect";
 
 const workerDigest = Effect.runSync(Digest.Digest.pipe(Effect.provide(Digest.layerWebCrypto)));
+
 export const retrieveHeldStatementMedia = (
   work: Parameters<typeof readWhatsAppStatementMedia>[0]
 ): Effect.Effect<

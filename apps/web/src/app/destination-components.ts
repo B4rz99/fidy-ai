@@ -9,10 +9,12 @@ import { lazyRouteComponent } from "@tanstack/react-router";
 import { RecurringWorkspace, ReviewWorkspace } from "./workspace-components";
 
 export const BudgetRoute = lazyRouteComponent(() => import("./budget-page"), "BudgetPage");
+
 export const RecurringRoute = lazyRouteComponent(
   () => import("@/features/recurring/feature"),
   "RecurringRoute"
 );
+
 export const destinationCodePreloads = [
   { path: "/app/needs-review", load: (): Promise<unknown> => ReviewWorkspace.preload() },
   {
@@ -22,9 +24,11 @@ export const destinationCodePreloads = [
         Effect.gen(function* () {
           yield* Effect.tryPromise(preloadBudgetScreen);
           yield* Effect.tryPromise(() => Promise.resolve(BudgetRoute.preload?.()));
+
           const { BudgetsFeature } = yield* Effect.tryPromise(
             () => import("@/features/budgets/feature")
           );
+
           yield* Effect.tryPromise(() => BudgetsFeature.preload());
         })
       ),

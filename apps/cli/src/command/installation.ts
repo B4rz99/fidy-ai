@@ -6,8 +6,11 @@ export const cliVersion = typeof FIDY_CLI_VERSION === "undefined" ? "0.1.0" : FI
 
 export const installationOutput = (args: ReadonlyArray<string>): Option.Option<string> => {
   if (args.length !== 1) return Option.none();
+
   if (args[0] === "--version") return Option.some(`fidy ${cliVersion}\n`);
+
   if (args[0] !== "--help") return Option.none();
+
   return Option.some(
     "Fidy — tus finanzas desde la terminal.\n\n" +
       "fidy login       Autoriza el acceso en tu navegador.\n" +

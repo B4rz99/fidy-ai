@@ -14,9 +14,13 @@ import {
 import { categorizeCapture, listLaunchCategories, validateKeywordRuleChange } from "./operations";
 
 const domicilios = CategoryId.make("10000000-0000-4000-8000-000000000002");
+
 const mercado = CategoryId.make("10000000-0000-4000-8000-000000000003");
+
 const first = KeywordRuleId.make("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+
 const second = KeywordRuleId.make("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+
 const rule = (
   id: KeywordRuleId,
   keyword: string,
@@ -40,12 +44,14 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const rules = [rule(first, "rappi"), rule(second, "Rappi Turbo", mercado)];
+
       const input = {
         caller: Option.none<CategoryId>(),
         counterparty: Option.some("RÁPPI Turbo Bogotá"),
         direction: "outflow" as const,
         rules,
       };
+
       expect(yield* categorizeCapture(input)).toBe(mercado);
       expect(yield* categorizeCapture({ ...input, rules: rules.toReversed() })).toBe(mercado);
       expect(yield* categorizeCapture({ ...input, caller: Option.some(domicilios) })).toBe(
@@ -64,6 +70,7 @@ it.effect(
         direction: "outflow" as const,
         rules: [rule(second, "cd", mercado), rule(first, "ab")],
       };
+
       expect(yield* categorizeCapture(input)).toBe(domicilios);
       expect(
         yield* categorizeCapture({ ...input, counterparty: Option.some("sin coincidencia") })
@@ -122,11 +129,13 @@ it.effect("allows the hundredth keyword instruction and refuses the hundred-and-
         `rule-${index}`
       )
     );
+
     const change = {
       operation: "categories.createKeywordRule" as const,
       ruleId: second,
       keyword: CategoryKeyword.make("new"),
     };
+
     expect(yield* validateKeywordRuleChange({ rules: rules.slice(0, -1), change })).toEqual(
       Option.none()
     );
@@ -147,6 +156,7 @@ it("keeps existing keyword rules editable and removable when creation capacity i
       )
     ),
   ];
+
   expect(
     Effect.runSync(
       validateKeywordRuleChange({

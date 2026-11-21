@@ -10,6 +10,7 @@ import { makeWorkerTelemetry, observeWorkerExecution } from "../runtime/telemetr
 it.effect("keeps fast checks running while dispatch and cleanup wait for their due windows", () =>
   Effect.gen(function* () {
     const completed: Array<string> = [];
+
     const activities = [
       { operation: "async.health", work: Effect.sync(() => completed.push("health")) },
       {
@@ -27,6 +28,7 @@ it.effect("keeps fast checks running while dispatch and cleanup wait for their d
       { operation: "ingestion.mediaRetention", work: Effect.sync(() => completed.push("media")) },
       { operation: "audit.retention", work: Effect.sync(() => completed.push("audit")) },
     ] as const;
+
     for (const [minute, expected] of [
       [1, ["health"]],
       [5, ["health", "email"]],
@@ -45,6 +47,7 @@ it.effect("keeps fast checks running while dispatch and cleanup wait for their d
 it.effect("attempts independent retention after a failed activity before reporting failure", () =>
   Effect.gen(function* () {
     const completed: Array<string> = [];
+
     const result = yield* executeSchedule([
       { operation: "emailReplacement.dispatch", work: Effect.fail(undefined) },
       {
@@ -69,10 +72,12 @@ it.effect("contains typed failures and defects in bounded logs and one failed Wo
     const logCauses: Array<Cause.Cause<unknown>> = [];
     const records: Array<TelemetryWorkRecord> = [];
     let retained = false;
+
     const logger = Logger.make<unknown, void>(({ message, cause }) => {
       logs.push(message);
       logCauses.push(cause);
     });
+
     const result = yield* executeSchedule([
       { operation: "emailReplacement.dispatch", work: Effect.fail(privateDetail) },
       { operation: "billing.refund.dispatch", work: Effect.die(new Error(privateDetail)) },
@@ -112,9 +117,11 @@ it.effect("contains typed failures and defects in bounded logs and one failed Wo
     ]);
     expect(logCauses.every((cause) => cause.reasons.length === 0)).toBe(true);
     expect(records).toHaveLength(1);
+
     const record = yield* Schema.decodeUnknownEffect(TelemetryWorkRecord, {
       onExcessProperty: "error",
     })(records[0]);
+
     expect(record.traceId).toBeDefined();
     expect(record.spanId).toBeDefined();
     expect(records).toMatchObject([
@@ -127,9 +134,11 @@ it.effect("contains typed failures and defects in bounded logs and one failed Wo
         latencyMilliseconds: 0,
       },
     ]);
+
     const exported = yield* Schema.encodeEffect(
       Schema.fromJsonString(Schema.Array(Schema.Unknown))
     )([logs, records]);
+
     expect(exported).not.toContain(privateDetail);
   })
 );
@@ -140,6 +149,7 @@ it.effect("cancels active work and runs its cleanup without starting the next ac
     let released = false;
     let laterStarted = false;
     const records: Array<TelemetryWorkRecord> = [];
+
     const fiber = yield* executeSchedule([
       {
         operation: "emailReplacement.dispatch",
@@ -180,11 +190,13 @@ it.effect("cancels active work and runs its cleanup without starting the next ac
 it.effect("does not carry a prior invocation's failure into a successful schedule", () =>
   Effect.gen(function* () {
     let attempts = 0;
+
     const schedule = executeSchedule([
       {
         operation: "audit.retention",
         work: Effect.suspend(() => {
           attempts += 1;
+
           return attempts === 1 ? Effect.fail(undefined) : Effect.void;
         }),
       },
@@ -200,6 +212,7 @@ it.effect("preserves an activity interruption and does not start later work", ()
   Effect.gen(function* () {
     let released = false;
     let laterStarted = false;
+
     const result = yield* executeSchedule([
       {
         operation: "emailReplacement.dispatch",

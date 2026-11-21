@@ -3,13 +3,18 @@ import { BigDecimal, DateTime, Option } from "effect";
 import { formatMoneyWithCode } from "@/transport/money";
 
 export type CurrentUser = CanonicalSuccess<"identity.getCurrentUser">["data"];
+
 export type Category = CanonicalSuccess<"categories.listCategories">["data"][number];
+
 export type LinkedPair = Extract<
   CanonicalSuccess<"transactions.getTransaction">["data"]["reconciliation"],
   { kind: "linked" }
 >;
+
 export type CaptureSources = CanonicalSuccess<"transactions.getTransaction">["data"]["sources"];
+
 export type OriginalTransactions = Pick<LinkedPair, "firstTransaction" | "secondTransaction">;
+
 export type Transaction = CanonicalSuccess<"transactions.listTransactions">["data"][number];
 
 export type CurrentMonthPeriod = Readonly<{
@@ -27,6 +32,7 @@ export const deriveCurrentMonthPeriod = ({
 }>): CurrentMonthPeriod => {
   const zonedNow = DateTime.setZone(now, DateTime.zoneMakeNamedUnsafe(timeZone));
   const zonedFrom = DateTime.startOf(zonedNow, "month");
+
   return {
     from: DateTime.toUtc(zonedFrom),
     to: DateTime.toUtc(DateTime.add(zonedFrom, { months: 1 })),
@@ -60,11 +66,13 @@ const occurrenceText = (
   occurredAt: Transaction["occurredAt"]
 ): string => {
   const parts = formatter.formatToParts(occurredAt.epochMilliseconds);
+
   const valueOf = (type: "day" | "month" | "year"): string =>
     Option.fromNullishOr(parts.find((part) => part.type === type)).pipe(
       Option.map((part) => part.value),
       Option.getOrThrow
     );
+
   return `${valueOf("day")}-${valueOf("month")}-${valueOf("year")}`;
 };
 
@@ -106,13 +114,16 @@ export const presentTransactionRows = ({
   transactions: ReadonlyArray<TransactionPresentationRecord>;
 }>): ReadonlyArray<TransactionListRow> => {
   const categoryLabels = new Map(categories.map(({ id, label }) => [id, label]));
+
   const dateFormatter = new Intl.DateTimeFormat(locale, {
     day: "numeric",
     month: "long",
     year: "numeric",
     timeZone,
   });
+
   const occurredOnFormatter = occurrenceFormatter(locale, timeZone);
+
   return transactions.map((transaction) => ({
     id: transaction.id,
     categoryId: transaction.categoryId,

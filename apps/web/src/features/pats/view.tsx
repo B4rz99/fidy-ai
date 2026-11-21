@@ -69,6 +69,7 @@ const LifetimeSelector = ({
       value={String(state.lifetimeDays)}
       onChange={(value) => {
         const selected = lifetimeOptions.find((option) => option.value === value);
+
         if (selected !== undefined) update({ ...state, lifetimeDays: selected.lifetimeDays });
       }}
     />
@@ -83,6 +84,7 @@ const ScopeSelector = ({
   update: (state: Extract<PATCreationDisplay, { _tag: "Editing" }>) => void;
 }>): JSX.Element => {
   const selectedScopes = new Set(state.scopes);
+
   return (
     <fieldset className="flex flex-col">
       <legend className="mb-2 font-medium">Permisos</legend>
@@ -121,12 +123,15 @@ const GrantEditor = ({
 }>): JSX.Element => {
   const normalizedLabel = state.recipientLabel.trim();
   const normalizedLabelLength = countPATLabelCharacters(normalizedLabel);
+
   const valid =
     normalizedLabelLength >= 1 &&
     normalizedLabelLength <= recipientLabelLimit &&
     state.scopes.length > 0;
+
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
+
     if (valid) review();
   };
 
@@ -217,6 +222,7 @@ const IssuedGrant = ({
   reset: () => void;
 }>): JSX.Element => {
   const [copied, setCopied] = useState(false);
+
   return (
     <div className="flex min-w-0 flex-col gap-5">
       <Alert>
@@ -246,13 +252,18 @@ const IssuedGrant = ({
 };
 
 const retryClockMilliseconds = 1_000;
+
 const subscribeRetryClock = (changed: () => void): (() => void) => {
   const timer = window.setInterval(changed, retryClockMilliseconds);
+
   return () => window.clearInterval(timer);
 };
+
 const currentRetrySecond = (): number =>
   Math.floor(Effect.runSync(Clock.currentTimeMillis) / retryClockMilliseconds);
+
 type RefusalDisplay = Extract<PATCreationDisplay, { _tag: "Refused" }>;
+
 const refusalDescription = (refusal: RefusalDisplay["refusal"], remaining: number): string => {
   switch (refusal._tag) {
     case "ReviewExpired":
@@ -267,6 +278,7 @@ const refusalDescription = (refusal: RefusalDisplay["refusal"], remaining: numbe
       return `Alcanzaste el límite de creación. Espera ${remaining} segundos antes de preparar otra revisión.`;
   }
 };
+
 const refusalRecovery = (
   state: RefusalDisplay,
   prepareReview: () => void,
@@ -279,6 +291,7 @@ const refusalRecovery = (
       </Button>
     );
   }
+
   if (state.refusal._tag === "Authority") {
     return (
       <Button render={<Link to="/login" reloadDocument />} variant="outline">
@@ -286,12 +299,14 @@ const refusalRecovery = (
       </Button>
     );
   }
+
   return (
     <Button disabled={remaining > 0} onClick={prepareReview} type="button" variant="outline">
       Revisar de nuevo
     </Button>
   );
 };
+
 const RefusedState = ({
   state,
   prepareReview,
@@ -300,6 +315,7 @@ const RefusedState = ({
   prepareReview: () => void;
 }>): JSX.Element => {
   const now = useSyncExternalStore(subscribeRetryClock, currentRetrySecond);
+
   const remaining =
     state.refusal._tag === "RateLimited"
       ? Math.max(
@@ -307,6 +323,7 @@ const RefusedState = ({
           Math.ceil(DateTime.toEpochMillis(state.refusal.retryAt) / retryClockMilliseconds) - now
         )
       : 0;
+
   return (
     <div className="flex flex-col gap-4">
       <Alert variant="destructive">
@@ -407,6 +424,7 @@ const CreationContent = ({
       );
   }
 };
+
 export const ManualPATView = ({
   state,
   actions,

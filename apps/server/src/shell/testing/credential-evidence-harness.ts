@@ -19,5 +19,6 @@ export const renderedFailure = (failure: unknown): Effect.Effect<string, Schema.
 
 export const expectNotInspected = (value: unknown, ...secrets: ReadonlyArray<string>): void => {
   const inspected = inspect(value);
+
   for (const secret of secrets) expect(inspected).not.toContain(secret);
 };

@@ -20,27 +20,44 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 1024,
   deadlineMilliseconds: 2_000,
 });
+
 export { pairingMilliseconds };
+
 export const dayMilliseconds = 86_400_000;
+
 const successStatus = 200;
+
 export const digestBytes = 32;
+
 export { maxActivePATs, issuanceWindowMilliseconds, maxIssuancesPerUserWindow };
+
 export const shortLength = patShortIdLength;
+
 const sampleSize = 16;
+
 export const httpBadRequest = 400;
+
 export const httpUnauthorized = 401;
+
 export const httpUnavailable = 503;
+
 export const httpConflict = 409;
+
 export const httpTooManyRequests = 429;
+
 export const httpReviewExpired = 422;
+
 export const httpRateLimited = 429;
+
 const unbiasedBase36Limit = 252;
+
 const shortAlphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
 
 export const SessionRow = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
   user_id: Schema.String.check(Schema.isUUID()),
 });
+
 export type SessionRow = typeof SessionRow.Type;
 
 export const retainedPATMillis = Schema.Finite.check(
@@ -64,6 +81,7 @@ export const PATRow = Schema.Struct({
   last_used_at_ms: Schema.NullOr(retainedPATMillis),
   revoked_at_ms: Schema.NullOr(retainedPATMillis),
 });
+
 export type PATRow = typeof PATRow.Type;
 
 export const iso = (milliseconds: number): string =>
@@ -79,6 +97,7 @@ export const newProof = (): string =>
 
 export const newShortId = (): string => {
   let shortId = "";
+
   while (shortId.length < shortLength) {
     for (const byte of crypto.getRandomValues(new Uint8Array(sampleSize))) {
       if (byte < unbiasedBase36Limit && shortId.length < shortLength) {
@@ -86,8 +105,10 @@ export const newShortId = (): string => {
       }
     }
   }
+
   return shortId;
 };
+
 export const newBearer = (shortId: string): string => `${patBearerPrefix}${shortId}_${newProof()}`;
 
 export const decodeBody = <Decoded, Encoded>({
@@ -104,11 +125,14 @@ export const decodeBody = <Decoded, Encoded>({
     ) {
       return Option.none<Decoded>();
     }
+
     const bytes = yield* readBoundedRequestBody(request, policy);
     const text = yield* Effect.try(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     const value = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text);
+
     return Schema.decodeUnknownOption(schema)(value);
   }).pipe(Effect.orElseSucceed(() => Option.none<Decoded>()));
+
 export const scopesFrom = (text: string): Option.Option<PATScopes> => {
   try {
     return Schema.decodeUnknownOption(PATScopes)(JSON.parse(text));
@@ -119,7 +143,9 @@ export const scopesFrom = (text: string): Option.Option<PATScopes> => {
 
 export const patFrom = (row: PATRow): Option.Option<PAT> => {
   const scopes = scopesFrom(row.scopes_json);
+
   if (Option.isNone(scopes)) return Option.none();
+
   return Schema.decodeUnknownOption(Schema.toType(PAT))({
     _tag: "PAT",
     id: row.id,
@@ -133,10 +159,13 @@ export const patFrom = (row: PATRow): Option.Option<PAT> => {
     revokedAt: Option.map(Option.fromNullishOr(row.revoked_at_ms), DateTime.makeUnsafe),
   });
 };
+
 export const response = ({ body, status }: Readonly<{ body: unknown; status: number }>): Response =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
+
 export const canonical = (data: unknown): Response =>
   response({ body: { data, next: [] }, status: successStatus });
+
 export const unauthorized = (): Response =>
   response({
     body: {
@@ -145,8 +174,10 @@ export const unauthorized = (): Response =>
     },
     status: httpUnauthorized,
   });
+
 export const unavailable = (): Response =>
   response({ body: patPairingUnavailableBody, status: httpUnavailable });
+
 export const serviceUnavailable = (): Response =>
   response({
     body: {
@@ -158,6 +189,7 @@ export const serviceUnavailable = (): Response =>
     },
     status: httpUnavailable,
   });
+
 export const invalid = (): Response =>
   response({
     body: {
@@ -168,6 +200,7 @@ export const invalid = (): Response =>
     },
     status: httpBadRequest,
   });
+
 export const rejected = (): Response =>
   response({
     body: {

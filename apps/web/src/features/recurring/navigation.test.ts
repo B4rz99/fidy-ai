@@ -19,14 +19,18 @@ const item = {
   planId: RecurringPlanId.make("23200000-0000-4000-8000-000000000001"),
   date: "2026-11-15",
 };
+
 const transactionId = TransactionId.make("23200000-0000-4000-8000-000000000002");
+
 const NavigationProbe = (): ReturnType<typeof createElement> => {
   const workspace = useRecurringWorkspaceView();
+
   const navigation = useRecurringNavigation({
     month: "2026-11",
     filters: workspace.filters,
     previous: workspace.previous,
   });
+
   return createElement(
     "main",
     null,
@@ -110,28 +114,36 @@ const NavigationProbe = (): ReturnType<typeof createElement> => {
     })
   );
 };
+
 const reactWork = (work: () => void): Promise<void> =>
   Promise.resolve(act(() => Promise.resolve(work())));
+
 const reactAssertion = (assertion: () => void): Promise<void> =>
   Promise.resolve(act(() => vi.waitFor(assertion)));
+
 const click = (container: HTMLElement, text: string): Promise<void> =>
   reactWork(() => {
     const button = Array.from(container.querySelectorAll("button")).find(
       (candidate) => candidate.textContent === text
     );
+
     if (button === undefined) throw new Error(`Missing ${text}`);
     button.click();
   });
+
 type NavigationRouter = ReturnType<typeof makeRouter>;
+
 const makeRouter = (
   history: ReturnType<typeof createMemoryHistory>,
   binding: string
 ): ReturnType<typeof createRouter> => {
   const parent = createRootRoute({ component: NavigationProbe });
+
   const route = createRoute({
     getParentRoute: () => parent,
     path: "/app/recurring",
   });
+
   return createRouter({
     routeTree: parent.addChildren([
       route,
@@ -141,11 +153,13 @@ const makeRouter = (
     history,
   });
 };
+
 type Harness = Readonly<{
   container: HTMLElement;
   router: NavigationRouter;
   reload: (binding: string) => Promise<void>;
 }>;
+
 const withNavigation = (
   run: (harness: Harness) => Effect.Effect<void, Cause.UnknownError>
 ): Promise<void> =>
@@ -153,22 +167,28 @@ const withNavigation = (
     Effect.gen(function* () {
       vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
       vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+
       const history = createMemoryHistory({
         initialEntries: ["/app/transactions", "/app/recurring?month=2026-11"],
       });
+
       let router = makeRouter(history, "session-a");
       const container = document.createElement("div");
       let root = createRoot(container);
+
       const mount = (): Promise<void> =>
         router
           .load()
           .then(() => reactWork(() => root.render(createElement(RouterProvider, { router }))));
+
       const reload = (binding: string): Promise<void> =>
         reactWork(() => root.unmount()).then(() => {
           router = makeRouter(history, binding);
           root = createRoot(container);
+
           return mount();
         });
+
       try {
         yield* Effect.tryPromise(mount);
         yield* run({ container, router, reload });
@@ -179,8 +199,10 @@ const withNavigation = (
       }
     })
   );
+
 const expectStep = (container: HTMLElement, step: string): Promise<void> =>
   reactAssertion(() => expect(container.querySelector("output")?.textContent).toBe(step));
+
 const openPicker = (container: HTMLElement): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
     yield* Effect.tryPromise(() => click(container, "Open occurrence"));
@@ -188,6 +210,7 @@ const openPicker = (container: HTMLElement): Effect.Effect<void, Cause.UnknownEr
     yield* Effect.tryPromise(() => click(container, "Open picker"));
     yield* Effect.tryPromise(() => expectStep(container, "link"));
   });
+
 it("browser Back from linking returns to the originating occurrence and Forward restores the picker", () =>
   withNavigation(({ container, router }) =>
     Effect.gen(function* () {
@@ -201,6 +224,7 @@ it("browser Back from linking returns to the originating occurrence and Forward 
       yield* Effect.tryPromise(() => expectStep(container, "occurrence"));
     })
   ));
+
 it("review Back and close preserve the search, and reload restores the current read-only step", () =>
   withNavigation(({ container, router, reload }) =>
     Effect.gen(function* () {
@@ -224,6 +248,7 @@ it("review Back and close preserve the search, and reload restores the current r
       yield* Effect.tryPromise(() => expectSearch(container, "Internet|Internet|unselected"));
     })
   ));
+
 it("restoring history in a replacement authentication lifetime discards the occurrence and search", () =>
   withNavigation(({ container, reload }) =>
     Effect.gen(function* () {
@@ -239,7 +264,9 @@ const expectSearch = (container: HTMLElement, text: string): Promise<void> =>
   reactAssertion(() =>
     expect(container.querySelector("[data-search]")?.textContent).toContain(text)
   );
+
 const back = (router: NavigationRouter): Promise<void> => reactWork(() => router.history.back());
+
 const forward = (router: NavigationRouter): Promise<void> =>
   reactWork(() => router.history.forward());
 
@@ -315,6 +342,7 @@ it("retained workspace filters survive sidebar departure and respect an explicit
       expect(container.querySelector("[data-workspace]")?.textContent).toBe("|2026-08");
     })
   ));
+
 const visitRoute = (
   router: NavigationRouter,
   to: "/app/transactions" | "/app/recurring"

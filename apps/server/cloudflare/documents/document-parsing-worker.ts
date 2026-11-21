@@ -26,13 +26,17 @@ const failureResponse = (reason: RejectionReason): Response =>
 
 const parseRequest = Effect.fn(function* (request: Request) {
   const startedAt = performance.now();
+
   const bytes = yield* collectBoundedRequestBody(
     request,
     statementParserLimits.maximumDecodedBytes
   );
+
   const parsed = yield* parseStatementFile(bytes);
+
   const work =
     new URL(request.url).pathname === "/statement-work" ? yield* measureStatementWork(parsed) : {};
+
   return Response.json({
     ...work,
     elapsedMilliseconds: performance.now() - startedAt,
@@ -52,7 +56,9 @@ const fetch = (
   ) {
     return Promise.resolve(failureResponse("not-found"));
   }
+
   const url = new URL(request.url);
+
   if (request.method !== "POST" || !["/statement", "/statement-work"].includes(url.pathname)) {
     return Promise.resolve(failureResponse("not-found"));
   }
@@ -63,8 +69,10 @@ const fetch = (
         if (failure instanceof BoundedBodyReadFailed) {
           return failureResponse(failure.reason);
         }
+
         const reason =
           failure._tag === "StatementParseFailed" ? failure.safeReason : "malformed-file";
+
         return failureResponse(reason);
       },
       onSuccess: (response) => response,

@@ -46,6 +46,7 @@ export const ConversationScrollButton = ({
 
   const handleScrollToBottom = useCallback(() => {
     const scrolling = scrollToBottom();
+
     if (typeof scrolling !== "boolean") scrolling.catch(() => undefined);
   }, [scrollToBottom]);
 

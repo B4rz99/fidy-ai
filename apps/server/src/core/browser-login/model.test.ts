@@ -3,6 +3,7 @@ import { Result, Schema } from "effect";
 import { BrowserLoginPrivateVerifier, BrowserLoginPublicCodeInput } from "./contract";
 
 const decodePrivateVerifier = Schema.decodeUnknownResult(BrowserLoginPrivateVerifier);
+
 const validPrivateVerifier = "A".repeat(43);
 
 it("accepts exactly 43 base64url characters as a private verifier", () => {

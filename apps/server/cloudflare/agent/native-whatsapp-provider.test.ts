@@ -8,11 +8,14 @@ import { native } from "../user-store.test-fixture";
 import { journey } from "./turn-journey.test-fixture";
 
 const safeReply = "No pude completar tu solicitud en este momento. Inténtalo más tarde.";
+
 const providerFailure = Effect.fn(function* (mode: string, rounds: number, answer: string) {
   const { db, provider, now } = yield* journey();
+
   const caller = "CO.13491208655302741918",
     portfolio = "123456789012345",
     message = "wamid." + mode;
+
   yield* native(() =>
     db.exec(
       "UPDATE users SET whatsapp_portfolio_id=?,whatsapp_bsuid=?,whatsapp_verified_at_ms=? WHERE id=?",
@@ -22,9 +25,11 @@ const providerFailure = Effect.fn(function* (mode: string, rounds: number, answe
       alice.user
     )
   );
+
   const directory = yield* native(() =>
     db.runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
   );
+
   yield* native(() =>
     directory.exec(
       "INSERT INTO whatsapp_routes(portfolio,bsuid,user_id,attempt_id,established) VALUES(?,?,?,?,1)",
@@ -34,10 +39,12 @@ const providerFailure = Effect.fn(function* (mode: string, rounds: number, answe
       "hosted-proof"
     )
   );
+
   const facts = (): ReturnType<typeof db.exec> =>
     db.exec(
       "SELECT answer,(SELECT count(*) FROM hosted_tool_calls WHERE turn_id=t.id) AS calls,(SELECT count(*) FROM whatsapp_deliveries WHERE operation_id=t.id) AS deliveries FROM hosted_turns t"
     );
+
   const send = (): ReturnType<typeof chatWith> =>
     chatWith(db.runtime, {
       text: "¿Qué recuerdas?",
@@ -46,6 +53,7 @@ const providerFailure = Effect.fn(function* (mode: string, rounds: number, answe
       occurredMs: now,
       message,
     });
+
   yield* native(() => provider.fetch("https://fixture.invalid/" + mode));
   yield* native(() => provider.fetch("https://fixture.invalid/release"));
   expect((yield* send()).status).toBe(202);
@@ -65,6 +73,7 @@ const providerFailure = Effect.fn(function* (mode: string, rounds: number, answe
   ).toMatchObject({ sends: 1 });
   expect(yield* native(facts)).toEqual([{ answer, calls: 1, deliveries: 1 }]);
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   for (const [mode, rounds, answer] of [
     ["unavailable-after-query", 2, safeReply],

@@ -2,7 +2,9 @@ import { oauthIssuer, oauthPaths, oauthResource } from "../../../src/shell/oauth
 import { oauthResponse as response } from "./response";
 
 const unavailableStatus = 503;
+
 const successStatus = 200;
+
 export const discoveryResponse = (path: string): Response => {
   if (path === oauthPaths.resource) {
     return response({
@@ -15,6 +17,7 @@ export const discoveryResponse = (path: string): Response => {
       },
     });
   }
+
   if (path === oauthPaths.issuer) {
     return response({
       status: successStatus,
@@ -33,6 +36,7 @@ export const discoveryResponse = (path: string): Response => {
       },
     });
   }
+
   if (path === oauthPaths.mcp) {
     return new Response(null, {
       status: 401,
@@ -41,5 +45,6 @@ export const discoveryResponse = (path: string): Response => {
       },
     });
   }
+
   return response({ body: { error: "temporarily_unavailable" }, status: unavailableStatus });
 };

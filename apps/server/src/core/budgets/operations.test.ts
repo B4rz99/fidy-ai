@@ -59,6 +59,7 @@ it("latches each crossed threshold once, including a jump across both thresholds
   const crossed = Effect.runSync(
     advanceBudgetLatch({ budget, spent: money("1000"), latch: initialLatch() })
   );
+
   expect(crossed.newlyReached).toEqual([80, 100]);
   expect(crossed.latch.highestReached).toBe(100);
   expect(
@@ -72,13 +73,17 @@ it("latches each crossed threshold once, including a jump across both thresholds
 
 it("uses exact Money at the 80% boundary without rounding or reopening a mark", () => {
   const decimalBudget = { ...budget, cap: money("100.01") };
+
   const below = Effect.runSync(
     advanceBudgetLatch({ budget: decimalBudget, spent: money("80"), latch: initialLatch() })
   );
+
   expect(below.newlyReached).toEqual([]);
+
   const above = Effect.runSync(
     advanceBudgetLatch({ budget: decimalBudget, spent: money("80.01"), latch: below.latch })
   );
+
   expect(above.newlyReached).toEqual([80]);
   expect(above.latch.highestReached).toBe(80);
 });
@@ -93,6 +98,7 @@ it("does not compare a threshold with spending in another Currency", () => {
       })
     )
   );
+
   expect(Result.isFailure(result) ? result.failure._tag : undefined).toBe("CurrencyMismatch");
 });
 
@@ -100,6 +106,7 @@ it("latches exactly eighty percent before the full cap and never reopens it afte
   const reached = Effect.runSync(
     advanceBudgetLatch({ budget, spent: money("800"), latch: initialLatch() })
   );
+
   expect(reached).toEqual({
     latch: { ...initialLatch(), highestReached: 80 },
     newlyReached: [80],

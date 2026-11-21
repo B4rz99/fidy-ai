@@ -14,6 +14,7 @@ import {
 
 const maximumPolls = 24,
   entropyBytes = 16;
+
 export const verifyNativeSmoke = Effect.fn(function* (input: {
   api: string;
   headers: Readonly<Record<string, string>>;
@@ -21,6 +22,7 @@ export const verifyNativeSmoke = Effect.fn(function* (input: {
   core: SmokeIdentity;
 }) {
   const probeId = Hex.encode(crypto.getRandomValues(new Uint8Array(entropyBytes)));
+
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(SmokeRequest))({
     probeId,
     protocolVersion: 1,
@@ -29,6 +31,7 @@ export const verifyNativeSmoke = Effect.fn(function* (input: {
     expectedGitRevision: input.core.gitRevision,
     expectedContractDigest: input.core.contractDigest,
   });
+
   const execute = (
     query: string,
     request: Option.Option<string>,
@@ -43,6 +46,7 @@ export const verifyNativeSmoke = Effect.fn(function* (input: {
         checkSmokeExchange(result, { public: input.public, core: input.core, replayIdentity })
       )
     );
+
   let status = yield* execute("", Option.some(body), true).pipe(
     Effect.retry({
       times: 6,
@@ -50,14 +54,17 @@ export const verifyNativeSmoke = Effect.fn(function* (input: {
       while: (error) => error instanceof CandidateRoutingPending,
     })
   );
+
   for (let attempt = 0; attempt < maximumPolls && status !== "passed"; attempt++) {
     yield* Effect.sleep("1500 millis");
     status = yield* execute("?probeId=" + probeId, Option.none(), false);
   }
+
   if (status !== "passed") {
     return yield* new ReleaseSmokeFailed({
       reason: "Native release Queue and Workflow did not complete",
     });
   }
+
   return { probeId, status };
 });

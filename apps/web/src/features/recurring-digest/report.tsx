@@ -13,6 +13,7 @@ export const HistoricalReport = ({
 }: Readonly<{ report: RecurringDigestReport; recovery: ReactNode }>): JSX.Element => {
   const day = report.payload.confirmationDay;
   const date = makeCompactDateFormatter(report.locale)(day.localDate);
+
   return (
     <div className="recurring-report-columns">
       <div className="recurring-report-main">

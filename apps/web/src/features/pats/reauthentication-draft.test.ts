@@ -6,20 +6,24 @@ import { PATLifetimeDays, PATRecipientLabel, PATScopes } from "@/transport/clien
 import { preservePATDraft, resumePATDraft } from "./reauthentication-draft";
 
 const userId = "10000000-0000-4000-8000-000000000001";
+
 const draft = {
   recipientLabel: PATRecipientLabel.make("Accesos QA"),
   scopes: PATScopes.make(["read"]),
   lifetimeDays: PATLifetimeDays.make(7),
 };
+
 afterEach(() => {
   window.sessionStorage.clear();
   vi.useRealTimers();
 });
+
 it("restores only grant choices once for the same authenticated User", () => {
   expect(preservePATDraft({ userId, draft })).toBe(true);
   expect(resumePATDraft(userId)).toEqual(Option.some(draft));
   expect(resumePATDraft(userId)).toEqual(Option.none());
 });
+
 it("discards drafts on account replacement and after the bounded handoff", () => {
   preservePATDraft({ userId, draft });
   expect(resumePATDraft("10000000-0000-4000-8000-000000000002")).toEqual(Option.none());
@@ -29,6 +33,7 @@ it("discards drafts on account replacement and after the bounded handoff", () =>
   vi.advanceTimersByTime(20 * 60 * 1000);
   expect(resumePATDraft(userId)).toEqual(Option.none());
 });
+
 it("discards malformed storage without granting or throwing", () => {
   window.sessionStorage.setItem("fidy:pat-identity-confirmation", "invalid");
   expect(resumePATDraft(userId)).toEqual(Option.none());

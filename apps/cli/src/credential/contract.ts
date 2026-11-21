@@ -2,13 +2,16 @@ import { IssuedPAT } from "@fidy/server/client";
 import { Data, type Effect, type Option, type Redacted, Schema } from "effect";
 
 export const apiOrigin = "https://api.fidyapp.com";
+
 export const managementUrl = "https://app.fidyapp.com/settings/access";
 
 export const SavedGrant = Schema.Struct({
   origin: Schema.Literal(apiOrigin),
   pat: IssuedPAT.fields.pat,
 });
+
 export type SavedGrant = typeof SavedGrant.Type;
+
 export type Credential = Readonly<{ grant: SavedGrant; bearer: typeof IssuedPAT.Type.bearer }>;
 
 export class CliFailure extends Data.TaggedError("CliFailure")<{

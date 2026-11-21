@@ -9,9 +9,13 @@ import { TestCrypto } from "../../src/shell/testing/crypto-harness";
 import { authorizeBancolombiaSandbox, pushBancolombiaSandboxAuthorization } from "./operations";
 
 const issuer = "https://auth1-api-open-finance-sandbox.ambientesbc.com";
+
 const as = "https://as1-api-open-finance-sandbox.ambientesbc.com";
+
 const clientId = "10000000-0000-4000-8000-000000000001";
+
 const state = "s".repeat(43);
+
 const challenge = "c".repeat(43);
 
 const signing = Effect.gen(function* () {
@@ -19,14 +23,18 @@ const signing = Effect.gen(function* () {
   const secureRandom = Context.get(services, SecureRandom.SecureRandom);
   const digest = Context.get(services, Digest.Digest);
   const key = yield* Effect.tryPromise(() => generateKeyPair("RS256", { extractable: true }));
+
   const publicKey = {
     ...(yield* Effect.tryPromise(() => exportJWK(key.publicKey))),
     kid: "synthetic-key",
     alg: "RS256",
   };
+
   const privateKey = Redacted.make(yield* Effect.tryPromise(() => exportPKCS8(key.privateKey)));
+
   return { secureRandom, digest, key, publicKey, privateKey };
 });
+
 const discovery = {
   issuer,
   token_endpoint: `${as}/token`,
@@ -41,6 +49,7 @@ const discovery = {
     pushed_authorization_request_endpoint: `${as}/par`,
   },
 };
+
 const checkPar = (
   request: HttpClientRequest.HttpClientRequest,
   publicKey: CryptoKey
@@ -60,6 +69,7 @@ const checkPar = (
       code_challenge_method: "S256",
       client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
     });
+
     const checked = yield* Effect.tryPromise(() =>
       jwtVerify(form.get("client_assertion") ?? "", publicKey, {
         algorithms: ["RS256"],
@@ -69,22 +79,28 @@ const checkPar = (
         currentDate: DateTime.toDateUtc(DateTime.makeUnsafe(0)),
       })
     ).pipe(Effect.orDie);
+
     expect(checked.payload).toMatchObject({ iat: 0, exp: 300 });
     expect(checked.payload.jti).toMatch(/^[0-9a-f-]{36}$/u);
   });
+
 it.effect(
   "pushes the exact consent, S256 and state with a locally signed assertion and returns only the bounded bank handoff",
   () =>
     Effect.gen(function* () {
       const { secureRandom, digest, key, publicKey, privateKey } = yield* signing;
       const urls: string[] = [];
+
       const httpClient = HttpClient.make((request) =>
         Effect.gen(function* () {
           urls.push(request.url);
+
           if (request.method === "GET") {
             return HttpClientResponse.fromWeb(request, Response.json(discovery));
           }
+
           yield* checkPar(request, key.publicKey);
+
           return HttpClientResponse.fromWeb(
             request,
             Response.json(
@@ -97,6 +113,7 @@ it.effect(
           );
         })
       );
+
       const result = yield* pushBancolombiaSandboxAuthorization({
         secureRandom,
         digest,
@@ -109,6 +126,7 @@ it.effect(
         challenge,
         expiresAtMilliseconds: 600000,
       });
+
       const url = new URL(result.url);
       expect(url.origin + url.pathname).toBe(`${issuer}/auth`);
       expect(Object.fromEntries(url.searchParams)).toEqual({
@@ -125,6 +143,7 @@ it.effect(
 it.effect("refuses hostile discovery before disclosing a signed PAR assertion", () =>
   Effect.gen(function* () {
     const keys = yield* signing;
+
     for (const changed of [
       { authorization_endpoint: "https://foreign.example/auth" },
       { pushed_authorization_request_endpoint: "http://127.0.0.1/par" },
@@ -138,6 +157,7 @@ it.effect("refuses hostile discovery before disclosing a signed PAR assertion", 
       { code_challenge_methods_supported: ["plain"] },
     ]) {
       const urls: string[] = [];
+
       const result = yield* pushBancolombiaSandboxAuthorization({
         ...keys,
         clientId,
@@ -147,11 +167,13 @@ it.effect("refuses hostile discovery before disclosing a signed PAR assertion", 
         expiresAtMilliseconds: 600000,
         httpClient: HttpClient.make((request) => {
           urls.push(request.url);
+
           return Effect.succeed(
             HttpClientResponse.fromWeb(request, Response.json({ ...discovery, ...changed }))
           );
         }),
       }).pipe(Effect.exit);
+
       assert.deepStrictEqual(result, Exit.fail(new BancolombiaAuthorizationFailed()));
       expect(urls).toEqual([`${issuer}/.well-known/openid-configuration`]);
     }
@@ -161,6 +183,7 @@ it.effect("refuses hostile discovery before disclosing a signed PAR assertion", 
 it.effect("does not retry uncertain or malformed PAR outcomes or expose provider bodies", () =>
   Effect.gen(function* () {
     const keys = yield* signing;
+
     for (const returned of [
       { status: 302, body: { error: "synthetic-secret" } },
       { status: 500, body: { error: "synthetic-secret" } },
@@ -179,6 +202,7 @@ it.effect("does not retry uncertain or malformed PAR outcomes or expose provider
       },
     ]) {
       let calls = 0;
+
       const result = yield* pushBancolombiaSandboxAuthorization({
         ...keys,
         clientId,
@@ -188,6 +212,7 @@ it.effect("does not retry uncertain or malformed PAR outcomes or expose provider
         expiresAtMilliseconds: 600000,
         httpClient: HttpClient.make((request) => {
           calls += 1;
+
           return Effect.succeed(
             HttpClientResponse.fromWeb(
               request,
@@ -201,6 +226,7 @@ it.effect("does not retry uncertain or malformed PAR outcomes or expose provider
           );
         }),
       }).pipe(Effect.exit);
+
       assert.deepStrictEqual(result, Exit.fail(new BancolombiaAuthorizationFailed()));
       expect(calls).toBe(2);
       expect(
@@ -247,6 +273,7 @@ const syntheticProfile = Schema.decodeSync(BancolombiaConsentProfile)({
     expiryPolicy: "bank-default",
   },
 });
+
 const consentResponse = {
   Data: {
     ConsentId: "synthetic-consent",
@@ -254,18 +281,24 @@ const consentResponse = {
     Permissions: syntheticProfile.intent.permissions,
   },
 };
+
 const createdConsentEndpoint =
   "https://rs1-api-open-finance-sandbox.ambientesbc.com/open-banking/v1/deposits/accounts/account-access-consent";
+
 const returnedPermissions = (mode: string): readonly string[] => {
   if (mode === "mismatch") return ["ReadAccountsBasic"];
+
   if (mode === "duplicate") return ["ReadAccountsBasic", "ReadAccountsBasic", "ReadAccountsBasic"];
+
   return consentResponse.Data.Permissions;
 };
+
 it.effect(
   "creates and durably records the exact consent before PAR, refuses uncertainty and mismatched intent",
   () =>
     Effect.gen(function* () {
       const keys = yield* signing;
+
       for (const mode of [
         "ready",
         "minimal",
@@ -277,13 +310,17 @@ it.effect(
         const urls: string[] = [];
         const recorded: string[] = [];
         const assertions: string[] = [];
+
         const httpClient = HttpClient.make((request) =>
           Effect.gen(function* () {
             urls.push(request.url);
+
             if (request.method === "GET") {
               return HttpClientResponse.fromWeb(request, Response.json(discovery));
             }
+
             if (request.body._tag !== "Uint8Array") throw new Error("Expected encoded body");
+
             if (request.url === createdConsentEndpoint) {
               expect(request.headers.authorization).toBe("Bearer synthetic-bearer");
               expect(request.headers["x-fapi-financial-id"]).toBe(syntheticProfile.financialId);
@@ -304,6 +341,7 @@ it.effect(
                   AccountOwner: syntheticProfile.accountOwner,
                 },
               });
+
               return HttpClientResponse.fromWeb(
                 request,
                 Response.json(
@@ -319,10 +357,12 @@ it.effect(
                 )
               );
             }
+
             const form = new URLSearchParams(new TextDecoder().decode(request.body.body));
             assertions.push(
               yield* assertionIdentifier(form.get("client_assertion") ?? "", keys.key.publicKey)
             );
+
             if (request.url.endsWith("/token")) {
               return HttpClientResponse.fromWeb(
                 request,
@@ -334,8 +374,10 @@ it.effect(
                 })
               );
             }
+
             expect(recorded).toEqual(["synthetic-consent"]);
             yield* checkPar(request, keys.key.publicKey);
+
             return HttpClientResponse.fromWeb(
               request,
               Response.json(
@@ -348,6 +390,7 @@ it.effect(
             );
           }).pipe(Effect.orDie)
         );
+
         const result = yield* authorizeBancolombiaSandbox({
           ...keys,
           clientId,
@@ -358,11 +401,13 @@ it.effect(
           profile: Redacted.make(syntheticProfile),
           recordConsent: (consentId) => {
             recorded.push(consentId);
+
             return mode === "record-failure"
               ? Effect.fail(new BancolombiaAuthorizationFailed())
               : Effect.void;
           },
         }).pipe(Effect.exit);
+
         if (mode === "ready" || mode === "minimal") {
           expect(Exit.isSuccess(result)).toBe(true);
           expect(urls).toEqual([

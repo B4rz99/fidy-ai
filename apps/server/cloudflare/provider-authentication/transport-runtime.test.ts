@@ -43,6 +43,7 @@ const makeProviderFetch = (
   Object.assign(
     (input: string | URL | Request, init?: RequestInit) => {
       observed.calls += 1;
+
       return runtime
         .dispatchFetch("http://provider", {
           method: "POST",
@@ -80,16 +81,19 @@ it("Access recovery signing-key requests work in Workers without following redir
           Effect.gen(function* () {
             for (const status of [200, 302]) {
               const observed = { calls: 0 };
+
               const clients = yield* Layer.build(FetchHttpClient.layer).pipe(
                 Effect.provideService(
                   FetchHttpClient.Fetch,
                   makeProviderFetch(runtime, status, observed)
                 )
               );
+
               const http = makeAccessSigningKeysOutboundHttp({
                 issuer: "https://synthetic.cloudflareaccess.com",
                 httpClient: Context.get(clients, HttpClient.HttpClient),
               });
+
               expect((yield* http.execute({ _tag: "CloudflareAccessSigningKeys" })).status).toBe(
                 status
               );
@@ -112,15 +116,18 @@ it("Google and Microsoft OIDC requests work in Workers and return redirects with
               for (const status of [200, 302]) {
                 const observed = { calls: 0 };
                 const providerFetch = makeProviderFetch(runtime, status, observed);
+
                 const clients = yield* Layer.build(FetchHttpClient.layer).pipe(
                   Effect.provideService(FetchHttpClient.Fetch, providerFetch)
                 );
+
                 const http = makeHttp({
                   clientId: "synthetic-client",
                   clientSecret: Redacted.make("synthetic-secret"),
                   redirectUri: "https://api.fidyapp.com/providers/test/callback",
                   httpClient: Context.get(clients, HttpClient.HttpClient),
                 });
+
                 for (const request of [
                   { _tag: "SigningKeys" },
                   {
@@ -131,6 +138,7 @@ it("Google and Microsoft OIDC requests work in Workers and return redirects with
                 ] as const) {
                   expect((yield* http.execute(request)).status).toBe(status);
                 }
+
                 expect(observed.calls).toBe(2);
               }
             }

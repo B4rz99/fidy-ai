@@ -7,9 +7,11 @@ import { observeInitialBrowserRequest } from "@/session/initial-request";
 export const mountWebApplication = (): void => {
   if (tryMountProviderReturn()) return;
   const ready = Promise.withResolvers<void>();
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => ready.resolve(), { once: true });
   } else ready.resolve();
+
   const request = observeInitialBrowserRequest(
     beginInitialBrowserRequest({
       apiOrigin: browserApiOrigin({
@@ -20,12 +22,15 @@ export const mountWebApplication = (): void => {
       transactions: window.location.pathname === "/app/transactions",
     })
   );
+
   preloadWebRouteCode(window.location.pathname).catch(() => undefined);
   Promise.all([import("./render"), import("@/transport/initial-session")])
     .then(([{ mountWebApplication }, { beginInitialBrowserSession }]) => {
       const initial = beginInitialBrowserSession({ ...request, request });
+
       return ready.promise.then(() => {
         const root = document.querySelector("#root");
+
         if (root === null) throw new Error("Web application root is missing");
         mountWebApplication({ root, initial });
       });

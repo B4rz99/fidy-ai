@@ -27,22 +27,27 @@ export const readLocalReport = Effect.fn(function* (
   input: Parameters<typeof recurringReportQuery>[0]
 ) {
   const sql = yield* SqliteClient;
+
   const [row] =
     yield* sql`SELECT e.event_json,r.report_json FROM insight_events e JOIN recurring_digest_reports r ON r.event_id=e.id WHERE e.user_id=${input.userId} AND e.id=${input.id}`;
+
   if (row === undefined) {
     const missing: LocalMutationResult = {
       status: 404,
       outcome: "not_found",
       body: { error: { code: "not_found", message: "Recurring report unavailable." }, next: [] },
     };
+
     return missing;
   }
+
   const { event, report } = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       event: Schema.fromJsonString(Schema.toCodecJson(InsightEvent)),
       report: ReportJson,
     })
   )({ event: row.event_json, report: row.report_json });
+
   if (
     event.kind !== "new-recurring-series" ||
     report.insightEventId !== event.id ||
@@ -51,6 +56,7 @@ export const readLocalReport = Effect.fn(function* (
   ) {
     return yield* new InsightUnavailable();
   }
+
   const response: LocalMutationResult = {
     status: 200,
     outcome: "success",
@@ -59,5 +65,6 @@ export const readLocalReport = Effect.fn(function* (
       next: [],
     },
   };
+
   return response;
 });

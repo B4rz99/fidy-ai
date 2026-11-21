@@ -22,10 +22,13 @@ export type CanonicalQueryState<A, E> =
 
 const classifyFailure = <A, E>(result: AsyncResult.Failure<A, E>): CanonicalQueryFailure<E> => {
   if (Cause.hasInterruptsOnly(result.cause)) return { _tag: "Interrupted" };
+
   if (Cause.hasDies(result.cause) || Cause.hasInterrupts(result.cause)) {
     return { _tag: "BoundaryFailure" };
   }
+
   const error: Option.Option<E> = Cause.findErrorOption(result.cause);
+
   return Option.match(error, {
     onNone: () => ({ _tag: "BoundaryFailure" }),
     onSome: (error) => ({ _tag: "DeclaredFailure", error }),
@@ -45,6 +48,7 @@ export const presentCanonicalQuery = <A, E>(
     }),
     onFailure: (failure) => {
       const classified = classifyFailure(failure);
+
       return Option.match(failure.previousSuccess, {
         onNone: () => ({
           _tag: "Failure" as const,

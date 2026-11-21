@@ -11,8 +11,11 @@ import { browserOrigins, productionTopology } from "../runtime/contract";
 import { Hex } from "effect/encoding";
 
 const attemptId = "22430000-0000-4000-8000-000000000001";
+
 const reference = "fidy-" + attemptId;
+
 const work = { _tag: "CollectUserBillingAttempt", userId: alice.user, attemptId };
+
 const until = (check: Effect.Effect<boolean>): Effect.Effect<void, "pending"> =>
   check.pipe(
     Effect.flatMap((done) => (done ? Effect.void : Effect.fail("pending" as const))),
@@ -37,15 +40,18 @@ const callbackFixture = Effect.fn(function* () {
     attemptId,
     reference
   );
+
   const db = yield* native(() =>
     runtime.unsafeGetDurableObjectStorage("wompi-fixture", "ProviderState", { name: "provider" })
   );
+
   yield* native(() =>
     db.exec(
       "CREATE TABLE charge_posts(reference TEXT,amount INTEGER,currency TEXT,source INTEGER); CREATE TABLE charge_control(released INTEGER,reference TEXT,amount INTEGER,source INTEGER)"
     )
   );
   yield* native(() => db.exec("INSERT INTO charge_control VALUES(0,?,2990000,5101)", reference));
+
   return { owner, runtime, db };
 });
 
@@ -58,6 +64,7 @@ const observer = (
         .getByName(id)
         .fetch(settleUserBillingUrl, { method: "POST", body: JSON.stringify(body) })
     );
+
     return response.status;
   });
 
@@ -67,9 +74,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     (erase) =>
       Effect.gen(function* () {
         const { owner, runtime, db } = yield* callbackFixture();
+
         const queue = yield* native(() =>
           runtime.getQueueProducer("BILLING_COLLECTION_QUEUE", "core")
         );
+
         yield* native(() => queue.send(work));
         yield* until(
           native(() => db.exec("SELECT count(*) AS n FROM charge_posts")).pipe(
@@ -84,6 +93,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             )
           )
         ).toEqual([{ user_id: alice.user, operation_id: attemptId }]);
+
         if (erase) {
           const accepted = yield* native(() =>
             runtime.dispatchFetch(
@@ -100,6 +110,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               }
             )
           );
+
           expect(accepted.status).toBe(202);
           const driver = yield* caseDriver(runtime);
           yield* driver.step();
@@ -108,8 +119,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             [{ status: "pending", collection_state: "sent" }]
           );
         }
+
         const stamp = 1712345678;
         const id = "provider-callback-id";
+
         const checksum = Hex.encode(
           new Uint8Array(
             yield* native(() =>
@@ -120,6 +133,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             )
           )
         );
+
         const notify = (
           environment: string,
           header: string
@@ -140,6 +154,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               }
             )
           );
+
         expect((yield* notify("prod", checksum)).status).toBe(400);
         expect((yield* notify("test", "0".repeat(64))).status).toBe(400);
         expect((yield* notify("test", checksum)).status).toBe(200);
@@ -157,6 +172,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* owner.exec("SELECT current_paid_attempt_id FROM subscriptions")).toEqual([
           { current_paid_attempt_id: attemptId },
         ]);
+
         if (erase) {
           expect(yield* owner.exec("SELECT followup_due_at_ms FROM billing_attempts")).toEqual([
             { followup_due_at_ms: null },
@@ -189,6 +205,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const { owner, runtime } = yield* callbackFixture();
         const other = yield* seed(runtime, bob);
         const owners = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
+
         const work = {
           userId: alice.user,
           attemptId,
@@ -202,6 +219,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           finalizedAt: owner.now,
           generation: { signedAt: 100, signedStatus: "DECLINED" },
         };
+
         const observe = observer(owners);
         expect(yield* observe(work)).toBe(204);
         yield* owner.exec(
@@ -209,6 +227,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           owner.now,
           attemptId
         );
+
         for (const wrong of [
           { sourceId: 5300 },
           { currency: "USD" },
@@ -219,6 +238,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         ]) {
           expect(yield* observe({ ...work, ...wrong })).toBe(204);
         }
+
         expect(yield* observe(work, bob.user)).toBe(204);
         expect(
           yield* owner.exec("SELECT count(*) AS n FROM billing_provider_transactions")
@@ -234,11 +254,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* owner.exec("SELECT status FROM billing_attempts")).toEqual([
           { status: "pending" },
         ]);
+
         const approved = {
           ...work,
           status: "APPROVED",
           generation: { signedAt: 100, signedStatus: "APPROVED" },
         };
+
         yield* owner.exec(
           "CREATE TRIGGER suppress_settlement_audit BEFORE INSERT ON billing_transition_audit BEGIN SELECT RAISE(IGNORE); END"
         );

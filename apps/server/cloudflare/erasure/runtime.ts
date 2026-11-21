@@ -25,5 +25,6 @@ export const handleNativeErasureOperator = Effect.fn(function* (
     issuer: environment.CLOUDFLARE_ACCESS_ISSUER,
     httpClient: yield* HttpClient.HttpClient,
   });
+
   return yield* nativeOperatorRequest({ request, environment, http });
 });

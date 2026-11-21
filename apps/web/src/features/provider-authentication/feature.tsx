@@ -18,19 +18,24 @@ import { closeProviderReturn, useProviderAuthentication } from "./controller";
 
 const canContinue = (intent: "signup" | "login", accepted: boolean, ready: boolean): boolean =>
   intent === "login" || (accepted && ready);
+
 type Authentication = Omit<ReturnType<typeof useProviderAuthentication>, "mounted">;
+
 const ConsentNotice = ({
   accepted,
   setAccepted,
 }: Readonly<{ accepted: boolean; setAccepted: (value: boolean) => void }>): JSX.Element => {
   const router = useRouter();
+
   const query = router.options.context.webAuthClient.query(
     "providerAuthentication",
     "disclosure",
     {}
   );
+
   const disclosure = useAtomValue(query);
   const refresh = useAtomRefresh(query);
+
   return (
     <div data-access-consent="">
       {AsyncResult.match(disclosure, {
@@ -54,6 +59,7 @@ const ConsentNotice = ({
     </div>
   );
 };
+
 type EditingFormProps = Readonly<{
   children: ReactNode;
   intent: "signup" | "login";
@@ -61,6 +67,7 @@ type EditingFormProps = Readonly<{
   start: Authentication["start"];
   handoffReference: Option.Option<string>;
 }>;
+
 const EditingForm = ({
   intent,
   setIntent,
@@ -69,10 +76,13 @@ const EditingForm = ({
   children,
 }: EditingFormProps): JSX.Element => {
   const router = useRouter();
+
   const disclosure = useAtomValue(
     router.options.context.webAuthClient.query("providerAuthentication", "disclosure", {})
   );
+
   const [accepted, setAccepted] = useState(false);
+
   return (
     <>
       {intent === "signup" && <ConsentNotice accepted={accepted} setAccepted={setAccepted} />}
@@ -111,6 +121,7 @@ const EditingForm = ({
     </>
   );
 };
+
 const ConfirmingStatus = ({
   authentication,
 }: Readonly<{ authentication: Authentication }>): JSX.Element => (
@@ -135,6 +146,7 @@ const ConfirmingStatus = ({
     )}
   </>
 );
+
 const RecoveryStatus = ({
   authentication,
 }: Readonly<{ authentication: Authentication }>): JSX.Element => (
@@ -153,6 +165,7 @@ const RecoveryStatus = ({
     )}
   </>
 );
+
 const AssociationStatus = ({
   authentication,
 }: Readonly<{ authentication: Authentication }>): JSX.Element => (
@@ -175,6 +188,7 @@ const AssociationStatus = ({
     )}
   </>
 );
+
 const AttemptStatus = ({
   authentication,
   setIntent,
@@ -219,6 +233,7 @@ const AttemptStatus = ({
     )}
   </>
 );
+
 const RetryStatus = ({
   authentication,
   provider,
@@ -242,6 +257,7 @@ const RetryStatus = ({
     )}
   </>
 );
+
 const ProviderBack = ({
   authentication,
 }: Readonly<{ authentication: Authentication }>): JSX.Element =>
@@ -263,6 +279,7 @@ const ProviderIntroduction = ({
   const router = useRouter();
   const confirmingIdentity = router.state.location.search.resume !== undefined;
   const confirmingToken = router.state.location.search.resume === "pat";
+
   return (
     <>
       <AccessHeading key={status}>
@@ -296,10 +313,13 @@ const ProviderAuthenticationView = ({
 }>): JSX.Element => {
   const router = useRouter();
   const confirmingIdentity = router.state.location.search.resume !== undefined;
+
   const [intent, setIntent] = useState<"signup" | "login">(
     Option.isSome(handoffReference) && !confirmingIdentity ? "signup" : "login"
   );
+
   const webSignup = intent === "signup" && Option.isNone(handoffReference);
+
   return (
     <div data-access-principal="" data-access-signup={webSignup ? "" : undefined}>
       <ProviderBack authentication={authentication} />
@@ -342,6 +362,7 @@ export const ProviderAuthenticationFeature = ({
   children: (presentation: ProviderAuthenticationPresentation) => ReactNode;
 }>): JSX.Element => {
   const { mounted, ...authentication } = useProviderAuthentication({ handoffReference });
+
   return (
     <div ref={mounted}>
       {children({

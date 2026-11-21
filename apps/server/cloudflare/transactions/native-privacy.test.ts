@@ -17,6 +17,7 @@ const privacyRequest = Effect.fnUntraced(function* (
   headers: Record<string, string> = {}
 ) {
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({ cursor });
+
   const response = yield* native(() =>
     runtime.dispatchFetch("https://api.fidyapp.com/web/privacy/transactions", {
       method: "POST",
@@ -31,7 +32,9 @@ const privacyRequest = Effect.fnUntraced(function* (
       body,
     })
   );
+
   const data = yield* native(() => response.arrayBuffer());
+
   return new Response(data, { status: response.status });
 });
 
@@ -65,36 +68,47 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         ).toBe(401);
         const first = yield* privacyRequest(runtime, null);
         expect(first.status).toBe(200);
+
         const page = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PrivacyTransactionPage))(
           yield* native(() => first.json())
         );
+
         expect(page.data).toHaveLength(100);
         expect(page.next).not.toBeNull();
+
         const cursor = yield* Schema.encodeEffect(
           Schema.toCodecJson(Schema.NullOr(PrivacyTransactionCursor))
         )(page.next);
+
         const peer = yield* privacyRequest(runtime, cursor, {
           cookie: "__Host-fidy_session=" + bob.bearer,
           "fidy-session-binding": bob.session,
         });
+
         expect(peer.status).toBe(200);
+
         const peerPage = yield* Schema.decodeUnknownEffect(PrivacyTransactionPage)(
           yield* native(() => peer.json())
         );
+
         expect(peerPage.data.map(({ id }) => id)).toEqual([transaction]);
         const second = yield* privacyRequest(runtime, cursor);
+
         const final = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PrivacyTransactionPage))(
           yield* native(() => second.json())
         );
+
         expect(final.data).toHaveLength(1);
         expect([...page.data, ...final.data].map((record) => record.id)).not.toContain(transaction);
         expect(final.next).toBeNull();
         expect(page.reference).not.toBe(final.reference);
+
         const audits = yield* owner.exec(
           "SELECT id FROM audit_entries WHERE user_id=? AND session_id=? AND operation='privacy.transactions' ORDER BY rowid",
           alice.user,
           alice.session
         );
+
         expect(audits).toEqual([{ id: page.reference }, { id: final.reference }]);
         yield* owner.exec(
           "CREATE TRIGGER reject_privacy_audit BEFORE INSERT ON audit_entries WHEN NEW.operation='privacy.transactions' BEGIN SELECT RAISE(ABORT,'fixture'); END"

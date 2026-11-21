@@ -18,10 +18,12 @@ describe("canonical response continuation checkpoint", () => {
     "filters nested %s and envelope continuations without changing exact values",
     (part) => {
       Schema.decodeUnknownSync(NextOperations)(candidates);
+
       const value = Schema.decodeSync(Schema.Json)({
         [part]: { amount: "9007199254740993", nested: { continuations: candidates } },
         next: candidates,
       });
+
       const projected = checkpointResponseSuggestions({
         value,
         catalog: operationCatalog,
@@ -31,6 +33,7 @@ describe("canonical response continuation checkpoint", () => {
             tier: "free",
           }),
       });
+
       expect(projected).toEqual({
         [part]: { amount: "9007199254740993", nested: { continuations: [candidates[0]] } },
         next: [candidates[0]],
@@ -44,16 +47,19 @@ describe("canonical response continuation checkpoint", () => {
         ? { ...operation, policy: { ...operation.policy, requiredTier: "pro" as const } }
         : operation
     );
+
     const catalog = {
       ...operationCatalog,
       operations,
       byId: new Map(operations.map((operation) => [operation.id, operation])),
     };
+
     for (const tier of ["free", "pro"] as const) {
       const value = Schema.decodeSync(Schema.Json)({
         data: { continuations: candidates.slice(0, 1) },
         next: [],
       });
+
       expect(
         checkpointResponseSuggestions({
           value,

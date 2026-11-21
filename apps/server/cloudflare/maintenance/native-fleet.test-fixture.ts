@@ -2,11 +2,15 @@ import { Clock, Effect } from "effect";
 import { Maintenance as NativeMaintenance } from "./runtime";
 
 export * from "../core-worker";
+
 export { default } from "../core-worker";
 
 type Environment = ConstructorParameters<typeof NativeMaintenance>[1];
+
 type Peer = Environment["DIRECTORY"];
+
 type Probe = { name: string; at: number; elapsedMs: number; status: number };
+
 const observationUrl = "https://fixture.invalid/fleet-observations";
 
 export class Maintenance extends NativeMaintenance {
@@ -15,6 +19,7 @@ export class Maintenance extends NativeMaintenance {
   constructor(state: DurableObjectState, env: Environment) {
     const clock = Effect.runSync(Clock.Clock);
     const sample = { active: 0, peak: 0, probes: new Array<Probe>() };
+
     const observe = (peer: Peer): Peer =>
       peer && {
         getByName: (name) => ({
@@ -25,13 +30,16 @@ export class Maintenance extends NativeMaintenance {
               elapsedMs: 0,
               status: 0,
             };
+
             sample.probes.push(probe);
             sample.peak = Math.max(sample.peak, ++sample.active);
+
             return peer
               .getByName(name)
               .fetch(input, init)
               .then((response) => {
                 probe.status = response.status;
+
                 return response;
               })
               .finally(() => {
@@ -41,6 +49,7 @@ export class Maintenance extends NativeMaintenance {
           },
         }),
       };
+
     super(state, {
       ...env,
       USER_STORE: observe(env.USER_STORE),
@@ -56,6 +65,7 @@ export class Maintenance extends NativeMaintenance {
     const snapshot = Response.json(this.sample);
     this.sample.probes.length = 0;
     this.sample.peak = this.sample.active;
+
     return Promise.resolve(snapshot);
   }
 }

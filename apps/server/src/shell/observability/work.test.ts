@@ -29,10 +29,12 @@ const options = {
 it.effect("exports only the closed Work-span projection and preserves success", () =>
   Effect.gen(function* () {
     const records: Array<TelemetryWorkRecord> = [];
+
     const telemetry = makeTelemetryService({
       ...DisabledTelemetryResource.adapter,
       exportWork: (record) => records.push(record),
     });
+
     const fiber = yield* telemetry
       .observeWork(options, Effect.sleep("25 millis").pipe(Effect.as("application-result")))
       .pipe(Effect.forkChild);
@@ -65,13 +67,16 @@ it.effect("exports only the closed Work-span projection and preserves success", 
 it.effect("preserves failure and interruption while exporting each exit once", () =>
   Effect.gen(function* () {
     const records: Array<TelemetryWorkRecord> = [];
+
     const telemetry = makeTelemetryService({
       ...DisabledTelemetryResource.adapter,
       exportWork: (record) => records.push(record),
     });
+
     const failure = yield* telemetry
       .observeWork(options, Effect.fail("application-failure"))
       .pipe(Effect.exit);
+
     const fiber = yield* telemetry.observeWork(options, Effect.never).pipe(Effect.forkChild);
     yield* Effect.yieldNow;
     yield* Fiber.interrupt(fiber);
@@ -95,9 +100,11 @@ it.effect("contains synchronous export failure without changing authoritative Wo
     expect(yield* telemetry.observeWork(options, Effect.succeed("application-result"))).toBe(
       "application-result"
     );
+
     const failure = yield* telemetry
       .observeWork(options, Effect.fail("application-failure"))
       .pipe(Effect.exit);
+
     expect(Exit.findErrorOption(failure)).toEqual(Option.some("application-failure"));
   })
 );
@@ -108,10 +115,12 @@ it.effect(
     Effect.gen(function* () {
       const records: Array<TelemetryWorkRecord> = [];
       let executions = 0;
+
       const telemetry = makeTelemetryService({
         ...DisabledTelemetryResource.adapter,
         exportWork: (record) => records.push(record),
       });
+
       const result = yield* telemetry.observeWork(
         {
           ...options,
@@ -125,9 +134,11 @@ it.effect(
         },
         Effect.sync(() => {
           executions += 1;
+
           return "authoritative-result";
         })
       );
+
       expect(result).toBe("authoritative-result");
       expect(executions).toBe(1);
       expect(records).toEqual([]);
@@ -139,6 +150,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       let exports = 0;
+
       const telemetry = makeTelemetryService({
         ...DisabledTelemetryResource.adapter,
         exportWork: () => {
@@ -146,12 +158,14 @@ it.effect(
           throw new Error("private-export-sentinel");
         },
       });
+
       const throwingOptions = {
         ...options,
         projectSuccess: (): TelemetryWorkSuccess => {
           throw new Error("private-projection-sentinel");
         },
       };
+
       expect(yield* telemetry.observeWork(throwingOptions, Effect.succeed("completed"))).toBe(
         "completed"
       );
@@ -169,10 +183,12 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const records: Array<TelemetryWorkRecord> = [];
+
       const telemetry = makeTelemetryService({
         ...DisabledTelemetryResource.adapter,
         exportWork: (record) => records.push(record),
       });
+
       const deadline = new Cause.TimeoutError();
       yield* Effect.exit(telemetry.observeWork(options, Effect.fail(deadline)));
       yield* Effect.exit(
@@ -182,9 +198,11 @@ it.effect(
         )
       );
       const runExit = Effect.runPromiseExitWith(yield* Effect.context<never>());
+
       const interrupted = yield* Effect.tryPromise(() =>
         runExit(telemetry.observeWork(options, Effect.interrupt))
       );
+
       expect(Exit.isFailure(interrupted) && Cause.hasInterrupts(interrupted.cause)).toBe(true);
       expect(records.map(({ outcome }) => outcome)).toEqual(["failed", "failed", "interrupted"]);
     })

@@ -8,6 +8,7 @@ import { makeOpenAiOutboundHttp } from "./operations";
 it.effect("uses the fixed OpenAI destination without redirect authority or trace propagation", () =>
   Effect.gen(function* () {
     let calls = 0;
+
     const client = HttpClient.make((request) =>
       Effect.gen(function* () {
         calls += 1;
@@ -20,9 +21,11 @@ it.effect("uses the fixed OpenAI destination without redirect authority or trace
           redirect: "manual",
           credentials: "omit",
         });
+
         return HttpClientResponse.fromWeb(request, Response.json({ choices: [] }));
       })
     );
+
     const http = makeOpenAiOutboundHttp({ apiKey: Redacted.make("synthetic-api-key"), client });
     const result = yield* http.execute('{"model":"gpt-6-luna","store":false}');
     expect(result.status).toBe(200);
@@ -35,8 +38,10 @@ it.effect("bounds streamed OpenAI response bytes and performs no hidden retry", 
   Effect.gen(function* () {
     let calls = 0;
     let cancelled = false;
+
     const client = HttpClient.make((request) => {
       calls += 1;
+
       return Effect.succeed(
         HttpClientResponse.fromWeb(
           request,
@@ -51,6 +56,7 @@ it.effect("bounds streamed OpenAI response bytes and performs no hidden retry", 
         )
       );
     });
+
     const http = makeOpenAiOutboundHttp({ apiKey: Redacted.make("synthetic-api-key"), client });
     assert.deepStrictEqual(
       Exit.fail(yield* Effect.flip(http.execute("{}"))),

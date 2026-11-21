@@ -16,6 +16,7 @@ export const InlineRecurringCategory = ({
 }>): JSX.Element => {
   const label =
     categories.find((category) => category.id === item.plan.categoryId)?.label ?? "Sin categoría";
+
   return (
     <InlineChoiceDropdown
       label={`Cambiar categoría de ${item.plan.name}`}
@@ -28,6 +29,7 @@ export const InlineRecurringCategory = ({
       onChange={(value) => {
         if (disabled || item.fulfillments.length > 0 || value === item.plan.categoryId) return;
         const category = categories.find((entry) => entry.id === value);
+
         if (category === undefined) return;
         save({
           kind: "edit",

@@ -3,6 +3,7 @@ import { Result, Schema } from "effect";
 import { expect, it } from "vitest";
 
 const reference = "10000000-0000-4000-8000-000000000001";
+
 it("requires explicit erasure confirmation", () => {
   expect(Result.isSuccess(Schema.decodeResult(ErasureRequest)({ confirm: true }))).toBe(true);
   expect(Result.isFailure(Schema.decodeUnknownResult(ErasureRequest)({ confirm: false }))).toBe(
@@ -22,6 +23,7 @@ it("preserves completed work and unresolved external evidence in the operator re
     ],
     recoveryUntilMs: null,
   };
+
   const decoded = Schema.decodeUnknownSync(ErasureOperatorReceipt)(value);
   expect(Schema.encodeSync(ErasureOperatorReceipt)(decoded)).toEqual(value);
 });
@@ -32,6 +34,7 @@ it("retains accepted custody evidence and safe unresolved reasons", () => {
     custodian: "Cloudflare",
     evidenceRef: "10000000-0000-4000-8000-000000000002",
   };
+
   const outcomes = [
     ...["Accepted", "Verified", "NotApplicable"].map((status) => ({ status })),
     ...["capability-unverified", "retention-conflict", "request-declined"].map((reason) => ({
@@ -39,6 +42,7 @@ it("retains accepted custody evidence and safe unresolved reasons", () => {
       reason,
     })),
   ];
+
   for (const outcome of outcomes) {
     const value = { ...identity, outcome };
     expect(
@@ -56,6 +60,7 @@ it("refuses unknown custodians, initialization outcomes and unapproved unresolve
     evidenceRef: "10000000-0000-4000-8000-000000000002",
     outcome: { status: "Accepted" },
   };
+
   for (const candidate of [
     { ...evidence, custodian: "Unknown" },
     { ...evidence, outcome: { status: "Pending" } },

@@ -30,10 +30,15 @@ type ActiveSpan = {
 };
 
 const maximumBreadcrumbs = 16;
+
 const maximumActiveSpans = 1024;
+
 const hexRadix = 16;
+
 const spanIdBytes = 8;
+
 const traceIdBytes = 16;
+
 const randomHex = (bytes: number): string =>
   Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (byte) =>
     byte.toString(hexRadix).padStart(2, "0")
@@ -42,6 +47,7 @@ const randomHex = (bytes: number): string =>
 const spanStatus = (state: ActiveSpan): Option.Option<TelemetryHttpStatus> =>
   Option.orElse(state.status, () => {
     const value = state.descriptor.metadata;
+
     return value._tag === "Http" || value._tag === "Provider" ? value.status : Option.none();
   });
 
@@ -56,6 +62,7 @@ const modelRoundMetadata = (
 const metadata = (state: ActiveSpan): Partial<ProjectedTraceData> => {
   const value = state.descriptor.metadata;
   const status = spanStatus(state);
+
   const http = Option.match(status, {
     onNone: () => ({}),
     onSome: (code) => ({
@@ -63,6 +70,7 @@ const metadata = (state: ActiveSpan): Partial<ProjectedTraceData> => {
       "http.response.status_class": projectHttpStatusClass(code),
     }),
   });
+
   const usage = Option.match(state.usage, {
     onNone: () => ({}),
     onSome: (record) => ({
@@ -71,6 +79,7 @@ const metadata = (state: ActiveSpan): Partial<ProjectedTraceData> => {
       "gen_ai.usage.output_tokens": record.outputTokens,
     }),
   });
+
   switch (value._tag) {
     case "None":
       return modelRoundMetadata(state, usage);
@@ -104,6 +113,7 @@ const metadata = (state: ActiveSpan): Partial<ProjectedTraceData> => {
 
 const isPureInterruption = (cause: Cause.Cause<unknown>): boolean =>
   Cause.hasInterrupts(cause) && !Cause.hasDies(cause) && !Cause.hasFails(cause);
+
 const declaredFailure = (state: ActiveSpan): Option.Option<DeclaredOutcome> =>
   Option.filter(
     state.outcome,
@@ -115,14 +125,18 @@ const terminalOutcome = (state: ActiveSpan, exit: Exit.Exit<unknown, unknown>): 
     if (isPureInterruption(exit.cause)) {
       return { outcome: "interrupted", error: Option.none(), retryable: false };
     }
+
     const declared = declaredFailure(state);
+
     if (!Cause.hasDies(exit.cause) && Option.isSome(declared)) return declared.value;
+
     return {
       outcome: "failed",
       error: Option.some(Cause.hasDies(exit.cause) ? "unexpected_defect" : "operational_failure"),
       retryable: false,
     };
   }
+
   return Option.getOrElse(state.outcome, () => ({
     outcome: "succeeded",
     error: Option.none(),
@@ -131,6 +145,7 @@ const terminalOutcome = (state: ActiveSpan, exit: Exit.Exit<unknown, unknown>): 
 };
 
 type ActiveSpans = Map<typeof TelemetrySpanId.Type, ActiveSpan>;
+
 type EventSink = (event: WorkerTelemetryEvent) => void;
 
 const startSpan =
@@ -138,15 +153,19 @@ const startSpan =
   (descriptor, parent) =>
     Effect.gen(function* () {
       if (active.size >= maximumActiveSpans) return Option.none();
+
       const decoded = yield* Schema.decodeEffect(
         SpanDescriptor,
         TelemetryStrictDecoding
       )(descriptor).pipe(Effect.orDie);
+
       const spanId = TelemetrySpanId.make(randomHex(spanIdBytes));
+
       const traceId = Option.match(parent, {
         onNone: () => TelemetryTraceId.make(randomHex(traceIdBytes)),
         onSome: (value) => value.traceId,
       });
+
       active.set(spanId, {
         descriptor: decoded,
         release:
@@ -162,6 +181,7 @@ const startSpan =
         usage: Option.none(),
         breadcrumbs: [],
       });
+
       return Option.some({
         traceId,
         spanId,
@@ -176,6 +196,7 @@ const finishSpan =
     Effect.gen(function* () {
       const state = active.get(span.spanId);
       active.delete(span.spanId);
+
       if (state === undefined || !span.sampled) return;
       const finishedAt = yield* Clock.currentTimeMillis;
       const outcome = terminalOutcome(state, exit);
@@ -241,8 +262,10 @@ const spanUpdates = (
   const update = (span: TelemetrySpan, change: (state: ActiveSpan) => void): Effect.Effect<void> =>
     Effect.sync(() => {
       const state = active.get(span.spanId);
+
       if (state !== undefined) change(state);
     });
+
   return {
     recordOutcome: (span, value) =>
       update(span, (state) => {
@@ -273,6 +296,7 @@ const spanUpdates = (
     addBreadcrumb: (span, value) =>
       update(span, (state) => {
         const breadcrumb = Schema.decodeSync(TelemetryBreadcrumb, TelemetryStrictDecoding)(value);
+
         if (state.breadcrumbs.length === maximumBreadcrumbs) state.breadcrumbs.shift();
         state.breadcrumbs.push(breadcrumb);
       }),
@@ -283,8 +307,10 @@ export const makeWorkerTelemetryAdapter = (
   sink: Readonly<{ exportWork: (record: TelemetryWorkRecord) => void; exportEvent: EventSink }>
 ): TelemetryAdapter => {
   const active: ActiveSpans = new Map();
+
   const emit: EventSink = (event) =>
     sink.exportEvent(Schema.decodeSync(WorkerTelemetryEvent, TelemetryStrictDecoding)(event));
+
   return {
     startSpan: startSpan(active),
     finishSpan: finishSpan(active, emit),

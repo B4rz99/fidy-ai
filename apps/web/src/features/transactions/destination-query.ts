@@ -5,9 +5,13 @@ import { type Transaction, deriveCurrentMonthPeriod } from "./presentation";
 import { transactionMonth } from "./period";
 
 type Client = Context.Service.Shape<FidyClient>;
+
 type Failure = Effect.Error<ReturnType<Client["transactions"]["getTransaction"]>>;
+
 type Result = AsyncResult.AsyncResult<CanonicalSuccess<"transactions.getTransaction">, Failure>;
+
 type TransactionId = CanonicalInput<"transactions.getTransaction">["params"]["id"];
+
 export const transactionDestinationQuery = ({
   client,
   id,
@@ -17,6 +21,7 @@ export const transactionDestinationQuery = ({
     timeToLive: "400 millis",
     reactivityKeys: ["transaction-detail"],
   });
+
 export const destinationMonth = ({
   transaction,
   timeZone,

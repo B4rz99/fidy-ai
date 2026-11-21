@@ -44,14 +44,18 @@ const MonthlyBudgets = ({
   children: ReactNode;
 }>): JSX.Element => {
   const router = useRouter();
+
   const state = useMonthlyBudgets({
     apiClient: router.options.context.apiClient,
     user,
     month,
     profileCurrent,
   });
+
   if (state._tag === "Failure") return <Failure retry={state.refresh} waiting={state.waiting} />;
+
   if (state._tag !== "Ready") return <PendingRead label="Cargando presupuestos" />;
+
   return (
     <>
       {state.stale ? (
@@ -73,6 +77,7 @@ const UserBudgets = ({
   const search = useSearch({ strict: false });
   const currentMonth = currentBudgetMonth(user);
   const month = "month" in search && typeof search.month === "string" ? search.month : currentMonth;
+
   return (
     <MonthlyBudgets
       key={`${user.id}:${user.timeZone}:${month}`}
@@ -90,10 +95,13 @@ export const BudgetScreen = ({ children }: Readonly<{ children: ReactNode }>): J
   const [profile] = useState(() => workspaceProfileQuery(router.options.context.apiClient));
   const state = useAtomValue(profile).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(profile);
+
   if (state._tag === "Failure") return <Failure retry={refresh} waiting={state.waiting} />;
+
   if (state._tag !== "Ready") {
     return <PendingRead label="Cargando presupuestos" />;
   }
+
   return (
     <>
       {Option.isSome(state.refreshFailure) ? (

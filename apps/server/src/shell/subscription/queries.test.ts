@@ -32,6 +32,7 @@ it("ends the original TrialPeriod at its half-open boundary without hiding histo
     attemptRows: [],
     now: trial.trial_ends_at_ms,
   });
+
   expect(result.accessTier).toBe("free");
   expect(result.trialPeriod.endsAt.epochMilliseconds).toBe(trial.trial_ends_at_ms);
   expect(Option.isNone(result.paidSubscription)).toBe(true);
@@ -65,8 +66,10 @@ it("derives Pro from a paid period while exposing its exact immutable Price snap
     attemptRows: [],
     now: Date.parse("2026-09-10T12:00:00Z"),
   });
+
   expect(result.accessTier).toBe("pro");
   expect(Option.isSome(result.paidSubscription)).toBe(true);
+
   if (Option.isSome(result.paidSubscription)) {
     expect(result.paidSubscription.value.money.currency).toBe("COP");
     expect(result.paidSubscription.value.endsAt.epochMilliseconds).toBe(

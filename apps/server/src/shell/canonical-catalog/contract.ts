@@ -10,6 +10,7 @@ import {
 import { makePartialInputSchema } from "~/shell/partial-input/contract";
 
 type OperationSchema = Schema.Codec<unknown, Schema.Json, never, never>;
+
 type PartialInputSchema = Schema.Codec<unknown, unknown>;
 
 export type CatalogOperation = {
@@ -37,6 +38,7 @@ const payloadSchemas = (endpoint: HttpApiEndpoint.Top): ReadonlyArray<Schema.Top
 
 const unionSchema = (schemas: ReadonlyArray<Schema.Top>): Schema.Top => {
   if (!Arr.isReadonlyArrayNonEmpty(schemas)) return Schema.Never;
+
   return schemas.length === 1 ? schemas[0] : Schema.Union(schemas);
 };
 
@@ -45,6 +47,7 @@ const asOperationSchema = (schema: Schema.Top): OperationSchema =>
 
 const canonicalInput = (endpoint: HttpApiEndpoint.Top, http = false): OperationSchema => {
   const fields: Array<SchemaAST.PropertySignature> = [];
+
   const add = (name: string, schema: Option.Option<Schema.Top>): void => {
     if (Option.isSome(schema)) {
       fields.push(
@@ -55,20 +58,25 @@ const canonicalInput = (endpoint: HttpApiEndpoint.Top, http = false): OperationS
       );
     }
   };
+
   add("params", Option.fromUndefinedOr(endpoint.params));
   add("query", Option.fromUndefinedOr(endpoint.query));
   add("headers", Option.fromUndefinedOr(endpoint.headers));
   const payloads = payloadSchemas(endpoint);
+
   if (Arr.isReadonlyArrayNonEmpty(payloads)) add("payload", Option.some(unionSchema(payloads)));
+
   const schema =
     fields.length === 0
       ? Schema.Record(Schema.String, Schema.Never)
       : Schema.make<PartialInputSchema>(new SchemaAST.Objects(fields, []));
+
   return asOperationSchema(schema);
 };
 
 const requestInput = (endpoint: HttpApiEndpoint.Top): Option.Option<PartialInputSchema> => {
   const fields: Array<SchemaAST.PropertySignature> = [];
+
   const add = (name: string, schema: Option.Option<Schema.Top>): void => {
     if (Option.isNone(schema)) return;
     fields.push(
@@ -84,6 +92,7 @@ const requestInput = (endpoint: HttpApiEndpoint.Top): Option.Option<PartialInput
   add("headers", Option.fromUndefinedOr(endpoint.headers));
 
   const payloads = payloadSchemas(endpoint);
+
   if (Arr.isReadonlyArrayNonEmpty(payloads)) add("payload", Option.some(unionSchema(payloads)));
 
   return fields.length === 0
@@ -108,22 +117,29 @@ export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGr
     onGroup: () => {},
     onEndpoint: ({ endpoint, group, mergedAnnotations, errors }) => {
       const defaultId = `${group.identifier}.${endpoint.identifier}`;
+
       const reflectedId = Context.getOrElse(mergedAnnotations, OpenApi.Identifier, () =>
         group.topLevel ? endpoint.identifier : defaultId
       );
+
       const id = CanonicalOperationId.make(reflectedId);
+
       if (reflectedId !== defaultId) {
         throw new Error(
           `Canonical operations must publish their group-qualified identifier: ${defaultId}`
         );
       }
+
       if (byId.has(id)) {
         throw new Error(`Duplicate canonical operation id: ${id}`);
       }
+
       const description = Context.getOption(mergedAnnotations, OpenApi.Description);
+
       if (Option.isNone(description)) {
         throw new Error(`Canonical operation is missing its agent description: ${id}`);
       }
+
       const operation = {
         id,
         description: description.value,
@@ -143,6 +159,7 @@ export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGr
             ? Option.none()
             : Option.some(Schema.suspend(() => Option.getOrThrow(requestInput(endpoint)))),
       };
+
       operations.push(operation);
       byId.set(id, operation);
     },
@@ -161,6 +178,7 @@ export const bindOperationCatalog = (catalog: OperationCatalog): void => {
   if (Option.isSome(boundCatalog) && boundCatalog.value !== catalog) {
     throw new Error("The canonical operation catalog was already bound");
   }
+
   boundCatalog = Option.some(catalog);
 };
 

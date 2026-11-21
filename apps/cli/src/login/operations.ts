@@ -9,6 +9,7 @@ import {
 } from "./contract";
 
 const requestDeadlineMilliseconds = 15_000;
+
 const maximumLoginMilliseconds =
   Duration.toMillis(patPairingLifetime) + requestDeadlineMilliseconds;
 
@@ -17,13 +18,17 @@ const preparePairing = Effect.fn(function* (input: unknown, dependencies: LoginD
     errors: "all",
     onExcessProperty: "error",
   })(input).pipe(Effect.mapError(() => new CliFailure({ reason: "InvalidInput" })));
+
   yield* dependencies.verifyStorage;
   const existing = yield* dependencies.store.load;
+
   if (Option.isSome(existing)) return yield* new CliFailure({ reason: "AlreadyLoggedIn" });
+
   return yield* dependencies.pairing.start(request);
 });
 
 type LoginInterruption = { reason: CliFailure["reason"] };
+
 const completeLogin = Effect.fn(function* (
   input: unknown,
   progress: (event: PublicProgress) => Effect.Effect<void>,
@@ -34,16 +39,20 @@ const completeLogin = Effect.fn(function* (
   yield* progress(approvalProgress(pairing.publicCode));
   let delaySeconds: number = pairing.pollingIntervalSeconds;
   let remaining = pairing.expiresAt.epochMilliseconds - (yield* DateTime.now).epochMilliseconds;
+
   while (remaining > 0) {
     const millisecondsPerSecond = 1000;
     yield* Effect.sleep(
       Math.min(delaySeconds * millisecondsPerSecond, remaining, maximumLoginMilliseconds)
     );
     const attemptAt = yield* DateTime.now;
+
     if (attemptAt.epochMilliseconds >= pairing.expiresAt.epochMilliseconds) {
       return yield* new CliFailure({ reason: "Expired" });
     }
+
     interruption.reason = "ClaimAmbiguous";
+
     const result = yield* dependencies.pairing.claim(pairing).pipe(
       Effect.catchTag("PollingDelayed", (failure) =>
         progress({
@@ -59,23 +68,29 @@ const completeLogin = Effect.fn(function* (
         orElse: () => Effect.fail(new CliFailure({ reason: "ClaimAmbiguous" })),
       })
     );
+
     remaining = pairing.expiresAt.epochMilliseconds - (yield* DateTime.now).epochMilliseconds;
+
     if ("_tag" in result) {
       delaySeconds = Math.max(delaySeconds, result.retryAfterSeconds);
       continue;
     }
+
     if ("status" in result) {
       delaySeconds = result.pollingIntervalSeconds;
       continue;
     }
+
     const grant: SavedGrant = { origin: apiOrigin, pat: result.pat };
     interruption.reason = "LoginSaveInterrupted";
     yield* dependencies.store.save({ grant, bearer: result.bearer }).pipe(
       Effect.mapError(() => new CliFailure({ reason: "ClaimStorageFailed" })),
       Effect.uninterruptible
     );
+
     return grant;
   }
+
   return yield* new CliFailure({ reason: "Expired" });
 });
 
@@ -87,6 +102,7 @@ export const login = Effect.fn(
   ) =>
     Effect.suspend(() => {
       const interruption: LoginInterruption = { reason: "Cancelled" };
+
       return completeLogin(input, progress, { dependencies, interruption }).pipe(
         Effect.timeoutOrElse({
           duration: maximumLoginMilliseconds,

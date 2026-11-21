@@ -25,16 +25,21 @@ const readObject = Effect.fnUntraced(function* (runtime: Miniflare, directory: s
       ) {
         return;
       }
+
       throw error;
     })
   );
+
   const files = yield* native(() =>
     Array.fromAsync(new Bun.Glob("**/" + id + ".sqlite").scan({ cwd: directory, absolute: true }))
   );
+
   if (files.length !== 1 || files[0] === undefined) {
     return yield* Effect.fail(Error("Physical inventory unavailable"));
   }
+
   const db = new Database(files[0], { readonly: true });
+
   try {
     return [
       id,
@@ -44,58 +49,72 @@ const readObject = Effect.fnUntraced(function* (runtime: Miniflare, directory: s
     db.close();
   }
 });
+
 const state = Effect.fnUntraced(function* (runtime: Miniflare, directory: string) {
   const ids = yield* native(() => runtime.listDurableObjectIds("UserStore", "core"));
+
   return Object.fromEntries(yield* Effect.forEach(ids, (id) => readObject(runtime, directory, id)));
 });
+
 const marker = Effect.fnUntraced(function* (
   runtime: Miniflare,
   revision: string,
   member: PerformanceMember
 ) {
   const bucket = yield* native(() => runtime.getR2Bucket("SMOKE_BUCKET", "core"));
+
   const value = yield* native(() =>
     bucket.get("_release-smoke/" + revision + "/acceptance/transactions/" + member)
   );
+
   return value === null ? null : yield* native(() => value.text());
 });
+
 const recoveryProbe = Effect.fnUntraced(function* (runtime: Miniflare, secret: string) {
   const response = yield* transport(runtime)(
     new Request(installedOrigins.acceptance.api + "/internal/release-smoke?storage=compatibility", {
       headers: { "x-fidy-smoke-proof": secret },
     })
   );
+
   const evidence = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       core: Schema.Struct({ workerVersionId: Schema.String }),
       fixtureFallbackCoreVersion: Schema.optional(Schema.String),
     })
   )(yield* native(() => response.json()));
+
   return {
     status: response.status,
     ingress: response.headers.get("x-fidy-fixture-fallback-ingress") !== null,
     core: evidence.fixtureFallbackCoreVersion === evidence.core.workerVersionId,
   };
 });
+
 const tick = Effect.fnUntraced(function* (runtime: Miniflare) {
   const core = yield* native(() => runtime.getWorker("core"));
   const now = DateTime.toDateUtc(yield* DateTime.now);
+
   return (
     (yield* native(() => core.scheduled({ cron: "* * * * *", scheduledTime: now }))).outcome ===
     "ok"
   );
 });
+
 const requestSchema = Schema.Struct({
   url: Schema.String,
   headers: Schema.Record(Schema.String, Schema.String),
   method: Schema.Literals(["POST", "GET"]),
   body: Schema.NullOr(Schema.String),
 });
+
 const dispatch = Effect.fnUntraced(function* (runtime: Miniflare, value: unknown) {
   const req = yield* Schema.decodeUnknownEffect(requestSchema)(value);
+
   if (new URL(req.url).origin !== installedOrigins.acceptance.api) {
     return yield* Effect.fail(Error("Foreign rehearsal origin"));
   }
+
   const response = yield* transport(runtime)(
     new Request(req.url, {
       method: req.method,
@@ -103,6 +122,7 @@ const dispatch = Effect.fnUntraced(function* (runtime: Miniflare, value: unknown
       ...(req.body === null ? {} : { body: req.body }),
     })
   );
+
   return {
     status: response.status,
     headers: [...response.headers],
@@ -118,18 +138,23 @@ const financialControls = Effect.fnUntraced(function* (
   const listener = yield* native(() => runtime.ready);
   const client = Context.get(yield* Layer.build(ReleaseHttpLive), HttpClient.HttpClient);
   const network = yield* FetchHttpClient.Fetch;
+
   const loopback: typeof fetch = Object.assign(
     (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): Promise<Response> => {
       const url = new URL(input instanceof Request ? input.url : input);
+
       if (url.origin !== installedOrigins.acceptance.api) {
         return Promise.reject(Error("Foreign rehearsal origin"));
       }
+
       const headers = new Headers(init?.headers);
       headers.set("cf-connecting-ip", "192.0.2.1");
+
       return network(new URL(url.pathname + url.search, listener), { ...init, headers });
     },
     { preconnect: network.preconnect }
   );
+
   return yield* retainedFinancialControls({
     revision: auth.revision,
     proof: Redacted.make(auth.secret),
@@ -137,6 +162,7 @@ const financialControls = Effect.fnUntraced(function* (
     send: streamed ? acceptanceSend(client) : transport(runtime),
   }).pipe(Effect.provideService(FetchHttpClient.Fetch, loopback));
 }, Effect.scoped);
+
 const run = Effect.gen(function* () {
   const auth = yield* cohortAuthority;
   const directory = yield* Config.String("FIDY_REHEARSAL_STATE");
@@ -144,10 +170,12 @@ const run = Effect.gen(function* () {
     closedRuntime(auth, directory, auth.member),
     (runtime) => {
       const send = transport(runtime);
+
       const local = Effect.fnUntraced(function* (item: CohortCommand) {
         const action = item.action;
 
         if (action === "provider-request") return yield* dispatch(runtime, item.body);
+
         if (["seed-survivors", "mount-original-sessions"].includes(action)) {
           const users = yield* establishSmokeUsers({
             revision: auth.revision,
@@ -156,14 +184,21 @@ const run = Effect.gen(function* () {
             send,
             erasure: Option.none(),
           });
+
           return action === "mount-original-sessions" ? [users[0].headers, users[1].headers] : true;
         }
+
         if (action === "recovery-probe") return yield* recoveryProbe(runtime, auth.secret);
+
         if (action === "census") return yield* state(runtime, directory);
+
         if (action === "marker") return yield* marker(runtime, auth.revision, auth.member);
+
         if (action === "tick") return yield* tick(runtime);
+
         return yield* Effect.fail(Error("Unknown rehearsal operation"));
       });
+
       return serveCohort(
         auth,
         () => send,
@@ -176,4 +211,5 @@ const run = Effect.gen(function* () {
     (runtime) => native(() => runtime.dispose())
   );
 });
+
 await Effect.runPromise(run);

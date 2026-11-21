@@ -19,8 +19,10 @@ const context = {
   expiresAt: 1_800_086_400_000,
   createdAt: 1_800_000_000_000,
 };
+
 const encodedLength = (value: unknown): number =>
   new TextEncoder().encode(JSON.stringify(value)).byteLength;
+
 const evidenceCodec = Schema.toCodecJson(StatementRowEvidence);
 
 const reviewRow = (raw: string, extraIssueBytes: number): NeedsReviewStatementRow => ({
@@ -50,6 +52,7 @@ it.each(["plain ASCII", 'é🙂\ud800x\udfff"\\\n\r\t\b\f\u0000'])(
     const requiredPayload = (1_999_706 - encodedLength(empty)) / 2;
     const raw = prefix + "x".repeat(requiredPayload - (encodedLength(prefix) - 2));
     const admits = statementReviewAdmission(context);
+
     for (const [extra, expected] of [
       [0, true],
       [1, true],
@@ -65,6 +68,7 @@ it.each(["plain ASCII", 'é🙂\ud800x\udfff"\\\n\r\t\b\f\u0000'])(
 
 it("counts XLSX optional formula and display metadata without dropping repeated values", () => {
   const admits = statementReviewAdmission({ ...context, sourceFormat: "xlsx" });
+
   const row: NeedsReviewStatementRow = {
     ...reviewRow("", 0),
     evidence: {
@@ -85,7 +89,9 @@ it("counts XLSX optional formula and display metadata without dropping repeated 
       ],
     },
   };
+
   expect(admits(row)).toBe(false);
+
   if (row.evidence.sourceFormat !== "xlsx") throw new Error("Expected XLSX evidence");
   const evidence = row.evidence;
   expect(
@@ -110,6 +116,7 @@ it("charges actual UTF-8 metadata without a fixed safety reserve", () => {
 
 it("charges retained partial facts against the complete-row capacity", () => {
   const row = reviewRow("\u0001".repeat(166_000) + "x".repeat(3_806), 0);
+
   const suggestions = Schema.decodeSync(ReviewDraft)({
     amount: "13500",
     currency: "COP",
@@ -117,6 +124,7 @@ it("charges retained partial facts against the complete-row capacity", () => {
     occurredAt: "",
     userProvidedFields: [],
   });
+
   expect(statementReviewAdmission(context)(row)).toBe(true);
   expect(statementReviewAdmission(context)({ ...row, suggestions: Option.some(suggestions) })).toBe(
     false

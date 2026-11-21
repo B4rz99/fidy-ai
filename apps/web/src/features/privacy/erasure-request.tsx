@@ -27,6 +27,7 @@ const ErasureSection = ({ children }: Readonly<{ children: ReactNode }>): JSX.El
 
 export const ErasureRequest = ({ client }: Readonly<{ client: WebAuthClient }>): JSX.Element => {
   const [confirmed, confirm] = useState(false);
+
   const [command] = useState(() =>
     client.runtime.fn<void>()(() =>
       client.pipe(
@@ -36,9 +37,11 @@ export const ErasureRequest = ({ client }: Readonly<{ client: WebAuthClient }>):
       )
     )
   );
+
   const result = useAtomValue(command);
   const submit = useAtomSet(command);
   const accepted = result._tag === "Success" && result.value;
+
   return (
     <ErasureSection>
       <label htmlFor="erasure-confirmation" className="flex items-center gap-3">

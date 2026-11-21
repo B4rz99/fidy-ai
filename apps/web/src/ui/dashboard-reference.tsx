@@ -143,6 +143,7 @@ const BudgetConfigurationReference = (): JSX.Element => {
   const [target, setTarget] = useState("usd");
   const [saved, setSaved] = useState("Restaurantes · COP");
   const id = useId();
+
   return (
     <div className="grid justify-items-start gap-3">
       <p>Configuración de ejemplo: {saved}</p>

@@ -26,11 +26,13 @@ const paid = {
   endsAt: "2026-11-25T14:00:00Z",
   renewalAnchor: "2026-10-25T14:00:00Z",
 };
+
 const cancellation = {
   cancelledAt: "2026-11-02T15:00:00Z",
   paidThrough: paid.endsAt,
   sourceCancellation: "detached",
 };
+
 const standing = {
   accessTier: "pro",
   hasProGrant: false,
@@ -39,7 +41,9 @@ const standing = {
   cancellation: null,
   recentAttempts: [],
 };
+
 const cleanup: Array<() => void> = [];
+
 afterEach(() => {
   cleanup
     .splice(0)
@@ -47,9 +51,12 @@ afterEach(() => {
     .forEach((dispose) => dispose());
   vi.useRealTimers();
 });
+
 const advance = (milliseconds: number): Promise<void> =>
   vi.advanceTimersByTimeAsync(milliseconds).then(() => undefined);
+
 const flush = (): Promise<void> => advance(0);
+
 type Fixture = Readonly<{
   requests: Array<string>;
   view: () => CancellationManagement;
@@ -65,9 +72,11 @@ type Fixture = Readonly<{
   passiveRefresh: () => void;
   dispose: () => void;
 }>;
+
 const fixture = (): Fixture => {
   vi.useFakeTimers();
   const requests: Array<string> = [];
+
   const behavior: Fixture["behavior"] = {
     postDelay: 0,
     getDelay: 0,
@@ -75,6 +84,7 @@ const fixture = (): Fixture => {
     getFails: false,
     cancellation: Option.none(),
   };
+
   const client = makeFidyClient({
     apiOrigin: "https://api.test.fidyapp.com",
     httpClient: Layer.succeed(
@@ -82,6 +92,7 @@ const fixture = (): Fixture => {
       HttpClient.make((request) => {
         requests.push(request.method);
         const failure = request.method === "POST" ? behavior.postFails : behavior.getFails;
+
         const body = failure
           ? {}
           : {
@@ -91,6 +102,7 @@ const fixture = (): Fixture => {
                   : { ...standing, cancellation: Option.getOrNull(behavior.cancellation) },
               next: [],
             };
+
         return Effect.sleep(
           request.method === "POST" ? behavior.postDelay : behavior.getDelay
         ).pipe(
@@ -106,11 +118,13 @@ const fixture = (): Fixture => {
       })
     ),
   });
+
   const registry = AtomRegistry.make();
   const resource = makeCancellationManagement(client);
   cleanup.push(() => registry.dispose(), registry.mount(resource));
   const dispose = registry.get(resource).mount();
   cleanup.push(dispose);
+
   return {
     requests,
     behavior,
@@ -121,6 +135,7 @@ const fixture = (): Fixture => {
     view: (): CancellationManagement => registry.get(resource),
   };
 };
+
 it.effect(
   "consumes a review synchronously, rejects stale review callbacks and admits one cancellation",
   () =>
@@ -181,6 +196,7 @@ it.effect(
       expect(harness.requests.filter((method) => method === "POST")).toHaveLength(2);
     })
 );
+
 it.effect(
   "retains acknowledged cancellation over delayed status and recovers provider evidence without replay",
   () =>
@@ -211,6 +227,7 @@ it.effect(
       expect(harness.requests.filter((method) => method === "POST")).toHaveLength(1);
     })
 );
+
 it.effect(
   "retires old confirmation callbacks and late results when the mounted owner is replaced",
   () =>
@@ -232,6 +249,7 @@ it.effect(
       expect(harness.requests.filter((method) => method === "POST")).toHaveLength(1);
     })
 );
+
 it.effect(
   "invalidates reviewed cancellation on shared status refresh and preserves focus through submission",
   () =>
@@ -259,16 +277,21 @@ it.effect(
               )
             )
           );
+
           return flush();
         })
       );
+
       const button = (text: string): HTMLButtonElement => {
         const found = Array.from(container.querySelectorAll("button")).find(
           (node) => node.textContent === text
         );
+
         if (found === undefined) throw new Error("Missing cancellation action");
+
         return found;
       };
+
       act(() => button("Cancelar renovaciones futuras").click());
       expect(document.activeElement?.textContent).toBe("¿Cancelar renovaciones futuras?");
       act(() => button("Conservar renovaciones").click());
@@ -292,6 +315,7 @@ it.effect(
       yield* Effect.tryPromise(() =>
         act(() => {
           button("Confirmar cancelación").click();
+
           return flush();
         })
       );
@@ -328,6 +352,7 @@ it.effect("recovers a lost response from retained evidence on fresh load without
     expect(reloaded.requests.every((method) => method === "GET")).toBe(true);
   })
 );
+
 it.effect("ends cancellation publication and old actions on authentication replacement", () =>
   Effect.gen(function* () {
     const original = fixture();

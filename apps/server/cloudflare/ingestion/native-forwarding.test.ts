@@ -19,6 +19,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           alice.user,
           owner.now
         );
+
         const read = (): Effect.Effect<Awaited<ReturnType<typeof runtime.dispatchFetch>>> =>
           native(() =>
             runtime.dispatchFetch(
@@ -32,14 +33,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               }
             )
           );
+
         const response = yield* read();
         expect(response.status).toBe(200);
         const first = yield* native(() => response.json());
+
         const disclosed = yield* Schema.decodeUnknownEffect(
           Schema.Struct({
             data: Schema.Struct({ address: Schema.Struct({ address: Schema.String }) }),
           })
         )(first);
+
         expect(disclosed.data.address.address).toMatch(/^[a-z0-9_-]{24,64}@fidyapp\.com$/u);
         yield* native(() =>
           owner.directory.exec("ALTER TABLE external_event_routes RENAME TO offline")

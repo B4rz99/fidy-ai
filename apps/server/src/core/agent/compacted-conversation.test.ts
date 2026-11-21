@@ -3,6 +3,7 @@ import { DateTime, Effect, Exit, Schema } from "effect";
 import { CompactedConversation, CompactedConversationOutput } from "./contract";
 
 const decodeConversation = Schema.decodeUnknownEffect(CompactedConversation);
+
 const decodeOutput = Schema.decodeUnknownEffect(CompactedConversationOutput);
 
 it.effect("accepts only positive revisions and non-negative cursors", () =>
@@ -13,6 +14,7 @@ it.effect("accepts only positive revisions and non-negative cursors", () =>
       revision: 1n,
       updatedAt: DateTime.makeUnsafe("2026-01-01T00:00:00.000Z"),
     };
+
     expect(Exit.isSuccess(yield* Effect.exit(decodeConversation(validConversation)))).toBe(true);
     expect(
       Exit.isFailure(

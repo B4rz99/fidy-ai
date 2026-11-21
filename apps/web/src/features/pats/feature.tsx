@@ -72,9 +72,11 @@ export const PATManagementFeature = ({
   const management = usePATManagement(router.options.context.apiClient);
   const queryState = management.query;
   const refreshActivePATs = management.actions.refresh;
+
   let activePATState: ActivePATManagementState = {
     _tag: queryState._tag === "Initial" && !queryState.waiting ? "Initial" : "Loading",
   };
+
   if (queryState._tag === "Failure") {
     activePATState = {
       _tag: "LoadFailure",
@@ -83,6 +85,7 @@ export const PATManagementFeature = ({
       waiting: queryState.waiting,
     };
   }
+
   if (queryState._tag === "Ready") {
     activePATState = {
       _tag: "Ready",
@@ -92,7 +95,9 @@ export const PATManagementFeature = ({
       refreshFailed: Option.isSome(queryState.refreshFailure),
     };
   }
+
   const resuming = useRouterState({ select: (state) => state.location.search.resume === "pat" });
+
   return (
     <PATManagementContent
       activePATState={activePATState}

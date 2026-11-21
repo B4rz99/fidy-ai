@@ -7,6 +7,7 @@ export const makeCompactDateFormatter = (locale: string): ((localDate: string) =
     year: "numeric",
     timeZone: "UTC",
   });
+
   return (localDate) =>
     formatter
       .formatToParts(DateTime.toEpochMillis(DateTime.makeUnsafe(`${localDate}T12:00:00Z`)))

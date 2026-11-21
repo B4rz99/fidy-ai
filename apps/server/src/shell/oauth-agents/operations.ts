@@ -10,6 +10,7 @@ export const liveOAuthAuthority = (
 ): OAuthAuthority => {
   const { subject, current } = input;
   const scope = Option.toArray(subject.requiredScope);
+
   return protectConsentAuthority({
     subject: { _tag: "User", userId: subject.userId },
     requirement: "active",
@@ -52,6 +53,7 @@ export const liveOAuthCommitAuthority = (
   input: Readonly<{ subject: OAuthCaller; current: number }>
 ): OAuthAuthority => {
   const authority = liveOAuthAuthority(input);
+
   return {
     ...authority,
     predicate: `${authority.predicate}

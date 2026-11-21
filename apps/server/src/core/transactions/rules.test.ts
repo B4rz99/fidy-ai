@@ -39,6 +39,7 @@ it.effect("accepts open-ended periods and rejects a two-ended period without pos
     yield* checkTransactionPeriod({ from: Option.some(july), to: Option.none<DateTime.Utc>() });
     yield* checkTransactionPeriod({ from: Option.none<DateTime.Utc>(), to: Option.some(august) });
     yield* checkTransactionPeriod({ from: Option.some(july), to: Option.some(august) });
+
     const failure = yield* Effect.flip(
       checkTransactionPeriod({ from: Option.some(august), to: Option.some(july) })
     );

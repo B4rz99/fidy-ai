@@ -4,19 +4,23 @@ import { expect } from "vitest";
 import { verificationRevision } from "./installed-verification-revision";
 
 const trunk = "1".repeat(40);
+
 const installed = "2".repeat(40);
 
 it.effect("uses the deployed ancestor only after confirming the unchanged runtime tree", () =>
   Effect.gen(function* () {
     const calls: Array<ReadonlyArray<string>> = [];
+
     const result = yield* verificationRevision(trunk, installed, (args) => {
       calls.push(args);
+
       return Effect.succeed(
         args.includes("diff")
           ? "infra/cloudflare/native-deployed-web.ts\0infra/cloudflare/native-erasure.ts\0"
           : ""
       );
     });
+
     expect(result).toBe(installed);
     expect(calls).toEqual([
       ["merge-base", "--is-ancestor", installed, trunk],
@@ -39,8 +43,10 @@ it.effect("refuses changed build inputs, unrelated commits and non-commit argume
       const result = yield* verificationRevision(trunk, installed, (args) =>
         Effect.succeed(args.includes("diff") ? path + "\0" : "")
       ).pipe(Effect.result);
+
       expect(Result.isFailure(result)).toBe(true);
     }
+
     expect(
       Result.isFailure(
         yield* Effect.result(
@@ -73,6 +79,7 @@ it.effect(
         verificationRevision(trunk, installed, (args) =>
           Effect.succeed(args.includes("diff") ? path + "\0" : "")
         );
+
       for (const path of [
         "scripts/infra-performance/deployed-fleet/pilot.py",
         "scripts/infra-performance/deployed-fleet/ten.py",
@@ -83,6 +90,7 @@ it.effect(
       ]) {
         expect(yield* changed(path)).toBe(installed);
       }
+
       for (const path of [
         "apps/server/cloudflare/maintenance/runtime.ts",
         "scripts/infra-performance/deployed-fleet/other.py",
@@ -98,16 +106,20 @@ it.effect(
 it.effect("allows only the reviewed Workers declaration refresh across the exact Git blobs", () =>
   Effect.gen(function* () {
     const paths = "apps/server/package.json\0bun.lock\0infra/cloudflare/package.json\0";
+
     const raw = [
       ":100644 100644 bd090a37f14232d15dda4e39ec82a7958a110e8b 5d310aa462a7c4d16853e2ce49e5009cd4086047 M\tapps/server/package.json",
       ":100644 100644 761257790873b34b8a9bf8a1e07c428d6248fe3d 211379fd87e4a55a39bb498d5f65fea72e50fe6c M\tbun.lock",
       ":100644 100644 4b4d2769d45666eb66d57a071f63767a4c3a981e ade98affc69e6e3801f078d80541f4b9cf0b4847 M\tinfra/cloudflare/package.json",
     ].join("\n");
+
     const verify = (blobs: string): ReturnType<typeof verificationRevision> =>
       verificationRevision(trunk, installed, (args) => {
         if (args.includes("--raw")) return Effect.succeed(blobs);
+
         return Effect.succeed(args.includes("--name-only") ? paths : "");
       });
+
     expect(yield* verify(raw)).toBe(installed);
     expect(yield* Effect.isFailure(verify(raw.replace("211379fd", "ffffffff")))).toBe(true);
   })

@@ -5,6 +5,7 @@ import {
 } from "../../apps/server/cloudflare/runtime/contract";
 
 const developmentGitRevision = "0000000000000000000000000000000000000000";
+
 const developmentContractDigest =
   "0000000000000000000000000000000000000000000000000000000000000000";
 
@@ -37,6 +38,7 @@ export type StateBackend = "cloudflare" | "local" | "memory";
 
 export const resolveStateBackend = (input: TopologyModeInput): StateBackend => {
   if (input.development) return "local";
+
   return input.stage === "production" ? "cloudflare" : "memory";
 };
 
@@ -44,7 +46,9 @@ export const resolveTopologyMode = (
   input: TopologyModeInput
 ): Result.Result<"development" | "production", InvalidDeploymentConfiguration> => {
   if (input.development) return Result.succeed("development");
+
   if (input.stage === "production") return Result.succeed("production");
+
   return Result.fail(new InvalidDeploymentConfiguration({ reason: "unsupported_remote_stage" }));
 };
 
@@ -55,6 +59,7 @@ export const resolveDeploymentConfiguration = (
   input: DeploymentConfigurationInput
 ): Result.Result<ReleaseMetadata, InvalidDeploymentConfiguration> => {
   const mode = resolveTopologyMode(input);
+
   if (Result.isFailure(mode)) return Result.fail(mode.failure);
 
   if (mode.success === "development") {

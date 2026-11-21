@@ -105,6 +105,7 @@ const ConsentContent = ({
   if (status._tag === "Initial") {
     return <PendingRead label="Consultando autorización" />;
   }
+
   if (status._tag === "Failure" || Option.isSome(status.refreshFailure)) {
     return (
       <Alert variant="destructive" role="alert">
@@ -113,6 +114,7 @@ const ConsentContent = ({
       </Alert>
     );
   }
+
   if (status.value.status === "Revoked") {
     return (
       <>
@@ -121,9 +123,11 @@ const ConsentContent = ({
       </>
     );
   }
+
   if (status.value.status === "Missing") {
     return <p>No hay una autorización registrada para retirar.</p>;
   }
+
   return children;
 };
 
@@ -149,6 +153,7 @@ const PrivacyExplanation = ({
     </div>
   </>
 );
+
 const RightsContact = (): JSX.Element => (
   <section className="settings-section">
     <div className="settings-section-icon settings-contact-icon">
@@ -232,12 +237,14 @@ const SavedTransactionsLink = (): JSX.Element => (
 
 export const PrivacyFeature = (): JSX.Element => {
   const client = useRouter().options.context.webAuthClient;
+
   const [query] = useState(() =>
     client.query("processingConsent", "status", {
       reactivityKeys: [consentKey],
       timeToLive: "0 seconds",
     })
   );
+
   const statusResult = useAtomValue(query);
   const status = presentCanonicalQuery(statusResult);
   const refresh = useAtomRefresh(query);
@@ -247,6 +254,7 @@ export const PrivacyFeature = (): JSX.Element => {
   const [confirmed, setConfirmed] = useState(false);
   const attempted = result._tag !== "Initial";
   const busy = result.waiting || (status._tag === "Ready" && status.waiting);
+
   return (
     <PrivacyWorkspace
       busy={busy}

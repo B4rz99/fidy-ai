@@ -18,6 +18,7 @@ export const ManualCaptureProvider = ({
 }: Readonly<{ timeZone: string; children: ReactNode }>): JSX.Element => {
   const [retentionResource] = useState(() => makeCaptureRetention());
   const retention = useAtomValue(retentionResource);
+
   return Option.match(retention.resource, {
     onNone: () => (
       <ManualCaptureAttachment retentionResource={retentionResource} timeZone={timeZone}>
@@ -35,6 +36,7 @@ export const ManualCaptureProvider = ({
     ),
   });
 };
+
 const ManualCaptureAttachment = ({
   timeZone,
   retentionResource,
@@ -46,6 +48,7 @@ const ManualCaptureAttachment = ({
 }>): JSX.Element => {
   const { apiClient } = useRouter().options.context;
   const registry = use(RegistryContext);
+
   const [mounted] = useState<RefCallback<HTMLDivElement>>(
     () =>
       (
@@ -53,21 +56,25 @@ const ManualCaptureAttachment = ({
       ): ReturnType<RefCallback<HTMLDivElement>> => {
         if (node === null) return undefined;
         const releaseRetention = registry.mount(retentionResource);
+
         const releaseTask = registry
           .get(retentionResource)
           .mount({ client: apiClient, timeZone, initial: emptyCaptureDraft(timeZone) }, timeZone);
+
         return () => {
           releaseTask();
           releaseRetention();
         };
       }
   );
+
   return (
     <div className="contents" ref={mounted}>
       {children}
     </div>
   );
 };
+
 const ManualCaptureTask = ({
   resource,
   retentionResource,
@@ -82,6 +89,7 @@ const ManualCaptureTask = ({
   const task = useAtomValue(resource);
   const [check, setCheck] = useState<Option.Option<CaptureHistoryVersion>>(() => Option.none());
   const identity = task.locked || Option.isSome(task.attempt) ? task.timeZone : timeZone;
+
   return (
     <ManualCaptureAttachment
       key={identity}
@@ -109,6 +117,7 @@ const ManualCaptureTask = ({
             ) {
               return;
             }
+
             task.resume();
             setCheck(Option.none());
           },

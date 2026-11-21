@@ -13,9 +13,11 @@ const maximumPageDefectRecords = 20;
 
 export const makeBrowserDefectReporter = (): ((error: BrowserDefect) => void) => {
   let exported = 0;
+
   return (error) => {
     if (exported >= maximumPageDefectRecords) return;
     exported++;
+
     try {
       Effect.runSync(
         Console.info("fidy.browser.defect", {
@@ -39,6 +41,7 @@ export const observeBrowserDecode = <A, E, R>(
         if (Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause)) return;
         const error = Cause.findErrorOption(exit.cause);
         const defect = Cause.findDefect(exit.cause);
+
         if (error._tag === "Some" && Schema.isSchemaError(error.value)) {
           reportBrowserDefect("invalid_response");
         } else if (defect._tag === "Success") reportBrowserDefect("client_defect");
@@ -51,6 +54,7 @@ export const installBrowserDefectListeners = (target: Window): (() => void) => {
   const onRejection = (): void => reportBrowserDefect("unhandled_rejection");
   target.addEventListener("error", onError);
   target.addEventListener("unhandledrejection", onRejection);
+
   return () => {
     target.removeEventListener("error", onError);
     target.removeEventListener("unhandledrejection", onRejection);

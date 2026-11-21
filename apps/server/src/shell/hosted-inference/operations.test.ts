@@ -74,6 +74,7 @@ const stubBehavior = (
 it.effect("keeps structured execution and discard one-shot", () =>
   Effect.gen(function* () {
     const executions = yield* Ref.make(0);
+
     const inference = makeHostedInferenceStub(
       stubBehavior({
         generateStructured: (schema) =>
@@ -86,12 +87,15 @@ it.effect("keeps structured execution and discard one-shot", () =>
           ),
       })
     );
+
     const outputSchema = Schema.Struct({ compactedConversation: Schema.String });
+
     const executed = yield* inference.prepareStructured({
       context: { prior: Option.some("compact this"), entries: [] },
       purpose: "conversation-compaction",
       outputSchema,
     });
+
     const discarded = yield* inference.prepareStructured({
       context: { prior: Option.some("discard this"), entries: [] },
       purpose: "conversation-compaction",
@@ -109,6 +113,7 @@ it.effect("keeps structured execution and discard one-shot", () =>
 it.effect("bounds structured retries after provider unavailability", () =>
   Effect.gen(function* () {
     const attempts = yield* Ref.make(0);
+
     const inference = makeHostedInferenceStub(
       stubBehavior({
         generateStructured: () =>
@@ -117,6 +122,7 @@ it.effect("bounds structured retries after provider unavailability", () =>
           ),
       })
     );
+
     const prepared = yield* inference.prepareStructured({
       context: { prior: Option.none(), entries: [] },
       purpose: "conversation-compaction",
@@ -134,6 +140,7 @@ it.effect("rejects concurrent prepared execution", () =>
   Effect.gen(function* () {
     const started = yield* Deferred.make<void>();
     const release = yield* Deferred.make<void>();
+
     const inference = makeHostedInferenceStub(
       stubBehavior({
         generate: () =>
@@ -143,6 +150,7 @@ it.effect("rejects concurrent prepared execution", () =>
           ),
       })
     );
+
     const prepared = yield* inference.prepareText(request("in progress"));
     assertHostedFailure(yield* Effect.exit(prepared.repairInvalidOutput), invalidAuthority());
     const fiber = yield* prepared.execute.pipe(Effect.forkChild({ startImmediately: true }));
@@ -158,6 +166,7 @@ it.effect("rejects concurrent prepared execution", () =>
 it.effect("allows one explicit retry after provider unavailability", () =>
   Effect.gen(function* () {
     const attempts = yield* Ref.make(0);
+
     const inference = makeHostedInferenceStub(
       stubBehavior({
         generate: () =>
@@ -168,6 +177,7 @@ it.effect("allows one explicit retry after provider unavailability", () =>
           ),
       })
     );
+
     const prepared = yield* inference.prepareText(request("retry"));
 
     assertHostedFailure(yield* Effect.exit(prepared.execute), retryableUnavailable());
@@ -179,6 +189,7 @@ it.effect("allows one explicit retry after provider unavailability", () =>
 it.effect("bounds repeated retryable text failures", () =>
   Effect.gen(function* () {
     const attempts = yield* Ref.make(0);
+
     const inference = makeHostedInferenceStub(
       stubBehavior({
         generate: () =>
@@ -187,6 +198,7 @@ it.effect("bounds repeated retryable text failures", () =>
           ),
       })
     );
+
     const prepared = yield* inference.prepareText(request("bounded retry"));
 
     assertHostedFailure(yield* Effect.exit(prepared.execute), retryableUnavailable());
@@ -215,6 +227,7 @@ it.effect("consumes discarded and successfully executed text authority", () =>
 it.effect("restores a continuation when its preparation is rejected", () =>
   Effect.gen(function* () {
     const validations = yield* Ref.make(0);
+
     const inference = makeHostedInferenceStub(
       stubBehavior({
         validate: () =>
@@ -233,6 +246,7 @@ it.effect("restores a continuation when its preparation is rejected", () =>
           ),
       })
     );
+
     const first = yield* inference.prepareText(request("first"));
     const result = yield* first.execute;
 
@@ -255,6 +269,7 @@ it.effect("restores a continuation when its preparation is rejected", () =>
 it.effect("repairs invalid output once without exposing feedback preparation", () =>
   Effect.gen(function* () {
     const attempts = yield* Ref.make(0);
+
     const inference = makeHostedInferenceStub(
       stubBehavior({
         generate: () =>
@@ -265,6 +280,7 @@ it.effect("repairs invalid output once without exposing feedback preparation", (
           ),
       })
     );
+
     const prepared = yield* inference.prepareText(request("recover"));
     assertHostedFailure(yield* Effect.exit(prepared.execute), invalidOutput());
     const recovered = yield* prepared.repairInvalidOutput;
@@ -290,6 +306,7 @@ for (const terminalCause of [Cause.die("provider defect"), Cause.interrupt()]) {
   it.effect("consumes text authority when provider failure also contains a terminal cause", () =>
     Effect.gen(function* () {
       const attempts = yield* Ref.make(0);
+
       const inference = makeHostedInferenceStub(
         stubBehavior({
           generate: () =>
@@ -300,6 +317,7 @@ for (const terminalCause of [Cause.die("provider defect"), Cause.interrupt()]) {
             ),
         })
       );
+
       const prepared = yield* inference.prepareText(request("uncertain outcome"));
       expect(Exit.isFailure(yield* Effect.exit(prepared.execute))).toBe(true);
       assertHostedFailure(yield* Effect.exit(prepared.execute), invalidAuthority());
@@ -311,6 +329,7 @@ for (const terminalCause of [Cause.die("provider defect"), Cause.interrupt()]) {
 it.effect("consumes authority when constructing provider execution defects", () =>
   Effect.gen(function* () {
     let calls = 0;
+
     const inference = makeHostedInferenceStub(
       stubBehavior({
         generate: () => {
@@ -319,6 +338,7 @@ it.effect("consumes authority when constructing provider execution defects", () 
         },
       })
     );
+
     const prepared = yield* inference.prepareText(request("construction defect"));
     expect(Exit.isFailure(yield* Effect.exit(prepared.execute))).toBe(true);
     assertHostedFailure(yield* Effect.exit(prepared.execute), invalidAuthority());
@@ -330,6 +350,7 @@ it.effect("consumes authority when constructing provider execution defects", () 
 it.effect("consumes structured authority for mixed provider failures", () =>
   Effect.gen(function* () {
     const attempts = yield* Ref.make(0);
+
     const inference = makeHostedInferenceStub(
       stubBehavior({
         generateStructured: () =>
@@ -342,11 +363,13 @@ it.effect("consumes structured authority for mixed provider failures", () =>
           ),
       })
     );
+
     const prepared = yield* inference.prepareStructured({
       context: { prior: Option.none(), entries: [] },
       purpose: "conversation-compaction",
       outputSchema: Schema.Struct({ text: Schema.String }),
     });
+
     expect(Exit.isFailure(yield* Effect.exit(prepared.execute))).toBe(true);
     assertHostedFailure(yield* Effect.exit(prepared.execute), invalidAuthority());
     expect(yield* Ref.get(attempts)).toBe(1);
@@ -356,6 +379,7 @@ it.effect("consumes structured authority for mixed provider failures", () =>
 it.effect("spends text repair even when feedback preparation fails", () =>
   Effect.gen(function* () {
     const validations = yield* Ref.make(0);
+
     const inference = makeHostedInferenceStub(
       stubBehavior({
         validate: () =>
@@ -367,6 +391,7 @@ it.effect("spends text repair even when feedback preparation fails", () =>
         generate: () => Effect.fail(invalidOutput()),
       })
     );
+
     const prepared = yield* inference.prepareText(request("repair once"));
     assertHostedFailure(yield* Effect.exit(prepared.execute), invalidOutput());
     assertHostedFailure(yield* Effect.exit(prepared.execute), invalidAuthority());
@@ -382,6 +407,7 @@ it.effect("discard after invalid text output spends the separate repair right", 
     const inference = makeHostedInferenceStub(
       stubBehavior({ generate: () => Effect.fail(invalidOutput()) })
     );
+
     const prepared = yield* inference.prepareText(request("discard repair"));
     assertHostedFailure(yield* Effect.exit(prepared.execute), invalidOutput());
     yield* prepared.discard;
@@ -394,6 +420,7 @@ it.effect("reserves continuation preparation and restores only failed preparatio
   Effect.gen(function* () {
     const started = yield* Deferred.make<void>();
     const validations = yield* Ref.make(0);
+
     const inference = makeHostedInferenceStub(
       stubBehavior({
         validate: () =>
@@ -406,11 +433,14 @@ it.effect("reserves continuation preparation and restores only failed preparatio
           ),
       })
     );
+
     const prepared = yield* inference.prepareText(request("continue"));
     const { continuation } = yield* prepared.execute;
+
     const pending = yield* continuation
       .prepare(continuationEvents("interrupted"))
       .pipe(Effect.forkChild({ startImmediately: true }));
+
     yield* Deferred.await(started);
     assertHostedFailure(
       yield* Effect.exit(continuation.prepare(continuationEvents("concurrent"))),
@@ -435,20 +465,24 @@ it.effect("reuses the exact captured request for an admitted provider retry", ()
   Effect.gen(function* () {
     const admitted: Array<Parameters<HostedInferenceStubBehavior["generate"]>[0]> = [];
     const availableOperations: HostedTextRequest["availableOperations"][number][] = [];
+
     const inference = makeHostedInferenceStub(
       stubBehavior({
         generate: (captured) => {
           admitted.push(captured);
+
           return admitted.length === 1
             ? Effect.fail(retryableUnavailable())
             : Effect.succeed(generated());
         },
       })
     );
+
     const prepared = yield* inference.prepareText({
       ...request("fixed work"),
       availableOperations,
     });
+
     expect(Object.isFrozen(availableOperations)).toBe(false);
     assertHostedFailure(yield* Effect.exit(prepared.execute), retryableUnavailable());
     yield* prepared.execute;
@@ -465,15 +499,19 @@ it.effect("reuses the exact captured request for an admitted provider retry", ()
 it.effect("restores continuation when constructing preparation defects", () =>
   Effect.gen(function* () {
     let validations = 0;
+
     const inference = makeHostedInferenceStub(
       stubBehavior({
         validate: () => {
           validations += 1;
+
           if (validations === 2) throw new Error("preparation construction failed");
+
           return Effect.void;
         },
       })
     );
+
     const prepared = yield* inference.prepareText(request("continuation construction"));
     const { continuation } = yield* prepared.execute;
     expect(

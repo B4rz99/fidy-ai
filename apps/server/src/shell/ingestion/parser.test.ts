@@ -6,30 +6,43 @@ import { ParsedStatementRow } from "~/core/ingestion/contract";
 import { parseStatementFile } from "./operations";
 
 const syntheticCellDate = DateTime.toDate(DateTime.makeUnsafe("2026-02-05T00:00:00Z"));
+
 const zipCentralHeaderLength = 46;
+
 const zipCentralSignature = 0x02014b50;
+
 const zipCompressionMethodOffset = 10;
+
 const zipCompressedSizeOffset = 20;
+
 const zipExpandedSizeOffset = 24;
+
 const zipLocalOffset = 42;
+
 const unsupportedZipCompressionMethod = 99;
+
 const missingOffset = -1;
 
 const statementWorkbook = (): { readonly sheet: WorkSheet; readonly workbook: WorkBook } => {
   const workbook = XLSX.utils.book_new();
+
   const sheet = XLSX.utils.aoa_to_sheet([
     ["Date", "Amount"],
     ["2026-01-01", 10],
   ]);
+
   XLSX.utils.book_append_sheet(workbook, sheet, "Statement");
+
   return { sheet, workbook };
 };
 
 const firstCentralDirectoryOffset = (bytes: Uint8Array): number => {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
   for (let offset = 0; offset + zipCentralHeaderLength <= bytes.length; offset += 1) {
     if (view.getUint32(offset, true) === zipCentralSignature) return offset;
   }
+
   return missingOffset;
 };
 
@@ -38,6 +51,7 @@ it.effect("preserves CSV records and multiline physical line positions", () =>
     const bytes = new TextEncoder().encode(
       'Date;Amount;Description;Type\n05/02/2026;25.000;"Mercado\ncentral";DEBIT\n06/02/2026;10.000;Taxi;DEBIT\n'
     );
+
     const parsed = yield* parseStatementFile(bytes);
 
     expect(parsed.sourceFormat).toBe("csv");
@@ -90,6 +104,7 @@ it.effect("detects CSV headers after empty leading lines and a UTF-8 BOM", () =>
     const parsed = yield* parseStatementFile(
       new TextEncoder().encode("\uFEFF\r\n\r\nfecha,valor,descripcion\r\n2026-08-01,-100,Cafe\r\n")
     );
+
     expect(parsed.headers).toEqual(["fecha", "valor", "descripcion"]);
     expect(parsed.rows[0]?.fields).toEqual(["2026-08-01", "-100", "Cafe"]);
     expect(parsed.rows[0]?.evidence).toMatchObject({ startLine: 4, endLine: 4 });
@@ -101,9 +116,11 @@ it.effect("sniffs CSV delimiters and rejects malformed or hostile bounds", () =>
     const comma = yield* parseStatementFile(new TextEncoder().encode("A,B\n1,2"));
     const tab = yield* parseStatementFile(new TextEncoder().encode("A\tB\n1\t2"));
     const carriageReturn = yield* parseStatementFile(new TextEncoder().encode("A,B\r1,2"));
+
     const carriageReturnLineFeed = yield* parseStatementFile(
       new TextEncoder().encode("A,B\r\n1,2")
     );
+
     expect(comma.headers).toEqual(["A", "B"]);
     expect(tab.headers).toEqual(["A", "B"]);
     expect(carriageReturn.rows).toHaveLength(1);
@@ -117,6 +134,7 @@ it.effect("sniffs CSV delimiters and rejects malformed or hostile bounds", () =>
         `${Array.from({ length: 201 }, (_, index) => `H${index}`).join(",")}\n`
       ),
     ];
+
     for (const input of malformedInputs) {
       const failed = yield* Effect.exit(parseStatementFile(input));
       expect(Exit.isFailure(failed)).toBe(true);
@@ -129,9 +147,11 @@ it.effect("sniffs CSV delimiters and rejects malformed or hostile bounds", () =>
     const headers = Array.from({ length: 200 }, (_, index) => `H${index}`).join(",");
     const row = Array.from({ length: 200 }, () => "1").join(",");
     const tooManyCells = `${headers}\n${`${row}\n`.repeat(1251)}`;
+
     const cellLimit = yield* Effect.exit(
       parseStatementFile(new TextEncoder().encode(tooManyCells))
     );
+
     expect(Exit.isFailure(cellLimit)).toBe(true);
   })
 );
@@ -144,14 +164,17 @@ it.effect("preserves XLSX blank, date, boolean, and error cell types", () =>
       [],
       ["text", 1, undefined, "present"],
     ]);
+
     sheet.C2 = { t: "e", v: 7 };
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, sheet, "Types");
+
     const buffer: unknown = XLSX.write(workbook, {
       type: "array",
       bookType: "xlsx",
       cellDates: true,
     });
+
     if (!(buffer instanceof ArrayBuffer)) return yield* Effect.die("Expected XLSX ArrayBuffer");
 
     const parsed = yield* parseStatementFile(new Uint8Array(buffer));
@@ -160,6 +183,7 @@ it.effect("preserves XLSX blank, date, boolean, and error cell types", () =>
     expect(parsed.rows[0]?.fields.slice(1)).toEqual(["true", "7", ""]);
     const evidence = parsed.rows[0]?.evidence;
     expect(evidence?.sourceFormat).toBe("xlsx");
+
     if (evidence?.sourceFormat !== "xlsx") return;
     expect(evidence.hidden).toBe(false);
     expect(evidence.cells.map((cell) => cell.cellType)).toEqual([
@@ -176,10 +200,12 @@ it.effect("rejects forged ZIP expansion metadata before workbook parsing", () =>
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([["A"], ["value"]]), "Data");
     const buffer: unknown = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+
     if (!(buffer instanceof ArrayBuffer)) return yield* Effect.die("Expected XLSX ArrayBuffer");
     const original = new Uint8Array(buffer);
     const centralOffset = firstCentralDirectoryOffset(original);
     expect(centralOffset).toBeGreaterThanOrEqual(0);
+
     const mutations: ReadonlyArray<(view: DataView) => void> = [
       (view: DataView): void => {
         view.setUint32(centralOffset + zipExpandedSizeOffset, 1, true);
@@ -198,6 +224,7 @@ it.effect("rejects forged ZIP expansion metadata before workbook parsing", () =>
         view.setUint32(centralOffset + zipLocalOffset, original.length, true);
       },
     ];
+
     for (const mutate of mutations) {
       const bytes = original.slice();
       mutate(new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength));
@@ -227,6 +254,7 @@ it.effect("accounts for rows across compatible XLSX worksheets", () =>
       "February"
     );
     const buffer: unknown = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+
     if (!(buffer instanceof ArrayBuffer)) return yield* Effect.die("Expected XLSX ArrayBuffer");
 
     const parsed = yield* parseStatementFile(new Uint8Array(buffer));
@@ -243,6 +271,7 @@ it.effect("rejects XLSX dimensions truncated by the bounded SheetJS read", () =>
     sheet["!ref"] = "A1:B20002";
     XLSX.utils.book_append_sheet(workbook, sheet, "Oversized");
     const buffer: unknown = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+
     if (!(buffer instanceof ArrayBuffer)) return yield* Effect.die("Expected XLSX ArrayBuffer");
 
     const result = yield* Effect.exit(parseStatementFile(new Uint8Array(buffer)));
@@ -256,6 +285,7 @@ it.effect("rejects worksheets with incompatible tabular formats", () =>
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([["A"], ["one"]]), "One");
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([["B"], ["two"]]), "Two");
     const buffer: unknown = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+
     if (!(buffer instanceof ArrayBuffer)) return yield* Effect.die("Expected XLSX ArrayBuffer");
     expect(Exit.isFailure(yield* Effect.exit(parseStatementFile(new Uint8Array(buffer))))).toBe(
       true
@@ -268,11 +298,13 @@ it.effect("retains an external workbook formula as inert evidence", () =>
     const { sheet, workbook } = statementWorkbook();
     sheet.B2 = { f: "'[external.xlsx]Sheet1'!A1", t: "n", v: 10 };
     const buffer: unknown = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+
     if (!(buffer instanceof ArrayBuffer)) return yield* Effect.die("Expected XLSX ArrayBuffer");
 
     const parsed = yield* parseStatementFile(new Uint8Array(buffer));
     const evidence = parsed.rows[0]?.evidence;
     expect(evidence?.sourceFormat).toBe("xlsx");
+
     if (evidence?.sourceFormat !== "xlsx") return;
     expect(evidence.cells[1]?.formula).toEqual(Option.some("'[external.xlsx]Sheet1'!A1"));
     expect(evidence.cells[1]?.value).toBe("10");
@@ -284,6 +316,7 @@ it.effect("ignores a workbook VBA project while parsing statement cells", () =>
     const { workbook } = statementWorkbook();
     workbook.vbaraw = Uint8Array.from([1, 2, 3, 4]);
     const buffer: unknown = XLSX.write(workbook, { type: "array", bookType: "xlsm" });
+
     if (!(buffer instanceof ArrayBuffer)) return yield* Effect.die("Expected XLSM ArrayBuffer");
     const bytes = new Uint8Array(buffer);
     expect(new TextDecoder().decode(bytes)).toContain("vbaProject.bin");
@@ -300,6 +333,7 @@ it.effect("reads XLSX cells directly and retains hidden/formula evidence", () =>
         Bun.file(new URL("./internal/fixtures/synthetic-statement.xlsx", import.meta.url)).bytes()
       )
     );
+
     const parsed = yield* parseStatementFile(bytes);
 
     expect(parsed.sourceFormat).toBe("xlsx");
@@ -308,6 +342,7 @@ it.effect("reads XLSX cells directly and retains hidden/formula evidence", () =>
     expect(parsed.rows[0]?.fields).toEqual(["2026-02-05", "25000", "Mercado", "DEBIT"]);
     const evidence = parsed.rows[1]?.evidence;
     expect(evidence?.sourceFormat).toBe("xlsx");
+
     if (evidence?.sourceFormat !== "xlsx") return;
     expect(evidence.hidden).toBe(true);
     expect(evidence.cells[1]?.formula).toEqual(Option.some("12500*2"));

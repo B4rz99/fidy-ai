@@ -13,7 +13,9 @@ const bodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 1024,
   deadlineMilliseconds: 2000,
 });
+
 const CreateInput = Schema.toCodecJson(CreateKeywordRuleInput);
+
 const UpdateInput = Schema.toCodecJson(UpdateKeywordRuleInput);
 
 const jsonResponse = (body: string, status: number): Response =>
@@ -46,10 +48,13 @@ export const keywordRuleInput = ({
   ) {
     return Promise.resolve(Option.none());
   }
+
   const input = update ? UpdateInput : CreateInput;
+
   return Effect.runPromise(readBoundedRequestBody(request, bodyPolicy))
     .then((bytes) => {
       const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+
       return Schema.decodeUnknownOption(input)(parsed);
     })
     .catch(() => Option.none());

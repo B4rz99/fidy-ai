@@ -21,6 +21,7 @@ const entryCode: Readonly<Record<string, () => Promise<unknown>>> = {
   "/auth/google-return": () => import("@/features/provider-authentication/feature"),
   "/auth/microsoft-return": () => import("@/features/provider-authentication/feature"),
 };
+
 const preloadEntryCode = (pathname: string): Promise<unknown> =>
   pathname.startsWith("/oauth/review/")
     ? import("@/features/oauth-connections/feature")

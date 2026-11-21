@@ -7,6 +7,7 @@ import { Button } from "./button";
 import { Input } from "./input";
 
 type Choice = Readonly<{ value: string; label: string }>;
+
 type Props = Readonly<{
   id: string;
   label: string;
@@ -16,6 +17,7 @@ type Props = Readonly<{
   width: "full" | "auto";
   onChange: (value: string) => void;
 }>;
+
 export const SearchableChoiceDropdown = ({
   id,
   label,
@@ -62,6 +64,7 @@ export const SearchableChoiceDropdown = ({
     <SearchableChoicePopup label={label} />
   </Combobox.Root>
 );
+
 const SearchableChoicePopup = ({ label }: Readonly<{ label: string }>): JSX.Element => (
   <Combobox.Portal>
     <Combobox.Positioner

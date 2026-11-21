@@ -1,6 +1,7 @@
 import { type Cause, Data, Effect, Option, Stream } from "effect";
 
 const outputLimit = 1_048_576;
+
 const shutdownGraceMilliseconds = 2000;
 
 class ProofCommandFailed extends Data.TaggedError("ProofCommandFailed")<{
@@ -13,10 +14,12 @@ export const stopProofProcess = Effect.fn(function* (child: Bun.Subprocess) {
     try: () => child.kill("SIGTERM"),
     catch: () => new ProofCommandFailed({ reason: "cleanup" }),
   });
+
   const exited = yield* Effect.tryPromise({
     try: () => child.exited,
     catch: () => new ProofCommandFailed({ reason: "cleanup" }),
   }).pipe(Effect.timeoutOption(shutdownGraceMilliseconds));
+
   if (Option.isNone(exited)) {
     yield* Effect.try({
       try: () => child.kill("SIGKILL"),
@@ -40,11 +43,14 @@ export const readProofOutput = Effect.fn(function* (stream: ReadableStream<Uint8
   }).pipe(
     Stream.runForEach((chunk) => {
       bytes += chunk.byteLength;
+
       if (bytes > outputLimit) return Effect.fail(new ProofCommandFailed({ reason: "output" }));
       output += decoder.decode(chunk, { stream: true });
+
       return Effect.void;
     })
   );
+
   return output + decoder.decode();
 });
 

@@ -31,11 +31,15 @@ const POLICY_PATH = "dependency-policy.json";
 const SCA_CONFIG_PATH = ".fluidattacks/sca.yaml";
 
 const REGISTRY_CONCURRENCY = 8;
+
 const maximumPackumentBytes = 67_108_864;
+
 const rateLimitedStatus = 429;
+
 const serverErrorMinimumStatus = 500;
 
 const EXACT_PIN = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
+
 const EXACT_SHEETJS_CDN_PIN =
   /^https:\/\/cdn\.sheetjs\.com\/xlsx-(\d+)\.(\d+)\.(\d+)\/xlsx-\1\.\2\.\3\.tgz$/;
 
@@ -149,29 +153,37 @@ const readPackument = Effect.fn(function* (response: HttpClientResponse.HttpClie
   if (Number(response.headers["content-length"] ?? 0) > maximumPackumentBytes) {
     return yield* new CheckFailed({ message: "Registry response exceeded its byte budget" });
   }
+
   const chunks: Uint8Array[] = [];
   let size = 0;
   yield* Stream.runForEachWhile(response.stream, (chunk) =>
     Effect.sync(() => {
       size += chunk.byteLength;
+
       if (size > maximumPackumentBytes) return false;
       chunks.push(chunk);
+
       return true;
     })
   );
+
   if (size > maximumPackumentBytes) {
     return yield* new CheckFailed({ message: "Registry response exceeded its byte budget" });
   }
+
   const bytes = new Uint8Array(size);
   let offset = 0;
+
   for (const chunk of chunks) {
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
+
   const text = yield* Effect.try({
     try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
     catch: () => new CheckFailed({ message: "Registry response contained invalid text" }),
   });
+
   return yield* Schema.decodeEffect(Schema.fromJsonString(Packument))(text);
 });
 
@@ -180,9 +192,11 @@ const fetchPackument = (
 ): Effect.Effect<typeof Packument.Type, CheckFailed, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
+
     const response = yield* HttpClient.filterStatusOk(HttpClient.withScope(client)).get(
       `${REGISTRY_URL}/${encodeURIComponent(name)}`
     );
+
     return yield* readPackument(response);
   }).pipe(
     Effect.scoped,
@@ -335,6 +349,7 @@ const externalPinsOf = (
       .filter(({ declared }) => declared.private)
       .map(({ declared }) => [declared.name, declared.version] as const)
   );
+
   return manifests
     .flatMap(({ declared, manifest }) => pinsOf(manifest, declared))
     .filter(
@@ -366,6 +381,7 @@ const bunfigFindings = ({
   }
 
   const install = bunfig.value.install;
+
   const short =
     install.minimumReleaseAge < RELEASE_DELAY_SECONDS
       ? [
@@ -378,6 +394,7 @@ const bunfigFindings = ({
           },
         ]
       : [];
+
   const holes = (install.minimumReleaseAgeExcludes ?? []).map((excluded) => ({
     severity: "failure" as const,
     subject: path,
@@ -400,6 +417,7 @@ const acceptanceFindings = ({
 }): ReadonlyArray<Finding> =>
   exclusions.map((exclusion): Finding => {
     const subject = `${exclusion.cve} (${exclusion.path})`;
+
     const recorded =
       acceptances.find(
         (acceptance) => acceptance.cve === exclusion.cve && acceptance.path === exclusion.path
@@ -482,6 +500,7 @@ const updateFinding = ({
   }
 
   const published = DateTime.formatIsoDate(release.publishedAt);
+
   const deferred = Option.match(deferral, {
     onNone: () => "",
     onSome: (active) =>
@@ -572,6 +591,7 @@ export const checkDependencyUpdates = Effect.gen(function* () {
   const decodedManifests = yield* Effect.forEach(manifests, (manifest) =>
     Effect.map(readJson(Manifest, manifest), (declared) => ({ declared, manifest }))
   );
+
   const externalPins = externalPinsOf(decodedManifests);
 
   const installSettings = yield* Effect.forEach(manifests, (manifest) => {
@@ -582,6 +602,7 @@ export const checkDependencyUpdates = Effect.gen(function* () {
 
   const declared = externalPins.map((pin) => ({ pin, current: parsePin(pin.spec) }));
   const ranged = declared.flatMap(({ pin, current }) => (Option.isNone(current) ? [pin] : []));
+
   const exact = declared.flatMap(({ pin, current }): ReadonlyArray<ExactPin> =>
     Option.isNone(current) ? [] : [{ ...pin, current: current.value }]
   );

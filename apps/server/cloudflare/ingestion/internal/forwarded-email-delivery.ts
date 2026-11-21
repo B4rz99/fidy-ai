@@ -25,15 +25,20 @@ export const receiveForwardedEmailWork = ({
           Effect.exit(
             Effect.gen(function* () {
               const work = Schema.decodeUnknownOption(ForwardedEmailWork)(message.body);
+
               if (Option.isNone(work)) {
                 message.ack();
+
                 return;
               }
+
               const payload = yield* sanitizeWorkTrace(work.value);
               const traceHeaders = yield* workTraceHeaders(payload);
+
               const body = yield* Schema.encodeEffect(Schema.fromJsonString(ForwardedEmailWork))(
                 payload
               );
+
               const response = yield* Effect.tryPromise({
                 try: (signal) =>
                   coordinator.getByName(work.value.userId).fetch(
@@ -46,16 +51,19 @@ export const receiveForwardedEmailWork = ({
                   ),
                 catch: (cause) => new ForwardedEmailDeliveryUnavailable({ cause }),
               });
+
               if (!response.ok) {
                 return yield* new ForwardedEmailDeliveryUnavailable({
                   cause: new Error("Forwarded email coordinator unavailable"),
                 });
               }
+
               message.ack();
             })
           ),
         { concurrency: coordinatorDeliveryConcurrency }
       );
+
       for (const outcome of outcomes) {
         if (Exit.isFailure(outcome)) return yield* Effect.failCause(outcome.cause);
       }

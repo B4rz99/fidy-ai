@@ -10,6 +10,7 @@ import type { ReviewWorkspaceQuery } from "./decisions";
 import type { Filter } from "./view-navigation";
 
 const renderCommitRetention = "400 millis";
+
 class WorkspaceKey extends Data.Class<
   Readonly<{
     client: FidyClient;
@@ -17,6 +18,7 @@ class WorkspaceKey extends Data.Class<
     page: number;
   }>
 > {}
+
 const sources = Atom.family(({ client, filter, page }: WorkspaceKey) =>
   client.query("ingestion", "getReviewWorkspace", {
     query: {
@@ -27,10 +29,13 @@ const sources = Atom.family(({ client, filter, page }: WorkspaceKey) =>
     timeToLive: renderCommitRetention,
   })
 );
+
 const activeQueries = Atom.family((key: WorkspaceKey) => {
   const source = sources(key);
+
   return observeReviewQuery(source);
 });
+
 export const reviewWorkspaceQueries = (
   input: Readonly<{
     client: FidyClient;
@@ -42,8 +47,10 @@ export const reviewWorkspaceQueries = (
   active: ReviewWorkspaceQuery;
 }> => {
   const key = new WorkspaceKey(input);
+
   return { source: sources(key), active: activeQueries(key) };
 };
+
 export const reviewItemQuery = ({
   client,
   workspace,
@@ -58,12 +65,15 @@ export const reviewItemQuery = ({
     reactivityKeys: ["ingestion-review", reviewItemKey(id)],
     timeToLive: renderCommitRetention,
   });
+
   return Atom.readable(
     (get) => {
       const state = get(workspace);
+
       const selected = Option.flatMap(AsyncResult.value(state), ({ data }) =>
         Option.filter(data.selectedDetail, (detail) => detail.item.id === id)
       );
+
       return Option.isSome(selected)
         ? AsyncResult.map(state, () => ({ data: selected.value, next: [] }))
         : get(individual);
@@ -74,11 +84,15 @@ export const reviewItemQuery = ({
     }
   );
 };
+
 const invalidateItemReads = Atom.family((client: FidyClient) =>
   client.runtime.fn<ReadonlyArray<string>>()((keys) => Reactivity.invalidate(keys))
 );
+
 const visited = Atom.family((_client: FidyClient) => Atom.make(false).pipe(Atom.keepAlive));
+
 const recentSnapshotMilliseconds = 5000;
+
 type ReviewPreparation = Readonly<{
   apiClient: FidyClient;
   registry: AtomRegistry.AtomRegistry;
@@ -86,11 +100,13 @@ type ReviewPreparation = Readonly<{
   page: number;
   signal: AbortSignal;
 }>;
+
 const invalidateSelectedReads = (
   { apiClient, registry }: ReviewPreparation,
   state: ReturnType<ReviewWorkspaceQuery["read"]>
 ): void => {
   const old = AsyncResult.value(state);
+
   if (Option.isSome(old)) {
     registry.set(
       invalidateItemReads(apiClient),
@@ -98,6 +114,7 @@ const invalidateSelectedReads = (
     );
   }
 };
+
 const prepareFirstMaterial = (
   {
     apiClient,
@@ -113,6 +130,7 @@ const prepareFirstMaterial = (
     Effect.gen(function* () {
       const snapshot = AsyncResult.value(registry.get(source));
       const selected = Option.flatMap(snapshot, ({ data }) => data.selectedDetail);
+
       if (
         Option.isSome(selected) &&
         DateTime.toEpochMillis(observeOriginalDeadline({ registry, item: selected.value.item })) >
@@ -134,10 +152,12 @@ const prepareFirstMaterial = (
       }
     })
   );
+
 const firstReviewRead = (
   seen: boolean,
   before: ReturnType<ReviewWorkspaceQuery["read"]>
 ): boolean => !seen || AsyncResult.isInitial(before);
+
 const refreshReviewRead = (
   first: boolean,
   before: ReturnType<ReviewWorkspaceQuery["read"]>
@@ -145,24 +165,30 @@ const refreshReviewRead = (
   !first ||
   !AsyncResult.isSuccess(before) ||
   DateTime.toEpochMillis(DateTime.nowUnsafe()) - before.timestamp >= recentSnapshotMilliseconds;
+
 export const prepareReviewWorkspace = (input: ReviewPreparation): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { apiClient, registry, filter, page, signal } = input;
+
       if (!preparationActive(signal)) {
         return;
       }
+
       const source = reviewWorkspaceQueries({
         client: apiClient,
         filter,
         page,
       }).source;
+
       const before = registry.get(source);
       const first = firstReviewRead(registry.get(visited(apiClient)), before);
       const fresh = refreshReviewRead(first, before);
+
       if (fresh && !before.waiting) {
         invalidateSelectedReads(input, before);
       }
+
       yield* Effect.tryPromise(() =>
         prepareQuery({
           registry,
@@ -173,10 +199,13 @@ export const prepareReviewWorkspace = (input: ReviewPreparation): Promise<void> 
           },
         })
       );
+
       if (!preparationActive(signal)) {
         return;
       }
+
       registry.set(visited(apiClient), true);
+
       if (first) {
         yield* Effect.tryPromise(() =>
           prepareFirstMaterial({ ...input, signal: Option.some(signal) }, source)
@@ -184,6 +213,7 @@ export const prepareReviewWorkspace = (input: ReviewPreparation): Promise<void> 
       }
     })
   );
+
 export const preloadReviewMaterial = ({
   client,
   registry,
@@ -196,11 +226,13 @@ export const preloadReviewMaterial = ({
       if (registry.get(visited(client))) {
         return;
       }
+
       const source = reviewWorkspaceQueries({
         client,
         filter: "pending",
         page: 0,
       }).source;
+
       yield* Effect.tryPromise(() =>
         prepareQuery({
           registry,

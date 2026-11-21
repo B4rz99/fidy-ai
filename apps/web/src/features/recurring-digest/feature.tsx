@@ -21,7 +21,9 @@ const ReportContent = (): JSX.Element => {
   const { id } = useParams({ strict: false });
   const router = useRouter();
   const params = Schema.decodeUnknownOption(RecurringDigestReportParams)({ id });
+
   if (Option.isNone(params)) return <InvalidReport />;
+
   return (
     <RecurringDigestReportView
       key={params.value.id}
@@ -41,13 +43,17 @@ const RecurringDigestReportView = ({
   const query = apiClient.query("insights", "getRecurringDigestReport", {
     params,
   });
+
   const result = useAtomValue(query);
   const state = presentCanonicalQuery(result);
   const refresh = useAtomRefresh(query);
+
   if (state._tag === "Initial") return <ReportLoading />;
+
   if (state._tag === "Failure") {
     return <UnavailableReport onRetry={refresh} waiting={state.waiting} />;
   }
+
   return (
     <HistoricalReport
       report={state.value.data}

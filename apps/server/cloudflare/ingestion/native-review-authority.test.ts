@@ -38,6 +38,7 @@ const seedMedia = Effect.fn(function* (
     )
   );
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "keeps drafts and media private across paging, revision conflicts, rollback, expiry and withdrawn credentials",
@@ -48,11 +49,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           first = batchCallId(51),
           second = batchCallId(52),
           foreign = batchCallId(53);
+
         yield* seedMedia(journey, alice, { id: first, when: now });
         yield* seedMedia(journey, alice, { id: second, when: now + 1 });
         yield* seedMedia(journey, bob, { id: foreign, when: now });
+
         const read = (path: string, index = 0): Effect.Effect<Response> =>
           native(() => journey.browser(index, path));
+
         const edit = (command: unknown): Effect.Effect<Response> =>
           native(() =>
             journey.send(
@@ -68,8 +72,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               })
             )
           );
+
         const inbox = "/ingestion/review-workspace",
           item = inbox + "/" + first;
+
         const draft = {
           amount: "42",
           currency: "USD",
@@ -78,6 +84,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           occurredAt: "",
           userProvidedFields: ["money"],
         };
+
         expect((yield* edit({ _tag: "SaveDraft", id: first, revision: 0, draft })).status).toBe(
           200
         );
@@ -101,6 +108,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           scopes: ["read", "write"],
           current: now,
         });
+
         for (const path of [item + "/material", inbox + "/context"]) {
           const agent = yield* native(() =>
             journey.send(
@@ -109,9 +117,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               })
             )
           );
+
           expect(agent.status).toBeGreaterThanOrEqual(400);
           expect(yield* native(() => agent.text())).not.toContain("private image caption");
         }
+
         expect(
           (yield* edit({
             _tag: "Skip",
@@ -121,6 +131,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             ],
           })).status
         ).toBe(400);
+
         const skip = {
           _tag: "Skip",
           items: [
@@ -128,6 +139,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             { id: second, revision: 0 },
           ],
         };
+
         yield* native(() =>
           journey.exec(
             "CREATE TRIGGER lose_review_audit BEFORE INSERT ON audit_entries WHEN NEW.operation='ingestion.applyReviewEdit' BEGIN SELECT RAISE(ABORT,'fixture'); END"
@@ -168,12 +180,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         yield* native(() =>
           journey.exec("UPDATE web_sessions SET revoked_at_ms=? WHERE id=?", now, alice.session)
         );
+
         const audit = (): Effect.Effect<Awaited<ReturnType<typeof journey.exec>>> =>
           native(() =>
             journey.exec(
               "SELECT count(*) AS n FROM audit_entries WHERE operation='ingestion.getReviewItem'"
             )
           );
+
         const before = yield* audit();
         expect((yield* read(item)).status).toBe(401);
         expect(yield* audit()).toEqual(before);

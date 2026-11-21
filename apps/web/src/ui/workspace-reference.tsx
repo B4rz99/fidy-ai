@@ -15,8 +15,10 @@ const categoryOptions = [
   { value: "restaurants", label: "Restaurantes" },
   { value: "groceries", label: "Mercado" },
 ];
+
 const ChoiceReference = (): JSX.Element => {
   const [category, setCategory] = useState("restaurants");
+
   return (
     <>
       <RecordToolbar>
@@ -69,6 +71,7 @@ export const WorkspaceReference = (): JSX.Element => {
   const [search, setSearch] = useState("");
   const [searching, setSearching] = useState(false);
   const [date, setDate] = useState("2026-10-09");
+
   return (
     <section aria-label="Patrones de aplicación" className="overflow-hidden rounded-xl border">
       <WorkspaceHeader
@@ -124,6 +127,7 @@ export const WorkspaceReference = (): JSX.Element => {
 
 const CandidateReference = (): JSX.Element => {
   const [selected, setSelected] = useState(false);
+
   return (
     <div className="mt-6">
       <TransactionCandidate

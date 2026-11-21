@@ -19,11 +19,13 @@ it("independently refuses premature resends and processing at the workflow expir
     resendAvailableAt: acceptedAt,
     expiresAt: DateTime.add(acceptedAt, { minutes: 10 }),
   };
+
   const input = {
     existing: Option.some(workflow),
     requestedAt: acceptedAt,
     processedAt: acceptedAt,
   };
+
   expect(decideBrowserPairingEmailRequest(input)).toBe("Continue");
   expect(
     decideBrowserPairingEmailRequest({
@@ -43,6 +45,7 @@ it("accepts a live matching workflow revision and rejects a stale revision", () 
     resendAvailableAt: DateTime.makeUnsafe("2026-08-23T11:59:00Z"),
     expiresAt: DateTime.makeUnsafe("2026-08-23T12:10:00Z"),
   };
+
   expect(
     decideBrowserPairingEmailRequest({
       existing: Option.some(workflow),
@@ -82,6 +85,7 @@ it("accepts a matching live proof and rejects an enrollment-expired proof", () =
     proofExpiresAt: DateTime.makeUnsafe("2026-08-24T12:10:00Z"),
     enrollmentExpiresAt: DateTime.makeUnsafe("2026-08-24T12:00:00Z"),
   };
+
   expect(
     Effect.runSync(
       decideProofAttempt({
@@ -182,9 +186,11 @@ it("redeems only armed onboarding proofs before both expiry boundaries", () => {
     proofExpiresAtMs: 1500,
     nowMs: 1499,
   };
+
   expect(canRedeemOnboardingProof(proof)).toBe(true);
   expect(canRedeemOnboardingProof({ ...proof, nowMs: 1500 })).toBe(false);
   expect(canRedeemOnboardingProof({ ...proof, expiresAtMs: 1499 })).toBe(false);
+
   for (const state of ["awaiting_delivery", "sending", "rejected", "ambiguous"] as const) {
     expect(canRedeemOnboardingProof({ ...proof, state })).toBe(false);
   }
@@ -198,6 +204,7 @@ it("refuses a sixth delivery for either replacement or browser-pairing proof", (
     resendAvailableAt: DateTime.makeUnsafe("2026-08-23T11:59:00Z"),
     expiresAt: DateTime.makeUnsafe("2026-08-24T12:00:00Z"),
   };
+
   expect(
     Effect.runSync(
       decideEmailReplacementRequest({

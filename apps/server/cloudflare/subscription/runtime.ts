@@ -97,6 +97,7 @@ import type { EnrollmentContext } from "./internal/enrollment-session";
 export const offerLocalBilling = Effect.fn(function* (context: Omit<BillingRecovery, "transport">) {
   return yield* recoverLocalBilling({ ...context, transport: wompiOutboundHttp });
 });
+
 export const handleLocalEnrollment = Effect.fn(function* (
   request: Request,
   context: Omit<EnrollmentContext, "transport">,
@@ -104,12 +105,14 @@ export const handleLocalEnrollment = Effect.fn(function* (
 ) {
   return yield* nativeEnrollment({ ...context, transport: wompiOutboundHttp }, request, owns);
 });
+
 export const answerRegistration = Effect.fn(function* (
   request: Request,
   owns: (id: string) => boolean
 ) {
   return yield* readRegistration(request, owns);
 });
+
 export const billingWake = Effect.fn(function* (storage: DurableObjectStorage) {
   return yield* withStoreCapacity("required")(inspectBillingAlarm(storage));
 });
@@ -124,9 +127,11 @@ export const wompiOutboundHttp = (
         environment,
         telemetry: cloudflareWorkerTelemetry,
       });
+
       const clients = yield* Layer.build(OutboundHttpLive).pipe(
         Effect.provideService(FetchHttpClient.Fetch, fetcher)
       );
+
       return makeWompiTransport({
         environment,
         httpClient: Context.get(clients, HttpClient.HttpClient),
@@ -160,10 +165,12 @@ export const handleRefundSupport = (
             })
           )
         );
+
         const http = makeAccessSigningKeysOutboundHttp({
           issuer: input.environment.CLOUDFLARE_ACCESS_ISSUER,
           httpClient: Context.get(clients, HttpClient.HttpClient),
         });
+
         return yield* supportRefund({ ...input, http });
       })
     ),
@@ -181,6 +188,7 @@ export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
     return Effect.runPromise(backgroundWorkAllowed(this.env)).then((allowed) => {
       if (!allowed) throw Error("Billing execution is closed");
+
       return this.execute(event, step);
     });
   }
@@ -221,6 +229,7 @@ export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
     return Effect.runPromise(backgroundWorkAllowed(this.env)).then((allowed) => {
       if (!allowed) throw Error("Billing execution is closed");
+
       return this.execute(event, step);
     });
   }
@@ -284,6 +293,7 @@ export class Pricing {
       owner: "pricing",
       ceilingBytes: env.SQLITE_STORE_CAPACITY_BYTES,
     });
+
     if (state.id.name === pricingName) {
       state.waitUntil(
         state.blockConcurrencyWhile(() =>
@@ -314,6 +324,7 @@ export class Pricing {
         )
       );
     }
+
     if (request.url === participantDrainedUrl) {
       return this.runtime.runPromise(
         participantDrain(request, outstandingPricingRegistrations).pipe(
@@ -321,6 +332,7 @@ export class Pricing {
         )
       );
     }
+
     if (request.url === participantFenceUrl && Option.isSome(this.users)) {
       return this.runtime.runPromise(
         fenceErasureParticipant(request, this.users.value, this.state.storage).pipe(
@@ -328,24 +340,29 @@ export class Pricing {
         )
       );
     }
+
     return Promise.resolve(new Response(null, { status: 503 }));
   }
   fetch(request: Request): Promise<Response> {
     if (this.state.id.name !== pricingName) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
+
     if (
       request.method === "POST" &&
       [participantCleanupUrl, participantDrainedUrl, participantFenceUrl].includes(request.url)
     ) {
       return this.erasureCommand(request);
     }
+
     if (request.method === "GET" && request.url === storeReadinessUrl) {
       return this.runtime.runPromise(
         storeReadiness({ history: pricingHistory, release: this.version })
       );
     }
+
     const work = pricingResponse(request, this.state.storage, Option.isSome(this.users));
+
     return this.runtime.runPromise(
       (ownerCheckRequest(request)
         ? work.pipe(
@@ -369,11 +386,14 @@ export const handlePricePublication = (
       issuer: input.environment.CLOUDFLARE_ACCESS_ISSUER,
       httpClient: yield* HttpClient.HttpClient,
     });
+
     return yield* publishPrice({ ...input, http });
   });
 
 const workPendingStatus = 202;
+
 const workAbsentStatus = 204;
+
 const cancellationBody = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 1024,
   deadlineMilliseconds: 5000,
@@ -387,14 +407,17 @@ export const handleSourceCancellationWork = Effect.fnUntraced(function* (
   }>
 ) {
   const action = new URL(input.request.url).pathname;
+
   const body = yield* boundedJsonBody({
     request: input.request,
     policy: cancellationBody,
     schema: LocalSourceCancellationWork,
   });
+
   if (Option.isNone(body) || !input.owns(body.value.userId)) {
     return new Response(null, { status: 404 });
   }
+
   if (action === "/work/source-cancellation/observe") {
     yield* observeCancellation({
       work: body.value,
@@ -403,7 +426,9 @@ export const handleSourceCancellationWork = Effect.fnUntraced(function* (
       http: yield* wompiOutboundHttp(input.environment),
     });
   }
+
   const pending = yield* pendingCancellation(body.value);
+
   return new Response(null, { status: pending ? workPendingStatus : workAbsentStatus });
 });
 
@@ -415,6 +440,7 @@ export const handleNativeBillingCallback = Effect.fn(function* (
 
 const callbackWorkflowId = Effect.fn(function* (event: typeof WompiBillingEvent.Type) {
   const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(WompiBillingEvent))(event);
+
   return "wompi-event-" + Hex.encode(yield* digestBytes(new TextEncoder().encode(encoded)));
 });
 
@@ -440,6 +466,7 @@ const workflowId = Effect.fnUntraced(function* (
       return "collect-" + work.userId + "-" + work.attemptId;
   }
 });
+
 export const offerNativeBillingWork = Effect.fn(function* (
   workflow: BillingObservationWorkflow,
   work:
@@ -448,6 +475,7 @@ export const offerNativeBillingWork = Effect.fn(function* (
     | typeof LocalRefundWork.Type
 ) {
   const id = yield* workflowId(work);
+
   const started = yield* Effect.result(
     Effect.tryPromise(() =>
       workflow.create({
@@ -457,11 +485,15 @@ export const offerNativeBillingWork = Effect.fn(function* (
       })
     )
   );
+
   if (Result.isSuccess(started)) return;
   const instance = yield* Effect.tryPromise(() => workflow.get(id));
   const { status } = yield* Effect.tryPromise(() => instance.status());
+
   if (acceptedWorkflowStates.has(status)) return;
+
   if (status === "errored") return yield* Effect.tryPromise(() => instance.restart());
+
   return yield* Effect.fail("billing-workflow-unavailable" as const);
 });
 
@@ -472,9 +504,11 @@ export const recoverNativeRefunds = Effect.fnUntraced(function* (
 ) {
   return yield* offerRefunds(input).pipe(Effect.mapError((cause) => new Cause.UnknownError(cause)));
 });
+
 export const repairRefundAlarm = Effect.fnUntraced(function* (storage: DurableObjectStorage) {
   return yield* refundWake(storage).pipe(withStoreCapacity("required"));
 });
+
 export const handleNativeRefundWork = Effect.fnUntraced(function* (
   request: Request,
   context: Omit<Parameters<typeof runOwnerRefund>[1], "transport">
@@ -482,7 +516,9 @@ export const handleNativeRefundWork = Effect.fnUntraced(function* (
   const work = yield* Effect.tryPromise(() => request.json()).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(LocalRefundWork))
   );
+
   yield* runOwnerRefund(work, { ...context, transport: wompiOutboundHttp });
+
   return new Response(null, { status: 204 });
 });
 

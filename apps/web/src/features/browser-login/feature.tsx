@@ -21,16 +21,22 @@ import { browserLoginPairingWhatsAppUrl } from "./whatsapp-link";
 type BrowserLoginPairing = Omit<PairingController, "mounted">;
 
 const millisecondsPerSecond = 1000;
+
 const secondsPerMinute = 60;
+
 const subscribeClock = (changed: () => void): (() => void) => {
   const timer = window.setInterval(changed, millisecondsPerSecond);
+
   return () => window.clearInterval(timer);
 };
+
 const currentSecond = (): number =>
   Math.floor(Effect.runSync(Clock.currentTimeMillis) / millisecondsPerSecond);
+
 const Remaining = ({ deadline }: Readonly<{ deadline: number }>): JSX.Element => {
   const now = useSyncExternalStore(subscribeClock, currentSecond);
   const remaining = Math.max(0, Math.ceil(deadline / millisecondsPerSecond) - now);
+
   return (
     <>
       {Math.floor(remaining / secondsPerMinute)
@@ -40,17 +46,22 @@ const Remaining = ({ deadline }: Readonly<{ deadline: number }>): JSX.Element =>
     </>
   );
 };
+
 const EmailForm = ({ pairing }: Readonly<{ pairing: BrowserLoginPairing }>): JSX.Element => {
   const busy =
     pairing.state._tag === "Starting" ||
     (pairing.state._tag === "AwaitingApproval" && pairing.state.emailStep === "sending");
+
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
+
     const email = Schema.decodeUnknownOption(EmailAddress)(
       new FormData(event.currentTarget).get("email")
     );
+
     if (Option.isSome(email)) pairing.requestEmail(email.value);
   };
+
   return (
     <>
       <AccessHeading method="email">Entra con tu correo</AccessHeading>
@@ -76,12 +87,14 @@ const EmailForm = ({ pairing }: Readonly<{ pairing: BrowserLoginPairing }>): JSX
     </>
   );
 };
+
 const EmailCodeActions = ({
   pairing,
   busy,
   deadline,
 }: Readonly<{ pairing: BrowserLoginPairing; busy: boolean; deadline: number }>): JSX.Element => {
   const now = useSyncExternalStore(subscribeClock, currentSecond);
+
   return (
     <div data-access-meta="">
       {deadline > now * millisecondsPerSecond ? (
@@ -99,20 +112,25 @@ const EmailCodeActions = ({
     </div>
   );
 };
+
 const EmailCodeForm = ({ pairing }: Readonly<{ pairing: BrowserLoginPairing }>): JSX.Element => {
   if (pairing.state._tag !== "AwaitingApproval") return <></>;
   const { emailStep, emailRetryAt } = pairing.state;
   const busy = emailStep === "submitting" || emailStep === "sending";
+
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
+
     const code = Option.flatMap(
       Schema.decodeUnknownOption(Schema.String)(
         new FormData(event.currentTarget).get("combinedCode")
       ),
       (value) => Schema.decodeOption(EmailVerificationCode)(value.trim().toUpperCase())
     );
+
     if (Option.isSome(code)) pairing.completeEmail(code.value);
   };
+
   return (
     <>
       <AccessHeading method="email">Revisa tu correo</AccessHeading>
@@ -150,11 +168,13 @@ const EmailCodeForm = ({ pairing }: Readonly<{ pairing: BrowserLoginPairing }>):
     </>
   );
 };
+
 type PairingViewProps = Readonly<{
   method: "email" | "whatsapp";
   pairing: BrowserLoginPairing;
   choose: (method: AccessMethod | "principal") => void;
 }>;
+
 const terminalPairingCopy = {
   Expired: {
     heading: "El código venció",
@@ -173,12 +193,16 @@ const terminalPairingCopy = {
     action: "Iniciar otra solicitud",
   },
 } as const;
+
 const TerminalStatus = ({ method, pairing, choose }: PairingViewProps): JSX.Element => {
   const { state } = pairing;
+
   if (state._tag !== "Expired" && state._tag !== "Invalid" && state._tag !== "Uncertain") {
     return <></>;
   }
+
   const copy = terminalPairingCopy[state._tag];
+
   return (
     <>
       <AccessHeading method={method}>{copy.heading}</AccessHeading>
@@ -192,8 +216,10 @@ const TerminalStatus = ({ method, pairing, choose }: PairingViewProps): JSX.Elem
     </>
   );
 };
+
 const WhatsAppStatus = ({ pairing }: Pick<PairingViewProps, "pairing">): JSX.Element => {
   const { state } = pairing;
+
   return (
     <>
       <AccessHeading method="whatsapp">
@@ -234,13 +260,17 @@ const WhatsAppStatus = ({ pairing }: Pick<PairingViewProps, "pairing">): JSX.Ele
     </>
   );
 };
+
 const PairingContent = (props: PairingViewProps): JSX.Element => {
   const { method, pairing } = props;
   const { state } = pairing;
+
   if (state._tag === "Invalid" || state._tag === "Expired" || state._tag === "Uncertain") {
     return <TerminalStatus {...props} />;
   }
+
   if (method === "whatsapp") return <WhatsAppStatus pairing={pairing} />;
+
   if (
     state._tag === "AwaitingApproval" &&
     state.emailStep !== "ready" &&
@@ -248,8 +278,10 @@ const PairingContent = (props: PairingViewProps): JSX.Element => {
   ) {
     return <EmailCodeForm pairing={pairing} />;
   }
+
   return <EmailForm pairing={pairing} />;
 };
+
 const PairingView = (props: PairingViewProps): JSX.Element => (
   <div data-access-flow="">
     <AccessBack onClick={() => props.choose("principal")} />
@@ -273,6 +305,7 @@ export const BrowserLoginPairingFeature = ({
   children: (presentation: BrowserLoginPresentation) => ReactNode;
 }>): JSX.Element => {
   const { mounted, ...pairing } = useBrowserLoginPairing();
+
   return (
     <div ref={mounted}>
       {children({

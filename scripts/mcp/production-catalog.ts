@@ -50,6 +50,7 @@ const expectedReadWriteTools = [
   "transactions.updateTransaction",
   "operations.executeAtomicBatch",
 ];
+
 const excludedOperations = [
   "dashboard.initializeDashboard",
   "dashboard.applyDashboardEdit",
@@ -64,6 +65,7 @@ const excludedOperations = [
   "pats.revokePAT",
   "recovery.rotateBackupRecoveryCode",
 ];
+
 const NamedTool = Schema.Struct({
   name: Schema.String,
   input_schema: Schema.optionalKey(Schema.Unknown),
@@ -81,7 +83,9 @@ const NamedTool = Schema.Struct({
 const CodexCatalog = Schema.Array(
   Schema.Union([NamedTool, Schema.Struct({ type: Schema.Literal("web_search") })])
 );
+
 const ClaudeCatalog = Schema.Array(NamedTool);
+
 export const validateCatalog = Effect.fn(function* (root: string, host: NativeHost) {
   const tools =
     host === "claude"
@@ -89,15 +93,18 @@ export const validateCatalog = Effect.fn(function* (root: string, host: NativeHo
       : ((yield* readJson(CodexCatalog, `${root}/${host}-catalog-private.json`))
           .filter(Schema.is(NamedTool))
           .find((tool) => tool.name === "mcp__fidy")?.tools ?? []);
+
   const names = tools.map((tool) => tool.name.replace(/^mcp__fidy__/u, "")).sort();
   const expected = expectedReadWriteTools.map((name) => name.replaceAll(".", "_")).sort();
   yield* requireCheck(
     encodeJson(names) === encodeJson(expected),
     "Native restricted catalog did not match the permission contract"
   );
+
   const schemas = encodeJson(
     tools.map((tool) => ("input_schema" in tool ? tool.input_schema : tool.parameters))
   );
+
   yield* requireCheck(
     excludedOperations.every((name) => !schemas.includes(`"${name}"`)),
     "Unauthorized operation identifier leaked into native input schemas"

@@ -17,6 +17,7 @@ export type InboxControl = Readonly<{
   recover: () => void;
   undoSkip: () => void;
 }>;
+
 export const useInboxControl = ({
   view,
   visibleItems,
@@ -30,8 +31,10 @@ export const useInboxControl = ({
   const [checked, setChecked] = useState<ReadonlyArray<Item["id"]>>([]);
   const [previous, setPrevious] = useState(decisions.completed);
   const selected = selectedItem({ selection, view: { ...view, items: visibleItems } });
+
   if (previous !== decisions.completed) {
     setPrevious(decisions.completed);
+
     if (Option.isSome(decisions.completed)) {
       setSelection(
         selectionAfterDecision({
@@ -43,6 +46,7 @@ export const useInboxControl = ({
       setChecked([]);
     }
   }
+
   return {
     decisions,
     selected,
@@ -85,7 +89,9 @@ const selectionAfterDecision = ({
   const completedIds = new Set(completed);
   const position = view.items.findIndex((item) => Option.contains(selected, item.id));
   const active = view.items[position];
+
   if (active === undefined || !completedIds.has(active.id)) return selected;
   const following = [...view.items.slice(position + 1), ...view.items.slice(0, position)];
+
   return Option.fromUndefinedOr(following.find((item) => !completedIds.has(item.id))?.id);
 };

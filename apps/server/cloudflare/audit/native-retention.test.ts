@@ -14,8 +14,10 @@ import { native, nativePurgePlatform } from "../user-store.test-fixture";
 const retention = Effect.gen(function* () {
   const db = yield* makeNativeTransactionJourney(undefined, nativePurgePlatform);
   const now = (yield* Clock.currentTimeMillis) + 450 * utcDayMilliseconds;
+
   const count =
     "SELECT count(*) n FROM audit_entries WHERE operation='transactions.listTransactions' AND id LIKE 'retention-%'";
+
   const seed = Effect.fn(function* (who: typeof alice) {
     yield* native(() =>
       db
@@ -38,6 +40,7 @@ const retention = Effect.gen(function* () {
         )
     );
   });
+
   yield* seed(alice);
   yield* seed(bob);
   expect(
@@ -47,6 +50,7 @@ const retention = Effect.gen(function* () {
   expect(yield* native(() => db.exec(count))).toEqual([{ n: 65 }]);
   const users = yield* native(() => db.runtime.getDurableObjectNamespace("USER_STORE", "core"));
   const owner = users.getByName(alice.user);
+
   const alarm = Effect.fn(function* () {
     return yield* native(() =>
       owner.fetch("https://fixture.invalid/user-alarm", {
@@ -55,6 +59,7 @@ const retention = Effect.gen(function* () {
       })
     );
   });
+
   yield* seedNativePAT({
     db,
     userId: alice.user,
@@ -62,6 +67,7 @@ const retention = Effect.gen(function* () {
     scopes: ["read"],
     current: now,
   });
+
   const admission = Effect.fn(function* (id: string, at: number) {
     return yield* native(() =>
       db.exec(
@@ -71,6 +77,7 @@ const retention = Effect.gen(function* () {
       )
     );
   });
+
   yield* admission("admission-old", now - 93 * utcDayMilliseconds);
   yield* admission("admission-new", now - 93 * utcDayMilliseconds + 1);
   yield* native(() =>
@@ -101,6 +108,7 @@ const retention = Effect.gen(function* () {
     db.exec("ALTER TABLE fixture_missing_receipts RENAME TO canonical_request_receipts")
   );
   expect((yield* alarm()).status).toBe(204);
+
   const retained = yield* native(() => db.exec(count)).pipe(
     Effect.repeat({
       until: (rows) => rows[0]?.n === 0,
@@ -108,6 +116,7 @@ const retention = Effect.gen(function* () {
       schedule: Schedule.spaced("50 millis"),
     })
   );
+
   expect(retained).toEqual([{ n: 0 }]);
   expect(
     yield* native(() => db.exec("SELECT id FROM audit_entries WHERE id='security-retained'"))

@@ -11,11 +11,14 @@ const deliveredProof = Effect.fn(function* () {
   const setup = yield* loginMailbox("person@example.test");
   const proof = yield* setup.pairing();
   expect((yield* setup.start(proof)).status).toBe(202);
+
   const code = yield* Schema.decodeUnknownEffect(Schema.String)(
     (yield* setup.delivered)[0]?.split("\n\n")[1]
   );
+
   const verify = (submitted: string): ReturnType<typeof setup.post> =>
     setup.post("/web/email/authentication/complete", { ...proof, combinedCode: submitted });
+
   return { ...setup, proof, code, verify };
 });
 
@@ -27,17 +30,21 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const { runtime, owner, directory, proof, code, verify, post } = yield* deliveredProof();
         expect((yield* verify(code)).status).toBe(200);
         const unbound = yield* browser(runtime).pair;
+
         for (const target of [unbound, proof]) {
           for (let attempt = 0; attempt < 5; attempt++) {
             const refused = yield* post("/web/pairings/redeem", {
               ...target,
               privateVerifier: "X".repeat(43),
             });
+
             expect(refused.status).toBe(400);
             expect(refused.headers.get("set-cookie")).toBeNull();
           }
+
           expect((yield* post("/web/pairings/redeem", target)).status).toBe(400);
         }
+
         expect(
           yield* directory(
             "SELECT wrong_attempts,user_id FROM browser_pairings WHERE id=?",
@@ -55,6 +62,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         ).toEqual([]);
       })
   );
+
   for (const refusal of ["RAISE(ABORT,'fixture')", "RAISE(IGNORE)"]) {
     test.effect(
       "one redemption issues a fresh bearer after a refused session insert using " + refusal,
@@ -63,6 +71,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           const { runtime, owner, directory, proof, code, verify } = yield* deliveredProof();
           expect((yield* verify(code)).status).toBe(200);
           const { api, headers } = browser(runtime);
+
           const redeem = (): Effect.Effect<Awaited<ReturnType<typeof runtime.dispatchFetch>>> =>
             native(() =>
               runtime.dispatchFetch(api + "/web/pairings/redeem", {
@@ -71,6 +80,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
                 body: JSON.stringify(proof),
               })
             );
+
           yield* owner.exec(
             "CREATE TRIGGER refuse_session BEFORE INSERT ON web_sessions BEGIN SELECT " +
               refusal +
@@ -85,10 +95,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               proof.pairingId
             )
           ).toEqual([{ state: "ready" }]);
+
           const issued = owner.exec(
             "SELECT id FROM web_sessions WHERE pairing_id=?",
             proof.pairingId
           );
+
           expect(yield* issued).toEqual([]);
           expect(
             yield* directory(
@@ -101,18 +113,23 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           expect(replies.map((reply) => reply.status).sort((left, right) => left - right)).toEqual([
             200, 400,
           ]);
+
           const cookie =
             replies.find((reply) => reply.status === 200)?.headers.get("set-cookie") ?? "";
+
           expect(cookie).toContain("Secure; HttpOnly; SameSite=Lax");
           expect(cookie).not.toContain(alice.bearer);
+
           const session = yield* native(() =>
             runtime.dispatchFetch(api + "/web/session/binding", {
               headers: { ...headers, cookie: cookie.split(";")[0] ?? "" },
             })
           );
+
           const { binding } = yield* Schema.decodeUnknownEffect(
             Schema.Struct({ binding: Schema.String })
           )(yield* native(() => session.json()));
+
           expect(binding).not.toBe(alice.session);
           expect(yield* issued).toEqual([{ id: binding }]);
           const replay = yield* redeem();
@@ -121,6 +138,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         })
     );
   }
+
   test.effect(
     "retains the activated session route after its UserStore commit acknowledgement is lost",
     () =>
@@ -131,6 +149,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const lost = yield* post("/web/pairings/redeem", proof);
         expect(lost.status).toBe(503);
         expect(lost.headers.get("set-cookie")).toBeNull();
+
         const [session] = yield* Schema.decodeUnknownEffect(
           Schema.Array(Schema.Struct({ id: Schema.String, digest: Schema.String }))
         )(
@@ -139,6 +158,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             proof.pairingId
           )
         );
+
         if (session === undefined) return yield* Effect.die("Missing committed session");
         expect(
           yield* directory(
@@ -203,6 +223,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       expect((yield* post("/web/pairings/redeem", proof)).status).toBe(200);
     })
   );
+
   for (const secret of ["correct", "incorrect"]) {
     test.effect(
       "the " +
@@ -212,8 +233,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         Effect.gen(function* () {
           const { owner, proof, code, verify, address } = yield* deliveredProof();
           yield* owner.exec("CREATE TABLE hash_deadline(observed_ms INTEGER)");
+
           const submitted =
             secret === "correct" ? code : code.slice(0, -1) + (code.endsWith("A") ? "B" : "A");
+
           expect((yield* verify(submitted)).status).toBe(400);
           expect(
             yield* owner.exec(
@@ -233,6 +256,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         })
     );
   }
+
   test.effect(
     "failed proof consumption rolls back browser approval and allows the same proof to retry",
     () =>

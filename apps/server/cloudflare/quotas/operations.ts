@@ -39,6 +39,7 @@ export const quotaStatusSelection = (
 ): OwnedStatement => {
   const pro = activeProForUserSelection({ users: input.users, nowEpochMs: input.current });
   const period = allowancePeriod(DateTime.makeUnsafe(input.current));
+
   return {
     sql: `SELECT ${pro.sql} AS pro,
     coalesce(sum(CASE WHEN allowance = 'forwarded_email' THEN units ELSE 0 END),0) AS forwarded_email,

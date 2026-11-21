@@ -40,8 +40,10 @@ const selectWindow = (
     TranscriptWindowTurnLimit.make(maxTurns),
     TranscriptWindowCharacterLimit.make(maxCharacters)
   );
+
 const entryId = (suffix: string): TranscriptEntryId =>
   TranscriptEntryId.make(`f1d1a000-0000-4000-8000-${suffix.padStart(12, "0")}`);
+
 const turnId = (suffix: string): TranscriptTurnId =>
   TranscriptTurnId.make(`f1d1a000-0000-4000-8001-${suffix.padStart(12, "0")}`);
 
@@ -66,6 +68,7 @@ const turn = (
 ];
 
 const windowOperation = CanonicalOperationId.make("categories.listCategories");
+
 const windowUser = (suffix: string, id: TranscriptTurnId, text = "u"): UserTranscriptEntry =>
   UserTranscriptEntry.make({
     id: entryId(suffix),
@@ -73,6 +76,7 @@ const windowUser = (suffix: string, id: TranscriptTurnId, text = "u"): UserTrans
     text: TranscriptText.make(text),
     occurredAt,
   });
+
 const windowAssistant = (
   suffix: string,
   id: TranscriptTurnId,
@@ -85,6 +89,7 @@ const windowAssistant = (
     text: TranscriptText.make(text),
     occurredAt,
   });
+
 const windowCall = (
   suffix: string,
   id: TranscriptTurnId,
@@ -99,6 +104,7 @@ const windowCall = (
     input: Schema.decodeSync(Schema.Json)({}),
     occurredAt,
   });
+
 const windowOversizedCall = (
   suffix: string,
   id: TranscriptTurnId,
@@ -107,6 +113,7 @@ const windowOversizedCall = (
   ...windowCall(suffix, id, toolCallId),
   input: Schema.decodeSync(Schema.Json)({ tooLarge: "x".repeat(20) }),
 });
+
 const windowResult = (
   suffix: string,
   id: TranscriptTurnId,
@@ -125,6 +132,7 @@ const windowResult = (
 it("accepts every canonical TranscriptEntry variant", () => {
   const id = turnId("0");
   const operation = CanonicalOperationId.make("categories.listCategories");
+
   const entries: ReadonlyArray<TranscriptEntry> = [
     UserTranscriptEntry.make({
       id: entryId("01"),
@@ -182,6 +190,7 @@ it("accepts every canonical TranscriptEntry variant", () => {
 it.effect("excludes lifecycle markers from model prompt windows", () =>
   Effect.gen(function* () {
     const complete = turn("0", "user", "assistant");
+
     const selected = yield* selectTranscriptWindow(
       [
         ...complete,
@@ -211,6 +220,7 @@ it.effect("never splits a turn to fill the remaining character budget", () =>
   Effect.gen(function* () {
     const older = turn("4", "small", "small");
     const newest = turn("5", "newest-user", "newest-assistant");
+
     const selected = yield* selectWindow(
       [...older, ...newest],
       5,
@@ -235,12 +245,14 @@ it.effect(
     Effect.gen(function* () {
       const id = turnId("7");
       const operation = CanonicalOperationId.make("categories.listCategories");
+
       const user = UserTranscriptEntry.make({
         id: entryId("71"),
         turnId: id,
         text: TranscriptText.make("current request"),
         occurredAt,
       });
+
       const oldCall = CanonicalToolCallEntry.make({
         id: entryId("72"),
         turnId: id,
@@ -250,6 +262,7 @@ it.effect(
         input: { old: "x".repeat(40) },
         occurredAt,
       });
+
       const oldResult = CanonicalToolResultEntry.make({
         id: entryId("73"),
         turnId: id,
@@ -259,6 +272,7 @@ it.effect(
         outcome: { _tag: "Succeeded", output: { old: "x".repeat(40) } },
         occurredAt,
       });
+
       const latestCall = CanonicalToolCallEntry.make({
         id: entryId("74"),
         turnId: id,
@@ -268,6 +282,7 @@ it.effect(
         input: {},
         occurredAt,
       });
+
       const latestResult = CanonicalToolResultEntry.make({
         id: entryId("75"),
         turnId: id,
@@ -277,6 +292,7 @@ it.effect(
         outcome: { _tag: "ToolInputRejected", failure: { code: "retry" } },
         occurredAt,
       });
+
       const latestCharacters = 33;
 
       expect(
@@ -307,12 +323,14 @@ it.effect("retains an unmatched trailing result without its preceding call", () 
   Effect.gen(function* () {
     const id = turnId("10");
     const operation = CanonicalOperationId.make("categories.listCategories");
+
     const user = UserTranscriptEntry.make({
       id: entryId("101"),
       turnId: id,
       text: TranscriptText.make("u"),
       occurredAt,
     });
+
     const call = CanonicalToolCallEntry.make({
       id: entryId("102"),
       turnId: id,
@@ -322,6 +340,7 @@ it.effect("retains an unmatched trailing result without its preceding call", () 
       input: { tooLarge: "x".repeat(20) },
       occurredAt,
     });
+
     const result = CanonicalToolResultEntry.make({
       id: entryId("103"),
       turnId: id,
@@ -340,12 +359,14 @@ it.effect("does not treat a non-call entry as the call for a trailing result", (
   Effect.gen(function* () {
     const id = turnId("11");
     const operation = CanonicalOperationId.make("categories.listCategories");
+
     const user = UserTranscriptEntry.make({
       id: entryId("111"),
       turnId: id,
       text: TranscriptText.make("u"),
       occurredAt,
     });
+
     const assistant = AssistantTranscriptEntry.make({
       id: entryId("112"),
       turnId: id,
@@ -353,6 +374,7 @@ it.effect("does not treat a non-call entry as the call for a trailing result", (
       text: TranscriptText.make("too large"),
       occurredAt,
     });
+
     const result = CanonicalToolResultEntry.make({
       id: entryId("113"),
       turnId: id,
@@ -371,12 +393,14 @@ it.effect("walks backward over each complete trailing call and result pair", () 
   Effect.gen(function* () {
     const id = turnId("12");
     const operation = CanonicalOperationId.make("categories.listCategories");
+
     const user = UserTranscriptEntry.make({
       id: entryId("121"),
       turnId: id,
       text: TranscriptText.make("u"),
       occurredAt,
     });
+
     const oldCall = CanonicalToolCallEntry.make({
       id: entryId("122"),
       turnId: id,
@@ -386,8 +410,10 @@ it.effect("walks backward over each complete trailing call and result pair", () 
       input: { tooLarge: "x".repeat(20) },
       occurredAt,
     });
+
     const trailing = [1, 2].flatMap((iteration) => {
       const toolCallId = ToolCallId.make(`call-${iteration}`);
+
       return [
         CanonicalToolCallEntry.make({
           id: entryId(`12${iteration * 2 + 1}`),
@@ -515,6 +541,7 @@ it.effect("counts canonical call inputs and both result outcomes in the turn bud
   Effect.gen(function* () {
     const id = turnId("8");
     const operation = CanonicalOperationId.make("categories.listCategories");
+
     const entries: ReadonlyArray<TranscriptWindowEntry> = [
       CanonicalToolCallEntry.make({
         id: entryId("81"),
@@ -544,6 +571,7 @@ it.effect("counts canonical call inputs and both result outcomes in the turn bud
         occurredAt,
       }),
     ];
+
     expect(yield* selectWindow(entries, 1, 49)).toEqual(entries);
     expect(yield* selectWindow(entries, 1, 48)).toEqual([]);
   })
@@ -603,6 +631,7 @@ it.effect(
         outcome: { _tag: "CommittedOutputUnavailable" },
         occurredAt,
       });
+
       const characters = 37;
       expect(yield* selectWindow([entry], 1, characters)).toEqual([entry]);
       expect(yield* selectWindow([entry], 1, characters - 1)).toEqual([]);

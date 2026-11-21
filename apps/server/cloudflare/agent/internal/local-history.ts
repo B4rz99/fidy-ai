@@ -9,14 +9,19 @@ import { type LocalTurn } from "./local-turn";
 
 export const meterHistory = Effect.fn(function* (turn: LocalTurn, entry: CanonicalToolResultEntry) {
   if (!loadsSavedHistory(entry)) return entry.outcome;
+
   const sql = yield* SqliteClient,
     now = yield* Clock.currentTimeMillis;
+
   const period = allowancePeriod(DateTime.makeUnsafe(now)),
     start = period.startsAt.epochMilliseconds;
+
   const prior =
     yield* sql`SELECT 1 FROM commercial_allowance_consumptions WHERE user_id=${turn.user_id} AND allowance='hosted_history_turn' AND identity=${turn.id}`;
+
   if (prior.length === 1) return entry.outcome;
   const pro = activeProUserCondition({ userId: turn.user_id, nowEpochMs: now });
+
   const rows = yield* sql.unsafe(
     `INSERT INTO commercial_allowance_consumptions(user_id,allowance,identity,period_start_ms,accepted_at_ms,units)
     SELECT ?, 'hosted_history_turn', ?, ?, ?, units FROM (SELECT CASE WHEN ${pro.sql} THEN 0 ELSE 1 END AS units)
@@ -32,6 +37,7 @@ export const meterHistory = Effect.fn(function* (turn: LocalTurn, entry: Canonic
       freeAllowanceLimits.hosted_history_turn,
     ]
   );
+
   return rows.length === 1
     ? entry.outcome
     : {

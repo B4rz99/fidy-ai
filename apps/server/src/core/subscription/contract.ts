@@ -9,21 +9,25 @@ import { AccessTier } from "~/core/access-tier/contract";
 export const PriceId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("PriceId"))
   .annotate({ identifier: "PriceId" });
+
 export type PriceId = typeof PriceId.Type;
 
 export const UpgradeDestination = Schema.Struct({
   url: Schema.URLFromString,
 }).annotate({ identifier: "UpgradeDestination" });
+
 export type UpgradeDestination = typeof UpgradeDestination.Type;
 
 export const BillingPeriod = Schema.Literals(["weekly", "monthly", "yearly"]).annotate({
   identifier: "BillingPeriod",
 });
+
 export type BillingPeriod = typeof BillingPeriod.Type;
 
 export const TaxTreatment = Schema.Literal("not-taxable").annotate({
   identifier: "TaxTreatment",
 });
+
 export type TaxTreatment = typeof TaxTreatment.Type;
 
 export const LaunchPaymentMethods = Schema.Tuple([
@@ -31,6 +35,7 @@ export const LaunchPaymentMethods = Schema.Tuple([
   Schema.Literal("nequi"),
   Schema.Literal("daviplata"),
 ]).annotate({ identifier: "LaunchPaymentMethods" });
+
 export type LaunchPaymentMethods = typeof LaunchPaymentMethods.Type;
 
 export const RenewalTerms = Schema.Struct({
@@ -39,9 +44,11 @@ export const RenewalTerms = Schema.Struct({
   cancellation: Schema.Literal("future-renewals-only"),
   paidAccessEnds: Schema.Literal("paid-period-end"),
 }).annotate({ identifier: "RenewalTerms" });
+
 export type RenewalTerms = typeof RenewalTerms.Type;
 
 const zero = BigDecimal.make(0n, 0);
+
 const colombiaPaidOffer = Schema.makeFilter<{
   readonly money: {
     readonly amount: Readonly<BigDecimal.BigDecimal>;
@@ -54,6 +61,7 @@ const colombiaPaidOffer = Schema.makeFilter<{
       issue: "Price Money must be greater than zero",
     };
   }
+
   return revision.money.currency === "COP"
     ? undefined
     : {
@@ -73,13 +81,16 @@ export const Price = Schema.Struct({
 })
   .check(colombiaPaidOffer)
   .annotate({ identifier: "Price" });
+
 export type Price = typeof Price.Type;
 
 const subscriptionOfferPeriodOrder: ReadonlyArray<BillingPeriod> = ["weekly", "monthly", "yearly"];
+
 type OfferIdentityAndPeriod = Readonly<{
   id: Price["id"];
   billingPeriod: BillingPeriod;
 }>;
+
 const authoritativeOfferSet = Schema.makeFilter<
   readonly [OfferIdentityAndPeriod, OfferIdentityAndPeriod, OfferIdentityAndPeriod]
 >((offers) => {
@@ -91,6 +102,7 @@ const authoritativeOfferSet = Schema.makeFilter<
       };
     }
   }
+
   return new Set(offers.map((offer) => offer.id)).size === offers.length
     ? undefined
     : {
@@ -102,21 +114,25 @@ const authoritativeOfferSet = Schema.makeFilter<
 export const SubscriptionOffers = Schema.Tuple([Price, Price, Price])
   .check(authoritativeOfferSet)
   .annotate({ identifier: "SubscriptionOffers" });
+
 export type SubscriptionOffers = typeof SubscriptionOffers.Type;
 
 export const SubscriptionId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("SubscriptionId"))
   .annotate({ identifier: "SubscriptionId" });
+
 export type SubscriptionId = typeof SubscriptionId.Type;
 
 export const PaymentRequestId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("PaymentRequestId"))
   .annotate({ identifier: "PaymentRequestId" });
+
 export type PaymentRequestId = typeof PaymentRequestId.Type;
 
 export const BillingAttemptId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("BillingAttemptId"))
   .annotate({ identifier: "BillingAttemptId" });
+
 export type BillingAttemptId = typeof BillingAttemptId.Type;
 
 const BillingAttemptSnapshot = {
@@ -154,6 +170,7 @@ export const BillingAttempt = Schema.Union([
   FailedBillingAttempt,
   SucceededBillingAttempt,
 ]).annotate({ identifier: "BillingAttempt" });
+
 export type BillingAttempt = typeof BillingAttempt.Type;
 
 export const PaidSubscription = Schema.Struct({
@@ -172,6 +189,7 @@ export const SubscriptionCancellation = Schema.Struct({
   paidThrough: UtcTimestamp,
   sourceCancellation: Schema.Literals(["detached", "void-pending", "voided"]),
 }).annotate({ identifier: "SubscriptionCancellation" });
+
 export type SubscriptionCancellation = typeof SubscriptionCancellation.Type;
 
 const maximumRecentBillingAttempts = 10;
@@ -186,16 +204,19 @@ export const SubscriptionStatus = Schema.Struct({
     Schema.isMaxLength(maximumRecentBillingAttempts)
   ),
 }).annotate({ identifier: "SubscriptionStatus" });
+
 export type SubscriptionStatus = typeof SubscriptionStatus.Type;
 
 export const EnrollmentMethod = Schema.Literals(["card", "nequi", "daviplata"]).annotate({
   identifier: "EnrollmentMethod",
 });
+
 export type EnrollmentMethod = typeof EnrollmentMethod.Type;
 
 export const EnrollmentAvailability = Schema.Struct({
   enabledMethods: Schema.UniqueArray(EnrollmentMethod).check(Schema.isMaxLength(3)),
 }).annotate({ identifier: "EnrollmentAvailability" });
+
 export type EnrollmentAvailability = typeof EnrollmentAvailability.Type;
 
 const DaviplataOtpEndpoint = Schema.String.check(
@@ -208,13 +229,17 @@ export const DaviplataOtpPolicy = Schema.Struct({
   sendUrl: DaviplataOtpEndpoint,
   confirmUrl: DaviplataOtpEndpoint,
 }).annotate({ identifier: "DaviplataOtpPolicy" });
+
 export type DaviplataOtpPolicy = typeof DaviplataOtpPolicy.Type;
 
 export const maximumEnrollmentEvidenceCharacters = 4096;
 
 export const maximumTransientPaymentTokenCharacters = 4096;
+
 const sha256Hex = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u));
+
 const providerContentHash = Schema.String.check(Schema.isPattern(/^[0-9a-f]{32,128}$/u));
+
 const boundedEvidenceText = Schema.String.check(
   Schema.isNonEmpty(),
   Schema.isMaxLength(maximumEnrollmentEvidenceCharacters)
@@ -223,6 +248,7 @@ const boundedEvidenceText = Schema.String.check(
 export const PaymentEnrollmentId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("PaymentEnrollmentId"))
   .annotate({ identifier: "PaymentEnrollmentId" });
+
 export type PaymentEnrollmentId = typeof PaymentEnrollmentId.Type;
 
 export const BillingEmail = Schema.Trim.pipe(
@@ -234,6 +260,7 @@ export const BillingEmail = Schema.Trim.pipe(
     })
   )
 ).annotate({ identifier: "BillingEmail" });
+
 export type BillingEmail = typeof BillingEmail.Type;
 
 const wompiContractEvidenceFields = {
@@ -258,12 +285,14 @@ export const WompiContractEvidence = Schema.Union([
   EndUserPolicyEvidence,
   PersonalDataAuthorizationEvidence,
 ]).annotate({ identifier: "WompiContractEvidence" });
+
 export type WompiContractEvidence = typeof WompiContractEvidence.Type;
 
 export const WompiContractEvidenceSet = Schema.Struct({
   endUserPolicy: EndUserPolicyEvidence,
   personalDataAuthorization: PersonalDataAuthorizationEvidence,
 }).annotate({ identifier: "WompiContractEvidenceSet" });
+
 export type WompiContractEvidenceSet = typeof WompiContractEvidenceSet.Type;
 
 export const RecurringDisclosure = Schema.Struct({
@@ -276,6 +305,7 @@ export const RecurringDisclosure = Schema.Struct({
   displayedText: boundedEvidenceText,
   contentSha256: sha256Hex,
 }).annotate({ identifier: "RecurringDisclosure" });
+
 export type RecurringDisclosure = typeof RecurringDisclosure.Type;
 
 export const EnrollmentDecisions = Schema.Struct({
@@ -283,6 +313,7 @@ export const EnrollmentDecisions = Schema.Struct({
   acceptedPersonalDataAuthorization: Schema.Literal(true),
   authorizedRecurringCharges: Schema.Literal(true),
 }).annotate({ identifier: "EnrollmentDecisions" });
+
 export type EnrollmentDecisions = typeof EnrollmentDecisions.Type;
 
 const PreparedEnrollmentFields = {
@@ -312,12 +343,14 @@ const CreatingPaymentEnrollment = Schema.Struct({
   method: EnrollmentMethod,
   priceId: PriceId,
 });
+
 const AvailablePaymentEnrollment = Schema.Struct({
   status: Schema.Literal("available"),
   enrollmentId: PaymentEnrollmentId,
   method: EnrollmentMethod,
   priceId: PriceId,
 });
+
 const RefusedPaymentEnrollment = Schema.Struct({
   status: Schema.Literal("refused"),
   enrollmentId: PaymentEnrollmentId,
@@ -325,12 +358,14 @@ const RefusedPaymentEnrollment = Schema.Struct({
   priceId: PriceId,
   reason: Schema.Literals(["provider-declined", "provider-error", "terms-changed"]),
 });
+
 const ExpiredPaymentEnrollment = Schema.Struct({
   status: Schema.Literal("expired"),
   enrollmentId: PaymentEnrollmentId,
   method: EnrollmentMethod,
   priceId: PriceId,
 });
+
 const VerifyingPaymentEnrollment = Schema.Struct({
   status: Schema.Literal("verifying"),
   enrollmentId: PaymentEnrollmentId,
@@ -346,6 +381,7 @@ export const PaymentEnrollment = Schema.Union([
   ExpiredPaymentEnrollment,
   VerifyingPaymentEnrollment,
 ]).annotate({ identifier: "PaymentEnrollment" });
+
 export type PaymentEnrollment = typeof PaymentEnrollment.Type;
 
 export const PaymentSubmission = Schema.Union([
@@ -361,16 +397,19 @@ export const PaymentSubmission = Schema.Union([
     reason: Schema.Literals(["provider-declined", "provider-error", "terms-changed", "expired"]),
   }),
 ]).annotate({ identifier: "PaymentSubmission" });
+
 export type PaymentSubmission = typeof PaymentSubmission.Type;
 
 export const RefundAttemptId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("RefundAttemptId"))
   .annotate({ identifier: "RefundAttemptId" });
+
 export type RefundAttemptId = typeof RefundAttemptId.Type;
 
 export const RefundRequestId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("RefundRequestId"))
   .annotate({ identifier: "RefundRequestId" });
+
 export type RefundRequestId = typeof RefundRequestId.Type;
 
 export const RefundMoney = Money.check(
@@ -378,6 +417,7 @@ export const RefundMoney = Money.check(
     (money) => BigDecimal.Order(money.amount, zero) > 0 || "Refund Money must be greater than zero"
   )
 ).annotate({ identifier: "RefundMoney" });
+
 export type RefundMoney = typeof RefundMoney.Type;
 
 export const RefundReason = Schema.Literals([
@@ -390,6 +430,7 @@ export const RefundIntent = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("refund"), money: RefundMoney }),
   Schema.Struct({ kind: Schema.Literal("card-void") }),
 ]).annotate({ identifier: "RefundIntent" });
+
 export type RefundIntent = typeof RefundIntent.Type;
 
 export const StartRefundInput = Schema.Struct({
@@ -399,6 +440,7 @@ export const StartRefundInput = Schema.Struct({
   intent: RefundIntent,
   reason: RefundReason,
 }).annotate({ identifier: "StartRefundInput" });
+
 export type StartRefundInput = typeof StartRefundInput.Type;
 
 export const CorrectionTreatment = Schema.Struct({
@@ -408,6 +450,7 @@ export const CorrectionTreatment = Schema.Struct({
   renewalEffect: Schema.Literal("stop-future-renewals"),
   accounting: Schema.Struct({ kind: Schema.Literal("sandbox-only") }),
 }).annotate({ identifier: "CorrectionTreatment" });
+
 export type CorrectionTreatment = typeof CorrectionTreatment.Type;
 
 const RefundSnapshot = {
@@ -442,6 +485,7 @@ export const RefundAttempt = Schema.Union([
     failure: Schema.Literals(["provider-declined", "provider-cancelled", "provider-refused"]),
   }),
 ]).annotate({ identifier: "RefundAttempt" });
+
 export type RefundAttempt = typeof RefundAttempt.Type;
 
 export const RefundStartFailure = Schema.Literals([
@@ -453,6 +497,7 @@ export const RefundStartFailure = Schema.Literals([
   "limited",
   "unavailable",
 ]).annotate({ identifier: "RefundStartFailure" });
+
 export type RefundStartFailure = typeof RefundStartFailure.Type;
 
 export const renewalGraceMs = 259_200_000;

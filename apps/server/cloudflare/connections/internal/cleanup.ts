@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 
 const maximumEnvelopeLength = 100000;
+
 export const Candidate = Schema.Struct({
   attemptId: Schema.String,
   connectionId: Schema.String,

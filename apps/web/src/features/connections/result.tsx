@@ -8,6 +8,7 @@ import type { CanonicalSuccess } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 
 type Connection = CanonicalSuccess<"connections.listConnections">["data"][number];
+
 const messages: Readonly<
   Record<Connection["state"], Readonly<{ title: string; description: string }>>
 > = {
@@ -33,22 +34,28 @@ const messages: Readonly<
 
 const AuthorizedAccounts = ({ connection }: Readonly<{ connection: Connection }>): JSX.Element => {
   const client = useRouter().options.context.apiClient;
+
   const [query] = useState(() =>
     client.query("connections", "listAccounts", {
       params: { id: connection.id },
       timeToLive: "0 seconds",
     })
   );
+
   const result = useAtomValue(query).pipe(presentCanonicalQuery);
+
   if (result._tag === "Initial") {
     return <PendingRead label="Cargando cuentas autorizadas" />;
   }
+
   if (result._tag !== "Ready") {
     return <p>La consulta de cuentas autorizadas aún no está disponible.</p>;
   }
+
   if (Option.isSome(result.refreshFailure)) {
     return <p>No pudimos actualizar las cuentas autorizadas.</p>;
   }
+
   return <p>Cuentas autorizadas: {result.value.data.length}.</p>;
 };
 
@@ -58,10 +65,13 @@ export const ConnectionResult = ({
   const connection = Option.fromUndefinedOr(
     connections.find((item) => item.institutionId === "bancolombia")
   );
+
   if (Option.isNone(connection)) {
     return <p>No hay una conexión de Bancolombia registrada para esta cuenta de Fidy.</p>;
   }
+
   const message = messages[connection.value.state];
+
   return (
     <section className="flex flex-col gap-3" aria-live="polite">
       <h2 className="text-xl font-semibold">{message.title}</h2>

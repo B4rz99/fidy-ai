@@ -85,6 +85,7 @@ describe("consent reply decision", () => {
 it.effect("expires a pending disclosure exactly 24 hours after creation", () =>
   Effect.gen(function* () {
     const createdAt = DateTime.makeUnsafe("2026-08-01T12:00:00Z");
+
     const pending = yield* makePendingConsentDraft({
       id: PendingConsentExchangeId.make("f1d1a000-0000-4000-8000-000000000811"),
       disclosure: makeDisclosure(),

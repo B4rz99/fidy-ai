@@ -47,6 +47,7 @@ export const makeLifecycleVerifier = (
   | WhatsAppStatusUnavailable
 >) => {
   const lookup = makeKapsoOutboundHttp(input);
+
   return Effect.fn(function* (authentication: WhatsAppLifecycleAuthentication) {
     return Option.map(
       yield* decodeLifecycleStatus(authentication, Option.some(lookup), input.admitLookup),
@@ -64,12 +65,14 @@ export const makeDeliveryVerifier = (
   InvalidWhatsAppPayload | WhatsAppStatusUnavailable
 >) => {
   const outboundHttp = makeKapsoOutboundHttp(input);
+
   return Effect.fn(function* (request: WhatsAppDeliveryLookup) {
     const verified = yield* lookupLifecycleStatus({
       ...request,
       outboundHttp,
       status: "delivered",
     });
+
     return verified._tag === "Correlated" &&
       verified.value.evidence.correlationToken === request.correlationToken
       ? Option.some(verified.value.evidence)
@@ -106,6 +109,7 @@ export const makeHostedSender = ({
     sandboxPhoneNumberId,
     outboundHttp: makeKapsoOutboundHttp({ apiKey, httpClient }),
   });
+
   return ({
     recipient,
     sandboxPhone,
@@ -151,6 +155,7 @@ export const makeVoiceUnavailableSender = (
     sandboxPhoneNumberId: input.sandboxPhoneNumberId,
     outboundHttp: makeKapsoOutboundHttp(input),
   });
+
   return (
     request: Readonly<{
       caller: WhatsAppInboundEvent["caller"];

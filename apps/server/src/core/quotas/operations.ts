@@ -9,10 +9,12 @@ import {
 } from "./contract";
 
 const bogota = DateTime.zoneMakeNamedUnsafe("America/Bogota");
+
 const limits = freeAllowanceLimits;
 
 export const allowancePeriod = (now: DateTime.Utc): AllowancePeriod => {
   const start = DateTime.startOf(DateTime.setZone(now, bogota), "month");
+
   return {
     startsAt: DateTime.toUtc(start),
     resetsAt: DateTime.toUtc(DateTime.add(start, { months: 1 })),
@@ -35,7 +37,9 @@ export const projectQuotaStatus = (
       canonicalCalls: { _tag: "Uncapped" },
     };
   }
+
   const period = allowancePeriod(input.now);
+
   const meter = (allowance: AllowanceKind): AllowanceMeter => ({
     _tag: "Limited",
     limit: limits[allowance],
@@ -43,6 +47,7 @@ export const projectQuotaStatus = (
     remaining: Math.max(0, limits[allowance] - input.consumed[allowance]),
     period,
   });
+
   return {
     accessTier: "free",
     forwardedEmails: meter("forwarded_email"),
@@ -65,6 +70,7 @@ export const decideConsumption = (
   | Readonly<{ _tag: "Exhausted"; allowance: AllowanceKind; resetsAt: DateTime.Utc }> => {
   if (input.accessTier === "pro") return { _tag: "Uncapped" };
   const limit = limits[input.allowance];
+
   return input.consumed >= limit
     ? {
         _tag: "Exhausted",

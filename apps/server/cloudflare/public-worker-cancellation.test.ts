@@ -19,8 +19,10 @@ const environment = (
 it.effect("does not forward an already-aborted public request", () => {
   const controller = new AbortController();
   controller.abort();
+
   return Effect.gen(function* () {
     const fetch = vi.fn(() => Promise.resolve(new Response()));
+
     const exit = yield* Effect.tryPromise(() =>
       publicWorker.fetch(
         new Request("https://api.fidyapp.com/categories", {
@@ -33,6 +35,7 @@ it.effect("does not forward an already-aborted public request", () => {
         environment(fetch)
       )
     ).pipe(Effect.exit);
+
     expect(Exit.isFailure(exit)).toBe(true);
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -40,14 +43,18 @@ it.effect("does not forward an already-aborted public request", () => {
 
 it.effect("connects pending Core forwarding to the original public request's cancellation", () => {
   const controller = new AbortController();
+
   return Effect.gen(function* () {
     const ready = yield* Deferred.make<void>();
     let forwardingSignal = Option.none<AbortSignal>();
+
     const env = environment((_request, init) => {
       forwardingSignal = Option.fromNullishOr(init?.signal);
       Deferred.doneUnsafe(ready, Effect.void);
+
       return holdForwarding(Option.getOrThrow(forwardingSignal));
     });
+
     const fiber = yield* Effect.tryPromise(() =>
       publicWorker.fetch(
         new Request("https://api.fidyapp.com/categories", {
@@ -60,6 +67,7 @@ it.effect("connects pending Core forwarding to the original public request's can
         env
       )
     ).pipe(Effect.exit, Effect.forkScoped);
+
     yield* Deferred.await(ready);
     controller.abort();
     const exit = yield* Fiber.join(fiber);

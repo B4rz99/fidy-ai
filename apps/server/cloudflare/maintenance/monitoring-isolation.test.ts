@@ -15,31 +15,41 @@ const cases = [
   { label: "missing Workflow", weekly: false, category: true, missing: "workflow" },
   { label: "stalled canary", weekly: false, category: false, missing: "stall" },
 ] as const;
+
 const counters = "https://fixture.invalid/monitoring-counters";
+
 const delivery = "90000000-0000-4000-8000-000000000012",
   question = "90000000-0000-4000-8000-000000000013";
+
 type Scenario = (typeof cases)[number];
+
 const expectedObservations = (scenario: Scenario): string[] => [
   ...(scenario.category && scenario.missing !== "workflow"
     ? ["proactivity-" + alice.user + "-" + delivery]
     : []),
   ...(scenario.weekly ? ["weekly-" + alice.user + "-weekly-question-" + question] : []),
 ];
+
 const queueMetrics = (scenario: Scenario): number =>
   (scenario.weekly || scenario.category) && scenario.missing !== "queue" ? 1 : 0;
+
 const features = (scenario: Scenario): Record<string, string> => ({
   ASYNC_HEALTH_ENABLED: "enabled",
   WEEKLY_SUMMARY_ENABLED: scenario.weekly ? "enabled" : "disabled",
   PROACTIVITY_ENABLED: scenario.category ? "enabled" : "disabled",
   MONITOR_FIXTURE: scenario.missing,
 });
+
 const testCase = Effect.fn(function* (scenario: Scenario) {
   const create = yield* nativeHealthPlatform,
     logs: string[] = [];
+
   const runtime = yield* create(undefined, logs, features(scenario));
+
   const owner = yield* seed(runtime, alice),
     other = yield* seed(runtime, bob),
     now = yield* Clock.currentTimeMillis;
+
   for (const [store, who] of [
     [owner, alice],
     [other, bob],
@@ -82,23 +92,28 @@ const testCase = Effect.fn(function* (scenario: Scenario) {
       question
     );
   }
+
   for (const who of [alice, bob]) {
     const registered = yield* history(runtime, who);
     expect(registered.status).toBe(200);
     yield* native(() => registered.arrayBuffer());
   }
+
   const core = yield* native(() => runtime.getWorker("core"));
   const scheduled = Math.floor(now / 3600000) * 3600000 + 5000;
+
   const ran = yield* Effect.tryPromise(() =>
     core.scheduled({
       cron: "* * * * *",
       scheduledTime: DateTime.toDate(DateTime.makeUnsafe(scheduled)),
     })
   ).pipe(Effect.result);
+
   const shouldFail = ["stall", "queue", "workflow"].includes(scenario.missing);
   expect(ran._tag === "Success" && ran.success.outcome === "ok").toBe(!shouldFail);
   const users = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
   const expectedIds = expectedObservations(scenario);
+
   const inspected = yield* native(() =>
     users
       .getByName(alice.user)
@@ -112,6 +127,7 @@ const testCase = Effect.fn(function* (scenario: Scenario) {
       schedule: Schedule.spaced("30 millis"),
     })
   );
+
   expect(inspected).toEqual(expectedIds);
   expect(
     yield* native(() =>
@@ -126,18 +142,22 @@ const testCase = Effect.fn(function* (scenario: Scenario) {
     canary: 1,
     metrics: queueMetrics(scenario),
   });
+
   const progress = yield* native(() =>
     runtime.unsafeGetDurableObjectStorage("core", "Maintenance", { name: maintenanceName })
   );
+
   expect(
     yield* native(() => progress.exec("SELECT scheduled,attempted,observed FROM watchdog_progress"))
   ).toEqual([{ scheduled, attempted: 5, observed: 5 }]);
   const enabled = scenario.weekly || scenario.category;
+
   if (enabled) {
     yield* Effect.sync(() =>
       logs.some((log) => log.includes("operation=proactivity state=attention"))
     ).pipe(Effect.repeat({ until: Boolean, times: 100, schedule: Schedule.spaced("30 millis") }));
   }
+
   const exported = logs.join("\n");
   expect(exported.includes("operation=proactivity state=attention")).toBe(enabled);
   expect(exported.includes("operation=proactivityQueue state=")).toBe(enabled);
@@ -145,6 +165,7 @@ const testCase = Effect.fn(function* (scenario: Scenario) {
     "operation=requiredBindings state=" +
       (["queue", "workflow"].includes(scenario.missing) ? "unavailable" : "healthy")
   );
+
   for (const secret of [
     alice.user,
     bob.user,
@@ -156,6 +177,7 @@ const testCase = Effect.fn(function* (scenario: Scenario) {
     expect(exported).not.toContain(secret);
   }
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) =>
   test.effect.each(cases)(
     "samples only enabled work with $label and preserves unrelated watchdog progress",

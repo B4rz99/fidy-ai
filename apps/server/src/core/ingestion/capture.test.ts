@@ -10,8 +10,11 @@ const context = {
   locale: Locale.make("es-CO"),
   timeZone: IanaTimeZone.make("America/Bogota"),
 };
+
 const submittedAt = DateTime.makeUnsafe("2026-10-01T04:59:59.000Z");
+
 type SingleMovement = Extract<CaptureProposal, { readonly _tag: "SingleMovement" }>;
+
 const singleMovement = (): SingleMovement => ({
   _tag: "SingleMovement",
   completion: "completed",
@@ -28,7 +31,9 @@ it("defaults missing Currency and date without substituting processing time", ()
     now: DateTime.makeUnsafe("2026-10-02T12:00:00.000Z"),
     proposal: singleMovement(),
   });
+
   expect(result._tag).toBe("Extracted");
+
   if (result._tag !== "Extracted") return;
   expect(result.extraction.money.currency).toBe("COP");
   expect(BigDecimal.format(result.extraction.money.amount)).toBe("35000");
@@ -49,8 +54,10 @@ it("preserves explicit foreign Currency and interprets a source date in its capt
     counterparty: "Ejemplo",
     occurrence: { _tag: "LocalDate", date: "2026-09-30" },
   });
+
   const result = interpretCapture({ context, proposal, submittedAt, now: submittedAt });
   expect(result._tag).toBe("Extracted");
+
   if (result._tag !== "Extracted") return;
   expect(result.extraction.money.currency).toBe(Currency.make("USD"));
   expect(BigDecimal.format(result.extraction.money.amount)).toBe("12.5");
@@ -68,13 +75,16 @@ it("uses explicit local time and historical time zone rather than the Bogotá al
       time: Option.some("12:34:56"),
     }),
   };
+
   const result = interpretCapture({
     context: { ...context, timeZone: IanaTimeZone.make("America/New_York") },
     proposal,
     submittedAt,
     now: submittedAt,
   });
+
   expect(result._tag).toBe("Extracted");
+
   if (result._tag !== "Extracted") return;
   expect(DateTime.formatIso(result.extraction.occurredAt)).toBe("2026-09-30T16:34:56.000Z");
 });
@@ -88,6 +98,7 @@ it("reviews multiple, unparseable and unfinished movements instead of selecting 
       reason: "movement-not-completed",
     })),
   ];
+
   for (const { proposal, reason } of cases) {
     expect(interpretCapture({ context, proposal, submittedAt, now: submittedAt })).toEqual({
       _tag: "NeedsReview",
@@ -114,6 +125,7 @@ it("reviews missing financial facts and Money invalid for its Currency without f
       reason: "canonical-validation-failed",
     })),
   ];
+
   for (const { proposal, reason } of cases) {
     expect(interpretCapture({ context, proposal, submittedAt, now: submittedAt })).toEqual({
       _tag: "NeedsReview",
@@ -128,6 +140,7 @@ it("does not replace invalid source dates or future instants with the submission
     Option.some({ _tag: "LocalDate", date: "0000-01-01", time: Option.none() }),
     Option.some({ _tag: "Instant", value: DateTime.makeUnsafe("2026-10-02T12:00:00.000Z") }),
   ];
+
   for (const occurrence of invalid) {
     expect(
       interpretCapture({
@@ -138,6 +151,7 @@ it("does not replace invalid source dates or future instants with the submission
       })
     ).toEqual({ _tag: "NeedsReview", reason: "invalid-occurrence" });
   }
+
   const explicit = interpretCapture({
     context,
     proposal: {
@@ -147,7 +161,9 @@ it("does not replace invalid source dates or future instants with the submission
     submittedAt,
     now: submittedAt,
   });
+
   expect(explicit._tag).toBe("Extracted");
+
   if (explicit._tag !== "Extracted") return;
   expect(explicit.evidence.dateBasis).toBe("explicit");
   expect(DateTime.formatIso(explicit.extraction.occurredAt)).toBe("2026-10-01T04:59:59.000Z");
@@ -163,6 +179,7 @@ it("reviews ambiguous and nonexistent local times instead of guessing a daylight
         time: Option.some(date === "2026-03-08" ? "02:30:00" : "01:30:00"),
       }),
     };
+
     expect(
       interpretCapture({
         context: { ...context, timeZone: IanaTimeZone.make("America/New_York") },
@@ -181,6 +198,7 @@ it("rejects malformed explicitly supplied Currency and date shapes at the propos
     direction: "outflow",
     money: { amount: "35000" },
   };
+
   expect(
     Option.isNone(
       Schema.decodeUnknownOption(CaptureProposal)({
@@ -201,9 +219,11 @@ it("rejects malformed explicitly supplied Currency and date shapes at the propos
 
 it("bounds explicit local occurrence spellings before calendar interpretation", () => {
   const decode = Schema.decodeUnknownResult(CaptureOccurrence);
+
   for (const date of ["2026-01-01", "2026-09-10", "2026-10-20", "2026-11-30", "2026-12-31"]) {
     expect(Result.isSuccess(decode({ _tag: "LocalDate", date }))).toBe(true);
   }
+
   for (const date of [
     "x2026-01-01",
     "2026-01-01x",
@@ -214,9 +234,11 @@ it("bounds explicit local occurrence spellings before calendar interpretation", 
   ]) {
     expect(Result.isFailure(decode({ _tag: "LocalDate", date }))).toBe(true);
   }
+
   for (const time of ["00:00:00", "19:59:59", "20:00:00", "23:59:59"]) {
     expect(Result.isSuccess(decode({ _tag: "LocalDate", date: "2026-01-01", time }))).toBe(true);
   }
+
   for (const time of [
     "x00:00:00",
     "00:00:00x",
@@ -241,6 +263,7 @@ it("accepts an explicit source date in the first supported Gregorian year", () =
     submittedAt,
     now: submittedAt,
   });
+
   expect(result._tag).toBe("Extracted");
 });
 
@@ -256,6 +279,7 @@ it("reports invalid Money before an independently invalid occurrence", () => {
       value: DateTime.makeUnsafe("2027-01-01T00:00:00Z"),
     }),
   };
+
   expect(interpretCapture({ context, proposal, submittedAt, now: submittedAt })).toEqual({
     _tag: "NeedsReview",
     reason: "canonical-validation-failed",
@@ -272,5 +296,6 @@ it("rejects year zero as an invalid occurrence even for the GMT named-zone alias
     submittedAt,
     now: submittedAt,
   });
+
   expect(result).toEqual({ _tag: "NeedsReview", reason: "invalid-occurrence" });
 });

@@ -9,6 +9,7 @@ export type DashboardSpendingProps = Readonly<{
 }>;
 
 export type DashboardSpendingRenderer = (props: DashboardSpendingProps) => JSX.Element;
+
 export const DashboardSpendingPresentation = createContext(
   Option.none<DashboardSpendingRenderer>()
 );

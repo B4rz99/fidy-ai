@@ -21,6 +21,7 @@ export const CaptureOccurrence = Schema.Union([
     ),
   }),
 ]).annotate({ identifier: "CaptureOccurrence" });
+
 export type CaptureOccurrence = typeof CaptureOccurrence.Type;
 
 export const CaptureProposal = Schema.Union([
@@ -38,6 +39,7 @@ export const CaptureProposal = Schema.Union([
   Schema.TaggedStruct("MultipleMovements", {}),
   Schema.TaggedStruct("Unparseable", {}),
 ]).annotate({ identifier: "CaptureProposal" });
+
 export type CaptureProposal = typeof CaptureProposal.Type;
 
 export const CaptureInterpretationEvidence = Schema.Struct({
@@ -45,6 +47,7 @@ export const CaptureInterpretationEvidence = Schema.Struct({
   dateBasis: Schema.Literals(["explicit", "submission-date-default"]),
   revision: InterpretationRevision,
 }).annotate({ identifier: "CaptureInterpretationEvidence" });
+
 export type CaptureInterpretationEvidence = typeof CaptureInterpretationEvidence.Type;
 
 export const CaptureInterpretation = Schema.Union([
@@ -63,6 +66,7 @@ export const CaptureInterpretation = Schema.Union([
     ]),
   }),
 ]).annotate({ identifier: "CaptureInterpretation" });
+
 export type CaptureInterpretation = typeof CaptureInterpretation.Type;
 
 export type CaptureInterpretationInput = Readonly<{
@@ -75,22 +79,27 @@ export type CaptureInterpretationInput = Readonly<{
 export const captureInterpretationRevision = InterpretationRevision.make("capture-v1");
 
 export const maximumEmailEvidenceIdCharacters = 256;
+
 export const maximumForwardedEmailDeliveryIdCharacters = 128;
 
 export const StatementSourceFormat = Schema.Literals(["csv", "xlsx"]);
+
 export type StatementSourceFormat = typeof StatementSourceFormat.Type;
 
 export const EmailSourceFormat = Schema.Literal("notification-email");
+
 export type EmailSourceFormat = typeof EmailSourceFormat.Type;
 
 export const StatementSubmissionId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("StatementSubmissionId"))
   .annotate({ identifier: "StatementSubmissionId" });
+
 export type StatementSubmissionId = typeof StatementSubmissionId.Type;
 
 export const NeedsReviewItemId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("NeedsReviewItemId"))
   .annotate({ identifier: "NeedsReviewItemId" });
+
 export type NeedsReviewItemId = typeof NeedsReviewItemId.Type;
 
 export const EmailForwardingLocalPart = Schema.String.check(
@@ -98,28 +107,33 @@ export const EmailForwardingLocalPart = Schema.String.check(
 )
   .pipe(Schema.brand("EmailForwardingLocalPart"))
   .annotate({ identifier: "EmailForwardingLocalPart" });
+
 export type EmailForwardingLocalPart = typeof EmailForwardingLocalPart.Type;
 
 export const EmailForwardingAddressId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("EmailForwardingAddressId"))
   .annotate({ identifier: "EmailForwardingAddressId" });
+
 export type EmailForwardingAddressId = typeof EmailForwardingAddressId.Type;
 
 export const IngestSampleId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("IngestSampleId"))
   .annotate({ identifier: "IngestSampleId" });
+
 export type IngestSampleId = typeof IngestSampleId.Type;
 
 export const ReceivedEmailId = Schema.NonEmptyString.check(
   Schema.isTrimmed(),
   Schema.isMaxLength(maximumEmailEvidenceIdCharacters)
 ).pipe(Schema.brand("ReceivedEmailId"));
+
 export type ReceivedEmailId = typeof ReceivedEmailId.Type;
 
 export const ForwardedEmailDeliveryId = Schema.NonEmptyString.check(
   Schema.isTrimmed(),
   Schema.isMaxLength(maximumForwardedEmailDeliveryIdCharacters)
 ).pipe(Schema.brand("ForwardedEmailDeliveryId"));
+
 export type ForwardedEmailDeliveryId = typeof ForwardedEmailDeliveryId.Type;
 
 export const freeMediaSubmissionCap = freeAllowanceLimits.media_submission;
@@ -149,7 +163,9 @@ export const maximumEmailInlineImageBytes = 1_048_576;
 export const maximumEmailInlineImageDimension = 4_096;
 
 const maximumStatementMebibytes = 5;
+
 const bytesPerKibibyte = 1024;
+
 const bytesPerMebibyte = bytesPerKibibyte * bytesPerKibibyte;
 
 export const maximumStatementBytes = maximumStatementMebibytes * bytesPerMebibyte;
@@ -162,6 +178,7 @@ export const EmailForwardingAddress = Schema.Struct({
   ),
   createdAt: UtcTimestamp,
 }).annotate({ identifier: "EmailForwardingAddress" });
+
 export type EmailForwardingAddress = typeof EmailForwardingAddress.Type;
 
 export const EmailForwardingStatus = Schema.Struct({
@@ -173,16 +190,19 @@ export const EmailForwardingStatus = Schema.Struct({
   deferredCapacityRemaining: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 50 })),
   resetsAt: UtcTimestamp,
 }).annotate({ identifier: "EmailForwardingStatus" });
+
 export type EmailForwardingStatus = typeof EmailForwardingStatus.Type;
 
 export const StatementStagingId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("StatementStagingId"))
   .annotate({ identifier: "StatementStagingId" });
+
 export type StatementStagingId = typeof StatementStagingId.Type;
 
 export const StatementContentDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u))
   .pipe(Schema.brand("StatementContentDigest"))
   .annotate({ identifier: "StatementContentDigest" });
+
 export type StatementContentDigest = typeof StatementContentDigest.Type;
 
 export const StagedStatementBytes = Schema.Struct({
@@ -192,6 +212,7 @@ export const StagedStatementBytes = Schema.Struct({
   sourceFormat: StatementSourceFormat,
   expiresAt: UtcTimestamp,
 }).annotate({ identifier: "StagedStatementBytes" });
+
 export type StagedStatementBytes = typeof StagedStatementBytes.Type;
 
 export const StagedStatementReference = Schema.Struct({
@@ -199,17 +220,20 @@ export const StagedStatementReference = Schema.Struct({
   byteLength: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: maximumStatementBytes })),
   sha256: StatementContentDigest,
 }).annotate({ identifier: "StagedStatementReference" });
+
 export type StagedStatementReference = typeof StagedStatementReference.Type;
 
 export const StatementIdempotencyKey = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("StatementIdempotencyKey")
 );
+
 export type StatementIdempotencyKey = typeof StatementIdempotencyKey.Type;
 
 export const SubmitForExtractionInput = Schema.Struct({
   idempotencyKey: StatementIdempotencyKey,
   reference: StagedStatementReference,
 }).annotate({ identifier: "SubmitForExtractionInput" });
+
 export type SubmitForExtractionInput = typeof SubmitForExtractionInput.Type;
 
 const StatementAccountingFields = Schema.Struct({
@@ -219,6 +243,7 @@ const StatementAccountingFields = Schema.Struct({
   skippedRows: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   abandonedRows: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
 });
+
 const conservedStatementRows = Schema.makeFilter<typeof StatementAccountingFields.Type>((counts) =>
   counts.inputRows ===
   counts.acceptedRows +
@@ -232,6 +257,7 @@ const conservedStatementRows = Schema.makeFilter<typeof StatementAccountingField
 export const StatementAccounting = StatementAccountingFields.check(conservedStatementRows).annotate(
   { identifier: "StatementAccounting" }
 );
+
 export type StatementAccounting = typeof StatementAccounting.Type;
 
 export const StatementSubmissionStatus = Schema.Literals([
@@ -242,6 +268,7 @@ export const StatementSubmissionStatus = Schema.Literals([
   "abandoned",
   "failed",
 ]);
+
 export const StatementFailureReason = Schema.Literals([
   "unsupported-format",
   "resource-limit",
@@ -293,6 +320,7 @@ export const StatementSubmission = Schema.Union([
     accounting: Schema.optionalKey(StatementAccounting),
   }),
 ]).annotate({ identifier: "StatementSubmission" });
+
 export type StatementSubmission = typeof StatementSubmission.Type;
 
 export const CsvRowEvidence = Schema.Struct({
@@ -312,6 +340,7 @@ export const XlsxCellEvidence = Schema.Struct({
   numberFormat: Schema.OptionFromOptionalKey(Schema.String),
   formula: Schema.OptionFromOptionalKey(Schema.String),
 });
+
 export type XlsxCellEvidence = typeof XlsxCellEvidence.Type;
 
 export const XlsxRowEvidence = Schema.Struct({
@@ -324,6 +353,7 @@ export const XlsxRowEvidence = Schema.Struct({
 });
 
 export const StatementRowEvidence = Schema.Union([CsvRowEvidence, XlsxRowEvidence]);
+
 export type StatementRowEvidence = typeof StatementRowEvidence.Type;
 
 export const NeedsReviewReason = Schema.Literals([
@@ -335,6 +365,7 @@ export const NeedsReviewReason = Schema.Literals([
   "mapping-unavailable",
   "model-unavailable",
 ]);
+
 export type NeedsReviewReason = typeof NeedsReviewReason.Type;
 
 export const NotificationEmailInterpretationReviewReason = Schema.Literals([
@@ -343,6 +374,7 @@ export const NotificationEmailInterpretationReviewReason = Schema.Literals([
   "ambiguous-format",
   "invalid-format",
 ]);
+
 export type NotificationEmailInterpretationReviewReason =
   typeof NotificationEmailInterpretationReviewReason.Type;
 
@@ -350,6 +382,7 @@ export const EmailRawSampleReviewReason = Schema.Union([
   Schema.Literal("canonical-validation-failed"),
   NotificationEmailInterpretationReviewReason,
 ]);
+
 export type EmailRawSampleReviewReason = typeof EmailRawSampleReviewReason.Type;
 
 export const EmailNoSampleReviewReason = Schema.Literals([
@@ -357,12 +390,14 @@ export const EmailNoSampleReviewReason = Schema.Literals([
   "processing-interrupted",
   "consent-revoked",
 ]);
+
 export type EmailNoSampleReviewReason = typeof EmailNoSampleReviewReason.Type;
 
 export const EmailNeedsReviewReason = Schema.Union([
   EmailRawSampleReviewReason,
   EmailNoSampleReviewReason,
 ]);
+
 export type EmailNeedsReviewReason = typeof EmailNeedsReviewReason.Type;
 
 export const CapturedFieldIssue = Schema.Struct({
@@ -413,6 +448,7 @@ const NeedsReviewItemVariants = Schema.Union([
     resolvedAt: UtcTimestamp,
   }),
 ]);
+
 const matchingReviewEvidenceFormat = Schema.makeFilter<typeof NeedsReviewItemVariants.Type>(
   (item) =>
     item.status !== "pending" ||
@@ -425,6 +461,7 @@ const matchingReviewEvidenceFormat = Schema.makeFilter<typeof NeedsReviewItemVar
 export const StatementNeedsReviewItem = NeedsReviewItemVariants.check(
   matchingReviewEvidenceFormat
 ).annotate({ identifier: "StatementNeedsReviewItem" });
+
 export type StatementNeedsReviewItem = typeof StatementNeedsReviewItem.Type;
 
 const EmailNeedsReviewFields = {
@@ -457,6 +494,7 @@ export const EmailNeedsReviewItem = Schema.Union([
   }),
   Schema.Struct({ ...EmailNeedsReviewFields, status: Schema.Literal("expired") }),
 ]).annotate({ identifier: "EmailNeedsReviewItem" });
+
 export type EmailNeedsReviewItem = typeof EmailNeedsReviewItem.Type;
 
 export const MediaNeedsReviewItem = Schema.Struct({
@@ -469,6 +507,7 @@ export const MediaNeedsReviewItem = Schema.Struct({
   status: Schema.Literals(["pending", "expired"]),
   createdAt: UtcTimestamp,
 }).annotate({ identifier: "MediaNeedsReviewItem" });
+
 export type MediaNeedsReviewItem = typeof MediaNeedsReviewItem.Type;
 
 export const NeedsReviewItem = Schema.Union([
@@ -476,6 +515,7 @@ export const NeedsReviewItem = Schema.Union([
   EmailNeedsReviewItem,
   MediaNeedsReviewItem,
 ]).annotate({ identifier: "NeedsReviewItem" });
+
 export type NeedsReviewItem = typeof NeedsReviewItem.Type;
 
 const StatementColumnMappingFields = Schema.Struct({
@@ -494,17 +534,20 @@ const StatementColumnMappingFields = Schema.Struct({
   decimalSeparator: Schema.Literals([".", ","]),
   groupingSeparator: Schema.OptionFromOptionalKey(Schema.Literals([".", ",", " ", "'"])),
 });
+
 const validStatementColumnStrategies = Schema.makeFilter<typeof StatementColumnMappingFields.Type>(
   (mapping) => {
     if (Option.isSome(mapping.currencyColumn) === Option.isSome(mapping.currencyLiteral)) {
       return { path: ["currencyColumn"], issue: "Expected exactly one Currency source" };
     }
+
     if (
       Option.isNone(mapping.directionColumn) &&
       (mapping.inflowMarkers.length > 0 || mapping.outflowMarkers.length > 0)
     ) {
       return { path: ["directionColumn"], issue: "Expected a column when markers are configured" };
     }
+
     return undefined;
   }
 );
@@ -512,6 +555,7 @@ const validStatementColumnStrategies = Schema.makeFilter<typeof StatementColumnM
 export const StatementColumnMapping = StatementColumnMappingFields.check(
   validStatementColumnStrategies
 ).annotate({ identifier: "StatementColumnMapping" });
+
 export type StatementColumnMapping = typeof StatementColumnMapping.Type;
 
 const ParsedStatementRowFields = Schema.Struct({
@@ -519,9 +563,12 @@ const ParsedStatementRowFields = Schema.Struct({
   fields: Schema.Array(Schema.String),
   evidence: StatementRowEvidence,
 });
+
 const matchingCsvRowEvidence = Schema.makeFilter<typeof ParsedStatementRowFields.Type>((row) => {
   const evidence = row.evidence;
+
   if (evidence.sourceFormat !== "csv") return undefined;
+
   return row.recordNumber === evidence.recordNumber &&
     row.fields.length === evidence.fields.length &&
     row.fields.every((field, index) => field === evidence.fields[index])
@@ -530,6 +577,7 @@ const matchingCsvRowEvidence = Schema.makeFilter<typeof ParsedStatementRowFields
 });
 
 export const ParsedStatementRow = ParsedStatementRowFields.check(matchingCsvRowEvidence);
+
 export type ParsedStatementRow = typeof ParsedStatementRow.Type;
 
 export type NeedsReviewStatementRow = Readonly<{
@@ -552,10 +600,15 @@ export type InterpretedStatementRow<Extraction> =
   | NeedsReviewStatementRow;
 
 const hoursPerDay = 24;
+
 const minutesPerHour = 60;
+
 const secondsPerMinute = 60;
+
 const millisecondsPerSecond = 1000;
+
 const maximumOutstandingSubmissions = 5;
+
 const maximumSubmissionsPerHour = 20;
 
 export const statementStagingLifetimeMilliseconds =
@@ -570,12 +623,15 @@ export const maximumStatementSubmissionsPerHour = maximumSubmissionsPerHour;
 export const statementParserRevision = InterpretationRevision.make("statement-parser-v1");
 
 export const ReviewStatus = Schema.Literals(["pending", "created", "skipped", "expired"]);
+
 const maximumReviewPreviewLength = 120;
+
 const ReviewPreview = Schema.Struct({
   counterparty: Schema.String.check(Schema.isMaxLength(maximumReviewPreviewLength)),
   amount: Schema.String.check(Schema.isMaxLength(maximumReviewPreviewLength)),
   currency: Schema.OptionFromOptionalKey(Money.fields.currency),
 });
+
 export const ReviewMetadata = Schema.Struct({
   preview: Schema.OptionFromOptionalKey(ReviewPreview),
   revision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -586,6 +642,7 @@ export const ReviewMetadata = Schema.Struct({
   createdAt: UtcTimestamp,
   expiresAt: UtcTimestamp,
 });
+
 export const ReviewSummary = Schema.Union([
   Schema.Struct({
     ...ReviewMetadata.fields,
@@ -598,8 +655,11 @@ export const ReviewSummary = Schema.Union([
     transactionId: Schema.OptionFromOptionalKey(Schema.Never),
   }),
 ]);
+
 export type ReviewSummary = typeof ReviewSummary.Type;
+
 export const reviewPageSize = 50;
+
 export const ReviewWorkspaceQuery = Schema.Struct({
   limit: Schema.optionalKey(
     Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: reviewPageSize })).annotate({
@@ -616,7 +676,9 @@ export const ReviewWorkspaceQuery = Schema.Struct({
 });
 
 const maximumReviewDraftFieldLength = 120;
+
 const maximumReviewProvidedFields = 5;
+
 export const ReviewField = Schema.Literals([
   "money",
   "direction",
@@ -624,6 +686,7 @@ export const ReviewField = Schema.Literals([
   "occurredAt",
   "categoryId",
 ]);
+
 export const ReviewDraft = Schema.Struct({
   amount: Schema.String.check(Schema.isMaxLength(maximumReviewDraftFieldLength)),
   currency: Schema.OptionFromOptionalKey(Money.fields.currency),
@@ -635,19 +698,25 @@ export const ReviewDraft = Schema.Struct({
     Schema.isMaxLength(maximumReviewProvidedFields)
   ),
 });
+
 export type ReviewDraft = typeof ReviewDraft.Type;
+
 export const ReviewReference = Schema.Struct({
   id: NeedsReviewItemId,
   revision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
+
 export type ReviewReference = typeof ReviewReference.Type;
+
 export const ReviewDetail = Schema.Struct({
   item: ReviewSummary,
   revision: ReviewReference.fields.revision,
   draft: Schema.OptionFromOptionalKey(ReviewDraft),
   suggestions: Schema.OptionFromOptionalKey(ReviewDraft),
 });
+
 export type ReviewDetail = typeof ReviewDetail.Type;
+
 export const ReviewWorkspace = Schema.Struct({
   pendingCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   total: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -656,6 +725,7 @@ export const ReviewWorkspace = Schema.Struct({
 });
 
 const ReviewReferences = Schema.NonEmptyArray(ReviewReference).check(Schema.isMaxLength(100));
+
 export const ReviewCommand = Schema.Union([
   Schema.TaggedStruct("Create", {
     ...ReviewReference.fields,
@@ -666,13 +736,17 @@ export const ReviewCommand = Schema.Union([
   Schema.TaggedStruct("Skip", { items: ReviewReferences }),
   Schema.TaggedStruct("Restore", { items: ReviewReferences }),
 ]);
+
 export type ReviewCommand = typeof ReviewCommand.Type;
+
 export const ReviewEditResult = Schema.Array(ReviewDetail);
 
 const maximumStructuralTagCount = 9999;
+
 const count = Schema.Int.check(
   Schema.isBetween({ minimum: 0, maximum: maximumStructuralTagCount })
 );
+
 export const SampleArtifact = Schema.Struct({
   serviceMarket: Schema.Literal("CO"),
   sourceFormat: Schema.Literal("notification-email"),
@@ -688,12 +762,15 @@ export const SampleArtifact = Schema.Struct({
     div: count,
   }),
 });
+
 const sampleRef = Schema.String.check(Schema.isUUID());
+
 const sampleVersion = {
   candidateId: sampleRef,
   revision: Schema.Int.check(Schema.isGreaterThan(0)),
   digest: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
 };
+
 export const SampleReviewCommand = Schema.Union([
   Schema.Struct({ action: Schema.Literal("preview"), userId: sampleRef }),
   Schema.Struct({
@@ -703,9 +780,11 @@ export const SampleReviewCommand = Schema.Union([
   }),
   Schema.Struct({ action: Schema.Literal("withdraw"), sampleId: sampleRef }),
 ]);
+
 export const SampleReviewResult = Schema.Union([
   Schema.Struct({ status: Schema.Literal("preview"), ...sampleVersion, artifact: SampleArtifact }),
   Schema.Struct({ status: Schema.Literals(["approved", "published"]), sampleId: sampleRef }),
   Schema.Struct({ status: Schema.Literals(["rejected", "withdrawn", "empty"]) }),
 ]);
+
 export const sampleReviewPath = "/internal/sample-review";

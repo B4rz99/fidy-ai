@@ -7,16 +7,19 @@ export const makeEnrollmentCommand = <A, E>(): Readonly<{
   clear: () => void;
 }> => {
   let pending = Option.none<Effect.Effect<A, E>>();
+
   const atom = Atom.fn<void>()(() =>
     Effect.suspend(() => {
       const offered = pending;
       pending = Option.none();
+
       return Option.match(offered, {
         onNone: () => Effect.interrupt,
         onSome: (work) => work,
       });
     })
   );
+
   return {
     atom,
     offer: (work: Effect.Effect<A, E>): void => {

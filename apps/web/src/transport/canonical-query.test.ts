@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { presentCanonicalQuery } from "./canonical-query";
 
 const response = { data: "visible" } as const;
+
 const previous = AsyncResult.success(response);
 
 describe("canonical query presentation", () => {
@@ -66,6 +67,7 @@ it("classifies mixed interruption and defect as boundary failure while retaining
       previousSuccess: Option.some(previous),
     }
   );
+
   expect(presentCanonicalQuery(result)).toEqual({
     _tag: "Ready",
     value: response,

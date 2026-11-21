@@ -17,6 +17,7 @@ type RenewalInput = Readonly<{
   withdrawalReference: string;
   authorization: NonNullable<ProcessingAuthorization["authorization"]>;
 }>;
+
 const makeRenewal = ({
   client,
   withdrawalReference,
@@ -73,6 +74,7 @@ const RenewalChoice = ({
   const [operation] = useState(() => makeRenewal({ client, withdrawalReference, authorization }));
   const result = useAtomValue(operation);
   const submit = useAtomSet(operation);
+
   return (
     <section aria-label="Renovar autorización" className="flex flex-col gap-4 border-t pt-6">
       <h2 className="text-xl font-semibold">Volver a autorizar</h2>
@@ -126,10 +128,13 @@ export const ConsentRenewal = ({
       reactivityKeys: ["processing-consent"],
     })
   );
+
   const queryResult = useAtomValue(query);
   const status = presentCanonicalQuery(queryResult);
   const refresh = useAtomRefresh(query);
+
   if (status._tag === "Initial") return <PendingRead label="Consultando aviso para renovar" />;
+
   if (status._tag === "Failure" || Option.isSome(status.refreshFailure)) {
     return (
       <div>
@@ -140,9 +145,11 @@ export const ConsentRenewal = ({
       </div>
     );
   }
+
   if (status.value.authorization === null) {
     return <p>No hay una autorización guardada para renovar.</p>;
   }
+
   return (
     <RenewalChoice
       key={withdrawalReference}

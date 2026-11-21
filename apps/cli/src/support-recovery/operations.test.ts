@@ -7,10 +7,12 @@ it.effect("rejects secret-bearing arguments before authentication or a recovery 
   Effect.gen(function* () {
     let contacted = false;
     const output: Array<string> = [];
+
     const result = yield* runSupportRecovery(["support-recovery", "--code", "secret"], {
       interactive: true,
       authenticate: Effect.sync(() => {
         contacted = true;
+
         return Redacted.make("access");
       }),
       readPairing: Effect.succeed("BCDF-GHJK"),
@@ -21,6 +23,7 @@ it.effect("rejects secret-bearing arguments before authentication or a recovery 
           output.push(text);
         }),
     });
+
     expect(result).toBe(true);
     expect(contacted).toBe(false);
     expect(output.join("")).toContain("sin argumentos");
@@ -37,6 +40,7 @@ const fixture = (
 }> => {
   const output: Array<string> = [];
   const submitted: Array<string> = [];
+
   return {
     output,
     submitted,
@@ -48,6 +52,7 @@ const fixture = (
       submit: (input) =>
         Effect.sync(() => {
           submitted.push(input.pairingCode);
+
           return "approved";
         }),
       write: (text) =>
@@ -66,6 +71,7 @@ it.effect("refuses piped input before reading a claimant proof or authenticating
       authenticate: Effect.die("must not authenticate"),
       readCode: Effect.die("must not read"),
     });
+
     expect(yield* runSupportRecovery(["support-recovery"], test.operator)).toBe(true);
     expect(test.submitted).toEqual([]);
   })
@@ -98,12 +104,15 @@ it.effect("invalid proof and cancelled entry never submit a recovery decision", 
 it.effect("interruption after submission reports uncertainty without replay", () =>
   Effect.gen(function* () {
     const sent = yield* Deferred.make<void>();
+
     const test = fixture({
       submit: () => Deferred.succeed(sent, undefined).pipe(Effect.andThen(Effect.never)),
     });
+
     const fiber = yield* runSupportRecovery(["support-recovery"], test.operator).pipe(
       Effect.forkChild
     );
+
     yield* Deferred.await(sent);
     yield* Fiber.interrupt(fiber);
     expect(test.output.join("")).toContain("servidor puede haber aprobado");

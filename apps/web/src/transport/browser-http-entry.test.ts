@@ -14,9 +14,11 @@ it.effect("paces a declared unadmitted mutation without loading the bootstrap AP
   Effect.gen(function* () {
     const started = Deferred.makeUnsafe<void>();
     let attempts = 0;
+
     const respond = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
       attempts++;
       yield* Deferred.succeed(started, undefined);
+
       return HttpClientResponse.fromWeb(
         request,
         Response.json(
@@ -27,21 +29,26 @@ it.effect("paces a declared unadmitted mutation without loading the bootstrap AP
         )
       );
     });
+
     const transport = HttpClient.makeWith(
       (
         request: Effect.Effect<HttpClientRequest.HttpClientRequest, HttpClientError.HttpClientError>
       ) => Effect.flatMap(request, respond),
       Effect.succeed
     );
+
     const context = yield* Layer.build(
       Layer.succeed(HttpClient.HttpClient, transport).pipe(
         browserHttpClientLayer("canonical", "https://api.test.fidyapp.com")
       )
     );
+
     const client = Context.get(context, HttpClient.HttpClient);
+
     const work = yield* Effect.forkChild(
       client.execute(HttpClientRequest.post("https://api.test.fidyapp.com/dashboard/initialize"))
     );
+
     yield* Deferred.await(started);
     expect(attempts).toBe(1);
     yield* TestClock.adjust("1 second");

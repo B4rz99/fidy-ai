@@ -30,6 +30,7 @@ export type Validation = Readonly<{
   verifier: string;
   attempt: Readonly<{ id: string; nonce: string; expires_at_ms: number }>;
 }>;
+
 export type VerifiedProviderIdentity = Readonly<{
   issuer: string;
   subject: string;

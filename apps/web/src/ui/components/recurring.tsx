@@ -15,19 +15,23 @@ import { Badge } from "./badge";
 import "./recurring.css";
 
 const desktopQuery = "(min-width: 1280px)";
+
 type PlanStatus = "scheduled" | "active" | "paused" | "stopped";
+
 const planLabels = {
   scheduled: "Programado",
   active: "Activo",
   paused: "Pausado",
   stopped: "Dejado de seguir",
 };
+
 const planVariants = {
   scheduled: "information",
   active: "success",
   paused: "warning",
   stopped: "destructive",
 } as const;
+
 const planDescriptions = {
   scheduled:
     "El seguimiento comenzará en la fecha programada. Los registros existentes se conservan.",
@@ -37,9 +41,11 @@ const planDescriptions = {
   active:
     "Fidy seguirá mostrando las próximas fechas de este plan. Los registros existentes se conservan.",
 };
+
 export const RecurringPlanBadge = ({ status }: Readonly<{ status: PlanStatus }>): JSX.Element => (
   <Badge variant={planVariants[status]}>{planLabels[status]}</Badge>
 );
+
 export const RecurringPlanStatus = ({
   status,
   action,
@@ -53,15 +59,20 @@ export const RecurringPlanStatus = ({
     <p>{planDescriptions[status]}</p>
   </section>
 );
+
 const isDesktop = (): boolean => window.matchMedia(desktopQuery).matches;
+
 const subscribe = (notify: () => void): (() => void) => {
   const media = window.matchMedia(desktopQuery);
   media.addEventListener("change", notify);
+
   return () => media.removeEventListener("change", notify);
 };
+
 export const RecurringSurface = ({ children }: Readonly<{ children: ReactNode }>): JSX.Element => (
   <div data-recurring-slot="workspace">{children}</div>
 );
+
 export const RecurringColumns = ({
   children,
   panel,
@@ -72,6 +83,7 @@ export const RecurringColumns = ({
     {panel}
   </div>
 );
+
 type PanelProps = Readonly<{
   children: ReactNode;
   themeControl: ReactNode;
@@ -79,6 +91,7 @@ type PanelProps = Readonly<{
   open: boolean;
   onClose: () => void;
 }>;
+
 export const RecurringThemeControl = ({
   theme,
   toggle,
@@ -92,6 +105,7 @@ export const RecurringThemeControl = ({
     <HugeiconsIcon icon={theme === "dark" ? Sun03Icon : Moon02Icon} strokeWidth={1.5} />
   </Button>
 );
+
 const PanelActions = ({
   desktop,
   onClose,
@@ -104,6 +118,7 @@ const PanelActions = ({
     </Button>
   </div>
 );
+
 export const RecurringContextPanel = ({
   children,
   title,
@@ -113,9 +128,11 @@ export const RecurringContextPanel = ({
 }: PanelProps): JSX.Element => {
   const desktop = useSyncExternalStore(subscribe, isDesktop);
   const [container, setContainer] = useState<Option.Option<HTMLDivElement>>(() => Option.none());
+
   const mounted = useCallback<RefCallback<HTMLDivElement>>((node) => {
     setContainer(node === null ? Option.none() : Option.some(node));
   }, []);
+
   return (
     <div ref={mounted} data-recurring-slot="panel-mount" hidden={!open}>
       <Dialog.Root

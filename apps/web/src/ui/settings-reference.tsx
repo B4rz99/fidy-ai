@@ -47,6 +47,7 @@ const EmailExample = (): JSX.Element => (
 const AuthorizationExample = (): JSX.Element => {
   const [confirmed, confirm] = useState(false);
   const [submitted, submit] = useState(false);
+
   return (
     <section className="settings-section">
       <div className="settings-section-icon" aria-hidden="true">
@@ -91,6 +92,7 @@ const AuthorizationExample = (): JSX.Element => {
 const TokenExample = (): JSX.Element => {
   const [selected, select] = useState(true);
   const [lifetime, selectLifetime] = useState("30");
+
   return (
     <div className="settings-panel">
       <div className="settings-token-creation">
@@ -138,11 +140,13 @@ const managementExampleDetails = [
   { label: "Estado", value: <Badge variant="success">Activo</Badge> },
   { label: "Vence", value: <time dateTime="2026-11-23T00:00:00Z">23 nov 2026</time> },
 ];
+
 const ManagementExampleAction = (): JSX.Element => (
   <Button type="button" variant="destructive-text" size="label" disabled>
     Desactivar ejemplo
   </Button>
 );
+
 const ManagementExampleTable = (): JSX.Element => (
   <div className="settings-table" data-settings-desktop>
     <Table aria-labelledby="settings-reference-table-title">
@@ -173,6 +177,7 @@ const ManagementExampleTable = (): JSX.Element => (
     </Table>
   </div>
 );
+
 const ManagementExample = (): JSX.Element => (
   <section className="settings-access-section" aria-labelledby="settings-reference-table-title">
     <h3 id="settings-reference-table-title" className="settings-section-title">

@@ -22,9 +22,11 @@ const plan = {
 
 it("accepts real local dates in the supported century and rejects normalized or partial spellings", () => {
   const decode = Schema.decodeUnknownResult(RecurringDate);
+
   for (const value of ["2000-01-01", "2099-12-31", "2028-02-29"]) {
     expect(Result.isSuccess(decode(value))).toBe(true);
   }
+
   for (const value of [
     "1999-12-31",
     "2100-01-01",
@@ -46,10 +48,13 @@ it("accepts real local dates in the supported century and rejects normalized or 
   ]) {
     expect(Result.isFailure(decode(value)), value).toBe(true);
   }
+
   const month = Schema.decodeUnknownResult(RecurringMonth);
+
   for (const value of ["2000-01", "2099-09", "2026-10", "2026-11", "2026-12"]) {
     expect(Result.isSuccess(month(value))).toBe(true);
   }
+
   for (const value of [
     "1999-12",
     "2100-01",
@@ -69,6 +74,7 @@ it("accepts real local dates in the supported century and rejects normalized or 
 
 it("requires bounded trimmed names, coherent Money and a nondecreasing schedule", () => {
   const decode = Schema.decodeUnknownResult(RecurringPlanInput);
+
   for (const value of [
     plan,
     { ...plan, name: "a".repeat(120), counterparty: "b".repeat(120) },
@@ -82,6 +88,7 @@ it("requires bounded trimmed names, coherent Money and a nondecreasing schedule"
   ]) {
     expect(Result.isSuccess(decode(value))).toBe(true);
   }
+
   for (const change of [
     { name: "" },
     { name: " Arriendo" },
@@ -110,6 +117,7 @@ it("requires bounded trimmed names, coherent Money and a nondecreasing schedule"
 
 it("round-trips commands for each editable scope and lifecycle decision", () => {
   const key = { planId: "10000000-0000-4000-8000-000000000001", date: "2026-01-31" };
+
   const edits = [
     { kind: "create", id: key.planId, plan },
     ...["once", "forward"].map((scope) => ({ kind: "edit", ...key, scope, plan })),
@@ -120,15 +128,18 @@ it("round-trips commands for each editable scope and lifecycle decision", () => 
       action,
     })),
   ];
+
   for (const value of edits) {
     expect(
       Schema.encodeSync(RecurringEdit)(Schema.decodeUnknownSync(RecurringEdit)(value))
     ).toEqual(value);
   }
+
   for (const status of ["upcoming", "unconfirmed", "partial", "completed", "skipped"]) {
     expect(Schema.decodeUnknownSync(RecurringFilters)({ status })).toEqual({ status });
     expect(Schema.decodeUnknownSync(RecurringOccurrence.fields.status)(status)).toBe(status);
   }
+
   for (const direction of ["inflow", "outflow"]) {
     expect(Schema.decodeUnknownSync(RecurringMatchFact.fields.direction)(direction)).toBe(
       direction

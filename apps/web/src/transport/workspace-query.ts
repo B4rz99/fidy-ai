@@ -5,18 +5,25 @@ import { forwardFreshQuery, makeFreshQuery } from "./fresh-query";
 import type { CanonicalSuccess, FidyClient } from "./client";
 
 type Client = Context.Service.Shape<FidyClient>;
+
 type ProfileError = Effect.Error<ReturnType<Client["identity"]["getCurrentUser"]>>;
+
 type CatalogError = Effect.Error<ReturnType<Client["dashboard"]["listDashboardCatalog"]>>;
+
 type ProfileQuery = Atom.Atom<
   AsyncResult.AsyncResult<CanonicalSuccess<"identity.getCurrentUser">, ProfileError>
 >;
+
 type CategoriesQuery = Atom.Atom<
   AsyncResult.AsyncResult<CanonicalSuccess<"categories.listCategories">, ProfileError>
 >;
+
 type CatalogQuery = Atom.Atom<
   AsyncResult.AsyncResult<CanonicalSuccess<"dashboard.listDashboardCatalog">, CatalogError>
 >;
+
 export const workspaceQueryRetention = { timeToLive: "5 minutes" } as const;
+
 export const revalidateWorkspaceQuery = <A, E>(
   query: Atom.Atom<AsyncResult.AsyncResult<A, E>>
 ): Atom.Atom<AsyncResult.AsyncResult<A, E>> =>
@@ -28,9 +35,11 @@ export const revalidateWorkspaceQuery = <A, E>(
       focusSignal: Atom.windowFocusSignal,
     })
   );
+
 type MetadataValue = Option.Option<
   AsyncResult.AsyncResult<CanonicalSuccess<"identity.getCurrentUser">, ProfileError>
 >;
+
 const initialMetadata: (client: FidyClient) => Atom.Writable<MetadataValue, MetadataValue> =
   Atom.family((_client: FidyClient) =>
     Atom.make<
@@ -39,6 +48,7 @@ const initialMetadata: (client: FidyClient) => Atom.Writable<MetadataValue, Meta
       >
     >(Option.none()).pipe(Atom.setIdleTTL("400 millis"))
   );
+
 const workspaceMetadataQuery = Atom.family((client: FidyClient) => {
   const remote = makeFreshQuery({
     runtime: client.runtime,
@@ -52,9 +62,11 @@ const workspaceMetadataQuery = Atom.family((client: FidyClient) => {
       ),
     decorate: Atom.setIdleTTL(workspaceQueryRetention.timeToLive),
   });
+
   const source = Atom.readable(
     (get) => {
       const current = Option.getOrElse(get(initialMetadata(client)), () => get(remote));
+
       return AsyncResult.isInitial(current)
         ? AsyncResult.waitingFrom(
             get.self<
@@ -71,12 +83,14 @@ const workspaceMetadataQuery = Atom.family((client: FidyClient) => {
     client.runtime.factory.withReactivity(["recurring-resume"]),
     Atom.setIdleTTL(workspaceQueryRetention.timeToLive)
   );
+
   return forwardFreshQuery({
     query: source,
     sources: [remote],
     before: (registry) => registry.set(initialMetadata(client), Option.none()),
   });
 });
+
 export const workspaceMetadataInitialValue = ({
   client,
   value,
@@ -89,6 +103,7 @@ export const workspaceMetadataInitialValue = ({
   ReturnType<typeof initialMetadata>,
   Option.Option<AsyncResult.AsyncResult<CanonicalSuccess<"identity.getCurrentUser">, ProfileError>>,
 ] => [initialMetadata(client), Option.some(AsyncResult.success(value, { timestamp }))] as const;
+
 export const retainPreparedWorkspaceMetadata = ({
   client,
   registry,
@@ -97,6 +112,7 @@ export const retainPreparedWorkspaceMetadata = ({
     registry.get(workspaceMetadataQuery(client));
   }
 };
+
 export const workspaceProfileQuery: (client: FidyClient) => ProfileQuery = Atom.family(
   (client: FidyClient) =>
     forwardFreshQuery({
@@ -104,6 +120,7 @@ export const workspaceProfileQuery: (client: FidyClient) => ProfileQuery = Atom.
       sources: [workspaceMetadataQuery(client)],
     })
 );
+
 const workspaceCategoriesSource: (client: FidyClient) => CategoriesQuery = Atom.family(
   (client: FidyClient) => {
     const individual = makeFreshQuery({
@@ -123,14 +140,18 @@ const workspaceCategoriesSource: (client: FidyClient) => CategoriesQuery = Atom.
           Atom.setIdleTTL(workspaceQueryRetention.timeToLive)
         ),
     });
+
     const metadata = workspaceMetadataQuery(client);
+
     const source: CategoriesQuery = Atom.readable(
       (get) => {
         const profile = get(metadata);
         const categories = Option.flatMap(AsyncResult.value(profile), (value) => value.categories);
+
         if (Option.isSome(categories)) {
           return AsyncResult.map(profile, () => ({ data: categories.value, next: [] }));
         }
+
         return AsyncResult.isInitial(profile)
           ? AsyncResult.initial(profile.waiting)
           : get(individual);
@@ -140,21 +161,25 @@ const workspaceCategoriesSource: (client: FidyClient) => CategoriesQuery = Atom.
         refresh(individual);
       }
     );
+
     return forwardFreshQuery({ query: source, sources: [metadata, individual] });
   }
 );
+
 const workspaceCategoriesView = Atom.family((client: FidyClient) =>
   forwardFreshQuery({
     query: workspaceCategoriesSource(client).pipe(revalidateWorkspaceQuery),
     sources: [workspaceCategoriesSource(client)],
   })
 );
+
 export const workspaceCategoriesQuery = (
   client: FidyClient
 ): Readonly<{
   source: CategoriesQuery;
   view: CategoriesQuery;
 }> => ({ source: workspaceCategoriesSource(client), view: workspaceCategoriesView(client) });
+
 export const workspaceDashboardCatalogQuery: (client: FidyClient) => CatalogQuery = Atom.family(
   (client: FidyClient) =>
     client

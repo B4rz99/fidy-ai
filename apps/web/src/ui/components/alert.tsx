@@ -22,7 +22,9 @@ const alertVariants = cva(
     defaultVariants: { variant: "default" },
   }
 );
+
 type DivProps = React.ComponentProps<"div">;
+
 const Alert = ({
   className,
   variant,
@@ -35,6 +37,7 @@ const Alert = ({
     {...props}
   />
 );
+
 const AlertTitle = ({ className, ...props }: DivProps): React.JSX.Element => (
   <div
     data-slot="alert-title"
@@ -45,6 +48,7 @@ const AlertTitle = ({ className, ...props }: DivProps): React.JSX.Element => (
     {...props}
   />
 );
+
 const AlertDescription = ({ className, ...props }: DivProps): React.JSX.Element => (
   <div
     data-slot="alert-description"
@@ -55,7 +59,9 @@ const AlertDescription = ({ className, ...props }: DivProps): React.JSX.Element 
     {...props}
   />
 );
+
 const AlertAction = ({ className, ...props }: DivProps): React.JSX.Element => (
   <div data-slot="alert-action" className={cn("absolute top-2 right-2", className)} {...props} />
 );
+
 export { Alert, AlertAction, AlertDescription, AlertTitle };

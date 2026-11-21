@@ -4,7 +4,9 @@ import { BigDecimal, Schema } from "effect";
 const ExactDecimal = Schema.NonEmptyString.pipe(Schema.decodeTo(Schema.BigDecimalFromString));
 
 const maximumFormatters = 32;
+
 const formatters = new Map<string, Intl.NumberFormat>();
+
 const numberFormatter = ({
   locale,
   currency,
@@ -20,7 +22,9 @@ const numberFormatter = ({
 }>): Intl.NumberFormat => {
   const key = [locale, currency, currencyDisplay, minimumDigits, maximumDigits].join("|");
   const previous = formatters.get(key);
+
   if (previous !== undefined) return previous;
+
   const formatter = new Intl.NumberFormat(
     locale,
     currency === ""
@@ -36,8 +40,10 @@ const numberFormatter = ({
           maximumFractionDigits: maximumDigits,
         }
   );
+
   if (formatters.size >= maximumFormatters) formatters.clear();
   formatters.set(key, formatter);
+
   return formatter;
 };
 
@@ -56,6 +62,7 @@ const currencyAmount = ({
 }>): string => {
   const decimal = amount;
   const digits = currencyMetadata(Schema.decodeUnknownSync(Currency)(currency)).fractionalDigits;
+
   const formatter = numberFormatter({
     locale,
     currency,
@@ -63,10 +70,12 @@ const currencyAmount = ({
     minimumDigits: compact && BigDecimal.isInteger(decimal) ? 0 : digits,
     maximumDigits: digits,
   });
+
   const scaled = BigDecimal.scale(BigDecimal.round(decimal, { scale: digits }), digits).value;
   const unit = 10n ** BigInt(digits);
   const whole = scaled / unit;
   const remainder = scaled % unit;
+
   const fraction =
     digits === 0
       ? ""
@@ -77,18 +86,23 @@ const currencyAmount = ({
           minimumDigits: digits,
           maximumDigits: digits,
         }).format(remainder < 0n ? -remainder : remainder);
+
   const parts = formatter.formatToParts(
     whole === 0n && BigDecimal.isNegative(decimal) ? -0 : whole
   );
+
   const formatted = parts
     .map((part) => {
       if (currencyDisplay === "code" && part.type === "currency") return "";
+
       if (part.type === "fraction") return fraction;
+
       return currencyDisplay === "code" && part.type === "literal"
         ? part.value.replaceAll(/\s/gu, "")
         : part.value;
     })
     .join("");
+
   return currencyDisplay === "code" ? `${currency} ${formatted}` : formatted;
 };
 

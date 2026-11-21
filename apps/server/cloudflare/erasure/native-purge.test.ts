@@ -21,6 +21,7 @@ const repeatPurge = Effect.fn(function* (
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(ErasureHandoff))({
     ...scope,
   });
+
   return yield* native(() => users.getByName(owner).fetch(localPurgeUrl, { method: "POST", body }));
 });
 
@@ -36,12 +37,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const registry = driver.storage;
         const users = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
         expect((yield* admitPurge(runtime)).status).toBe(202);
+
         const [record] = yield* native(() =>
           registry.exec(
             "SELECT reference,user_id AS userId,requested_at_ms AS requestedAtMs FROM erasure_cases"
           )
         );
+
         const scope = yield* Schema.decodeUnknownEffect(ErasureHandoff)(record);
+
         for (const state of ["Sealing", "Erasing", "ExternalPending"]) {
           yield* native(() =>
             registry.exec(
@@ -55,6 +59,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           expect(
             (yield* native(() => registry.exec("SELECT state FROM erasure_cases")))[0]?.state
           ).not.toBe(state);
+
           if (state === "Sealing") {
             expect(yield* first.exec("SELECT state FROM erasure_requests")).toEqual([
               { state: "Sealing" },
@@ -82,12 +87,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             expect((yield* repeatPurge(users, scope, bob.user)).ok).toBe(false);
             expect((yield* repeatPurge(users, scope, alice.user)).status).toBe(204);
           }
+
           yield* native(() => registry.exec("DROP TRIGGER lose_phase"));
           expect(yield* driver.step()).toBe(state);
         }
+
         expect((yield* repeatPurge(users, scope, alice.user)).ok).toBe(false);
         const cases = yield* native(() => runtime.getDurableObjectNamespace("ERASURE", "core"));
         const now = yield* Clock.currentTimeMillis;
+
         const receipt = yield* native(() =>
           cases
             .getByName(erasureRegistryName)
@@ -105,9 +113,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               }),
             })
         );
+
         const evidence = yield* Schema.decodeUnknownEffect(ErasureOperatorReceipt)(
           yield* native(() => receipt.json())
         );
+
         expect(
           yield* native(() =>
             first.directory.exec("SELECT user_id FROM session_routes WHERE user_id=?", alice.user)
@@ -126,9 +136,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const runtime = yield* (yield* nativePurgePlatform)();
       const owner = yield* seed(runtime, alice);
       const driver = yield* caseDriver(runtime);
+
       const user = (yield* native(() =>
         runtime.getDurableObjectNamespace("USER_STORE", "core")
       )).getByName(alice.user);
+
       const shared = yield* native(() => runtime.getR2Bucket("SAMPLE_BUCKET", "core"));
       const sample = "22510000-0000-4000-8000-000000000033";
       yield* owner.exec(
@@ -137,9 +149,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         owner.now
       );
       yield* native(() => user.fetch("https://fixture.invalid/hold-sample", { method: "POST" }));
+
       const digest = yield* native(() =>
         crypto.subtle.digest("SHA-256", new TextEncoder().encode(anonymousSample))
       );
+
       yield* owner.exec(
         "INSERT INTO ingest_sample_decisions VALUES('candidate',?,1,?,'issuer','operator',?,?,?,'approved',1)",
         alice.user,
@@ -149,6 +163,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         anonymousSample
       );
       yield* native(() => user.fetch("https://owner.internal/work/check", { method: "POST" }));
+
       const issued = yield* owner.exec("SELECT nonce FROM ingest_sample_reservations").pipe(
         Effect.repeat({
           until: (rows) => rows.length === 1,
@@ -156,6 +171,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           schedule: Schedule.spaced("40 millis"),
         })
       );
+
       expect(issued.length).toBe(1);
       expect(yield* native(() => shared.head("samples/" + sample))).toBeNull();
       expect((yield* admitPurge(runtime)).status).toBe(202);
@@ -163,6 +179,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       expect(yield* driver.step()).toBe("Draining");
       expect(yield* owner.exec("SELECT nonce FROM ingest_sample_reservations")).toEqual(issued);
       yield* native(() => user.fetch("https://fixture.invalid/release-sample", { method: "POST" }));
+
       const ended = yield* owner.exec("SELECT nonce FROM ingest_sample_reservations").pipe(
         Effect.repeat({
           until: (rows) => rows.length === 0,
@@ -170,6 +187,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           schedule: Schedule.spaced("40 millis"),
         })
       );
+
       expect(ended).toEqual([]);
       yield* owner.exec("UPDATE ingest_sample_decisions SET due_ms=1 WHERE phase='removing'");
       expect(
@@ -193,10 +211,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         owner.now,
         owner.now + 60000
       );
+
       const logins = Array.from(
         { length: 17 },
         (_, index) => "22510000-0000-4000-8000-" + String(index).padStart(12, "0")
       );
+
       for (const [ordinal, key] of logins.entries()) {
         yield* owner.exec(
           "INSERT INTO browser_handoffs(id,pairing_id,user_id,ordinal,verifier_digest,expires_at_ms,wrong_attempts,minimum_poll_seconds,outcome,state,email_login) VALUES(?,?,?,?, 'synthetic',?,0,1,'committed','pending_approval',1)",
@@ -215,6 +235,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           owner.now
         );
       }
+
       const driver = yield* caseDriver(runtime);
       expect((yield* admitPurge(runtime)).status).toBe(202);
       const registry = driver.storage;
@@ -263,6 +284,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const first = yield* seed(runtime, alice);
       const shared = yield* native(() => runtime.getR2Bucket("SAMPLE_BUCKET", "core"));
       const cases = yield* caseDriver(runtime);
+
       const valid = "22510000-0000-4000-8000-000000000021",
         unsafe = "22510000-0000-4000-8000-000000000022";
 
@@ -273,6 +295,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const checksum = yield* native(() =>
           crypto.subtle.digest("SHA-256", new TextEncoder().encode(artifact))
         );
+
         yield* native(() =>
           shared.put("samples/" + id, artifact, {
             sha256: checksum,
@@ -288,6 +311,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           id
         );
       }
+
       expect((yield* admitPurge(runtime)).status).toBe(202);
       expect(
         yield* cases
@@ -297,6 +321,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const unsafeHead = yield* native(() => shared.head("samples/" + unsafe));
       expect(unsafeHead === null).toBe(true);
       const safeObject = yield* native(() => shared.get("samples/" + valid));
+
       if (safeObject === null) return yield* Effect.die("Expected anonymous sample");
       expect(yield* native(() => safeObject.text())).toBe(anonymousSample);
     })
@@ -350,11 +375,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       expect(yield* native(() => registry.exec("SELECT state FROM erasure_cases"))).toEqual([
         { state: "Draining" },
       ]);
+
       const placeholder = yield* native(() =>
         shared.put("samples/" + sample, sampleWriter, {
           customMetadata: { purpose: "sample-placeholder", nonce: sampleWriter },
         })
       );
+
       yield* first.exec("UPDATE ingest_sample_decisions SET due_ms=0 WHERE phase='removing'");
       yield* driver.step().pipe(Effect.repeat({ times: 3 }));
       expect(yield* native(() => registry.exec("SELECT state FROM erasure_cases"))).toEqual([

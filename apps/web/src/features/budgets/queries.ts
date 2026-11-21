@@ -27,6 +27,7 @@ export const budgetStatusQuery = ({
       query: { timeZone: user.timeZone, month },
     })
     .pipe(revalidateWorkspaceQuery);
+
 export const preloadBudgetData = ({
   apiClient,
   registry,
@@ -48,9 +49,11 @@ export const preloadBudgetData = ({
         })
       );
       const profile = presentCanonicalQuery(registry.get(workspaceProfileQuery(apiClient)));
+
       if (profile._tag !== "Ready" || Option.isSome(profile.refreshFailure)) {
         return;
       }
+
       return yield* Effect.tryPromise(() =>
         prepareQuery({
           registry,

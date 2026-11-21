@@ -1,4 +1,5 @@
 type Forward = (request: Request) => Promise<Response>;
+
 type BrowserOptions = Readonly<{
   forwardWeb: Forward;
   network: "ordinary";

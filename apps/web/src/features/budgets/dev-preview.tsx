@@ -13,17 +13,21 @@ const datasets: ReadonlyArray<Readonly<{ value: PreviewDataset; label: string }>
   { value: "full", label: "16 categories" },
   { value: "many", label: "1,000 rows" },
 ];
+
 const restoreTextSizeOnUnmount = (_element: HTMLElement): (() => void) => {
   const original = document.documentElement.style.fontSize;
+
   return (): void => {
     document.documentElement.style.fontSize = original;
   };
 };
+
 export const BudgetDataPreview = (props: WorkspaceProps): JSX.Element => {
   const search = useSearch({ strict: false });
   const navigate = useNavigate();
   const dataset = "data" in search ? (search.data ?? "demo") : "demo";
   const [largeText, setLargeText] = useState(false);
+
   return (
     <>
       <div className="pb-24">

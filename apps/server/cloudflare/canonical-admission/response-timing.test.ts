@@ -9,7 +9,9 @@ it("reports native SQL execution separately from storage waiting and preserves t
         { timings: { sql_duration_ms: 0.125 }, query: "must not enter headers" },
         { timings: { sql_duration_ms: 0.25 }, params: ["must not enter headers"] },
       ]);
+
       expect(sql).toEqual(Option.some(0.375));
+
       const response = appendSnapshotTimings({
         response: new Response("complete response", {
           status: 202,
@@ -22,6 +24,7 @@ it("reports native SQL execution separately from storage waiting and preserves t
         duration: Duration.millis(20),
         timings: { storage: 15, presentation: 3, sql },
       });
+
       expect(response.status).toBe(202);
       expect(response.headers.get("cache-control")).toBe("no-store");
       expect(response.headers.get("fidy-canonical-remaining")).toBe("12");
@@ -56,6 +59,7 @@ it("distinguishes an unavailable SQL measurement from a measured zero", () => {
         }).headers.get("server-timing")
       )
     );
+
   expect(make(Option.none())).not.toContain("canonical-sql");
   expect(make(reportedSqlDuration([{ timings: { sql_duration_ms: 0 } }]))).toContain(
     "canonical-sql;dur=0.000"

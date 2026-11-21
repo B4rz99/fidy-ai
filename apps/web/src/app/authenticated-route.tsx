@@ -8,6 +8,7 @@ export const AuthenticatedRoute = (): JSX.Element => {
     select: (state) =>
       state.status === "pending" && state.location.pathname === "/app/transactions",
   });
+
   return (
     <SignedInContent>
       <Outlet />

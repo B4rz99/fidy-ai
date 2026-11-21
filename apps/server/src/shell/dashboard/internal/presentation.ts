@@ -29,14 +29,19 @@ const renderChart = (
       period: widget.period,
       timeZone: facts.context.timeZone,
     });
+
     const ranges = facts.groups.get(widget.id);
+
     if (ranges === undefined) return yield* new DashboardUnavailable();
+
     const buckets = projectAggregateChart({
       widget,
       ranges,
       lookupCategory: (id) => Option.fromUndefinedOr(facts.categories.get(id)),
     });
+
     if (Option.isNone(buckets)) return yield* new DashboardUnavailable();
+
     return { widget, result: { appliedPeriod: period, buckets: buckets.value } };
   });
 
@@ -46,7 +51,9 @@ const renderList = (
 ): Effect.Effect<DashboardWidgetView, DashboardUnavailable> =>
   Effect.gen(function* () {
     const rows = facts.lists.get(widget.id);
+
     if (rows === undefined) return yield* new DashboardUnavailable();
+
     return {
       widget,
       result: {
@@ -73,8 +80,11 @@ const renderMetric = (
       period: widget.period,
       timeZone: facts.context.timeZone,
     });
+
     const ranges = facts.groups.get(widget.id);
+
     if (ranges === undefined) return yield* new DashboardUnavailable();
+
     return {
       widget,
       result: { appliedPeriod: period, moneyGroups: projectAggregateMetric(widget, ranges) },
@@ -90,10 +100,13 @@ const renderBudget = (
     const zone = facts.context.timeZone;
     const period = resolveDashboardPeriod({ now, period: "this-month", timeZone: zone });
     const category = facts.categories.get(widget.categoryId);
+
     if (category === undefined) return yield* new DashboardUnavailable();
+
     const budget = facts.budgets.find(
       (entry) => entry.categoryId === widget.categoryId && entry.cap.currency === widget.currency
     );
+
     if (budget === undefined) {
       return {
         widget,
@@ -105,21 +118,27 @@ const renderBudget = (
         },
       };
     }
+
     const ranges = facts.groups.get(widget.id);
+
     if (ranges === undefined) return yield* new DashboardUnavailable();
     const spent = projectAggregateBudgetSpent(widget, ranges);
+
     const calculated = yield* calculateBudgetStatus({
       budget,
       spent,
       period: { from: period.from, to: period.toExclusive, timeZone: zone },
     }).pipe(Effect.mapError(() => new DashboardUnavailable()));
+
     let status: Extract<
       Extract<DashboardWidgetView, { widget: Extract<Widget, { type: "budget-bar" }> }>["result"],
       { availability: "available" }
     >["status"];
+
     if (calculated.type === "under") status = { type: "under", remaining: calculated.remaining };
     else if (calculated.type === "over") status = { type: "over", overBy: calculated.overBy };
     else status = { type: "reached" };
+
     return {
       widget,
       result: {
@@ -181,6 +200,7 @@ export const renderDashboardView = ({
             ],
           }))
         );
+
   return render(document.layout).pipe(
     Effect.map((layout) => ({
       title: document.title,

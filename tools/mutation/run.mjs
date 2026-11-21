@@ -13,19 +13,24 @@ if (Object.hasOwn(process.versions, "bun")) {
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
+
 const strykerCli = resolve(here, "node_modules/@stryker-mutator/core/bin/stryker.js");
 
 const child = spawn(process.execPath, [strykerCli, "run", ...process.argv.slice(2)], {
   stdio: "inherit",
 });
+
 child.on("exit", (code, signal) => {
   if (signal !== null) {
     process.kill(process.pid, signal);
+
     return;
   }
+
   if (code === 0 && existsSync(resolve("src/core")) && process.argv.length === 2) {
     const report = loadMutationReport(resolve("reports/mutation/mutation.json"));
     verifyEquivalentReport(loadRegistry(), report);
   }
+
   process.exit(code ?? 1);
 });

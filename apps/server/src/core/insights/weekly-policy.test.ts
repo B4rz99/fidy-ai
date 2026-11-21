@@ -15,6 +15,7 @@ it("freezes consecutive Sunday 18:00 reporting periods in the captured Bogotá z
     scheduledAt: DateTime.makeUnsafe("2026-10-11T23:00:00Z"),
     timeZone: IanaTimeZone.make("America/Bogota"),
   });
+
   expect(DateTime.formatIso(periods.current.from)).toBe("2026-10-04T23:00:00.000Z");
   expect(DateTime.formatIso(periods.current.toExclusive)).toBe("2026-10-11T23:00:00.000Z");
   expect(DateTime.formatIso(periods.previous.from)).toBe("2026-09-27T23:00:00.000Z");
@@ -26,6 +27,7 @@ it("keeps seven local days across daylight saving rather than subtracting 168 el
     scheduledAt: DateTime.makeUnsafe("2026-11-01T23:00:00Z"),
     timeZone: IanaTimeZone.make("America/New_York"),
   });
+
   expect(DateTime.formatIso(periods.current.from)).toBe("2026-10-25T22:00:00.000Z");
 });
 
@@ -35,14 +37,18 @@ it("defers a closed-window attempt to 09:00 but refuses a new send at its exact 
     expiresAt: DateTime.makeUnsafe("2026-10-12T23:00:00Z"),
     timeZone: IanaTimeZone.make("America/Bogota"),
   };
+
   const closed = decideInsightDelivery({
     ...input,
     now: DateTime.makeUnsafe("2026-10-12T00:00:00Z"),
   });
+
   expect(closed._tag).toBe("Deferred");
+
   if (closed._tag === "Deferred") {
     expect(DateTime.formatIso(closed.nextEligibleAt)).toBe("2026-10-12T14:00:00.000Z");
   }
+
   expect(
     decideInsightDelivery({ ...input, now: DateTime.makeUnsafe("2026-10-12T23:00:00Z") })
   ).toEqual({ _tag: "Expired" });
@@ -54,6 +60,7 @@ it("includes 09:00, excludes 19:00 and never sends before the original due insta
     expiresAt: DateTime.makeUnsafe("2026-10-12T23:00:00Z"),
     timeZone: IanaTimeZone.make("America/Bogota"),
   };
+
   expect(
     decideInsightDelivery({ ...input, now: DateTime.makeUnsafe("2026-10-11T22:59:59Z") })._tag
   ).toBe("Deferred");
@@ -80,16 +87,19 @@ it("rejects a persisted report whose comparison period overlaps its current peri
     current: { from: "2026-10-04T23:00:00Z", toExclusive: "2026-10-11T23:00:00Z" },
     previous: { from: "2026-09-27T23:00:00Z", toExclusive: "2026-10-05T23:00:00Z" },
   });
+
   expect(decoded._tag).toBe("None");
 });
 
 it("finds the next Sunday 18:00 strictly after the decision instant and rejects invalid timing", () => {
   const timing = WeeklyTiming.make({ weekday: 0, hour: 18, minute: 0 });
+
   const next = nextWeeklyOccurrence({
     after: DateTime.makeUnsafe("2026-10-11T23:00:00Z"),
     timing,
     timeZone: IanaTimeZone.make("America/Bogota"),
   });
+
   expect(DateTime.formatIso(next)).toBe("2026-10-18T23:00:00.000Z");
   expect(Schema.decodeOption(WeeklyTiming)({ weekday: 7, hour: 24, minute: 60 })._tag).toBe("None");
 });
@@ -99,6 +109,7 @@ it("selects only the latest scheduled cutoff after missed weeks, including the e
     timing: WeeklyTiming.make({ weekday: 0, hour: 18, minute: 0 }),
     timeZone: IanaTimeZone.make("America/Bogota"),
   };
+
   expect(
     DateTime.formatIso(
       latestWeeklyOccurrence({ ...input, atOrBefore: DateTime.makeUnsafe("2026-10-11T23:00:00Z") })
@@ -136,6 +147,7 @@ it("rejects empty or reversed captured financial periods independently of adjace
   const current = { from: "2026-10-04T23:00:00Z", toExclusive: "2026-10-11T23:00:00Z" };
   const previous = { from: "2026-09-27T23:00:00Z", toExclusive: current.from };
   expect(Result.isSuccess(decode({ current, previous }))).toBe(true);
+
   for (const period of [
     { from: current.from, toExclusive: current.from },
     { from: current.toExclusive, toExclusive: current.from },
@@ -143,6 +155,7 @@ it("rejects empty or reversed captured financial periods independently of adjace
     expect(Result.isFailure(decode({ current: period, previous }))).toBe(true);
     expect(Result.isFailure(decode({ current, previous: period }))).toBe(true);
   }
+
   expect(
     Result.isFailure(
       decode({ current, previous: { ...previous, toExclusive: "2026-10-03T23:00:00Z" } })
@@ -152,11 +165,13 @@ it("rejects empty or reversed captured financial periods independently of adjace
 
 it("never rounds a future 09:30 scheduled send backwards into the open window", () => {
   const scheduledAt = DateTime.makeUnsafe("2026-10-12T14:30:00Z");
+
   const decision = decideInsightDelivery({
     scheduledAt,
     expiresAt: DateTime.makeUnsafe("2026-10-12T18:00:00Z"),
     now: DateTime.makeUnsafe("2026-10-12T14:15:00Z"),
     timeZone: IanaTimeZone.make("America/Bogota"),
   });
+
   expect(decision).toEqual({ _tag: "Deferred", nextEligibleAt: scheduledAt });
 });

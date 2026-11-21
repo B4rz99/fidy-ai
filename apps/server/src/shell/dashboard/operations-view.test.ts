@@ -3,16 +3,19 @@ import { Result, Schema } from "effect";
 import { DashboardView } from "./contract";
 
 const widgetId = "f1d1a000-0000-4000-8000-00000000030a";
+
 const category = {
   id: "10000000-0000-4000-8000-000000000001",
   label: "Restaurantes",
 };
+
 const appliedPeriod = {
   requested: "this-month",
   from: "2026-07-01T05:00:00.000Z",
   toExclusive: "2026-08-01T05:00:00.000Z",
   timeZone: "America/Bogota",
 };
+
 const valid = {
   title: "Mi tablero",
   context: {
@@ -70,6 +73,7 @@ it("rejects malformed calendar keys and mixed-Currency Budget results", () => {
       },
     },
   });
+
   expect(
     Result.isSuccess(Schema.decodeUnknownResult(DashboardView)(calendarView("2026-07-20")))
   ).toBe(true);
@@ -100,7 +104,9 @@ it("rejects malformed calendar keys and mixed-Currency Budget results", () => {
       },
     },
   };
+
   expect(Result.isFailure(Schema.decodeUnknownResult(DashboardView)(mixedBudget))).toBe(true);
+
   const contradictoryBudget = {
     ...mixedBudget,
     layout: {
@@ -115,6 +121,7 @@ it("rejects malformed calendar keys and mixed-Currency Budget results", () => {
       },
     },
   };
+
   expect(Result.isFailure(Schema.decodeUnknownResult(DashboardView)(contradictoryBudget))).toBe(
     true
   );
@@ -144,8 +151,10 @@ it("strips private Transaction search and tie-breaking fields from enriched leav
       },
     },
   });
+
   if (decoded.layout.kind !== "leaf") throw new Error("Expected leaf");
   const result = decoded.layout.widget.result;
+
   if (!("transactions" in result)) throw new Error("Expected Transaction list result");
 
   expect(result.transactions[0]).not.toHaveProperty("notes");

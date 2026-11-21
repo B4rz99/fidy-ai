@@ -20,6 +20,7 @@ const writeMessages = {
       "No pudimos confirmar la eliminación. Actualiza para comprobar el plan antes de volver a editar.",
   },
 };
+
 const inlineMessages = {
   saving: "Guardando presupuesto…",
   saved: "Presupuesto guardado.",
@@ -28,12 +29,14 @@ const inlineMessages = {
   uncertain:
     "No pudimos confirmar el guardado. Tu importe se conserva. Usa Actualizar para comprobar el plan antes de continuar.",
 };
+
 const feedbackVariants = {
   saving: "pending",
   saved: "success",
   failed: "destructive",
   uncertain: "destructive",
 } as const;
+
 export const BudgetWriteFeedback = ({
   saveState,
   writeAction,
@@ -41,6 +44,7 @@ export const BudgetWriteFeedback = ({
 }: Pick<BudgetEditing, "saveState" | "writeAction"> &
   Readonly<{ inline: boolean }>): JSX.Element => {
   if (saveState === "idle") return <></>;
+
   return (
     <Alert
       role={saveState === "saving" || saveState === "saved" ? "status" : "alert"}

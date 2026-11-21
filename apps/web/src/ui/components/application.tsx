@@ -8,16 +8,22 @@ import { useTheme } from "./theme";
 import "./application.css";
 
 const mascot = new URL("../assets/access/mascot.webp", import.meta.url).href;
+
 const habitat = new URL("../assets/access/habitat-ceiba.webp", import.meta.url).href;
+
 const habitat384 = new URL("../assets/access/habitat-ceiba-384.webp", import.meta.url).href;
+
 const habitat768 = new URL("../assets/access/habitat-ceiba-768.webp", import.meta.url).href;
+
 const mascot192 = new URL("../assets/access/mascot-192.webp", import.meta.url).href;
+
 const mascot384 = new URL("../assets/access/mascot-384.webp", import.meta.url).href;
 
 export const ApplicationSurface = ({
   children,
 }: Readonly<{ children: ReactNode }>): JSX.Element => {
   const { theme, toggle, mounted } = useTheme();
+
   return (
     <div ref={mounted} className="signed-in-theme application-shell">
       <svg width="0" height="0" aria-hidden="true" className="application-logo-filter">
@@ -57,6 +63,7 @@ export const ApplicationSurface = ({
 export const ApplicationWordmark = (): JSX.Element => (
   <img className="application-logo" src={fidyLogoUrl} alt="Fidy" />
 );
+
 export const ApplicationHabitat = (): JSX.Element => (
   <div className="application-habitat" aria-hidden="true">
     <img
@@ -85,6 +92,7 @@ export const ApplicationHabitat = (): JSX.Element => (
 export const ApplicationLogoutAction = (props: ComponentProps<typeof Button>): JSX.Element => (
   <Button {...props} className="application-logout" variant="ghost" />
 );
+
 export const ApplicationMenuAction = (props: ComponentProps<typeof Button>): JSX.Element => (
   <Button {...props} className="application-theme-button" variant="outline" size="icon" />
 );

@@ -15,16 +15,20 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const runtime = yield* (yield* nativeBrowserPlatform)();
         const context = browser(runtime);
         const proof = yield* context.pair;
+
         const directory = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
         );
+
         const deadline = (yield* Clock.currentTimeMillis) + 60000;
+
         const send = (): ReturnType<typeof context.post> =>
           native(() =>
             runtime.dispatchFetch(context.api + "/web/providers/disclosure", {
               headers: { ...context.headers, "x-provider-source": "f".repeat(64) },
             })
           );
+
         const first = yield* send();
         expect(first.status).toBe(200);
         yield* native(() => first.arrayBuffer());
@@ -44,11 +48,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             deadline
           )
         );
+
         const expensive = yield* context.post("/web/providers/google/start", {
           ...proof,
           intent: "signup",
           consentRevision: webSignupDisclosure().revision,
         });
+
         expect(expensive.status).toBe(429);
         yield* native(() => expensive.arrayBuffer());
         expect(
@@ -63,9 +69,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const runtime = yield* (yield* nativeBrowserPlatform)();
         const context = browser(runtime);
         yield* context.pair;
+
         const directory = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
         );
+
         yield* native(() => directory.exec("DELETE FROM bootstrap_admissions"));
         const deadline = (yield* Clock.currentTimeMillis) + 60000;
         yield* native(() =>
@@ -79,18 +87,22 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             "INSERT INTO bootstrap_admissions(scope,expires_at_ms) VALUES('expired',0)"
           )
         );
+
         const send = (source: string): ReturnType<typeof context.post> =>
           native(() =>
             runtime.dispatchFetch(context.api + "/web/providers/disclosure", {
               headers: { ...context.headers, "CF-Connecting-IP": source },
             })
           );
+
         const results = yield* Effect.all([send("192.0.2.3"), send("192.0.2.4")], {
           concurrency: 2,
         });
+
         expect(
           results.map((response) => response.status).sort((left, right) => left - right)
         ).toEqual([200, 429]);
+
         for (const response of results) yield* native(() => response.arrayBuffer());
         expect(
           yield* native(() =>
@@ -113,6 +125,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const context = browser(runtime);
         const proof = yield* context.pair;
         const payload = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(proof);
+
         for (let index = 0; index < 6; index++) {
           const response = yield* native(() =>
             runtime.dispatchFetch(context.api + "/web/providers/google/status", {
@@ -121,12 +134,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               body: payload,
             })
           );
+
           expect(response.status).toBe(index === 5 ? 429 : 400);
           yield* native(() => response.arrayBuffer());
         }
+
         const headers = new Headers(context.headers);
         headers.set("CF-Connecting-IP", "");
         headers.set("x-provider-source", "f".repeat(64));
+
         const missing = yield* native(() =>
           publicWorker.fetch(
             new Request(context.api + "/web/providers/google/status", {
@@ -143,6 +159,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }
           )
         );
+
         expect(missing.status).toBe(503);
         yield* native(() => missing.arrayBuffer());
       })

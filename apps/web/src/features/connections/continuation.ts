@@ -11,20 +11,25 @@ import type {
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 
 type Review = typeof ConnectionContinuationReview.Type;
+
 type Attempt = typeof ConnectionAttemptReference.Type;
+
 type Lifetime = Readonly<{
   attach: (dispose: () => void) => () => void;
   active: () => boolean;
   generation: () => number;
 }>;
+
 const makeLifetime = (): Lifetime => {
   let active = false;
   let generation = 0;
+
   return {
     active: () => active,
     generation: () => generation,
     attach: (dispose) => {
       active = true;
+
       return () => {
         active = false;
         generation += 1;
@@ -33,9 +38,12 @@ const makeLifetime = (): Lifetime => {
     },
   };
 };
+
 export const continuationDeadline = (review: Review): DateTime.Utc =>
   review.authorization?.expiresAt ?? review.expiresAt;
+
 const now = (): number => Effect.runSync(Clock.currentTimeMillis);
+
 const freshReview = (result: CanonicalQueryState<Review, unknown>): Option.Option<Review> =>
   result._tag === "Ready" &&
   !result.waiting &&
@@ -49,6 +57,7 @@ const canRefresh = (result: CanonicalQueryState<Review, unknown>): boolean =>
   (result._tag !== "Ready" || continuationDeadline(result.value).epochMilliseconds > now());
 
 type Submission = Readonly<{ generation: number; deadline: number }>;
+
 const prepareContinuation = (
   {
     client,
@@ -67,6 +76,7 @@ const prepareContinuation = (
     lifetime.active() &&
     lifetime.generation() === submission.generation &&
     submission.deadline > now();
+
   return Effect.suspend(() =>
     current()
       ? client.pipe(
@@ -98,9 +108,11 @@ export const useContinuation = (attempt: Attempt): Continuation => {
   const { webAuthClient: client, registry } = useRouter().options.context;
   const [lifetime] = useState(makeLifetime);
   const [submitted] = useState(() => Atom.make(false));
+
   const [query] = useState(() =>
     client.query("connectionBrowser", "review", { query: { attempt }, timeToLive: "0 seconds" })
   );
+
   const [command] = useState(() =>
     client.runtime.fn<Submission>()(
       (submission) =>
@@ -111,12 +123,15 @@ export const useContinuation = (attempt: Attempt): Continuation => {
       { concurrent: false }
     )
   );
+
   const execution = useAtomValue(command).pipe(presentCanonicalQuery);
+
   const mounted = useCallback(
     (_node: HTMLDivElement): (() => void) =>
       lifetime.attach(() => registry.set(command, Atom.Interrupt)),
     [command, lifetime, registry]
   );
+
   return {
     result: useAtomValue(query).pipe(presentCanonicalQuery),
     busy: execution.waiting,
@@ -125,10 +140,13 @@ export const useContinuation = (attempt: Attempt): Continuation => {
     mounted,
     begin: () => {
       const fresh = registry.get(query).pipe(presentCanonicalQuery, freshReview);
+
       if (!lifetime.active() || registry.get(submitted)) return;
+
       if (Option.isNone(fresh) || fresh.value.phase !== "ready") {
         return;
       }
+
       registry.set(submitted, true);
       registry.set(command, {
         generation: lifetime.generation(),

@@ -12,6 +12,7 @@ it.effect(
         locale: "es-CO",
         timeZone: "America/Bogota",
       });
+
       const result = yield* interpretNotificationEmail({
         context,
         content: {
@@ -24,6 +25,7 @@ it.effect(
           createdAt: "2026-01-18T12:00:00Z",
         },
       });
+
       expect(result).toEqual({ _tag: "NeedsReview", reason: "canonical-validation-failed" });
     })
 );

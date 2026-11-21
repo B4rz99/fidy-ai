@@ -15,6 +15,7 @@ it("keeps a three-local-day anchor across the end of a month", () => {
     cadence: { kind: "every-three-days", anchorDate: "2026-01-28" },
     timeZone: IanaTimeZone.make("America/Bogota"),
   });
+
   expect(DateTime.formatIso(next)).toBe("2026-02-03T23:00:00.000Z");
 });
 
@@ -24,6 +25,7 @@ it("recovers only the latest anchored reminder after missed occurrences, includi
     cadence: { kind: "every-three-days" as const, anchorDate: "2026-01-28" },
     timeZone: IanaTimeZone.make("America/Bogota"),
   };
+
   expect(
     DateTime.formatIso(
       latestReminderOccurrence({
@@ -67,6 +69,7 @@ it("rejects malformed cadence instructions and impossible reminder attention sta
       Schema.decodeOption(ReminderCadence)({ kind: "every-three-days", anchorDate })._tag
     ).toBe("None");
   }
+
   expect(Schema.decodeOption(ReminderCadence)({ kind: "weekly", weekday: 7 })._tag).toBe("None");
   expect(
     Schema.decodeUnknownOption(ReminderStanding)({ _tag: "QuestionDelivered", unanswered: 2 })._tag
@@ -82,6 +85,7 @@ it("skips weekends and chooses weekly occurrences strictly after the selected ti
     timeZone: IanaTimeZone.make("America/Bogota"),
     after: DateTime.makeUnsafe("2026-10-09T23:00:00Z"),
   };
+
   expect(
     DateTime.formatIso(nextReminderOccurrence({ ...input, cadence: { kind: "weekdays" } }))
   ).toBe("2026-10-12T23:00:00.000Z");
@@ -98,6 +102,7 @@ it("keeps the anchored local time across daylight saving rather than adding 72 e
     timeZone: IanaTimeZone.make("America/New_York"),
     cadence: { kind: "every-three-days" as const, anchorDate: "2026-10-30" },
   };
+
   expect(
     DateTime.formatIso(
       nextReminderOccurrence({
@@ -114,6 +119,7 @@ it("keeps daily reminders on weekends while weekdays skip them", () => {
     timing: { hour: 18, minute: 0 },
     timeZone: IanaTimeZone.make("America/Bogota"),
   };
+
   expect(DateTime.formatIso(nextReminderOccurrence({ ...input, cadence: { kind: "daily" } }))).toBe(
     "2026-10-24T23:00:00.000Z"
   );
@@ -129,5 +135,6 @@ it("keeps the calendar anchor when a time-zone transition skips an entire local 
     cadence: { kind: "every-three-days", anchorDate: "2011-12-27" },
     timeZone: IanaTimeZone.make("Pacific/Apia"),
   });
+
   expect(DateTime.formatIso(next)).toBe("2012-01-01T19:00:00.000Z");
 });

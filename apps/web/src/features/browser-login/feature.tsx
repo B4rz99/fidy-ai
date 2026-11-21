@@ -1,6 +1,6 @@
-import { EmailAddress, EmailVerificationCode } from "@/transport/client";
+import { EmailAddress } from "@/transport/client";
 import { DateTime, Option, Predicate, Schema } from "effect";
-import { type FormEvent, type JSX, type ReactNode, useSyncExternalStore } from "react";
+import { type FormEvent, type JSX, type ReactNode, useState, useSyncExternalStore } from "react";
 import {
   AccessAction,
   AccessAlternatives,
@@ -11,6 +11,7 @@ import {
   type AccessMethod,
 } from "@/ui/components/access";
 import { Spinner } from "@/ui/components/spinner";
+import { readEmailVerificationCode } from "./email-code";
 import {
   type BrowserLoginPairing as PairingController,
   BrowserLoginPairingViewState as PairingState,
@@ -93,7 +94,11 @@ const EmailCodeActions = ({
   pairing,
   busy,
   deadline,
-}: Readonly<{ pairing: BrowserLoginPairing; busy: boolean; deadline: number }>): JSX.Element => {
+}: Readonly<{
+  pairing: BrowserLoginPairing;
+  busy: boolean;
+  deadline: number;
+}>): JSX.Element => {
   const now = useSyncExternalStore(subscribeClock, currentSecond);
 
   return (
@@ -114,22 +119,80 @@ const EmailCodeActions = ({
   );
 };
 
+const codeErrorId = "browser-login-code-error";
+
+type CodeProblem = "none" | "malformed" | "rejected";
+
+const codeProblemMessage = {
+  malformed:
+    "Ese código no está completo o tiene caracteres que no usamos. Revísalo o solicita uno nuevo.",
+  rejected: "No pudimos validar ese código. Revísalo o solicita uno nuevo.",
+} as const;
+
+const codeProblem = (malformed: boolean, rejected: boolean): CodeProblem => {
+  if (malformed) {
+    return "malformed";
+  }
+
+  return rejected ? "rejected" : "none";
+};
+
+const EmailCodeField = ({
+  busy,
+  problem,
+  edited,
+}: Readonly<{
+  busy: boolean;
+  problem: CodeProblem;
+  edited: () => void;
+}>): JSX.Element => (
+  <>
+    <label htmlFor="browser-login-email-code">Código del correo</label>
+    <AccessInput
+      id="browser-login-email-code"
+      name="combinedCode"
+      autoCapitalize="characters"
+      autoComplete="one-time-code"
+      placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+      disabled={busy}
+      required
+      onChange={edited}
+      aria-invalid={problem !== "none"}
+      aria-describedby={problem === "none" ? "browser-login-code-help" : codeErrorId}
+    />
+    <p data-access-helper="" id="browser-login-code-help">
+      Pega el código de 24 caracteres, con o sin guiones.
+    </p>
+    {problem === "none" ? null : (
+      <p role="alert" id={codeErrorId} data-access-error="">
+        {codeProblemMessage[problem]}
+      </p>
+    )}
+  </>
+);
+
 const EmailCodeForm = ({ pairing }: Readonly<{ pairing: BrowserLoginPairing }>): JSX.Element => {
+  const [malformed, setMalformed] = useState(false);
+
   if (!PairingState.$is("AwaitingApproval")(pairing.state)) return <></>;
   const { emailStep, emailRetryAt } = pairing.state;
   const busy = emailStep === "submitting" || emailStep === "sending";
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
+    const input = event.currentTarget.elements.namedItem("combinedCode");
 
-    const code = Option.flatMap(
-      Schema.decodeUnknownOption(Schema.String)(
-        new FormData(event.currentTarget).get("combinedCode")
-      ),
-      (value) => Schema.decodeOption(EmailVerificationCode)(value.trim().toUpperCase())
-    );
-
-    if (Option.isSome(code)) pairing.completeEmail(code.value);
+    if (!Schema.is(Schema.instanceOf(HTMLInputElement))(input)) return;
+    Option.match(readEmailVerificationCode(input.value), {
+      onNone: () => {
+        setMalformed(true);
+        input.focus();
+      },
+      onSome: (code) => {
+        input.value = code;
+        pairing.completeEmail(code);
+      },
+    });
   };
 
   return (
@@ -139,28 +202,11 @@ const EmailCodeForm = ({ pairing }: Readonly<{ pairing: BrowserLoginPairing }>):
         Si tu correo está verificado en Fidy, recibirás un código para entrar.
       </p>
       <form onSubmit={submit}>
-        <label htmlFor="browser-login-email-code">Código del correo</label>
-        <AccessInput
-          id="browser-login-email-code"
-          name="combinedCode"
-          autoCapitalize="characters"
-          autoComplete="one-time-code"
-          placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
-          disabled={busy}
-          required
-          aria-invalid={emailStep === "rejected"}
-          aria-describedby={
-            emailStep === "rejected" ? "browser-login-code-error" : "browser-login-code-help"
-          }
+        <EmailCodeField
+          busy={busy}
+          problem={codeProblem(malformed, emailStep === "rejected")}
+          edited={() => setMalformed(false)}
         />
-        <p data-access-helper="" id="browser-login-code-help">
-          Pega el código completo de 24 caracteres.
-        </p>
-        {emailStep === "rejected" ? (
-          <p role="alert" id="browser-login-code-error" data-access-error="">
-            No pudimos validar ese código. Revísalo o solicita uno nuevo.
-          </p>
-        ) : null}
         <AccessAction kind="primary" disabled={busy} type="submit">
           {busy ? <Spinner /> : null}Confirmar y entrar
         </AccessAction>

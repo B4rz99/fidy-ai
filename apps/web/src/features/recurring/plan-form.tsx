@@ -6,6 +6,13 @@ import { Input } from "@/ui/components/input";
 import { ChoiceField } from "./fields";
 import { Field, IdentityFields, ScheduleFields } from "./form-fields";
 import type { Category, PlanInput } from "./model";
+import {
+  type PlanDraft,
+  PlanFeedbackContext,
+  type PlanProblem,
+  findPlanProblems,
+  parseMonthDay,
+} from "./plan-validation";
 
 const value = (form: FormData, key: string): string => {
   const entry = form.get(key);
@@ -13,8 +20,15 @@ const value = (form: FormData, key: string): string => {
   return Option.getOrElse(Schema.decodeUnknownOption(Schema.String)(entry), () => "").trim();
 };
 
-const day = (text: string): number | "last" =>
-  text === "último" || text === "last" ? "last" : Number(text);
+const planDraft = (form: FormData): PlanDraft => ({
+  kind: value(form, "kind"),
+  cardPayment: value(form, "cardPayment") === "yes",
+  frequency: value(form, "frequency"),
+  firstDate: value(form, "firstDate"),
+  endDate: value(form, "endDate"),
+  day1: value(form, "day1"),
+  day2: value(form, "day2"),
+});
 
 const parsePlan = (form: FormData, timeZone: PlanInput["timeZone"]): Option.Option<PlanInput> => {
   const currency = value(form, "currency").toUpperCase();
@@ -45,10 +59,13 @@ const parsePlan = (form: FormData, timeZone: PlanInput["timeZone"]): Option.Opti
       }
     ),
     ...Option.match(
-      Option.liftPredicate(frequency, (cadence) => cadence === "twice-monthly"),
+      Option.flatMap(
+        Option.liftPredicate(frequency, (cadence) => cadence === "twice-monthly"),
+        () => Option.all([parseMonthDay(value(form, "day1")), parseMonthDay(value(form, "day2"))])
+      ),
       {
         onNone: () => ({}),
-        onSome: () => ({ monthDays: [day(value(form, "day1")), day(value(form, "day2"))] }),
+        onSome: (monthDays) => ({ monthDays }),
       }
     ),
   });
@@ -67,30 +84,55 @@ export const PlanForm = ({
 }>): JSX.Element => {
   const [amountMode, setAmountMode] = useState(initial.amountMode ?? "unknown");
   const [invalid, setInvalid] = useState(false);
+  const [problems, setProblems] = useState<ReadonlyArray<PlanProblem>>([]);
+
+  const edited = (field: string): void =>
+    setProblems((current) =>
+      current.some((problem) => problem.clearedBy.includes(field))
+        ? current.filter((problem) => !problem.clearedBy.includes(field))
+        : current
+    );
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    const parsed = parsePlan(new FormData(event.currentTarget), initial.timeZone);
-    setInvalid(Option.isNone(parsed));
+    const form = new FormData(event.currentTarget);
+    const found = findPlanProblems(planDraft(form));
+    const parsed = found.length === 0 ? parsePlan(form, initial.timeZone) : Option.none();
+    setProblems(found);
+    setInvalid(found.length === 0 && Option.isNone(parsed));
+    const first = found[0];
+
+    if (first !== undefined) {
+      event.currentTarget.querySelector<HTMLElement>(`#recurring-${first.field}`)?.focus();
+    }
 
     if (Option.isSome(parsed)) onSubmit(parsed.value);
   };
 
   return (
-    <form onSubmit={submit} data-recurring-slot="plan-form" className="grid gap-4">
-      <fieldset disabled={disabled} className="grid gap-4">
-        <IdentityFields initial={initial} />
-        <AmountFields initial={initial} amountMode={amountMode} setAmountMode={setAmountMode} />
-        <ScheduleFields initial={initial} categories={categories} />
-        {invalid ? (
-          <p role="alert">
-            Revisa la fecha, moneda e importe. Un pago de tarjeta debe ser una transferencia.
-          </p>
-        ) : null}
-        <Button contentLayout="wrap" focusAppearance="subtle" type="submit">
-          Guardar
-        </Button>
-      </fieldset>
+    <form
+      onSubmit={submit}
+      onChange={(event) => {
+        if (Schema.is(Schema.instanceOf(HTMLInputElement))(event.target)) edited(event.target.name);
+      }}
+      data-recurring-slot="plan-form"
+      className="grid gap-4"
+    >
+      <PlanFeedbackContext value={{ problems, edited }}>
+        <fieldset disabled={disabled} className="grid gap-4">
+          <IdentityFields initial={initial} />
+          <AmountFields initial={initial} amountMode={amountMode} setAmountMode={setAmountMode} />
+          <ScheduleFields initial={initial} categories={categories} />
+          {invalid ? (
+            <p role="alert">
+              No pudimos guardar el recurrente. Revisa el nombre, la moneda y el importe.
+            </p>
+          ) : null}
+          <Button contentLayout="wrap" focusAppearance="subtle" type="submit">
+            Guardar
+          </Button>
+        </fieldset>
+      </PlanFeedbackContext>
     </form>
   );
 };

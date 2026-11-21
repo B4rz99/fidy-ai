@@ -11,12 +11,22 @@ import { AtomRegistry } from "effect/reactivity";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
-import { makeFidyClient } from "@/transport/client";
+import { IanaTimeZone, makeFidyClient } from "@/transport/client";
 import { RecurringFeature } from "@/features/recurring/feature";
+import type { PlanInput } from "@/features/recurring/model";
+import { PlanForm } from "@/features/recurring/plan-form";
 
 const plans = [
-  { id: "24000000-0000-4000-8000-000000017231", name: "Arriendo de prueba", kind: "expense" },
-  { id: "24000000-0000-4000-8000-000000017232", name: "Ingreso de prueba", kind: "income" },
+  {
+    id: "24000000-0000-4000-8000-000000017231",
+    name: "Arriendo de prueba",
+    kind: "expense",
+  },
+  {
+    id: "24000000-0000-4000-8000-000000017232",
+    name: "Ingreso de prueba",
+    kind: "income",
+  },
 ].map(({ id, name, kind }) => ({
   id,
   pauses: [],
@@ -213,6 +223,9 @@ const withWorkspace = (
     })
   );
 
+const filteredScope =
+  "Resumen filtrado: solo incluye los recurrentes que coinciden con los filtros.";
+
 type WorkspaceCheck = Effect.Effect<void, Cause.UnknownError>;
 
 const checkFilters = (presentation: string, container: HTMLElement): WorkspaceCheck =>
@@ -226,6 +239,17 @@ const checkFilters = (presentation: string, container: HTMLElement): WorkspaceCh
         expect(container.textContent).toContain("Arriendo de prueba");
         expect(container.textContent).not.toContain("Ingreso de prueba");
         expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
+
+        Match.value(presentation).pipe(
+          Match.when("Todos los recurrentes", () => undefined),
+          Match.orElse(() => {
+            expect(container.textContent).toContain(filteredScope);
+            expect(container.textContent).toContain(
+              "Sin recurrentes que coincidan con los filtros"
+            );
+            expect(container.textContent).not.toContain("Sin recurrentes este mes");
+          })
+        );
       })
     );
     yield* Effect.tryPromise(() => searchFor(container, "Sin coincidencias"));
@@ -249,6 +273,12 @@ const checkFilters = (presentation: string, container: HTMLElement): WorkspaceCh
         expect(container.textContent).toContain("Arriendo de prueba");
         expect(container.textContent).toContain("Ingreso de prueba");
         expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
+        expect(container.textContent).not.toContain(filteredScope);
+
+        Match.value(presentation).pipe(
+          Match.when("Todos los recurrentes", () => undefined),
+          Match.orElse(() => expect(container.textContent).toContain("Sin recurrentes este mes"))
+        );
       })
     );
   });
@@ -286,3 +316,121 @@ const checkEarlierDisclosure = (container: HTMLElement): WorkspaceCheck =>
 
 it("keeps the requested earlier month open after its fresh occurrences arrive", () =>
   withWorkspace(checkEarlierDisclosure));
+
+type RenderedPlanForm = Readonly<{
+  container: HTMLElement;
+  onSubmit: ReturnType<typeof vi.fn>;
+}>;
+
+const renderForm = (initial: Partial<PlanInput>): RenderedPlanForm => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const onSubmit = vi.fn();
+  act(() =>
+    createRoot(container).render(
+      createElement(PlanForm, {
+        initial: {
+          name: "Arriendo de prueba",
+          timeZone: IanaTimeZone.make("America/Bogota"),
+          firstDate: "2026-11-02",
+          ...initial,
+        },
+        categories: [],
+        disabled: false,
+        onSubmit,
+      })
+    )
+  );
+
+  return { container, onSubmit };
+};
+
+const save = (container: HTMLElement): void =>
+  act(() => container.querySelector("form")?.requestSubmit());
+
+const described = (element: unknown): string => {
+  const id = Schema.is(Schema.instanceOf(Element))(element)
+    ? element.getAttribute("aria-describedby")
+    : "";
+
+  return document.getElementById(id ?? "")?.textContent ?? "";
+};
+
+const typeInto = (input: HTMLInputElement, text: string): void =>
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, text);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+it("explains an out-of-range twice-monthly day at its field without the card-payment rule", () => {
+  const { container, onSubmit } = renderForm({
+    frequency: "twice-monthly",
+    monthDays: [15, "last"],
+  });
+
+  const firstDay = container.querySelector<HTMLInputElement>("#recurring-day1");
+
+  if (firstDay === null) throw new Error("Missing first day");
+  typeInto(firstDay, "32");
+  save(container);
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(firstDay);
+  expect(firstDay.getAttribute("aria-invalid")).toBe("true");
+  expect(described(firstDay)).toBe("Escribe un día del 1 al 31 o «último».");
+  expect(firstDay.value).toBe("32");
+  expect(container.textContent).not.toContain("tarjeta debe");
+  typeInto(firstDay, "1");
+  expect(firstDay.hasAttribute("aria-invalid")).toBe(false);
+});
+
+it("asks for two different twice-monthly days", () => {
+  const { container, onSubmit } = renderForm({
+    frequency: "twice-monthly",
+    monthDays: [15, 15],
+  });
+
+  save(container);
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(described(document.activeElement)).toBe("Elige un día diferente del primero.");
+  expect(document.activeElement?.id).toBe("recurring-day2");
+});
+
+it("identifies an end date that precedes the first date", () => {
+  const { container, onSubmit } = renderForm({ endDate: "2026-11-01" });
+  save(container);
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(document.activeElement?.id).toBe("recurring-endDate");
+  expect(described(document.activeElement)).toBe(
+    "La fecha final debe ser igual o posterior a la primera fecha."
+  );
+});
+
+it("explains the card-payment rule only for card payments that are not transfers", () => {
+  const { container, onSubmit } = renderForm({
+    cardPayment: true,
+    kind: "expense",
+  });
+
+  save(container);
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(document.activeElement?.id).toBe("recurring-cardPayment");
+  expect(described(document.activeElement)).toBe(
+    "Un pago de tarjeta debe tener el tipo Transferencia."
+  );
+});
+
+it("submits a valid twice-monthly plan with its last-day choice", () => {
+  const { container, onSubmit } = renderForm({
+    frequency: "twice-monthly",
+    monthDays: [15, "last"],
+  });
+
+  save(container);
+  expect(onSubmit).toHaveBeenCalledWith(
+    expect.objectContaining({
+      frequency: "twice-monthly",
+      monthDays: [15, "last"],
+    })
+  );
+});

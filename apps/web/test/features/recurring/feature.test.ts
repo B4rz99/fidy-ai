@@ -3,6 +3,7 @@ import {
   RouterProvider,
   createMemoryHistory,
   createRootRoute,
+  createRoute,
   createRouter,
 } from "@tanstack/react-router";
 import { type Cause, Effect, Layer, Match, Option, Schema } from "effect";
@@ -185,9 +186,12 @@ const withWorkspace = (
       });
 
       const registry = AtomRegistry.make();
+      const parent = createRootRoute({ component: Workspace });
 
       const router = createRouter({
-        routeTree: createRootRoute({ component: Workspace }),
+        routeTree: parent.addChildren([
+          createRoute({ getParentRoute: () => parent, path: "/app/recurring" }),
+        ]),
         context: { apiClient, sessionBinding: "recurring-feature-test" },
         history: createMemoryHistory({ initialEntries: ["/app/recurring"] }),
       });
@@ -434,3 +438,82 @@ it("submits a valid twice-monthly plan with its last-day choice", () => {
     })
   );
 });
+
+const panelElement = (): HTMLElement => {
+  const panel = document.querySelector('[role="dialog"]');
+
+  if (!Schema.is(Schema.instanceOf(HTMLElement))(panel)) throw new Error("Missing recurring panel");
+
+  return panel;
+};
+
+const panelInput = (id: string): HTMLInputElement => {
+  const input = panelElement().querySelector(`#${id}`);
+
+  if (!Schema.is(Schema.instanceOf(HTMLInputElement))(input)) throw new Error(`Missing ${id}`);
+
+  return input;
+};
+
+const nameField = (): HTMLInputElement => panelInput("recurring-name");
+
+const expectBlankCreation = (): Promise<void> =>
+  reactAssertion(() => {
+    expect(nameField().value).toBe("");
+    expect(panelElement().textContent).not.toContain("Borrador sin guardar");
+  });
+
+const openOccurrence = (container: HTMLElement): Promise<void> =>
+  reactWork(() =>
+    Array.from(container.querySelectorAll("button"))
+      .find((candidate) => candidate.textContent.includes("Ingreso de prueba"))
+      ?.click()
+  );
+
+const openCreation = (container: HTMLElement): WorkspaceCheck =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => click(container, "Nuevo recurrente"));
+    yield* Effect.tryPromise(() => reactAssertion(() => nameField()));
+  });
+
+const leaveDraft = (container: HTMLElement, name: string): WorkspaceCheck =>
+  Effect.gen(function* () {
+    yield* openCreation(container);
+
+    if (name !== "") {
+      typeInto(nameField(), name);
+      typeInto(panelInput("recurring-counterparty"), "Inmobiliaria Sur");
+    }
+
+    yield* Effect.tryPromise(() => openOccurrence(container));
+    yield* Effect.tryPromise(() =>
+      reactAssertion(() =>
+        expect(panelElement().querySelector("h2")?.textContent).toBe("Ingreso de prueba")
+      )
+    );
+    yield* openCreation(container);
+  });
+
+it("keeps a modified creation draft when another occurrence opens until it is discarded", () =>
+  withWorkspace((container) =>
+    Effect.gen(function* () {
+      yield* leaveDraft(container, "Arriendo oficina");
+      expect(nameField().value).toBe("Arriendo oficina");
+      expect(panelInput("recurring-counterparty").value).toBe("Inmobiliaria Sur");
+      expect(panelElement().textContent).toContain("Borrador sin guardar");
+      yield* Effect.tryPromise(() => click(panelElement(), "Descartar borrador"));
+      yield* Effect.tryPromise(expectBlankCreation);
+    })
+  ));
+
+it("opens a blank creation form after an untouched form or an explicit cancellation", () =>
+  withWorkspace((container) =>
+    Effect.gen(function* () {
+      yield* leaveDraft(container, "");
+      expect(panelElement().textContent).not.toContain("Borrador sin guardar");
+      typeInto(nameField(), "Arriendo oficina");
+      yield* Effect.tryPromise(() => click(panelElement(), "Cancelar"));
+      yield* openCreation(container);
+      yield* Effect.tryPromise(expectBlankCreation);
+    })
+  ));

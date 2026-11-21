@@ -1,9 +1,13 @@
+from base64 import b64decode, urlsafe_b64decode
 from copy import deepcopy
+from hashlib import sha256
+import hmac
+import json
 import unittest
 from unittest.mock import Mock, patch
 
 from disposition import KINDS, SCOPE, dispose, hold_reasons, require_isolation, unchanged_remaining, validate_scope, worker_deletion_order
-from provider import Provider, Refused
+from provider import Provider, Refused, multipart_read_session
 
 
 class InventorySafety(unittest.TestCase):
@@ -35,13 +39,12 @@ class InventorySafety(unittest.TestCase):
         snapshot = {"census": {"exact": [{"source": "structural_samples", "attention_rows": 7},
                                  {"source": "billing_attempts", "attention_rows": 2},
                                  {"source": "whatsapp_deliveries", "attention_rows": 4}]},
-                    "objects": {"exact": {"count": 0, "multipartClear": None}}}
+                    "objects": {"exact": {"count": 0, "multipartClear": True}}}
         self.assertEqual(hold_reasons(snapshot), [])
         snapshot["objects"]["exact"]["multipartClear"] = False
         self.assertEqual([hold["source"] for hold in hold_reasons(snapshot)], ["multipart-unverified"])
         snapshot["objects"]["exact"]["multipartClear"] = None
         snapshot["census"]["exact"].append({"source": "issued_r2_writers", "attention_rows": 1})
-        snapshot["objects"]["exact"]["count"] = 1
         self.assertEqual([hold["source"] for hold in hold_reasons(snapshot)],
                          ["issued_r2_writers", "multipart-unverified"])
 
@@ -103,6 +106,50 @@ class InventorySafety(unittest.TestCase):
 
 
 class ProviderReads(unittest.TestCase):
+    @patch("provider.time", return_value=1770000000)
+    def test_r2_session_only_lists_one_bucket_for_two_minutes(self, _time):
+        account, access, parent = "0" * 32, "1" * 32, "synthetic-parent"
+        hostname = f"{account}.r2.cloudflarestorage.com"
+        bucket = next(iter(SCOPE["buckets"]))
+        settings = multipart_read_session(account, hostname, access, parent, bucket)
+        session = b64decode(settings["AWS_SESSION_TOKEN"])
+        self.assertTrue(session.startswith(b"jwt/"))
+        jwt = session.removeprefix(b"jwt/")
+        header, payload, signature = jwt.split(b".")
+
+        def decode(part):
+            return urlsafe_b64decode(part + b"=" * (-len(part) % 4))
+
+        self.assertEqual(json.loads(decode(header)), {"alg": "HS256", "typ": "JWT"})
+        self.assertEqual(json.loads(decode(payload)), {
+            "bucket": bucket, "actions": ["ListMultipartUploads"], "sub": account, "iss": access,
+            "aud": hostname, "iat": 1770000000, "exp": 1770000120,
+        })
+        self.assertEqual(decode(signature), hmac.digest(sha256(parent.encode()).hexdigest().encode(),
+                                                        header + b"." + payload, "sha256"))
+        self.assertEqual(settings["AWS_SECRET_ACCESS_KEY"], sha256(jwt).hexdigest())
+        self.assertEqual(settings["AWS_ACCESS_KEY_ID"], access)
+
+    @patch("provider.subprocess.run")
+    def test_multipart_inspection_refuses_foreign_or_incomplete_listing(self, command):
+        service = Provider(account="0" * 32, zone="1" * 32, token="synthetic", builds_token="synthetic")
+        service.r2_parent_access_key = Mock(return_value="2" * 32)
+        bucket = next(iter(SCOPE["buckets"]))
+        with self.assertRaises(Refused):
+            service.multipart_clear("unrelated")
+        service.r2_parent_access_key.assert_not_called()
+        command.assert_not_called()
+        command.return_value.stdout = json.dumps({"Bucket": bucket, "IsTruncated": False})
+        self.assertTrue(service.multipart_clear(bucket))
+        command.return_value.stdout = json.dumps({"Bucket": bucket, "IsTruncated": True})
+        self.assertFalse(service.multipart_clear(bucket))
+        command.return_value.stdout = json.dumps({"Bucket": bucket, "IsTruncated": False,
+                                                  "Uploads": [{"Key": "private", "UploadId": "private"}]})
+        self.assertFalse(service.multipart_clear(bucket))
+        command.return_value.stdout = json.dumps({"Bucket": "unrelated", "IsTruncated": False})
+        with self.assertRaises(Refused):
+            service.multipart_clear(bucket)
+
     def test_complete_provider_pages_with_no_total_pages(self):
         class Read:
             pages = Provider.pages

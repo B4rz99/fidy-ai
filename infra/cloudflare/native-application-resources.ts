@@ -128,7 +128,7 @@ export const nativeSmokeExecutor = Effect.fn(function* (input: {
     reference: Cloudflare.Workflow("ReleaseSmokeReference", {
       workflowName,
       className: "ReleaseSmokeWorkflowV2",
-      scriptName: smoke.workerName,
+      scriptName: input.release.signupOpening ? workflowName : smoke.workerName,
     }),
   };
 });

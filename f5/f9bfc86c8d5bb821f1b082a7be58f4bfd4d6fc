@@ -1,0 +1,16 @@
+docs/security/ledger.md
+  h_c6d49c804e0ad2 5-7
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f5f9bfc86c8d5bb821f1b082a7be58f4bfd4d6fc",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

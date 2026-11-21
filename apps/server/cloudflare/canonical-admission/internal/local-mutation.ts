@@ -25,7 +25,6 @@ import {
   freePatCaller,
   grantsRequiredTier,
 } from "../../../src/shell/canonical-operations/operations";
-import { CurrentSuggestionCaller } from "../../canonical-operations/contract";
 import { listLaunchCategories } from "../../../src/core/categories/operations";
 import { decideOperationAccess } from "../../../src/shell/canonical-policy/operations";
 import { patRouteHeader } from "../../directory/contract";
@@ -40,6 +39,7 @@ import {
 import { newId } from "../../secret-material/operations";
 import {
   CanonicalAdmissionUnavailable,
+  CurrentSuggestionCaller,
   type LocalMutationResult,
   canonicalRequestProtection,
 } from "../contract";

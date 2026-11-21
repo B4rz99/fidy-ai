@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import { expect } from "vitest";
 import { storeReadinessUrl } from "../runtime/sqlite/contract";
 import { native, nativeOAuthPlatform } from "../user-store.test-fixture";
@@ -11,16 +11,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const create = yield* nativeOAuthPlatform;
       const runtime = yield* create();
       const directory = yield* native(() => runtime.getDurableObjectNamespace("DIRECTORY", "core"));
-      const ready = yield* native(() =>
-        directory.getByName("directory-v1").fetch(storeReadinessUrl)
-      );
+      const store = directory.getByName("directory-v1");
+      const ready = yield* native(() => store.fetch(storeReadinessUrl));
       expect(ready.ok).toBe(true);
       const capped = "a".repeat(64);
       const other = "b".repeat(64);
       const storage = yield* native(() =>
         runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
       );
-      const now = Date.now();
+      const now = yield* Clock.currentTimeMillis;
       for (let index = 0; index < 8; index += 1) {
         yield* native(() =>
           storage.exec(
@@ -31,9 +30,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           )
         );
       }
-      const dispatch = (source: string): Effect.Effect<Response> =>
+      type LeaseReply = Awaited<ReturnType<typeof store.fetch>>;
+      const dispatch = (source: string): Effect.Effect<LeaseReply> =>
         native(() =>
-          directory.getByName("directory-v1").fetch("https://directory.invalid/oauth/token", {
+          store.fetch("https://directory.invalid/oauth/token", {
             method: "POST",
             headers: {
               "content-type": "application/x-www-form-urlencoded",

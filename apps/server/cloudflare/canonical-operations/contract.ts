@@ -3,16 +3,7 @@ import {
   CanonicalOperationId,
 } from "../../src/core/canonical-operations/contract";
 import { maximumAtomicBatchCalls } from "../../src/shell/operations/contract";
-import {
-  type SuggestedOperationCaller,
-  freePatCaller,
-} from "../../src/shell/canonical-operations/operations";
-import { Context, Schema } from "effect";
-
-export const CurrentSuggestionCaller = Context.Reference<SuggestedOperationCaller>(
-  "@fidy/cloudflare/CurrentSuggestionCaller",
-  { defaultValue: () => freePatCaller([]) }
-);
+import { Schema } from "effect";
 
 export const BatchCalls = Schema.NonEmptyArray(Schema.Unknown).check(
   Schema.isMaxLength(maximumAtomicBatchCalls)

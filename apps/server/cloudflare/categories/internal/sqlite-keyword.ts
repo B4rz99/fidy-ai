@@ -14,7 +14,7 @@ import {
 import { validateKeywordRuleChange } from "../../../src/core/categories/operations";
 import { normalizeSearchText } from "../../../src/core/search/operations";
 import type { UserId } from "../../../src/core/identity/contract";
-import { CurrentSuggestionCaller } from "../../canonical-operations/contract";
+import { CurrentSuggestionCaller } from "../../canonical-admission/contract";
 import type { SuggestedOperationCaller } from "../../../src/shell/canonical-operations/operations";
 import { toApiFailure } from "../../../src/shell/categories/operations";
 import { NotFound, ValidationFailed } from "../../../src/shell/public-http/contract";

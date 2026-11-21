@@ -19,9 +19,9 @@ import { DisclosureSnapshot } from "../../src/shell/consent/contract";
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 import type { WorkerTelemetryEvent } from "../runtime/telemetry/contract";
 import type { CoreQueueEnvironment } from "./contract";
-import { makeCoreQueue } from "./runtime";
+import { coreQueueHandler } from "./runtime";
 
-const queue = makeCoreQueue(makeWorkerTelemetry(() => undefined));
+const queue = coreQueueHandler(makeWorkerTelemetry(() => undefined));
 
 const userId = alice.user;
 
@@ -360,7 +360,7 @@ it("contains a defective acknowledgement and an ordinary handoff failure in one 
         identity(0)
       );
       const records: TelemetryWorkRecord[] = [];
-      const observedQueue = makeCoreQueue(makeWorkerTelemetry((record) => records.push(record)));
+      const observedQueue = coreQueueHandler(makeWorkerTelemetry((record) => records.push(record)));
       const privateFailure = "private-acknowledgement-failure-sentinel";
 
       const workflow: Workflow = {
@@ -468,7 +468,7 @@ it.each(independentHandoffs)(
         const now = yield* Clock.currentTimeMillis;
         const events: WorkerTelemetryEvent[] = [];
 
-        const observedQueue = makeCoreQueue(
+        const observedQueue = coreQueueHandler(
           makeWorkerTelemetry({
             exportWork: () => undefined,
             exportEvent: (event) => events.push(event),
@@ -634,7 +634,7 @@ it.each(independentHandoffs)(
         const records: TelemetryWorkRecord[] = [];
         const telemetry = makeWorkerTelemetry((record) => records.push(record));
 
-        const interruptedQueue = makeCoreQueue({
+        const interruptedQueue = coreQueueHandler({
           ...telemetry,
           observeWork: (observation, work) =>
             Effect.gen(function* () {

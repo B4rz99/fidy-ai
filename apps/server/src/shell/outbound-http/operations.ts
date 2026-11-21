@@ -43,6 +43,12 @@ export const makeAccessSigningKeysOutboundHttp = (
   }>
 ): OutboundHttpService => makeCloudflareAccessSigningKeysHttp(input);
 
+export const accessSigningKeysOutboundHttp = Effect.fn(function* (issuer: string) {
+  const httpClient = yield* HttpClient.HttpClient;
+
+  return makeAccessSigningKeysOutboundHttp({ issuer, httpClient });
+});
+
 export const makeKapsoOutboundHttp = (
   input: Readonly<{
     readonly apiKey: Redacted.Redacted<string>;

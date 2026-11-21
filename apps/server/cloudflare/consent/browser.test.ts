@@ -26,32 +26,67 @@ type Call = { user: typeof alice; path: string } & Partial<
 >;
 
 const send = Effect.fn(function* (db: Journey, input: Call) {
+  const init = {
+    method: input.method ?? "GET",
+    headers: {
+      origin: "https://app.fidyapp.com",
+      "content-type": "application/json",
+      "fidy-session-binding": input.user.session,
+      cookie: "__Host-fidy_session=" + input.user.bearer,
+      ...input.headers,
+    },
+  };
+
   return yield* native(() =>
     db.send(
-      new Request("https://api.fidyapp.com" + input.path, {
-        method: input.method ?? "GET",
-        headers: {
-          origin: "https://app.fidyapp.com",
-          "content-type": "application/json",
-          "fidy-session-binding": input.user.session,
-          cookie: "__Host-fidy_session=" + input.user.bearer,
-          ...input.headers,
-        },
-        ...(input.method === "GET" || input.body === undefined
-          ? {}
-          : { body: JSON.stringify(input.body) }),
-      })
+      new Request(
+        "https://api.fidyapp.com" + input.path,
+        input.method === "GET" || input.body === undefined
+          ? init
+          : { ...init, body: JSON.stringify(input.body) }
+      )
     )
   );
 });
 
 const json = Effect.fn(function* <Value, Encoded>(
   reply: Response,
-  shape: Schema.Codec<Value, Encoded>
+  codec: Schema.Codec<Value, Encoded>
 ) {
   expect(reply.status).toBe(200);
 
-  return yield* Schema.decodeUnknownEffect(shape)(yield* native(() => reply.json()));
+  return yield* Schema.decodeUnknownEffect(codec)(yield* native(() => reply.json()));
+});
+
+const expectStatus = Effect.fn(function* (db: Journey, input: Call, status: number) {
+  expect((yield* send(db, input)).status, String(status)).toBe(status);
+});
+
+const refusedConsentRead = Effect.fn(function* (db: Journey, testPath: string) {
+  const reply = yield* send(
+    db,
+    testPath === withdrawal
+      ? { user: alice, path: testPath, method: "POST", body: { confirm: true } }
+      : { user: alice, path: testPath }
+  );
+
+  expect(reply.status).toBe(401);
+  expect(yield* native(() => reply.text())).not.toContain(webSignupDisclosure().contentSha256);
+});
+
+const historyMutations = ["processing_withdrawal", "processing_renewal"].flatMap((type) =>
+  [
+    "UPDATE consent_history SET occurred_at_ms=0 WHERE record_type=?",
+    "DELETE FROM consent_history WHERE record_type=?",
+  ].map((statement) => [type, statement] as const)
+);
+
+const refusedHistoryMutation = Effect.fn(function* (
+  db: Journey,
+  [type, statement]: readonly [string, string]
+) {
+  const result = yield* Effect.result(Effect.tryPromise(() => db.exec(statement, type)));
+  expect(Result.isFailure(result)).toBe(true);
 });
 
 const granted = Effect.fn(function* (
@@ -122,6 +157,31 @@ const counts = Effect.fn(function* (db: Journey, user: typeof alice) {
   );
 });
 
+const cancelledDelivery = Effect.fn(function* (db: Journey, target: string) {
+  const body = target === withdrawal ? { confirm: true } : yield* decision(db);
+  const before = yield* counts(db, alice);
+  const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(body);
+
+  const outcome = yield* Effect.result(
+    Effect.tryPromise(() =>
+      db.runtime.dispatchFetch("https://api.fidyapp.com" + target, {
+        method: "POST",
+        headers: {
+          origin: "https://app.fidyapp.com",
+          cookie: "__Host-fidy_session=" + alice.bearer,
+          "fidy-session-binding": alice.session,
+          "content-type": "application/json",
+        },
+        body: encoded,
+        signal: AbortSignal.abort(),
+      })
+    )
+  );
+
+  expect(Result.isSuccess(outcome) ? outcome.success.status : 503).toBe(503);
+  expect(yield* counts(db, alice)).toEqual(before);
+});
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "returns each original signup disclosure before and after withdrawal, renews its exact reference once and allows a new withdrawal",
@@ -135,13 +195,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           yield* json(yield* send(db, { user: bob, path: auth }), ProcessingAuthorization)
         ).toEqual({ authorization: second });
 
-        for (const input of [
-          { user: bob, body },
-          { user: alice, body: { ...body, authorizationReference: remoteGrant } },
-          { user: alice, body: { ...body, disclosureSha256: "0".repeat(64) } },
-        ]) {
-          expect((yield* send(db, { ...input, path: renewal, method: "POST" })).status).toBe(403);
-        }
+        yield* Effect.forEach(
+          [
+            { user: bob, body },
+            { user: alice, body: { ...body, authorizationReference: remoteGrant } },
+            { user: alice, body: { ...body, disclosureSha256: "0".repeat(64) } },
+          ],
+          (input) => expectStatus(db, { ...input, path: renewal, method: "POST" }, 403),
+          { discard: true }
+        );
 
         const renew = (): ReturnType<typeof send> =>
           send(db, { user: alice, path: renewal, method: "POST", body });
@@ -174,19 +236,22 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           { method: "GET", status: 405 },
         ];
 
-        for (const input of attempts) {
-          const { status, ...request } = input;
-          expect(
-            (yield* send(db, {
-              user: alice,
-              path: withdrawal,
-              method: "POST",
-              body: { confirm: true },
-              ...request,
-            })).status,
-            String(status)
-          ).toBe(status);
-        }
+        yield* Effect.forEach(
+          attempts,
+          ({ status, ...request }) =>
+            expectStatus(
+              db,
+              {
+                user: alice,
+                path: withdrawal,
+                method: "POST",
+                body: { confirm: true },
+                ...request,
+              },
+              status
+            ),
+          { discard: true }
+        );
 
         const available = (yield* Clock.currentTimeMillis) + 60000;
         yield* native(() =>
@@ -274,18 +339,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           yield* native(() => db.exec("UPDATE web_sessions SET idle_expires_at_ms=created_at_ms"));
         }
 
-        for (const testPath of [path, auth, withdrawal]) {
-          const reply = yield* send(db, {
-            user: alice,
-            path: testPath,
-            ...(testPath === withdrawal ? { method: "POST", body: { confirm: true } } : {}),
-          });
-
-          expect(reply.status).toBe(401);
-          expect(yield* native(() => reply.text())).not.toContain(
-            webSignupDisclosure().contentSha256
-          );
-        }
+        yield* Effect.forEach(
+          [path, auth, withdrawal],
+          (testPath) => refusedConsentRead(db, testPath),
+          { discard: true }
+        );
 
         expect(yield* counts(db, alice)).toEqual([{ decisions: 0, audit: 0 }]);
         expect(yield* counts(db, bob)).toEqual([{ decisions: 0, audit: 0 }]);
@@ -314,11 +372,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           )
         );
 
-        const result = yield* send(db, {
-          user: alice,
-          path: { copy: auth, renew: renewal, withdraw: withdrawal }[mode],
-          ...(mode === "copy" ? {} : { method: "POST", body }),
-        });
+        const target = { copy: auth, renew: renewal, withdraw: withdrawal }[mode];
+
+        const result = yield* send(
+          db,
+          mode === "copy"
+            ? { user: alice, path: target }
+            : { user: alice, path: target, method: "POST", body }
+        );
 
         expect(result.status).toBe(401);
         expect(yield* native(() => result.text())).not.toContain(
@@ -334,30 +395,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const { db } = yield* setup();
 
-        for (const target of [withdrawal, renewal]) {
-          const body = target === withdrawal ? { confirm: true } : yield* decision(db);
-          const before = yield* counts(db, alice);
-          const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(body);
-
-          const outcome = yield* Effect.result(
-            Effect.tryPromise(() =>
-              db.runtime.dispatchFetch("https://api.fidyapp.com" + target, {
-                method: "POST",
-                headers: {
-                  origin: "https://app.fidyapp.com",
-                  cookie: "__Host-fidy_session=" + alice.bearer,
-                  "fidy-session-binding": alice.session,
-                  "content-type": "application/json",
-                },
-                body: encoded,
-                signal: AbortSignal.abort(),
-              })
-            )
-          );
-
-          if (Result.isSuccess(outcome)) expect(outcome.success.status).toBe(503);
-          expect(yield* counts(db, alice)).toEqual(before);
-        }
+        yield* Effect.forEach([withdrawal, renewal], (target) => cancelledDelivery(db, target), {
+          discard: true,
+        });
       })
   );
   test.effect.each(["short", "long", "bad-character", "bad-json", "oversized"] as const)(
@@ -419,15 +459,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         );
         expect((yield* renew()).status).toBe(200);
 
-        for (const type of ["processing_withdrawal", "processing_renewal"]) {
-          for (const statement of [
-            "UPDATE consent_history SET occurred_at_ms=0 WHERE record_type=?",
-            "DELETE FROM consent_history WHERE record_type=?",
-          ]) {
-            const result = yield* Effect.result(Effect.tryPromise(() => db.exec(statement, type)));
-            expect(Result.isFailure(result)).toBe(true);
-          }
-        }
+        yield* Effect.forEach(
+          historyMutations,
+          (mutation) => refusedHistoryMutation(db, mutation),
+          { discard: true }
+        );
 
         expect((yield* renew()).status).toBe(200);
         expect(yield* counts(db, alice)).toEqual([{ decisions: 2, audit: 2 }]);

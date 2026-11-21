@@ -18,10 +18,10 @@ import {
 } from "../../src/shell/connections/contract";
 
 import type { CoreRejectionBoundary } from "../runtime/operational-health/contract";
-import { makeCoreRejectionObserver } from "../runtime/operational-health/runtime";
+import { coreRejectionObserver } from "../runtime/operational-health/runtime";
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { FetchHttpClient, HttpClient } from "effect/http";
-import { Clock, Context, Effect, Layer, Option } from "effect";
+import { Clock, Context, Effect, Layer, ManagedRuntime, Option } from "effect";
 import { decodeTraceParent } from "../../src/shell/observability/operations";
 import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
 import type { TelemetryService } from "../../src/shell/observability/contract";
@@ -38,6 +38,8 @@ import {
   releaseAdmission,
   renewAcceptanceWindow,
 } from "../release-isolation/operations";
+
+const coreHttpRuntime = ManagedRuntime.make(Layer.empty);
 
 const rejectionBoundary = (request: Request): CoreRejectionBoundary => {
   const pathname = new URL(request.url).pathname;
@@ -126,8 +128,8 @@ const consumeVersionOverride = (request: Request): Request => {
   return new Request(request, { headers });
 };
 
-export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): CoreHttpHandler => {
-  const observeRejections = makeCoreRejectionObserver();
+export const coreHttpHandler = ({ telemetry, institutions }: CoreComposition): CoreHttpHandler => {
+  const observeRejections = coreRejectionObserver();
 
   return (incoming, installed) => {
     const environment = closedHostEnvironment({
@@ -187,7 +189,7 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
             ),
           })
         ),
-      (program) => Effect.runPromise(program, { signal: incoming.signal })
+      (program) => coreHttpRuntime.runPromise(program, { signal: incoming.signal })
     );
   };
 };

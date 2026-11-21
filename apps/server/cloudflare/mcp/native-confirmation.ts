@@ -1,44 +1,62 @@
-import { type Cause, Clock, Effect, Option, Schema, type Scope } from "effect";
+import { type Cause, Clock, Data, Effect, Option, Schema, type Scope } from "effect";
 import { McpProtocol, McpSchema } from "effect/ai";
 import { OAuthConfirmationAttempt } from "../../src/shell/mcp/contract";
 import { OAuthNativeReview } from "../oauth-confirmation/contract";
 import { readBoundedRequestBody } from "../http/operations";
 import type { RequestBodyPolicy } from "../http/contract";
 
+const [ReviewAttempt, DecisionAttempt] = OAuthConfirmationAttempt.members;
+
+const DecisionFields = Schema.Struct({
+  reference: DecisionAttempt.fields.reference,
+  response: DecisionAttempt.fields.response,
+});
+
+export type NativeConfirmationRead = Data.TaggedEnum<{
+  Invalid: {};
+  Valid: { readonly attempt: Option.Option<OAuthConfirmationAttempt> };
+}>;
+
+export const NativeConfirmationRead = Data.taggedEnum<NativeConfirmationRead>();
+
 export const readNativeConfirmation = (
   input: Readonly<{
     context: McpSchema.McpRequestContext["Service"];
     supplied: Option.Option<OAuthConfirmationAttempt>;
   }>
-):
-  | Readonly<{ _tag: "Invalid" }>
-  | Readonly<{ _tag: "Valid"; attempt: Option.Option<OAuthConfirmationAttempt> }> => {
-  if (Option.isSome(input.supplied)) return { _tag: "Valid", attempt: input.supplied };
+): NativeConfirmationRead => {
+  if (Option.isSome(input.supplied)) {
+    return NativeConfirmationRead.Valid({ attempt: input.supplied });
+  }
+
   const context = input.context;
 
   if (context.requestState !== undefined) {
-    const attempt = Schema.decodeUnknownOption(OAuthConfirmationAttempt)({
-      _tag: "Decision",
+    const attempt = Schema.decodeUnknownOption(DecisionFields)({
       reference: context.requestState,
       response: context.inputResponses?.review ?? null,
-    });
+    }).pipe(Option.map((fields) => DecisionAttempt.make(fields)));
 
-    return Option.isNone(attempt) ? { _tag: "Invalid" } : { _tag: "Valid", attempt };
+    return Option.isNone(attempt)
+      ? NativeConfirmationRead.Invalid()
+      : NativeConfirmationRead.Valid({ attempt });
   }
 
-  return {
-    _tag: "Valid",
+  return NativeConfirmationRead.Valid({
     attempt:
       context.clientCapabilities.elicitation?.form === undefined
         ? Option.none()
-        : Option.some({ _tag: "Review" }),
-  };
+        : Option.some(ReviewAttempt.make({})),
+  });
 };
 
-type NativeConfirmation =
-  | Readonly<{ _tag: "InputRequired"; result: McpSchema.InputRequired }>
-  | Readonly<{ _tag: "Unavailable" }>
-  | Readonly<{ _tag: "Decision"; attempt: OAuthConfirmationAttempt }>;
+export type NativeConfirmation = Data.TaggedEnum<{
+  InputRequired: { readonly result: McpSchema.InputRequired };
+  Unavailable: {};
+  Decision: { readonly attempt: OAuthConfirmationAttempt };
+}>;
+
+export const NativeConfirmation = Data.taggedEnum<NativeConfirmation>();
 
 type NativeConfirmationFailure =
   | Effect.Error<ReturnType<typeof readBoundedRequestBody>>
@@ -77,8 +95,7 @@ export const requestNativeConfirmation = (
     });
 
     if (input.context.protocolVersion === McpProtocol.v2026_07_28.protocolVersion) {
-      return {
-        _tag: "InputRequired" as const,
+      return NativeConfirmation.InputRequired({
         result: new McpSchema.InputRequired({
           requestState: review.reference,
           inputRequests: {
@@ -88,22 +105,20 @@ export const requestNativeConfirmation = (
             },
           },
         }),
-      };
+      });
     }
 
     const legacy = yield* Effect.serviceOption(McpSchema.McpServerClient);
 
-    if (Option.isNone(legacy)) return { _tag: "Unavailable" as const };
+    if (Option.isNone(legacy)) return NativeConfirmation.Unavailable();
     const client = yield* legacy.value.getClient;
     const remaining = Math.max(1, review.expiresAtMilliseconds - (yield* Clock.currentTimeMillis));
     const decision = yield* client.elicit(params).pipe(Effect.timeout(remaining));
 
-    return {
-      _tag: "Decision" as const,
-      attempt: OAuthConfirmationAttempt.make({
-        _tag: "Decision",
+    return NativeConfirmation.Decision({
+      attempt: DecisionAttempt.make({
         reference: review.reference,
         response: yield* Schema.encodeEffect(McpSchema.ElicitResult)(decision),
       }),
-    };
+    });
   });

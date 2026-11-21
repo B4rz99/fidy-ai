@@ -1,6 +1,6 @@
 import { parseMoneyInput } from "@/transport/money-input";
 import { ReviewCommand, ReviewDraft } from "@/transport/client";
-import { DateTime, Option, Schema } from "effect";
+import { DateTime, Option, Schema, Struct } from "effect";
 import type { CanonicalSuccess } from "@/transport/client";
 
 export type Workspace = CanonicalSuccess<"ingestion.getReviewWorkspace">["data"];
@@ -12,6 +12,10 @@ export type Detail = CanonicalSuccess<"ingestion.getReviewItem">["data"];
 export type Draft = ReviewDraft;
 
 export type Command = ReviewCommand;
+
+export const ReviewCommands = ReviewCommand.pipe(Schema.toTaggedUnion("_tag"));
+
+const CreationFields = ReviewCommands.cases.Create.mapFields(Struct.omit(["_tag"]));
 
 export type Category = CanonicalSuccess<"categories.listCategories">["data"][number];
 
@@ -89,8 +93,7 @@ export const creation = ({
 
   if (Option.isNone(money)) return Option.none();
 
-  return Schema.decodeOption(Schema.toCodecJson(ReviewCommand))({
-    _tag: "Create",
+  return Schema.decodeOption(Schema.toCodecJson(CreationFields))({
     id: detail.item.id,
     revision: detail.revision,
     ...Option.match(draft.categoryId, {
@@ -109,10 +112,16 @@ export const creation = ({
         onNone: () => ({}),
         onSome: (direction) => ({ direction }),
       }),
-      ...(draft.counterparty.trim() === "" ? {} : { counterparty: draft.counterparty.trim() }),
+      ...Option.match(
+        Option.liftPredicate(draft.counterparty.trim(), (value) => value !== ""),
+        {
+          onNone: () => ({}),
+          onSome: (counterparty) => ({ counterparty }),
+        }
+      ),
       occurredAt: draft.occurredAt,
     },
-  });
+  }).pipe(Option.map((fields) => ReviewCommands.cases.Create.make(fields)));
 };
 
 export const localOccurrence = ({

@@ -96,7 +96,7 @@ const monthlyIncomeAndExpenses = DashboardCatalogEntry.make({
   },
 });
 
-export const makeDashboardCatalog = (
+export const dashboardCatalog = (
   input: Readonly<{ readonly restaurantCategoryId: CategoryId }>
 ): DashboardCatalog => [
   monthlySpending,
@@ -121,13 +121,13 @@ const defaultLeaf = (entry: DashboardCatalogEntry, id: WidgetId): LeafNode => ({
   widget: makeCatalogWidget({ entry, id }),
 });
 
-export const makeDefaultDashboard = (
+export const defaultDashboard = (
   input: Readonly<{
     readonly restaurantCategoryId: CategoryId;
     readonly widgetIds: DefaultWidgetIds;
   }>
 ): DashboardDocument => {
-  const catalog = makeDashboardCatalog({ restaurantCategoryId: input.restaurantCategoryId });
+  const catalog = dashboardCatalog({ restaurantCategoryId: input.restaurantCategoryId });
   const [firstId, secondId, thirdId, fourthId] = input.widgetIds;
   const first = defaultLeaf(catalog[0], firstId);
   const second = defaultLeaf(catalog[1], secondId);

@@ -3,7 +3,7 @@ import { OutboundHttpFailure } from "~/shell/outbound-http/contract";
 import { expect, it } from "@effect/vitest";
 import { Effect, Exit, Option, Redacted } from "effect";
 import { FetchHttpClient, Headers, HttpClient, HttpClientResponse } from "effect/http";
-import { makeOpenAiOutboundHttp } from "~/shell/outbound-http/operations";
+import { openAiOutboundHttp } from "~/shell/outbound-http/operations";
 
 it.effect("uses the fixed OpenAI destination without redirect authority or trace propagation", () =>
   Effect.gen(function* () {
@@ -26,7 +26,7 @@ it.effect("uses the fixed OpenAI destination without redirect authority or trace
       })
     );
 
-    const http = makeOpenAiOutboundHttp({ apiKey: Redacted.make("synthetic-api-key"), client });
+    const http = openAiOutboundHttp({ apiKey: Redacted.make("synthetic-api-key"), client });
     const result = yield* http.execute('{"model":"gpt-6-luna","store":false}');
     expect(result.status).toBe(200);
     expect(new TextDecoder().decode(result.body)).toBe('{"choices":[]}');
@@ -57,7 +57,7 @@ it.effect("bounds streamed OpenAI response bytes and performs no hidden retry", 
       );
     });
 
-    const http = makeOpenAiOutboundHttp({ apiKey: Redacted.make("synthetic-api-key"), client });
+    const http = openAiOutboundHttp({ apiKey: Redacted.make("synthetic-api-key"), client });
     assert.deepStrictEqual(
       Exit.fail(yield* Effect.flip(http.execute("{}"))),
       Exit.fail(

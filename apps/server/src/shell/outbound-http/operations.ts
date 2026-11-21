@@ -43,6 +43,12 @@ export const makeAccessSigningKeysOutboundHttp = (
   }>
 ): OutboundHttpService => makeCloudflareAccessSigningKeysHttp(input);
 
+export const accessSigningKeysOutboundHttp = Effect.fn(function* (issuer: string) {
+  const httpClient = yield* HttpClient.HttpClient;
+
+  return makeAccessSigningKeysOutboundHttp({ issuer, httpClient });
+});
+
 export const makeKapsoOutboundHttp = (
   input: Readonly<{
     readonly apiKey: Redacted.Redacted<string>;
@@ -154,15 +160,44 @@ export const makeMicrosoftOutboundHttp = (
   }>
 ): ProviderOidcHttpService => oidcHttp({ ...input, provider: "microsoft" });
 
-export const makeCliReleaseOutboundHttp = (
-  httpClient: HttpClient.HttpClient
-): CliReleaseHttpService => cliReleaseHttp(httpClient);
+export class AccessSigningKeysHttp extends Context.Service<
+  AccessSigningKeysHttp,
+  Readonly<{ forIssuer: (issuer: string) => OutboundHttpService }>
+>()("@fidy/server/shell/outbound-http/operations/AccessSigningKeysHttp") {
+  static readonly make = Effect.gen(function* () {
+    const httpClient = yield* HttpClient.HttpClient;
 
-export const makeBancolombiaSandboxOutboundHttp = (
-  client: HttpClient.HttpClient
-): BancolombiaSandboxHttpService => bancolombiaSandboxHttp(client);
+    return {
+      forIssuer: (issuer: string): OutboundHttpService =>
+        makeCloudflareAccessSigningKeysHttp({ issuer, httpClient }),
+    };
+  });
 
-export const makeOpenAiOutboundHttp = (
+  static readonly layer = Layer.effect(this, this.make);
+}
+
+export class CliReleaseHttp extends Context.Service<CliReleaseHttp, CliReleaseHttpService>()(
+  "@fidy/server/shell/outbound-http/operations/CliReleaseHttp"
+) {
+  static readonly make = Effect.gen(function* () {
+    return cliReleaseHttp(yield* HttpClient.HttpClient);
+  });
+
+  static readonly layer = Layer.effect(this, this.make);
+}
+
+export class BancolombiaSandboxHttp extends Context.Service<
+  BancolombiaSandboxHttp,
+  BancolombiaSandboxHttpService
+>()("@fidy/server/shell/outbound-http/operations/BancolombiaSandboxHttp") {
+  static readonly make = Effect.gen(function* () {
+    return bancolombiaSandboxHttp(yield* HttpClient.HttpClient);
+  });
+
+  static readonly layer = Layer.effect(this, this.make);
+}
+
+export const openAiOutboundHttp = (
   input: Readonly<{
     apiKey: Redacted.Redacted<string>;
     client: HttpClient.HttpClient;

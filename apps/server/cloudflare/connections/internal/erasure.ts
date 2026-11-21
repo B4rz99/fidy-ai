@@ -1,11 +1,11 @@
-import type { ErasureProjection } from "../../erasure-store/contract";
+import { type ErasureProjection, ErasureQuiescence } from "../../erasure-store/contract";
 
 export const projections: ReadonlyArray<ErasureProjection> = [
   {
     id: "connection_accounts",
     dataClass: "projections",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM connection_accounts r JOIN connections c ON c.id=r.connection_id WHERE c.user_id=?",
       params: [userId],
@@ -25,7 +25,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "connection_grants",
     dataClass: "credentials",
     dependencies: ["connection_accounts"],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM connection_grants r JOIN connection_attempts a ON a.id=r.attempt_id JOIN connections c ON c.id=a.connection_id WHERE c.user_id=?",
       params: [userId],
@@ -45,7 +45,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "connection_authorizations",
     dataClass: "credentials",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM connection_authorizations r JOIN connection_attempts a ON a.id=r.attempt_id JOIN connections c ON c.id=a.connection_id WHERE c.user_id=?",
       params: [userId],
@@ -65,7 +65,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "connection_attempts",
     dataClass: "projections",
     dependencies: ["connection_authorizations", "connection_grants"],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM connection_attempts r WHERE EXISTS(SELECT 1 FROM connections c WHERE c.id=r.connection_id AND c.user_id=?)",
@@ -87,7 +87,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "connections",
     dataClass: "projections",
     dependencies: ["connection_attempts"],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM connections r WHERE r.user_id=?",

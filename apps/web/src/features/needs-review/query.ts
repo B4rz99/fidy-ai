@@ -1,3 +1,4 @@
+import { browserRuntime } from "@/transport/browser-runtime";
 import { observeReviewQuery } from "./query-observation";
 import { reviewItemKey, reviewWorkspaceKey } from "./query-keys";
 import { Data, DateTime, Effect, Option } from "effect";
@@ -8,6 +9,11 @@ import { AsyncResult, Atom, type AtomRegistry, Reactivity } from "effect/reactiv
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
 import type { ReviewWorkspaceQuery } from "./decisions";
 import type { Filter } from "./view-navigation";
+
+type ReviewWorkspaceQueries = Readonly<{
+  source: ReviewWorkspaceQuery;
+  active: ReviewWorkspaceQuery;
+}>;
 
 const renderCommitRetention = "400 millis";
 
@@ -42,10 +48,7 @@ export const reviewWorkspaceQueries = (
     filter: Filter;
     page: number;
   }>
-): Readonly<{
-  source: ReviewWorkspaceQuery;
-  active: ReviewWorkspaceQuery;
-}> => {
+): ReviewWorkspaceQueries => {
   const key = new WorkspaceKey(input);
 
   return { source: sources(key), active: activeQueries(key) };
@@ -126,7 +129,7 @@ const prepareFirstMaterial = (
     }>,
   source: ReviewWorkspaceQuery
 ): Promise<void> =>
-  Effect.runPromise(
+  browserRuntime.runPromise(
     Effect.gen(function* () {
       const snapshot = AsyncResult.value(registry.get(source));
       const selected = Option.flatMap(snapshot, ({ data }) => data.selectedDetail);
@@ -167,7 +170,7 @@ const refreshReviewRead = (
   DateTime.toEpochMillis(DateTime.nowUnsafe()) - before.timestamp >= recentSnapshotMilliseconds;
 
 export const prepareReviewWorkspace = (input: ReviewPreparation): Promise<void> =>
-  Effect.runPromise(
+  browserRuntime.runPromise(
     Effect.gen(function* () {
       const { apiClient, registry, filter, page, signal } = input;
 
@@ -221,7 +224,7 @@ export const preloadReviewMaterial = ({
   client: FidyClient;
   registry: AtomRegistry.AtomRegistry;
 }>): Promise<void> =>
-  Effect.runPromise(
+  browserRuntime.runPromise(
     Effect.gen(function* () {
       if (registry.get(visited(client))) {
         return;

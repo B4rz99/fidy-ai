@@ -20,7 +20,7 @@ type PrivacyHistory = Readonly<{
 
 class PageKey extends Data.Class<{ generation: number; cursor: PrivacyTransactionPage["next"] }> {}
 
-type ReadyPage = Extract<PrivacyHistoryState["query"], { _tag: "Ready" }>;
+type ReadyPage = Data.TaggedEnum.Value<PrivacyHistoryState["query"], "Ready">;
 
 const pagePending = (query: PrivacyHistoryState["query"]): boolean =>
   !Predicate.isTagged(query, "Ready") || query.waiting || Option.isSome(query.refreshFailure);

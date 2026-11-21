@@ -1,4 +1,4 @@
-import { Array, Cause, Deferred, Effect, Option, Predicate } from "effect";
+import { Array, Cause, type Data, Deferred, Effect, Option, Predicate } from "effect";
 import { type AsyncResult, Atom, Reactivity } from "effect/reactivity";
 import { type CanonicalInput, type CanonicalSuccess, type FidyClient } from "@/transport/client";
 import { isCanonicalInput } from "@/transport/canonical-input";
@@ -173,12 +173,8 @@ const live = (owner: Owner, generation: number): boolean =>
 
 const fresh = <A, E>(
   query: ReturnType<typeof presentCanonicalQuery<A, E>>
-): query is Extract<
-  ReturnType<typeof presentCanonicalQuery<A, E>>,
-  {
-    _tag: "Ready";
-  }
-> => Predicate.isTagged(query, "Ready") && !query.waiting && Option.isNone(query.refreshFailure);
+): query is Data.TaggedEnum.Value<ReturnType<typeof presentCanonicalQuery<A, E>>, "Ready"> =>
+  Predicate.isTagged(query, "Ready") && !query.waiting && Option.isNone(query.refreshFailure);
 
 const currentRevisions = (owner: Owner, correction: Correction): boolean => {
   const history = owner.get.once(owner.history).query;
@@ -491,11 +487,11 @@ const readAffectedIdentities = (owner: Owner): Effect.Effect<boolean> =>
     if (missing.length === 0) return true;
     const client = yield* owner.client;
 
-    for (const id of missing) {
-      if (!(yield* readIdentity(client, id))) return false;
-    }
-
-    return true;
+    return yield* Effect.reduce(
+      missing,
+      () => true,
+      (observedAll, id) => (observedAll ? readIdentity(client, id) : Effect.succeed(false))
+    );
   });
 
 const readIdentity = Effect.fnUntraced(function* (client: Client, id: Transaction["id"]) {

@@ -1,6 +1,7 @@
 import { Clock, Effect, Option, type Redacted, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
-import { makeBancolombiaSandboxOutboundHttp } from "../../../src/shell/outbound-http/operations";
+import { BancolombiaSandboxHttpRequest } from "../../../src/shell/outbound-http/contract";
+import { sandboxHttp } from "./sandbox-http";
 import {
   BancolombiaAuthenticationFailed,
   type BancolombiaBankGrant,
@@ -33,11 +34,14 @@ const inspectToken = (
   token: Token
 ): Effect.Effect<boolean, BancolombiaAuthenticationFailed> =>
   Effect.gen(function* () {
-    const response = yield* makeBancolombiaSandboxOutboundHttp(input.httpClient).execute({
-      _tag: "InspectBankToken",
-      ...token,
-      assertion: yield* input.assertion,
-    });
+    const http = yield* sandboxHttp(input.httpClient);
+
+    const response = yield* http.execute(
+      BancolombiaSandboxHttpRequest.InspectBankToken({
+        ...token,
+        assertion: yield* input.assertion,
+      })
+    );
 
     if (response.status !== successfulStatus) return yield* failed();
 
@@ -57,11 +61,11 @@ const revokeToken = (
   token: Token
 ): Effect.Effect<void, BancolombiaAuthenticationFailed> =>
   Effect.gen(function* () {
-    const response = yield* makeBancolombiaSandboxOutboundHttp(input.httpClient).execute({
-      _tag: "RevokeBankToken",
-      ...token,
-      assertion: yield* input.assertion,
-    });
+    const http = yield* sandboxHttp(input.httpClient);
+
+    const response = yield* http.execute(
+      BancolombiaSandboxHttpRequest.RevokeBankToken({ ...token, assertion: yield* input.assertion })
+    );
 
     if (response.status !== successfulStatus) return yield* failed();
   }).pipe(Effect.mapError(failed));
@@ -145,18 +149,11 @@ export const revokeGrant = (input: Cleanup): Effect.Effect<void, BancolombiaAuth
       prepareCleanupToken(input, token).pipe(Effect.result)
     );
 
-    let incomplete = false;
+    const cleaned = yield* Effect.forEach(prepared, (token) =>
+      Result.isFailure(token)
+        ? Effect.succeed(false)
+        : cleanupToken(input, token.success).pipe(Effect.result, Effect.map(Result.isSuccess))
+    );
 
-    for (const token of prepared) {
-      if (Result.isFailure(token)) {
-        incomplete = true;
-        continue;
-      }
-
-      const cleaned = yield* cleanupToken(input, token.success).pipe(Effect.result);
-
-      if (Result.isFailure(cleaned)) incomplete = true;
-    }
-
-    if (incomplete) return yield* failed();
+    if (!cleaned.every(Boolean)) return yield* failed();
   }).pipe(Effect.timeout("60 seconds"), Effect.mapError(failed));

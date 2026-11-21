@@ -61,10 +61,9 @@ const fixtureCurrency = (index: number): Currency => {
   return Currency.make(index % 3 === 1 ? "USD" : "EUR");
 };
 
-const fixtureAmounts = (
-  index: number,
-  worst: boolean
-): Readonly<{ cap: BudgetStatus["budget"]["cap"]; spent: BudgetStatus["spent"] }> => {
+type FixtureAmounts = Pick<BudgetStatus, "spent"> & Pick<BudgetStatus["budget"], "cap">;
+
+const fixtureAmounts = (index: number, worst: boolean): FixtureAmounts => {
   const selected = amountCases[index % amountCases.length] ?? ["100", "0"];
   const amounts = index === 2 ? ["1", "1"] : selected;
   const currency = fixtureCurrency(index);
@@ -93,20 +92,22 @@ const fixtureStatus = ({
   const currency = cap.currency;
   const difference = BigDecimal.subtract(cap.amount, spent.amount);
 
+  const budget = {
+    createdAt: period.from,
+    updatedAt: period.from,
+    id: BudgetSchema.fields.id.make(
+      `24000000-0000-4000-8000-${String(index + 1).padStart(uuidSuffixLength, "0")}`
+    ),
+    categoryId: category.id,
+    cap,
+  };
+
   const common = {
     period,
-    budget: {
-      createdAt: period.from,
-      updatedAt: period.from,
-      id: BudgetSchema.fields.id.make(
-        `24000000-0000-4000-8000-${String(index + 1).padStart(uuidSuffixLength, "0")}`
-      ),
-      categoryId: category.id,
-      cap,
-      ...(worst && index === worstRowCount - 1
-        ? {}
-        : { groupName: worst && index < 2 ? groupLimitName : `Grupo ${index + 1}` }),
-    },
+    budget:
+      worst && index === worstRowCount - 1
+        ? budget
+        : { ...budget, groupName: worst && index < 2 ? groupLimitName : `Grupo ${index + 1}` },
     spent,
   };
 

@@ -1,7 +1,7 @@
 import { PendingRead } from "@/ui/components/pending-read";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { DateTime, Option, Schema } from "effect";
+import { DateTime, Option, Predicate, Schema } from "effect";
 import { type JSX, useMemo, useState } from "react";
 import { type CanonicalSuccess, TransactionQueryValues } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
@@ -100,25 +100,31 @@ type PageProps = Props &
 const SpendingPage = ({ category, spent, period, user, cursor, next }: PageProps): JSX.Element => {
   const client = useRouter().options.context.apiClient;
 
+  const baseQuery = {
+    from: period.from,
+    to: period.to,
+    categoryId: category.id,
+    currency: spent.currency,
+    direction: "outflow" as const,
+  };
+
   const [resource] = useState(() =>
     client.query("transactions", "listTransactions", {
-      query: {
-        from: period.from,
-        to: period.to,
-        categoryId: category.id,
-        currency: spent.currency,
-        direction: "outflow",
-        ...(Option.isSome(cursor) ? { cursor: cursor.value } : {}),
-      },
+      query: Option.match(cursor, {
+        onNone: () => baseQuery,
+        onSome: (value) => ({ ...baseQuery, cursor: value }),
+      }),
     })
   );
 
   const state = useAtomValue(resource).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(resource);
 
-  if (state._tag === "Failure") return <SpendingRetry retry={refresh} waiting={state.waiting} />;
+  if (Predicate.isTagged(state, "Failure")) {
+    return <SpendingRetry retry={refresh} waiting={state.waiting} />;
+  }
 
-  if (state._tag !== "Ready") return <PendingRead label="Cargando movimientos" />;
+  if (!Predicate.isTagged(state, "Ready")) return <PendingRead label="Cargando movimientos" />;
 
   return (
     <div className="grid gap-3">

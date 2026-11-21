@@ -40,11 +40,22 @@ const draftFacts = (draft: BulkDraft, props: BulkProps): Changes => ({
     Option.fromNullishOr(props.categories.find((category) => category.id === draft.categoryId)),
     { onNone: () => ({}), onSome: (category) => ({ categoryId: category.id }) }
   ),
-  ...(draft.direction === "inflow" || draft.direction === "outflow"
-    ? { direction: draft.direction }
-    : {}),
-  ...(draft.counterparty.trim() !== "" ? { counterparty: draft.counterparty.trim() } : {}),
-  ...(draft.notes.trim() !== "" ? { notes: draft.notes.trim() } : {}),
+  ...Option.match(
+    Option.liftPredicate(
+      draft.direction,
+      (direction): direction is "inflow" | "outflow" =>
+        direction === "inflow" || direction === "outflow"
+    ),
+    { onNone: () => ({}), onSome: (direction) => ({ direction }) }
+  ),
+  ...Option.match(
+    Option.liftPredicate(draft.counterparty.trim(), (counterparty) => counterparty !== ""),
+    { onNone: () => ({}), onSome: (counterparty) => ({ counterparty }) }
+  ),
+  ...Option.match(
+    Option.liftPredicate(draft.notes.trim(), (notes) => notes !== ""),
+    { onNone: () => ({}), onSome: (notes) => ({ notes }) }
+  ),
 });
 
 const draftMoney = (draft: BulkDraft, props: BulkProps): Option.Option<Changes> => {

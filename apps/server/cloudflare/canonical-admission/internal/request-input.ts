@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Predicate, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import { getBoundOperationCatalog } from "../../../src/shell/canonical-catalog/contract";
 import {
@@ -20,45 +20,47 @@ const bodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
 export const normalized = (input: Schema.Json): Schema.Json => {
   if (Array.isArray(input)) return input.map(normalized);
 
-  if (input !== null && typeof input === "object") {
-    return Object.fromEntries(
-      Object.entries(input)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, value]) => [key, normalized(value)])
-    );
+  if (
+    input === null ||
+    Predicate.isString(input) ||
+    Predicate.isNumber(input) ||
+    Predicate.isBoolean(input)
+  ) {
+    return input;
   }
 
-  return input;
+  return Object.fromEntries(
+    Object.entries(input)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, value]) => [key, normalized(value)])
+  );
 };
 
-const requestParams = (
-  request: Request,
-  operation: CatalogOperation
-): Readonly<Record<string, string>> => {
+const requestParams = (request: Request, operation: CatalogOperation): Schema.Json => {
   const actual = new URL(request.url).pathname.split("/");
-  const params: Record<string, string> = {};
 
-  for (const [index, segment] of operation.route.split("/").entries()) {
-    if (segment.startsWith(":")) params[segment.slice(1)] = decodeURIComponent(actual[index] ?? "");
-  }
-
-  return params;
+  return Object.fromEntries(
+    operation.route
+      .split("/")
+      .flatMap((segment, index): ReadonlyArray<readonly [string, string]> =>
+        segment.startsWith(":") ? [[segment.slice(1), decodeURIComponent(actual[index] ?? "")]] : []
+      )
+  );
 };
 
-const requestQuery = (
-  request: Request
-): Readonly<Record<string, string | ReadonlyArray<string>>> => {
+const requestQuery = (request: Request): Schema.Json => {
   const url = new URL(request.url);
-  const query: Record<string, string | string[]> = {};
 
-  for (const key of new Set(url.searchParams.keys())) {
-    const values = url.searchParams.getAll(key);
-    const first = values[0];
+  return Object.fromEntries(
+    [...new Set(url.searchParams.keys())].flatMap(
+      (key): ReadonlyArray<readonly [string, string | ReadonlyArray<string>]> => {
+        const values = url.searchParams.getAll(key);
+        const first = values[0];
 
-    if (first !== undefined) query[key] = values.length === 1 ? first : values;
-  }
-
-  return query;
+        return first === undefined ? [] : [[key, values.length === 1 ? first : values]];
+      }
+    )
+  );
 };
 
 const rawInput = ({

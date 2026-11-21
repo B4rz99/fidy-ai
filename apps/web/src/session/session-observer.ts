@@ -1,5 +1,6 @@
 import type { InitialBrowserSession } from "@/transport/initial-session";
-import { type Cause, Effect, Option } from "effect";
+import { browserRuntime } from "@/transport/browser-runtime";
+import { type Cause, Data, Effect, Option, Predicate } from "effect";
 import type { BrowserSessionLifetime } from "@/transport/session-binding";
 import {
   type BrowserSessionEntryFailure,
@@ -13,13 +14,24 @@ type BindingEntry = Readonly<{
   initial: BrowserSessionObservation;
 }>;
 
-type BindingLifecycle =
-  | Readonly<{ _tag: "CheckingInitial" }>
-  | Readonly<{ _tag: "Bound"; entry: BindingEntry }>
-  | Readonly<{ _tag: "Rechecking"; entry: BindingEntry }>
-  | Readonly<{ _tag: "Unavailable" }>
-  | Readonly<{ _tag: "Retired" }>
-  | Readonly<{ _tag: "Disposed" }>;
+type BindingLifecycle = Data.TaggedEnum<{
+  CheckingInitial: {};
+  Bound: { readonly entry: BindingEntry };
+  Rechecking: { readonly entry: BindingEntry };
+  Unavailable: {};
+  Retired: {};
+  Disposed: {};
+}>;
+
+const BindingLifecycle = Data.taggedEnum<BindingLifecycle>();
+
+const checkingInitial = BindingLifecycle.$is("CheckingInitial");
+
+const rechecking = BindingLifecycle.$is("Rechecking");
+
+const reading = Predicate.or(checkingInitial, rechecking);
+
+const retirable = Predicate.or(reading, BindingLifecycle.$is("Bound"));
 
 export type BindingState = BindingEntry & Readonly<{ checking: boolean }>;
 
@@ -85,52 +97,51 @@ const cancelBinding = (
 export const observeBinding = (input: BindingObserver): (() => void) => {
   const { apiOrigin, initial, owner, expired, update, failed } = input;
   const lifetime = new AbortController();
-  let state: BindingLifecycle = { _tag: "CheckingInitial" };
+  let state: BindingLifecycle = BindingLifecycle.CheckingInitial();
   const first = initial.apiOrigin === apiOrigin ? initial.take(owner) : Option.none();
   let consumed = false;
   const cancel = (): void => cancelBinding(lifetime, first);
 
   const retire = (): void => {
-    if (state._tag === "CheckingInitial" || state._tag === "Bound" || state._tag === "Rechecking") {
-      state = { _tag: "Retired" };
+    if (retirable(state)) {
+      state = BindingLifecycle.Retired();
       cancel();
     }
   };
 
   const validate = (): void => {
-    if (state._tag === "Bound") {
-      state = { _tag: "Rechecking", entry: state.entry };
+    if (BindingLifecycle.$is("Bound")(state)) {
+      state = BindingLifecycle.Rechecking({ entry: state.entry });
       update({ ...state.entry, checking: true });
-    } else if (state._tag !== "CheckingInitial" || consumed) {
+    } else if (!checkingInitial(state) || consumed) {
       return;
     }
 
     const prepared = consumed ? Option.none() : first;
     consumed = true;
-    Effect.runFork(
-      bindingRead(prepared, apiOrigin, state._tag === "CheckingInitial").pipe(
+    browserRuntime.runFork(
+      bindingRead(prepared, apiOrigin, checkingInitial(state)).pipe(
         Effect.matchCause({
           onSuccess: (current) => {
-            if (state._tag !== "CheckingInitial" && state._tag !== "Rechecking") return;
+            if (!reading(state)) return;
 
-            if (state._tag === "Rechecking" && current.binding !== state.entry.session.binding) {
+            if (rechecking(state) && current.binding !== state.entry.session.binding) {
               retire();
               expired();
 
               return;
             }
 
-            const entry =
-              state._tag === "Rechecking"
-                ? state.entry
-                : createEntry(current, lifetime.signal, validate);
+            const entry = rechecking(state)
+              ? state.entry
+              : createEntry(current, lifetime.signal, validate);
 
-            state = { _tag: "Bound", entry };
+            state = BindingLifecycle.Bound({ entry });
             update({ ...entry, checking: false });
           },
           onFailure: () => {
-            if (state._tag === "CheckingInitial" || state._tag === "Rechecking") {
-              state = { _tag: "Unavailable" };
+            if (reading(state)) {
+              state = BindingLifecycle.Unavailable();
               cancel();
               failed();
             }
@@ -144,7 +155,7 @@ export const observeBinding = (input: BindingObserver): (() => void) => {
   const removeListeners = observeBindingEvents(validate, retire);
 
   return () => {
-    state = { _tag: "Disposed" };
+    state = BindingLifecycle.Disposed();
     cancel();
     removeListeners();
   };

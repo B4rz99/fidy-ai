@@ -40,7 +40,7 @@ export const executeSchedule = <E>(
         )
     );
 
-    if (failed) return yield* new ScheduledWorkFailed();
+    if (failed) return yield* new ScheduledWorkFailed({ cause: Option.none() });
   });
 
 export const executeDueSchedule = <E>(

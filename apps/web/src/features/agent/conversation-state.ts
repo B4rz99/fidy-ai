@@ -1,5 +1,6 @@
+import { browserRuntime } from "@/transport/browser-runtime";
 import { browserSecureRandom } from "@/browser/crypto";
-import { type Context, Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import type { Atom } from "effect/reactivity";
 import { HostedTurnQuotaExceeded, HostedTurnRequest } from "@/transport/hosted-turn-client";
 import type {
@@ -75,7 +76,7 @@ const rejectSubmission = (
     }))
   );
 
-type Channel = Context.Service.Shape<HostedTurnClient>;
+type Channel = HostedTurnClient["Service"];
 
 const progressChecks = 12;
 
@@ -89,25 +90,53 @@ export type ConversationLifetime = Readonly<{
   active: () => boolean;
 }>;
 
+type TurnProgress = ReturnType<Channel["hostedTurn"]["progress"]>;
+
+const pollTurn = (
+  channel: Channel,
+  { setConversation, active }: Pick<ConversationLifetime, "setConversation" | "active">,
+  { current, attempt }: Readonly<{ current: Proposal | Processing; attempt: number }>
+): Effect.Effect<
+  Option.Option<Proposal | Processing>,
+  Effect.Error<TurnProgress>,
+  Effect.Services<TurnProgress>
+> => {
+  if (!("status" in current) || attempt >= progressChecks) {
+    return Effect.succeedSome(current);
+  }
+
+  const pending = current;
+
+  return Effect.gen(function* () {
+    if (!active()) return Option.none();
+    yield* Effect.sync(() => setTurn(setConversation, { tag: "polling", value: pending }));
+    yield* Effect.sleep("5 seconds");
+
+    if (!active()) return Option.none();
+    const next = yield* channel.hostedTurn.progress({ payload: { turnId: pending.turnId } });
+
+    return yield* pollTurn(
+      channel,
+      { setConversation, active },
+      { current: next, attempt: attempt + 1 }
+    );
+  });
+};
+
 const followTurn = (
   channel: Channel,
   initial: Proposal | Processing,
   { setConversation, active }: ConversationLifetime
 ): Effect.Effect<void> =>
   Effect.gen(function* () {
-    let current = initial;
+    const settled = yield* pollTurn(
+      channel,
+      { setConversation, active },
+      { current: initial, attempt: 0 }
+    );
 
-    for (let attempt = 0; "status" in current && attempt < progressChecks; attempt++) {
-      if (!active()) return;
-      const pending = current;
-      yield* Effect.sync(() => setTurn(setConversation, { tag: "polling", value: pending }));
-      yield* Effect.sleep("5 seconds");
-
-      if (!active()) return;
-      current = yield* channel.hostedTurn.progress({ payload: { turnId: current.turnId } });
-    }
-
-    yield* Effect.sync(() => setTurn(setConversation, proposedTurn(current)));
+    if (Option.isNone(settled)) return;
+    yield* Effect.sync(() => setTurn(setConversation, proposedTurn(settled.value)));
   }).pipe(Effect.catch(() => Effect.sync(() => retainUncertain(setConversation, initial))));
 
 export const conversationCommands = ({
@@ -251,7 +280,7 @@ const submitConversation = ({
   }
 
   const entry: Entry = {
-    id: Effect.runSync(browserSecureRandom.uuidV4().pipe(Effect.orDie)),
+    id: browserRuntime.runSync(browserSecureRandom.uuidV4().pipe(Effect.orDie)),
     from: "user",
     text: displayText,
   };

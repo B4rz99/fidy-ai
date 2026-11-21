@@ -7,9 +7,13 @@ import {
   patScopeCopy,
   recipientLabelLimit,
 } from "@/transport/client";
-import { Clock, DateTime, Effect, Option, Predicate, Redacted } from "effect";
+import { type Data, DateTime, Match, Option, Predicate, Redacted } from "effect";
 import { type FormEvent, type JSX, type RefCallback, useState, useSyncExternalStore } from "react";
-import type { PATCreationActions, PATCreationDisplay, ReviewedManualPATGrant } from "./issuance";
+import {
+  type PATCreationActions,
+  PATCreationDisplay,
+  type ReviewedManualPATGrant,
+} from "./issuance";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Badge } from "@/ui/components/badge";
 import { Button } from "@/ui/components/button";
@@ -53,8 +57,8 @@ const LifetimeSelector = ({
   state,
   update,
 }: Readonly<{
-  state: Extract<PATCreationDisplay, { _tag: "Editing" }>;
-  update: (state: Extract<PATCreationDisplay, { _tag: "Editing" }>) => void;
+  state: Data.TaggedEnum.Value<PATCreationDisplay, "Editing">;
+  update: (state: Data.TaggedEnum.Value<PATCreationDisplay, "Editing">) => void;
 }>): JSX.Element => (
   <fieldset className="settings-token-lifetime">
     <legend className="font-medium">Duración</legend>
@@ -80,8 +84,8 @@ const ScopeSelector = ({
   state,
   update,
 }: Readonly<{
-  state: Extract<PATCreationDisplay, { _tag: "Editing" }>;
-  update: (state: Extract<PATCreationDisplay, { _tag: "Editing" }>) => void;
+  state: Data.TaggedEnum.Value<PATCreationDisplay, "Editing">;
+  update: (state: Data.TaggedEnum.Value<PATCreationDisplay, "Editing">) => void;
 }>): JSX.Element => {
   const selectedScopes = new Set(state.scopes);
 
@@ -117,8 +121,8 @@ const GrantEditor = ({
   update,
   review,
 }: Readonly<{
-  state: Extract<PATCreationDisplay, { _tag: "Editing" }>;
-  update: (state: Extract<PATCreationDisplay, { _tag: "Editing" }>) => void;
+  state: Data.TaggedEnum.Value<PATCreationDisplay, "Editing">;
+  update: (state: Data.TaggedEnum.Value<PATCreationDisplay, "Editing">) => void;
   review: () => void;
 }>): JSX.Element => {
   const normalizedLabel = state.recipientLabel.trim();
@@ -260,24 +264,21 @@ const subscribeRetryClock = (changed: () => void): (() => void) => {
 };
 
 const currentRetrySecond = (): number =>
-  Math.floor(Effect.runSync(Clock.currentTimeMillis) / retryClockMilliseconds);
+  Math.floor(DateTime.nowUnsafe().epochMilliseconds / retryClockMilliseconds);
 
-type RefusalDisplay = Extract<PATCreationDisplay, { _tag: "Refused" }>;
+type RefusalDisplay = Data.TaggedEnum.Value<PATCreationDisplay, "Refused">;
 
-const refusalDescription = (refusal: RefusalDisplay["refusal"], remaining: number): string => {
-  switch (refusal._tag) {
-    case "ReviewExpired":
-      return "La revisión venció. Revisa de nuevo los permisos y la duración antes de crear el token.";
-    case "Input":
-      return "Revisa el nombre, los permisos y la duración antes de crear el token.";
-    case "Consent":
-      return "Necesitas una autorización de tratamiento vigente para crear el token. Iniciar sesión no la renueva.";
-    case "Authority":
-      return "Inicia sesión para volver a revisar y crear el token.";
-    case "RateLimited":
-      return `Alcanzaste el límite de creación. Espera ${remaining} segundos antes de preparar otra revisión.`;
-  }
-};
+const refusalDescription = (refusal: RefusalDisplay["refusal"], remaining: number): string =>
+  Match.valueTags(refusal, {
+    ReviewExpired: () =>
+      "La revisión venció. Revisa de nuevo los permisos y la duración antes de crear el token.",
+    Input: () => "Revisa el nombre, los permisos y la duración antes de crear el token.",
+    Consent: () =>
+      "Necesitas una autorización de tratamiento vigente para crear el token. Iniciar sesión no la renueva.",
+    Authority: () => "Inicia sesión para volver a revisar y crear el token.",
+    RateLimited: () =>
+      `Alcanzaste el límite de creación. Espera ${remaining} segundos antes de preparar otra revisión.`,
+  });
 
 const refusalRecovery = (
   state: RefusalDisplay,
@@ -311,7 +312,7 @@ const RefusedState = ({
   state,
   prepareReview,
 }: Readonly<{
-  state: Extract<PATCreationDisplay, { _tag: "Refused" }>;
+  state: Data.TaggedEnum.Value<PATCreationDisplay, "Refused">;
   prepareReview: () => void;
 }>): JSX.Element => {
   const now = useSyncExternalStore(subscribeRetryClock, currentRetrySecond);
@@ -338,7 +339,7 @@ const UncertainState = ({
   state,
   prepareAnother,
 }: Readonly<{
-  state: Extract<PATCreationDisplay, { _tag: "Uncertain" }>;
+  state: Data.TaggedEnum.Value<PATCreationDisplay, "Uncertain">;
   prepareAnother: () => void;
 }>): JSX.Element => (
   <section aria-label="Creación sin confirmar" className="flex min-w-0 flex-col gap-4">
@@ -368,7 +369,7 @@ const IdentityConfirmationState = ({
   state,
   actions,
 }: Readonly<{
-  state: Extract<PATCreationDisplay, { _tag: "IdentityConfirmation" }>;
+  state: Data.TaggedEnum.Value<PATCreationDisplay, "IdentityConfirmation">;
   actions: PATCreationActions;
 }>): JSX.Element => (
   <div className="flex flex-col gap-4">
@@ -398,30 +399,32 @@ const CreationContent = ({
   state,
   actions,
 }: Readonly<{ state: PATCreationDisplay; actions: PATCreationActions }>): JSX.Element => {
-  switch (state._tag) {
-    case "Editing":
-      return <GrantEditor state={state} update={actions.update} review={actions.review} />;
-    case "Reviewing":
-    case "Issuing":
-      return (
-        <GrantReview
-          grant={state.grant}
-          issuing={Predicate.isTagged(state, "Issuing")}
-          confirm={actions.confirm}
-          edit={actions.edit}
-        />
-      );
-    case "IdentityConfirmation":
-      return <IdentityConfirmationState state={state} actions={actions} />;
-    case "Refused":
-      return <RefusedState state={state} prepareReview={actions.prepareReview} />;
-    case "Uncertain":
-      return <UncertainState state={state} prepareAnother={actions.prepareReview} />;
-    case "Issued":
-      return (
-        <IssuedGrant issued={state.issued} copyToClipboard={actions.copy} reset={actions.reset} />
-      );
-  }
+  const review = ({ grant }: Readonly<{ grant: ReviewedManualPATGrant }>): JSX.Element => (
+    <GrantReview
+      grant={grant}
+      issuing={Predicate.isTagged(state, "Issuing")}
+      confirm={actions.confirm}
+      edit={actions.edit}
+    />
+  );
+
+  return PATCreationDisplay.$match(state, {
+    Editing: (editing) => (
+      <GrantEditor state={editing} update={actions.update} review={actions.review} />
+    ),
+    Reviewing: review,
+    Issuing: review,
+    IdentityConfirmation: (confirmation) => (
+      <IdentityConfirmationState state={confirmation} actions={actions} />
+    ),
+    Refused: (refused) => <RefusedState state={refused} prepareReview={actions.prepareReview} />,
+    Uncertain: (uncertain) => (
+      <UncertainState state={uncertain} prepareAnother={actions.prepareReview} />
+    ),
+    Issued: ({ issued }) => (
+      <IssuedGrant issued={issued} copyToClipboard={actions.copy} reset={actions.reset} />
+    ),
+  });
 };
 
 export const ManualPATView = ({

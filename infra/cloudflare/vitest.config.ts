@@ -10,7 +10,12 @@ const nativeFileMilliseconds: ReadonlyMap<string, number> = new Map(
   })
 );
 
-const nativeProcessTests = ["local-emulation.test.ts", "openai-conformance-script.test.ts"];
+const nativeProcessTests = [
+  "local-emulation.test.ts",
+  "openai-conformance-script.test.ts",
+  "smoke-schema.test.ts",
+  "workers.test.ts",
+];
 
 class InfrastructureTestSequencer extends BaseSequencer {
   override sort(files: TestSpecification[]): Promise<TestSpecification[]> {

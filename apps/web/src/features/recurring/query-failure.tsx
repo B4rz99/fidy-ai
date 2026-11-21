@@ -1,7 +1,28 @@
-import type { JSX } from "react";
+import { type JSX, useState } from "react";
 import { Predicate } from "effect";
 import type { CanonicalQueryState } from "@/transport/canonical-query";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
+
+type FailureCopy = Readonly<{ title: string; description: string }>;
+
+const failureCopy = (limited: boolean, retried: boolean): FailureCopy => {
+  if (limited) {
+    return {
+      title: "Alcanzaste el límite de solicitudes",
+      description: "Inténtalo de nuevo más tarde. Tus datos siguen guardados.",
+    };
+  }
+
+  return retried
+    ? {
+        title: "El reintento no funcionó",
+        description: "Vuelve a intentarlo en unos minutos.",
+      }
+    : {
+        title: "No pudimos cargar tus recurrentes",
+        description: "Vuelve a intentarlo.",
+      };
+};
 
 export const RecurringQueryFailure = ({
   states,
@@ -12,6 +33,8 @@ export const RecurringQueryFailure = ({
   waiting: boolean;
   retry: () => void;
 }>): JSX.Element => {
+  const [retried, setRetried] = useState(false);
+
   const limited = states.some(
     (state) =>
       Predicate.isTagged(state, "Failure") &&
@@ -19,21 +42,20 @@ export const RecurringQueryFailure = ({
       Predicate.isTagged(state.failure.error, "ResourceLimited")
   );
 
+  const copy = failureCopy(limited, retried && !waiting);
+
   return (
     <div className="p-5">
       <CanonicalQueryRetry
-        title={
-          limited ? "Alcanzaste el límite de solicitudes" : "No pudimos cargar tus recurrentes"
-        }
-        description={
-          limited
-            ? "Inténtalo de nuevo más tarde. Tus datos siguen guardados."
-            : "Tus datos no se han reemplazado por una lista vacía."
-        }
+        title={copy.title}
+        description={copy.description}
         retryLabel="Reintentar"
         retryingLabel="Reintentando…"
         waiting={waiting}
-        onRetry={retry}
+        onRetry={() => {
+          setRetried(true);
+          retry();
+        }}
       />
     </div>
   );

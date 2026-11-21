@@ -227,7 +227,7 @@ const ReadyEditor = ({
   const locked = editor.locked || disabled;
 
   if (editor.detail.item.status !== "pending") {
-    return <HistoryDetail detail={editor.detail} originalExpiresAt={originalExpiresAt} />;
+    return <HistoryDetail {...{ detail: editor.detail, originalExpiresAt, locked, decisions }} />;
   }
 
   const failed = ["uncertain", "failed"].includes(editor.feedback);
@@ -306,9 +306,13 @@ const historyTitles = {
 const HistoryDetail = ({
   detail,
   originalExpiresAt,
+  locked,
+  decisions,
 }: Readonly<{
   detail: Detail;
   originalExpiresAt: Item["expiresAt"];
+  locked: boolean;
+  decisions: ReviewDecisions;
 }>): JSX.Element => (
   <div data-review="columns">
     <OriginalMaterial item={detail.item} expiresAt={originalExpiresAt} />
@@ -324,6 +328,15 @@ const HistoryDetail = ({
         <p className="mt-3 text-sm text-muted-foreground">{historyDescription(detail.item)}</p>
       )}
       <CreatedTransactionLink item={detail.item} />
+      {detail.item.status === "skipped" ? (
+        <Button
+          className="mt-5"
+          onClick={() => decisions.bulk(true, [detail.item])}
+          disabled={locked}
+        >
+          Restaurar
+        </Button>
+      ) : null}
     </div>
   </div>
 );
@@ -368,7 +381,7 @@ const historyDescription = (item: Item): string => {
     return "Creaste una transacción a partir de este elemento.";
   }
 
-  return "Selecciona este elemento y pulsa Restaurar para volver a editarlo. Su vencimiento original se conserva.";
+  return "Restáuralo para devolverlo a Pendientes y volver a editarlo. Su vencimiento original se conserva.";
 };
 
 const ReviewEditorNotice = ({

@@ -66,6 +66,11 @@ export const ReviewNavigation = (props: Props): JSX.Element => {
   );
 };
 
+const searchLabel = (filter: Filter): string =>
+  filter === "pending"
+    ? "Buscar pendientes en esta página"
+    : "Buscar en el historial de esta página";
+
 const ReviewFilters = (props: Props & Readonly<{ searchHelp: string }>): JSX.Element => (
   <div data-review="filters">
     {props.filter !== "pending" ? (
@@ -103,8 +108,8 @@ const ReviewFilters = (props: Props & Readonly<{ searchHelp: string }>): JSX.Ele
     />
     <div data-review="search">
       <Input
-        aria-label="Buscar pendientes en esta página"
-        placeholder="Buscar en esta página"
+        aria-label={searchLabel(props.filter)}
+        placeholder={searchLabel(props.filter)}
         aria-describedby={props.searchHelp}
         value={props.search}
         disabled={props.unavailable}

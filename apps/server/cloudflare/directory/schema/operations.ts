@@ -211,5 +211,13 @@ export const directoryHistory: StoreHistory = {
         "ALTER TABLE whatsapp_invitations ADD COLUMN send_rejected INTEGER NOT NULL DEFAULT 0 CHECK(send_rejected IN(0,1))",
       ],
     },
+    {
+      version: 14,
+      id: "oauth-lease-source",
+      statements: [
+        "ALTER TABLE oauth_leases ADD COLUMN source TEXT",
+        "CREATE INDEX oauth_lease_source ON oauth_leases(source,expires_at_ms)",
+      ],
+    },
   ],
 };

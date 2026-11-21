@@ -343,10 +343,10 @@ const ColumnControls = ({
 );
 
 const sortOptions = [
-  { value: "default", label: "Ordenar" },
-  { value: "counterpartyLabel:asc", label: "Contraparte A–Z" },
-  { value: "counterpartyLabel:desc", label: "Contraparte Z–A" },
-  { value: "categoryLabel:asc", label: "Categoría A–Z" },
+  { value: "default", label: "Más recientes primero" },
+  { value: "counterpartyLabel:asc", label: "Contraparte A–Z en cada día" },
+  { value: "counterpartyLabel:desc", label: "Contraparte Z–A en cada día" },
+  { value: "categoryLabel:asc", label: "Categoría A–Z en cada día" },
 ];
 
 const SortControl = ({

@@ -115,6 +115,8 @@ const pollingSlowdownIncrementSeconds = 5;
 
 const maximumWrongProofAttempts = 32_767;
 
+export const pairingWrongProofLimit = 5;
+
 const isActivePairing = (lifecycle: PATPairingLifecycle): boolean =>
   lifecycle === "pending_approval" || lifecycle === "approved_awaiting_claim";
 

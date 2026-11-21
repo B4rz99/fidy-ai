@@ -9,6 +9,19 @@ import { native, nativeUserPlatform } from "../user-store.test-fixture";
 
 type TransportResult = Effect.Effect<Awaited<ReturnType<Miniflare["dispatchFetch"]>>>;
 
+type Post = (path: string, payload: unknown) => TransportResult;
+
+const refusedWrongProof = (post: Post, pairingId: string): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const wrong = yield* post("/pat-pairings/claim", {
+      pairingId,
+      privateDeviceCode: "x".repeat(43),
+    });
+
+    expect(wrong.status).toBe(400);
+    yield* native(() => wrong.text());
+  });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "admits an anonymous CLI pairing and polls its private proof before User handoff",
@@ -17,7 +30,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const create = yield* nativeUserPlatform;
         const runtime = yield* create();
 
-        const post = (path: string, payload: unknown): TransportResult =>
+        const post: Post = (path, payload) =>
           native(() =>
             runtime.dispatchFetch("https://api.fidyapp.com" + path, {
               method: "POST",
@@ -48,6 +61,49 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(tooSoon.status).toBe(429);
         yield* native(() => tooSoon.text());
       })
+  );
+  test.effect("revokes an unclaimed pairing after five wrong device proofs", () =>
+    Effect.gen(function* () {
+      const create = yield* nativeUserPlatform;
+      const runtime = yield* create();
+
+      const post: Post = (path, payload) =>
+        native(() =>
+          runtime.dispatchFetch("https://api.fidyapp.com" + path, {
+            method: "POST",
+            headers: { "content-type": "application/json", "cf-connecting-ip": "192.0.2.35" },
+            body: JSON.stringify(payload),
+          })
+        );
+
+      const started = yield* post("/pat-pairings", {
+        recipientLabel: "CLI",
+        scopes: ["read"],
+        lifetimeDays: 7,
+      });
+
+      expect(started.status).toBe(200);
+
+      const proof = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ pairingId: Schema.String, privateDeviceCode: Schema.String })
+      )(yield* native(() => started.json()));
+
+      yield* Effect.forEach(
+        Array.from({ length: 5 }, (_, attempt) => attempt),
+        () => refusedWrongProof(post, proof.pairingId),
+        { discard: true }
+      );
+
+      const dead = yield* post("/pat-pairings/claim", proof);
+      expect(dead.status).toBe(400);
+      yield* native(() => dead.text());
+
+      const directory = yield* native(() =>
+        runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
+      );
+
+      expect(yield* native(() => directory.exec("SELECT id FROM pat_bootstrap"))).toEqual([]);
+    })
   );
   test.effect(
     "runs both eligible PAT pairing batch children under the live browser and issues the bearer only to its device",

@@ -1,0 +1,20 @@
+apps/server/cloudflare/canonical-admission/internal/local-mutation.ts
+  h_c6d49c804e0ad2 23-28,174-180,623
+apps/server/cloudflare/canonical-operations/contract.ts
+  h_c6d49c804e0ad2 6-15
+apps/server/cloudflare/categories/internal/sqlite-keyword.ts
+  h_c6d49c804e0ad2 17-18,49-53,131,140,148,171-174
+apps/server/cloudflare/categories/keyword-rule-suggestions.test.ts
+  h_c6d49c804e0ad2 1-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8d5da7f1bde6ebe0ba5e7ec469d8322478be775c",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

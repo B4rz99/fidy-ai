@@ -1,0 +1,18 @@
+apps/server/cloudflare/directory/schema/operations.ts
+  h_c6d49c804e0ad2 214-221
+apps/server/cloudflare/oauth-agents/internal/native-directory.ts
+  h_c6d49c804e0ad2 35,44-48,68
+apps/server/cloudflare/oauth-agents/native-lease-source.test.ts
+  h_c6d49c804e0ad2 1-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7d140efc69441adb413ca21885d30345aa94b268",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

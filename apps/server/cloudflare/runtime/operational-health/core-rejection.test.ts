@@ -1,4 +1,4 @@
-import { Effect, Logger } from "effect";
+import { Array as Arr, Effect, Logger } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { makeCoreRejectionObserver } from "./runtime";
@@ -60,15 +60,19 @@ it.effect(
 
       const observe = makeCoreRejectionObserver();
 
-      for (const [now, count] of [
-        [1_800_000, 1_000],
-        [1_740_000, 100],
-        [1_860_000, 100],
-      ] as const) {
-        yield* burst(observe, { now, count }).pipe(
-          Effect.provideService(Logger.CurrentLoggers, loggers)
-        );
-      }
+      yield* Effect.forEach(
+        [
+          [1_800_000, 1_000],
+          [1_740_000, 100],
+          [1_860_000, 100],
+        ] as const,
+        Effect.fnUntraced(function* ([now, count]) {
+          yield* burst(observe, { now, count }).pipe(
+            Effect.provideService(Logger.CurrentLoggers, loggers)
+          );
+        }),
+        { discard: true }
+      );
 
       const expected = { message: warning, reasons: [], logLevel: "Warn" };
       expect(logs).toEqual([expected, expected]);
@@ -104,18 +108,30 @@ it.effect("counts only admitted boundary statuses", () =>
     const mcp = makeCoreRejectionObserver();
 
     const work = Effect.gen(function* () {
-      for (let index = 0; index < 99; index += 1) {
-        yield* callback({ now, boundary: "providerCallback", status: 400 });
-        yield* mcp({ now, boundary: "mcp", status: 429 });
-      }
+      yield* Effect.forEach(
+        Arr.range(1, 99),
+        Effect.fnUntraced(function* () {
+          yield* callback({ now, boundary: "providerCallback", status: 400 });
+          yield* mcp({ now, boundary: "mcp", status: 429 });
+        }),
+        { discard: true }
+      );
 
-      for (const status of [200, 303, 404, 429, 500]) {
-        yield* callback({ now, boundary: "providerCallback", status });
-      }
+      yield* Effect.forEach(
+        [200, 303, 404, 429, 500],
+        Effect.fnUntraced(function* (status) {
+          yield* callback({ now, boundary: "providerCallback", status });
+        }),
+        { discard: true }
+      );
 
-      for (const status of [200, 303, 500, 503]) {
-        yield* mcp({ now, boundary: "mcp", status });
-      }
+      yield* Effect.forEach(
+        [200, 303, 500, 503],
+        Effect.fnUntraced(function* (status) {
+          yield* mcp({ now, boundary: "mcp", status });
+        }),
+        { discard: true }
+      );
 
       expect(logs).toEqual([]);
       yield* callback({ now, boundary: "providerCallback", status: 422 });

@@ -119,10 +119,14 @@ const migrate = Effect.fnUntraced(function* (
   const sql = yield* SqliteClient;
   yield* sql.withTransaction(
     Effect.gen(function* () {
-      for (const statement of step.statements) {
-        if (typeof statement === "string") yield* sql.unsafe(statement);
-        else yield* sql.unsafe(statement.sql, statement.bindings);
-      }
+      yield* Effect.forEach(
+        step.statements,
+        Effect.fnUntraced(function* (statement) {
+          if (typeof statement === "string") yield* sql.unsafe(statement);
+          else yield* sql.unsafe(statement.sql, statement.bindings);
+        }),
+        { discard: true }
+      );
 
       const layout = yield* checksum(yield* schemaCatalog);
       yield* sql`INSERT INTO store_migrations(owner,version,id,checksum,layout) VALUES (${history.owner},${step.version},${step.id},${digest},${layout})`;
@@ -225,12 +229,16 @@ export const openSqliteStore = Effect.fnUntraced(
 
     const completed = yield* readProgress(history, digests);
 
-    for (const step of history.steps.slice(completed)) {
-      const digest = digests[step.version - 1];
+    yield* Effect.forEach(
+      history.steps.slice(completed),
+      Effect.fnUntraced(function* (step) {
+        const digest = digests[step.version - 1];
 
-      if (digest === undefined) return yield* refuse("invalid_history");
-      yield* tryStep({ history, step, digest, release });
-    }
+        if (digest === undefined) return yield* refuse("invalid_history");
+        yield* tryStep({ history, step, digest, release });
+      }),
+      { discard: true }
+    );
 
     yield* capacity.observe;
   },

@@ -1,4 +1,4 @@
-import { type Option, Schema } from "effect";
+import { Data, type Option, Schema } from "effect";
 import type { UserId } from "~/core/identity/contract";
 import type { OAuthConnectionId } from "~/core/oauth-agents/contract";
 import type { PATScopes } from "~/core/tokens/contract";
@@ -128,6 +128,8 @@ export type ConsentSubjectColumn =
 export type ConsentSubject =
   | Readonly<{ _tag: "User"; userId: string }>
   | Readonly<{ _tag: "Owner"; column: ConsentSubjectColumn }>;
+
+export const ConsentSubject = Data.taggedEnum<ConsentSubject>();
 
 export type ConsentStandingRequirement = "granted" | "unrevoked" | "active";
 

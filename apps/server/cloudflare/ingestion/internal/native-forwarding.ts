@@ -16,6 +16,7 @@ import { emailAllowancePeriod } from "../../../src/core/ingestion/operations";
 import type { UserId } from "../../../src/core/identity/contract";
 import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
+import { ConsentSubject } from "../../../src/shell/consent/contract";
 import { allowanceConsumptionCount } from "../../quotas/operations";
 
 import { DirectoryWriteUnavailable, type UserStoreBindings } from "../../directory/contract";
@@ -39,7 +40,7 @@ const addressFor = Effect.fn(function* (userId: UserId) {
   const sql = yield* SqliteClient;
 
   const query = protectConsentStatement({
-    subject: { _tag: "User", userId },
+    subject: ConsentSubject.User({ userId }),
     requirement: "active",
     statement: {
       sql: "SELECT id,local_part,issued_at_ms FROM forwarding_addresses WHERE user_id=?",
@@ -112,9 +113,15 @@ const forwardingStatus = Effect.fn(function* ({
     body: {
       data: {
         address: data,
-        ...(stats.pro === 1
-          ? {}
-          : { remainingThisMonth: Math.max(0, freeForwardedEmailCap - stats.used) }),
+        ...Option.match(
+          Option.liftPredicate(stats, (usage) => usage.pro !== 1),
+          {
+            onNone: () => ({}),
+            onSome: (usage) => ({
+              remainingThisMonth: Math.max(0, freeForwardedEmailCap - usage.used),
+            }),
+          }
+        ),
         deferredEmails: stats.deferred,
         deferredCapacityRemaining: Math.max(0, freeForwardedEmailDeferredCap - stats.deferred),
         resetsAt: DateTime.formatIso(

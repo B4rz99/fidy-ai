@@ -96,7 +96,7 @@ export const projectEmailRow = ({
 }): Option.Option<EmailNeedsReviewItem> => {
   const expired = row.evidence_expires_at_ms.epochMilliseconds <= asOf;
 
-  return Schema.decodeUnknownOption(EmailNeedsReviewItem)({
+  const item = {
     id: row.id,
     receivedEmailId: row.receipt_id,
     reason: row.reason,
@@ -116,10 +116,13 @@ export const projectEmailRow = ({
     issues: [],
     createdAt: DateTime.formatIso(row.created_at_ms),
     status: expired ? "expired" : "pending",
-    ...(expired || row.reason === "processing-interrupted" || row.reason === "consent-revoked"
-      ? {}
-      : { ingestSampleId: row.receipt_id }),
-  });
+  };
+
+  return Schema.decodeUnknownOption(EmailNeedsReviewItem)(
+    expired || row.reason === "processing-interrupted" || row.reason === "consent-revoked"
+      ? item
+      : { ...item, ingestSampleId: row.receipt_id }
+  );
 };
 
 export const reviewPage = (url: URL): Option.Option<typeof ReviewPage.Type> =>

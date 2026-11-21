@@ -252,22 +252,26 @@ export const inspectPublishedSamples = Effect.fn(function* (
   const rows =
     yield* sql`SELECT sample_id,digest FROM ingest_sample_decisions WHERE user_id=${user} AND phase='published' AND sample_id>(SELECT sample_cursor FROM erasure_requests WHERE user_id=${user}) ORDER BY sample_id LIMIT 8`;
 
-  for (const raw of rows) {
-    const row = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ sample_id: Schema.String.check(Schema.isUUID()), digest: Schema.String })
-    )(raw);
+  yield* Effect.forEach(
+    rows,
+    Effect.fnUntraced(function* (raw) {
+      const row = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ sample_id: Schema.String.check(Schema.isUUID()), digest: Schema.String })
+      )(raw);
 
-    const safe = yield* safePublication(row.sample_id, row.digest, buckets);
-    yield* withStoreCapacity("required")(
-      Effect.gen(function* () {
-        if (!safe) {
-          yield* sql`UPDATE ingest_sample_decisions SET phase='removing',due_ms=${now} WHERE sample_id=${row.sample_id} AND phase='published'`;
-        }
+      const safe = yield* safePublication(row.sample_id, row.digest, buckets);
+      yield* withStoreCapacity("required")(
+        Effect.gen(function* () {
+          if (!safe) {
+            yield* sql`UPDATE ingest_sample_decisions SET phase='removing',due_ms=${now} WHERE sample_id=${row.sample_id} AND phase='published'`;
+          }
 
-        yield* sql`UPDATE erasure_requests SET sample_cursor=${row.sample_id} WHERE user_id=${user} AND state='Draining' AND sample_cursor<${row.sample_id}`;
-      })
-    );
-  }
+          yield* sql`UPDATE erasure_requests SET sample_cursor=${row.sample_id} WHERE user_id=${user} AND state='Draining' AND sample_cursor<${row.sample_id}`;
+        })
+      );
+    }),
+    { discard: true }
+  );
 });
 
 export const recoverSamples = Effect.fn(function* (now: number, buckets: Buckets) {

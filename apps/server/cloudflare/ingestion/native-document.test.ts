@@ -1,16 +1,24 @@
 import { localHostedCatalog } from "../canonical-operations/operations";
 import { completeHostedClarification } from "./clarification.test-fixture";
-import { statementStagingLifetimeMilliseconds } from "../../src/core/ingestion/contract";
+import {
+  type ReviewCommand,
+  statementStagingLifetimeMilliseconds,
+} from "../../src/core/ingestion/contract";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { DisclosureSnapshot } from "../../src/shell/consent/contract";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, Schedule, Schema } from "effect";
+import { Data, Effect, Option, Schedule, Schema } from "effect";
 import { expect } from "vitest";
 import { alice, seed } from "../financial-user-store.test-fixture";
 import { native, nativeBillingPlatform } from "../user-store.test-fixture";
 
 import { batchCallId } from "./statement-batch.test-fixture";
+import { type StatementCoordinatorActivity } from "./contract";
+
+const CoordinatorWire = Data.taggedEnum<typeof StatementCoordinatorActivity.Encoded>();
+
+const ReviewWire = Data.taggedEnum<typeof ReviewCommand.Encoded>();
 
 const storedText = Schema.decodeUnknownSync(Schema.String);
 
@@ -184,7 +192,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
                 "Fidy-Session-Binding": alice.session,
                 "content-type": "application/json",
               },
-              ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+              ...Option.match(Option.fromUndefinedOr(payload), {
+                onNone: () => ({}),
+                onSome: (payload) => ({ body: JSON.stringify(payload) }),
+              }),
             })
           );
 
@@ -416,12 +427,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           native(() =>
             ns.getByName(alice.user).fetch("https://coordinator.internal/statement-work", {
               method: "POST",
-              body: JSON.stringify({
-                _tag: "StatementWork",
-                version: 1,
-                userId: alice.user,
-                submissionId: id,
-              }),
+              body: JSON.stringify(
+                CoordinatorWire.StatementWork({ version: 1, userId: alice.user, submissionId: id })
+              ),
             })
           );
 
@@ -520,7 +528,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             "Fidy-Session-Binding": alice.session,
             "content-type": "application/json",
           },
-          ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+          ...Option.match(Option.fromUndefinedOr(payload), {
+            onNone: () => ({}),
+            onSome: (payload) => ({ body: JSON.stringify(payload) }),
+          }),
         })
       );
 
@@ -531,10 +542,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       (yield* invoke("ingestion/statements/" + storedText(item.submission) + "/abandon")).status
     ).toBe(404);
     expect(
-      (yield* invoke("ingestion/review-workspace/edits", {
-        _tag: "Skip",
-        items: [{ id: item.id, revision: 0 }],
-      })).status
+      (yield* invoke(
+        "ingestion/review-workspace/edits",
+        ReviewWire.Skip({ items: [{ id: storedText(item.id), revision: 0 }] })
+      )).status
     ).toBeGreaterThanOrEqual(400);
     expect(
       yield* owner.exec("SELECT workspace_revision FROM ingestion_review_items WHERE id=?", item.id)
@@ -652,9 +663,8 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           callId: batchCallId(1),
           operation: "ingestion.applyReviewEdit",
           input: {
-            payload: {
-              _tag: "SaveDraft",
-              id: first.id,
+            payload: ReviewWire.SaveDraft({
+              id: storedText(first.id),
               revision: 0,
               draft: {
                 amount: "42",
@@ -664,7 +674,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
                 counterparty: "local-only",
                 userProvidedFields: ["money"],
               },
-            },
+            }),
           },
         };
 

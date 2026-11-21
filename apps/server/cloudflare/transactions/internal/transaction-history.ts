@@ -373,8 +373,14 @@ const storedFields = (row: typeof Row.Type): typeof Transaction.Encoded => ({
   money: { amount: row.amount, currency: row.currency },
   direction: row.direction,
   categoryId: row.category_id,
-  ...(row.counterparty === null ? {} : { counterparty: row.counterparty }),
-  ...(row.notes === null ? {} : { notes: row.notes }),
+  ...Option.match(Option.fromNullOr(row.counterparty), {
+    onNone: () => ({}),
+    onSome: (counterparty) => ({ counterparty }),
+  }),
+  ...Option.match(Option.fromNullOr(row.notes), {
+    onNone: () => ({}),
+    onSome: (notes) => ({ notes }),
+  }),
   occurredAt: row.occurred_at,
   createdAt: row.created_at,
   revision: row.revision,

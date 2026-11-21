@@ -51,8 +51,9 @@ export const submission = (row: typeof RefundSubmissionSnapshot.Type): RefundSub
 export const receiveRefunds = (
   input: RefundReceiveInput
 ): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
-  Effect.gen(function* () {
-    for (const message of input.batch.messages) {
+  Effect.forEach(
+    input.batch.messages,
+    Effect.fnUntraced(function* (message) {
       const work = yield* Schema.decodeUnknownEffect(RefundWork)(message.body);
       const id = `refund-v1-${work.refundAttemptId}${work.kind === "refund" ? "" : `-verify-${work.verification}`}`;
       const params = yield* sanitizeWorkTrace(work);
@@ -68,5 +69,6 @@ export const receiveRefunds = (
         )
       );
       message.ack();
-    }
-  });
+    }),
+    { discard: true }
+  );

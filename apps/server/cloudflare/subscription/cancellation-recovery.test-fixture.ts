@@ -6,7 +6,7 @@ import { observeCancellation } from "./internal/local-cancellation";
 import { UserId } from "../../src/core/identity/contract";
 import { BillingAttemptId } from "../../src/core/subscription/contract";
 import { DurableObject } from "cloudflare:workers";
-import { Effect, Option, Result } from "effect";
+import { Effect, Option, Predicate, Result } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { createStoreRuntime, openSqliteStore } from "../runtime/sqlite/operations";
 import { recoverUserWork, userStoreHistory } from "../user-store/operations";
@@ -234,7 +234,7 @@ const exerciseProvider = Effect.fnUntraced(function* (path: string) {
     environment: "sandbox",
     http: {
       execute: (message) => {
-        if (message._tag === "WompiVoidPaymentSource") sends++;
+        if (Predicate.isTagged(message, "WompiVoidPaymentSource")) sends++;
         const id = path === "/observe-foreign" ? otherSource : providerSource;
 
         return Effect.succeed({

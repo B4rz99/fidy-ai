@@ -1,5 +1,5 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Result, Schema } from "effect";
 import { UserId } from "../../../src/core/identity/contract";
 import { RefundAttemptId } from "../../../src/core/subscription/contract";
 import { LocalRefundWork, RefundWorkFailure } from "../contract";
@@ -65,20 +65,25 @@ export const offerRefunds = Effect.fnUntraced(function* ({
 
   let failed = 0;
 
-  for (const row of rows) {
-    const sent = yield* Effect.result(
-      Effect.tryPromise(() =>
-        queue.send({
-          _tag: "RunUserRefund",
-          userId: row.user_id,
-          refundAttemptId: row.id,
-          verification: row.verification,
-        })
-      )
-    );
+  yield* Effect.forEach(
+    rows,
+    Effect.fnUntraced(function* (row) {
+      const sent = yield* Effect.result(
+        Effect.tryPromise(() =>
+          queue.send(
+            LocalRefundWork.make({
+              userId: row.user_id,
+              refundAttemptId: row.id,
+              verification: row.verification,
+            })
+          )
+        )
+      );
 
-    if (sent._tag === "Failure") failed++;
-  }
+      if (Result.isFailure(sent)) failed++;
+    }),
+    { discard: true }
+  );
 
   return { attempted: rows.length, failed };
 });

@@ -16,6 +16,10 @@ import {
   requireDaviplataSandboxPolicy,
 } from "./daviplata-sandbox.test-fixture";
 
+const ProofFailureProjection = Schema.TaggedStruct("DaviplataSandboxProofFailure", {
+  stage: Schema.String,
+});
+
 const endpoint = "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox";
 
 const policy = { sendUrl: endpoint, confirmUrl: endpoint };
@@ -227,10 +231,7 @@ it("identifies a failed OTP-send response without retaining provider content or 
 
       const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(failure);
       const projected = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(encoded);
-      expect(projected).toEqual({
-        _tag: "DaviplataSandboxProofFailure",
-        stage: "otp-send-response",
-      });
+      expect(projected).toEqual(ProofFailureProjection.make({ stage: "otp-send-response" }));
       expect(requests).toBe(2);
     })
   ));

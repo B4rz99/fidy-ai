@@ -42,3 +42,27 @@ class CanonicalActivityTest(unittest.TestCase):
         signup["$workers"]["scriptVersion"]["id"] = "foreign"
         with self.assertRaisesRegex(ValueError, "Unexpected event"):
             outcomes(opening, "account", NOW, read, canary)
+
+    def test_missing_signup_log_uses_explicit_operator_time_for_background_checks(self):
+        opening = {"openedAt": "1970-01-01T00:00:01Z",
+                   "workers": {CORE: {"version": VERSION}}}
+        traversal = event("fidy.operational component=inspection-coverage operation=ownerInspections state=complete",
+                          "event-2", 3_000)
+
+        def read(_path, request):
+            since = request["timeframe"]["from"]
+            self.assertIn(since, (START, 2_000))
+            return {"success": True, "result": {"events": {"events": [] if since == START else [traversal]}}}
+
+        def canary(account, since, until):
+            self.assertEqual((account, since, until), ("account", 2_000, NOW))
+            return "operational-canary-1"
+
+        proof = outcomes(opening, "account", NOW, read, canary, observed_at="1970-01-01T00:00:02Z")
+        self.assertEqual(proof["provider"], "ordinary")
+        self.assertTrue(proof["background"]["watchdogCompleted"])
+        self.assertTrue(proof["background"]["canaryCompleted"])
+        with self.assertRaisesRegex(ValueError, "observed 0"):
+            outcomes(opening, "account", NOW, read, canary)
+        with self.assertRaisesRegex(ValueError, "outside the open deployment window"):
+            outcomes(opening, "account", NOW, read, canary, observed_at="1970-01-01T00:00:00Z")

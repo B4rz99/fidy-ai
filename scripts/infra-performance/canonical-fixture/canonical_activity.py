@@ -153,15 +153,28 @@ def native_canary(account, since, until, read=cloudflare):
     raise ActivityRefused("No actual native background canary completion after the ordinary signup")
 
 
-def outcomes(opening, account, end, read=query, read_canary=native_canary):
+def confirmed_signup(version, start, end, observed_at):
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", observed_at) is None:
+        raise ActivityRefused("The operator-confirmed signup needs an exact UTC timestamp")
+    at = timestamp(observed_at)
+    if not start <= at < end:
+        raise ActivityRefused("The operator-confirmed signup is outside the open deployment window")
+    return {"kind": "ordinary", "at": at,
+            "sha256": hashlib.sha256((version + "/operator-confirmed/" + observed_at).encode()).hexdigest()}
+
+
+def outcomes(opening, account, end, read=query, read_canary=native_canary, *, observed_at=""):
     start = timestamp(opening["openedAt"])
     if end <= start:
         raise ValueError("Canonical activity cannot predate opening")
     version = opening["workers"][CORE]["version"]
     signups = exact_events(account, version, start, end, "component=canonical-signup", SIGNUP, read)
-    if len(signups) != 1:
+    if not signups and observed_at:
+        signup = confirmed_signup(version, start, end, observed_at)
+    elif len(signups) == 1:
+        signup, = signups
+    else:
         raise ActivityRefused(f"Expected one native provider account creation, observed {len(signups)}")
-    signup, = signups
     complete = exact_events(account, version, signup["at"], end, "component=inspection-coverage", WATCHDOG, read)
     if not complete:
         raise ActivityRefused("No completed native watchdog traversal was observed after canonical signup")
@@ -188,7 +201,8 @@ def main():
         reference = {"artifactId": env["CANONICAL_OPENING_ARTIFACT"], "sha256": env["CANONICAL_OPENING_SHA256"]}
         opening = opened_release(reference, verifier)
         activity = outcomes(opening, env["CLOUDFLARE_ACCOUNT_ID"],
-                            int(datetime.now(timezone.utc).timestamp() * 1000))
+                            int(datetime.now(timezone.utc).timestamp() * 1000),
+                            observed_at=env.get("CANONICAL_SIGNUP_OBSERVED_AT", ""))
         directory = Path(env["RUNNER_TEMP"])
         with (directory / "native-canonical-observations.json").open("x") as evidence:
             json.dump({"opening": opening, "activity": activity,

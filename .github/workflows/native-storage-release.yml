@@ -72,6 +72,10 @@ on:
         description: Independently verified SHA-256 of the protected opening artifact
         required: false
         type: string
+      canonical_signup_observed_at:
+        description: UTC timestamp for an operator-confirmed public signup if its log event is missing
+        required: false
+        type: string
       fleet_source_run:
         description: Original protected ten-User trial run ID for cleanup
         required: false
@@ -471,6 +475,7 @@ jobs:
         env:
           CANONICAL_OPENING_ARTIFACT: ${{ inputs.canonical_opening_artifact }}
           CANONICAL_OPENING_SHA256: ${{ inputs.canonical_opening_sha256 }}
+          CANONICAL_SIGNUP_OBSERVED_AT: ${{ inputs.canonical_signup_observed_at }}
         run: python3 scripts/infra-performance/canonical-fixture/canonical_activity.py
       - name: Verify the same canonical routing, one added User Store and accepted recovery
         if: inputs.operation == 'verify-canonical-activity'

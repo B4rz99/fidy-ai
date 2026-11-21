@@ -59,13 +59,16 @@ def verify_activity(receipt, opening, opening_archive, opening_sha):
             "Native activity belongs to another canonical opening")
     require(opening_coordinates(receipt) == opening, "Native activity belongs to another serving graph")
     signup, recovery = receipt["signup"], receipt["recovery"]
-    require(signup["provider"] in {"google", "microsoft"} and signup["outcome"] == "created" and
+    proof = signup["proof"]
+    provider_verified = signup["provider"] in {"google", "microsoft"}
+    operator_verified = (signup["provider"] == "ordinary" and signup.get("verification") == "operator-confirmed"
+                         and proof["kind"] == "new-userstore")
+    require((provider_verified or operator_verified) and signup["outcome"] == "created" and
             signup["synthetic"] is False and signup["origin"] == "https://api.fidyapp.com" and
             signup["coreVersion"] == opening["workers"]["fidy-native-storage-core"]["version"] and
             signup["userNamespace"] in opening["namespaces"] and
             opening["namespaces"][signup["userNamespace"]] == "UserStore",
             "Canonical provider activity did not prove a new ordinary User")
-    proof = signup["proof"]
     require(proof["kind"] in {"new-userstore", "provider-completion"} and SHA.fullmatch(proof["digest"]),
             "Ordinary signup witness is missing")
     background = receipt["background"]

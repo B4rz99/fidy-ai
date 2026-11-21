@@ -2,15 +2,15 @@ import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { TestClock } from "effect/testing";
-import { makeProtectedClient } from "../direct-client/runtime";
+import { protectedHttpClient } from "../../src/direct-client/runtime";
 import {
   discoverOperations as discoverQueries,
   runOperationCommand as runQueryCommand,
-} from "./operations";
+} from "../../src/canonical/operations";
 import { makeCanonicalFixture as constructQueryFixture } from "./canonical.test-fixture";
-import { makeCanonicalClient } from "./runtime";
+import { canonicalClientFactory } from "../../src/canonical/runtime";
 
-const makeQueryFixture = constructQueryFixture(makeCanonicalClient);
+const makeQueryFixture = constructQueryFixture(canonicalClientFactory);
 
 const encodeFixture = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Json));
 
@@ -86,11 +86,12 @@ it.effect(
 );
 
 it.effect("rejects a batch child outside the saved grant even when the envelope is eligible", () =>
-  Effect.gen(function* () {
-    for (const child of [
+  Effect.forEach(
+    [
       { operation: "dashboard.initializeDashboard", input: {} },
       { operation: "pats.inspectPATPairing", input: { payload: { publicCode: "ABCD-1234" } } },
-    ]) {
+    ],
+    Effect.fnUntraced(function* (child) {
       const fixture = makeQueryFixture(undefined, ["write"]);
       expect(
         yield* Effect.result(
@@ -108,17 +109,19 @@ it.effect("rejects a batch child outside the saved grant even when the envelope 
         )
       ).toMatchObject({ failure: { reason: "OperationUnavailable" } });
       expect(fixture.requests).toEqual([]);
-    }
-  })
+    }),
+    { discard: true }
+  )
 );
 
 it.effect("contains uncertain mutation outcomes without replay or a no-effect claim", () =>
-  Effect.gen(function* () {
-    for (const response of [
+  Effect.forEach(
+    [
       { body: "not json", status: 200 },
       { body: "{}", status: 503 },
       { body: "{}", status: 302 },
-    ]) {
+    ],
+    Effect.fnUntraced(function* (response) {
       const fixture = makeQueryFixture(response, ["dashboard"]);
       expect(
         yield* Effect.result(
@@ -127,8 +130,9 @@ it.effect("contains uncertain mutation outcomes without replay or a no-effect cl
       ).toMatchObject({ failure: { reason: "MutationAmbiguous" } });
       expect(fixture.requests).toHaveLength(1);
       expect(fixture.stdout).toEqual([]);
-    }
-  })
+    }),
+    { discard: true }
+  )
 );
 
 it.effect(
@@ -157,8 +161,8 @@ it.effect(
 it.effect(
   "keeps commercial exhaustion, security rejection and Pro-only failures distinct while preserving their metadata",
   () =>
-    Effect.gen(function* () {
-      for (const example of [
+    Effect.forEach(
+      [
         {
           code: "quota_exhausted",
           status: 429,
@@ -191,7 +195,8 @@ it.effect(
           guidance: "revocado",
           retry: "",
         },
-      ]) {
+      ],
+      Effect.fnUntraced(function* (example) {
         const envelope = {
           error: { code: example.code, message: example.message, ...example.detail },
           next: [],
@@ -223,8 +228,9 @@ it.effect(
           example.code === "rate_limited"
         );
         expect(fixture.requests).toHaveLength(1);
-      }
-    })
+      }),
+      { discard: true }
+    )
 );
 
 it.effect(
@@ -255,32 +261,37 @@ it.effect(
         { ...valid, "Fidy-Canonical-Limit": "uncapped" },
       ];
 
-      for (const headers of unavailableHeaders) {
-        const fixture = makeQueryFixture({ body: '{"data":[],"next":[]}', status: 200, headers });
-        yield* runQueryCommand(["categories", "listCategories"], fixture.dependencies);
-        expect(fixture.stdout).toEqual(['{"data":[],"next":[]}\n']);
-        const guidance = fixture.stderr.join("");
-        expect(guidance).toContain("no disponible");
-        expect(guidance).not.toContain("llamadas canónicas restantes");
-        expect(guidance).not.toContain("secret");
-        expect(guidance).not.toContain("\u001b");
-        expect(guidance).not.toContain("\u202e");
-        expect(fixture.requests).toHaveLength(1);
-      }
+      yield* Effect.forEach(
+        unavailableHeaders,
+        Effect.fnUntraced(function* (headers) {
+          const fixture = makeQueryFixture({ body: '{"data":[],"next":[]}', status: 200, headers });
+          yield* runQueryCommand(["categories", "listCategories"], fixture.dependencies);
+          expect(fixture.stdout).toEqual(['{"data":[],"next":[]}\n']);
+          const guidance = fixture.stderr.join("");
+          expect(guidance).toContain("no disponible");
+          expect(guidance).not.toContain("llamadas canónicas restantes");
+          expect(guidance).not.toContain("secret");
+          expect(guidance).not.toContain("\u001b");
+          expect(guidance).not.toContain("\u202e");
+          expect(fixture.requests).toHaveLength(1);
+        }),
+        { discard: true }
+      );
     })
 );
 
 it.effect(
   "shows server uncapped standing without inventing a Trial/Pro meter and retains security guidance",
   () =>
-    Effect.gen(function* () {
-      for (const response of [
+    Effect.forEach(
+      [
         { status: 200, body: '{"data":[],"next":[]}' },
         {
           status: 429,
           body: '{"error":{"code":"rate_limited","message":"Security protection."},"next":[]}',
         },
-      ]) {
+      ],
+      Effect.fnUntraced(function* (response) {
         const fixture = makeQueryFixture({
           ...response,
           headers: {
@@ -300,8 +311,9 @@ it.effect(
         expect(fixture.stderr.join("")).not.toContain("llamadas canónicas restantes");
         expect(fixture.stderr.join("")).not.toContain("Reinicio:");
         expect(fixture.requests).toHaveLength(1);
-      }
-    })
+      }),
+      { discard: true }
+    )
 );
 
 it.effect("decodes nested query filters and encodes exact Money, dates and optional values", () =>
@@ -348,33 +360,41 @@ it.effect(
     Effect.gen(function* () {
       const fixture = makeQueryFixture();
 
-      for (const args of [
-        ["transactions", "createTransaction"],
-        ["pats", "listPATs"],
-        ["unknown", "query"],
-        ["categories", "listCategories", "--input", "request.json"],
-        ["transactions", "listTransactions", "--input", "-", "--input", "file.json"],
-      ]) {
-        expect(
-          Exit.isFailure(yield* Effect.exit(runQueryCommand(args, fixture.dependencies)))
-        ).toBe(true);
-      }
+      yield* Effect.forEach(
+        [
+          ["transactions", "createTransaction"],
+          ["pats", "listPATs"],
+          ["unknown", "query"],
+          ["categories", "listCategories", "--input", "request.json"],
+          ["transactions", "listTransactions", "--input", "-", "--input", "file.json"],
+        ],
+        Effect.fnUntraced(function* (args) {
+          expect(
+            Exit.isFailure(yield* Effect.exit(runQueryCommand(args, fixture.dependencies)))
+          ).toBe(true);
+        }),
+        { discard: true }
+      );
 
-      for (const input of [
-        '{"query":{"from":"bad"}}',
-        '{"payload":{}}',
-        '{"query":{},"responseMode":"response-only"}',
-        "not json",
-      ]) {
-        const result = yield* Effect.result(
-          runQueryCommand(["transactions", "listTransactions", "--input", "-"], {
-            ...fixture.dependencies,
-            readInput: () => Effect.succeed(input),
-          })
-        );
+      yield* Effect.forEach(
+        [
+          '{"query":{"from":"bad"}}',
+          '{"payload":{}}',
+          '{"query":{},"responseMode":"response-only"}',
+          "not json",
+        ],
+        Effect.fnUntraced(function* (input) {
+          const result = yield* Effect.result(
+            runQueryCommand(["transactions", "listTransactions", "--input", "-"], {
+              ...fixture.dependencies,
+              readInput: () => Effect.succeed(input),
+            })
+          );
 
-        expect(result).toMatchObject({ failure: { reason: "InvalidInput" } });
-      }
+          expect(result).toMatchObject({ failure: { reason: "InvalidInput" } });
+        }),
+        { discard: true }
+      );
 
       expect(fixture.requests).toEqual([]);
       expect(fixture.stdout).toEqual([]);
@@ -449,23 +469,27 @@ it.effect(
     Effect.gen(function* () {
       const responseOverflow = 1_048_577;
 
-      for (const response of [
-        { body: "not json", status: 200 },
-        { body: '{"data":"wrong","next":[]}', status: 200 },
-        { body: "x".repeat(responseOverflow), status: 200 },
-        { body: "{}", status: 302 },
-        { body: "{}", status: 418 },
-      ]) {
-        const fixture = makeQueryFixture(response);
-        expect(
-          yield* Effect.result(
-            runQueryCommand(["categories", "listCategories"], fixture.dependencies)
-          )
-        ).toMatchObject({ failure: { reason: "TransportUnavailable" } });
-        expect(fixture.stdout).toEqual([]);
-        expect(fixture.stderr).toEqual([]);
-        expect(fixture.requests).toHaveLength(1);
-      }
+      yield* Effect.forEach(
+        [
+          { body: "not json", status: 200 },
+          { body: '{"data":"wrong","next":[]}', status: 200 },
+          { body: "x".repeat(responseOverflow), status: 200 },
+          { body: "{}", status: 302 },
+          { body: "{}", status: 418 },
+        ],
+        Effect.fnUntraced(function* (response) {
+          const fixture = makeQueryFixture(response);
+          expect(
+            yield* Effect.result(
+              runQueryCommand(["categories", "listCategories"], fixture.dependencies)
+            )
+          ).toMatchObject({ failure: { reason: "TransportUnavailable" } });
+          expect(fixture.stdout).toEqual([]);
+          expect(fixture.stderr).toEqual([]);
+          expect(fixture.requests).toHaveLength(1);
+        }),
+        { discard: true }
+      );
     })
 );
 
@@ -475,7 +499,7 @@ it.effect(
     Effect.gen(function* () {
       const fixture = makeQueryFixture();
 
-      const protectedClient = makeProtectedClient({
+      const protectedClient = protectedHttpClient({
         client: fixture.dependencies.httpClient,
         allowQuery: true,
         maximumResponseBytes: 1024,
@@ -485,13 +509,17 @@ it.effect(
         captureTrace: () => {},
       });
 
-      for (const destination of [
-        "https://attacker.example/transactions",
-        "https://api.fidyapp.com@attacker.example/transactions",
-        "http://api.fidyapp.com/transactions",
-      ]) {
-        expect(Exit.isFailure(yield* Effect.exit(protectedClient.get(destination)))).toBe(true);
-      }
+      yield* Effect.forEach(
+        [
+          "https://attacker.example/transactions",
+          "https://api.fidyapp.com@attacker.example/transactions",
+          "http://api.fidyapp.com/transactions",
+        ],
+        Effect.fnUntraced(function* (destination) {
+          expect(Exit.isFailure(yield* Effect.exit(protectedClient.get(destination)))).toBe(true);
+        }),
+        { discard: true }
+      );
 
       expect(fixture.requests).toEqual([]);
       let cancelled = false;
@@ -614,23 +642,27 @@ it.effect(
 
       const traceId = "0123456789abcdef0123456789abcdef";
 
-      for (const receipt of [traceId, "private-content", "f".repeat(33)]) {
-        const fixture = makeQueryFixture({
-          body,
-          status: 503,
-          headers: { "fidy-trace-id": receipt },
-        });
+      yield* Effect.forEach(
+        [traceId, "private-content", "f".repeat(33)],
+        Effect.fnUntraced(function* (receipt) {
+          const fixture = makeQueryFixture({
+            body,
+            status: 503,
+            headers: { "fidy-trace-id": receipt },
+          });
 
-        expect(yield* runQueryCommand(["categories", "listCategories"], fixture.dependencies)).toBe(
-          true
-        );
-        expect(fixture.stdout).toEqual([body + "\n"]);
-        expect(fixture.stderr.join("").includes("Referencia de diagnóstico:")).toBe(
-          receipt === traceId
-        );
-        expect(fixture.stderr.join("")).not.toContain("private-content");
-        expect(fixture.requests).toHaveLength(1);
-      }
+          expect(
+            yield* runQueryCommand(["categories", "listCategories"], fixture.dependencies)
+          ).toBe(true);
+          expect(fixture.stdout).toEqual([body + "\n"]);
+          expect(fixture.stderr.join("").includes("Referencia de diagnóstico:")).toBe(
+            receipt === traceId
+          );
+          expect(fixture.stderr.join("")).not.toContain("private-content");
+          expect(fixture.requests).toHaveLength(1);
+        }),
+        { discard: true }
+      );
 
       const success = makeQueryFixture({
         body: '{"data":[],"next":[]}',

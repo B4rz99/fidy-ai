@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
-import { assembleFlags, deriveFlags } from "./flags";
+import { assembleFlags, deriveFlags } from "../../../src/canonical/internal/flags";
 
 it("disambiguates siblings, transport containers and reserved options without accepting short aliases", () => {
   const schema = Schema.Struct({

@@ -1,11 +1,11 @@
 import { expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Predicate, Schema } from "effect";
 import { HttpClient, HttpClientResponse, UrlParams } from "effect/http";
-import { discoverOperations, runOperationCommand } from "./operations";
+import { discoverOperations, runOperationCommand } from "../../src/canonical/operations";
 import { makeCanonicalFixture } from "./canonical.test-fixture";
-import { makeCanonicalClient } from "./runtime";
+import { canonicalClientFactory } from "../../src/canonical/runtime";
 
-const fixture = makeCanonicalFixture(makeCanonicalClient);
+const fixture = makeCanonicalFixture(canonicalClientFactory);
 
 const encode = Schema.encodeSync(Schema.fromJsonString(Schema.Json));
 
@@ -39,6 +39,37 @@ const facts = {
   occurredAt: transaction.occurredAt,
 };
 
+const capturingBodies = (bodies: Array<string>): HttpClient.HttpClient =>
+  HttpClient.make((request) =>
+    Effect.sync(() => {
+      if (Predicate.isTagged(request.body, "Uint8Array")) {
+        bodies.push(new TextDecoder().decode(request.body.body));
+      }
+
+      return HttpClientResponse.fromWeb(
+        request,
+        new Response(encode({ data: transaction, next: [] }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        })
+      );
+    })
+  );
+
+const capturingQueries = (queries: Array<string>): HttpClient.HttpClient =>
+  HttpClient.make((request) =>
+    Effect.sync(() => {
+      queries.push(UrlParams.toString(request.urlParams));
+
+      return HttpClientResponse.fromWeb(
+        request,
+        new Response('{"data":[],"next":[]}', {
+          headers: { "content-type": "application/json" },
+        })
+      );
+    })
+  );
+
 it.effect(
   "flag and JSON invocations send the same exact Money request and return the same canonical result",
   () =>
@@ -46,29 +77,19 @@ it.effect(
       const bodies: string[] = [];
       const outputs: string[] = [];
 
-      for (const args of [mutationFlags, ["--input", "-"]]) {
-        const test = fixture(undefined, ["write"]);
-        yield* runOperationCommand(["transactions", "createTransaction", ...args], {
-          ...test.dependencies,
-          readInput: () => Effect.succeed(encode({ payload: facts })),
-          httpClient: HttpClient.make((request) =>
-            Effect.sync(() => {
-              if (request.body._tag === "Uint8Array") {
-                bodies.push(new TextDecoder().decode(request.body.body));
-              }
-
-              return HttpClientResponse.fromWeb(
-                request,
-                new Response(encode({ data: transaction, next: [] }), {
-                  status: 201,
-                  headers: { "content-type": "application/json" },
-                })
-              );
-            })
-          ),
-        });
-        outputs.push(test.stdout.join(""));
-      }
+      yield* Effect.forEach(
+        [mutationFlags, ["--input", "-"]],
+        Effect.fnUntraced(function* (args) {
+          const test = fixture(undefined, ["write"]);
+          yield* runOperationCommand(["transactions", "createTransaction", ...args], {
+            ...test.dependencies,
+            readInput: () => Effect.succeed(encode({ payload: facts })),
+            httpClient: capturingBodies(bodies),
+          });
+          outputs.push(test.stdout.join(""));
+        }),
+        { discard: true }
+      );
 
       expect(bodies).toEqual([encode(facts), encode(facts)]);
       expect(outputs).toEqual([
@@ -82,29 +103,22 @@ it.effect("query flags and JSON keep the same canonical filter representation", 
   Effect.gen(function* () {
     const queries: string[] = [];
 
-    for (const args of [
-      ["--currency", "COP", "--direction", "outflow"],
-      ["--input", "-"],
-    ]) {
-      const test = fixture();
-      yield* runOperationCommand(["transactions", "listTransactions", ...args], {
-        ...test.dependencies,
-        readInput: () => Effect.succeed('{"query":{"currency":"COP","direction":"outflow"}}'),
-        httpClient: HttpClient.make((request) =>
-          Effect.sync(() => {
-            queries.push(UrlParams.toString(request.urlParams));
-
-            return HttpClientResponse.fromWeb(
-              request,
-              new Response('{"data":[],"next":[]}', {
-                headers: { "content-type": "application/json" },
-              })
-            );
-          })
-        ),
-      });
-      expect(test.stdout).toEqual(['{"data":[],"next":[]}\n']);
-    }
+    yield* Effect.forEach(
+      [
+        ["--currency", "COP", "--direction", "outflow"],
+        ["--input", "-"],
+      ],
+      Effect.fnUntraced(function* (args) {
+        const test = fixture();
+        yield* runOperationCommand(["transactions", "listTransactions", ...args], {
+          ...test.dependencies,
+          readInput: () => Effect.succeed('{"query":{"currency":"COP","direction":"outflow"}}'),
+          httpClient: capturingQueries(queries),
+        });
+        expect(test.stdout).toEqual(['{"data":[],"next":[]}\n']);
+      }),
+      { discard: true }
+    );
 
     expect(queries).toEqual(["direction=outflow&currency=COP", "direction=outflow&currency=COP"]);
   })
@@ -132,28 +146,32 @@ it.effect(
         ["--amount", "1", "--currency", "COP", "--direction", "outflow"],
       ];
 
-      for (const args of invalid) {
-        const test = fixture(undefined, ["write"]);
-        let reads = 0;
+      yield* Effect.forEach(
+        invalid,
+        Effect.fnUntraced(function* (args) {
+          const test = fixture(undefined, ["write"]);
+          let reads = 0;
 
-        const result = yield* Effect.result(
-          runOperationCommand(["transactions", "createTransaction", ...args], {
-            ...test.dependencies,
-            readInput: () =>
-              Effect.sync(() => {
-                reads += 1;
+          const result = yield* Effect.result(
+            runOperationCommand(["transactions", "createTransaction", ...args], {
+              ...test.dependencies,
+              readInput: () =>
+                Effect.sync(() => {
+                  reads += 1;
 
-                return "{}";
-              }),
-          })
-        );
+                  return "{}";
+                }),
+            })
+          );
 
-        expect(result).toMatchObject({ failure: { reason: "InvalidInput" } });
-        expect(test.requests).toEqual([]);
-        expect(test.stdout).toEqual([]);
-        expect(test.stderr).toEqual([]);
-        expect(reads).toBe(0);
-      }
+          expect(result).toMatchObject({ failure: { reason: "InvalidInput" } });
+          expect(test.requests).toEqual([]);
+          expect(test.stdout).toEqual([]);
+          expect(test.stderr).toEqual([]);
+          expect(reads).toBe(0);
+        }),
+        { discard: true }
+      );
     })
 );
 

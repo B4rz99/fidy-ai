@@ -1,6 +1,6 @@
 import { Option } from "effect";
 import { expect, it } from "vitest";
-import { installationOutput } from "./installation";
+import { installationOutput } from "../../src/command/installation";
 
 it("publishes installation help without credential dependencies", () => {
   expect(Option.getOrThrow(installationOutput(["--help"]))).toContain("fidy login");

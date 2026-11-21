@@ -1,8 +1,8 @@
 import { type PATScope, TokenBearer } from "@fidy/server/client";
 import { Effect, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
-import { SavedGrant, apiOrigin } from "../credential/contract";
-import type { CanonicalClientFactory, CanonicalDependencies } from "./contract";
+import { SavedGrant, apiOrigin } from "../../src/credential/contract";
+import type { CanonicalClientFactory, CanonicalDependencies } from "../../src/canonical/contract";
 
 const secretCharacters = 43;
 

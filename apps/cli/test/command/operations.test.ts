@@ -1,12 +1,22 @@
 import { deepStrictEqual } from "node:assert";
 import { TestClock } from "effect/testing";
-import { type LoginDependencies } from "../login/contract";
+import { type LoginDependencies } from "../../src/login/contract";
 import { IssuedPAT, StartedPATPairing } from "@fidy/server/client";
-import { expect, it } from "@effect/vitest";
-import { Cause, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
-import { CliFailure, type Credential, SavedGrant, apiOrigin } from "../credential/contract";
-import { type CommandDependencies, PublicOutput } from "./contract";
-import { formatCommandFailure, formatFailure, formatOutput, runCommand } from "./operations";
+import { assert, expect, it } from "@effect/vitest";
+import { Cause, Deferred, Effect, Exit, Fiber, Option, Predicate, Schema } from "effect";
+import { CliFailure, type Credential, SavedGrant, apiOrigin } from "../../src/credential/contract";
+import {
+  type CommandDependencies,
+  LocalStatusAbsent,
+  LoggedOut,
+  PublicOutput,
+} from "../../src/command/contract";
+import {
+  formatCommandFailure,
+  formatFailure,
+  formatOutput,
+  runCommand,
+} from "../../src/command/operations";
 
 const secretLength = 43;
 
@@ -58,19 +68,24 @@ it.effect(
       };
 
       yield* runCommand(["status"], dependencies);
-      expect(output[0]).toMatchObject({ _tag: "LocalStatus", availability: "expired" });
+      expect(Predicate.isTagged(output[0], "LocalStatus")).toBe(true);
+      expect(output[0]).toMatchObject({ availability: "expired" });
 
-      for (const event of output) {
-        const human = yield* formatOutput(event, false);
-        const json = yield* formatOutput(event, true);
-        expect(human.includes(secret) || json.includes(secret)).toBe(false);
-        expect(human.includes("\u001b") || json.includes("\u001b")).toBe(false);
-        expect(/[\u007f-\u009f\u202e]/u.test(human + json)).toBe(false);
-      }
+      yield* Effect.forEach(
+        output,
+        Effect.fnUntraced(function* (event) {
+          const human = yield* formatOutput(event, false);
+          const json = yield* formatOutput(event, true);
+          expect(human.includes(secret) || json.includes(secret)).toBe(false);
+          expect(human.includes("\u001b") || json.includes("\u001b")).toBe(false);
+          expect(/[\u007f-\u009f\u202e]/u.test(human + json)).toBe(false);
+        }),
+        { discard: true }
+      );
 
       yield* runCommand(["logout"], dependencies);
       expect(Option.isNone(local)).toBe(true);
-      const logout = yield* formatOutput({ _tag: "LoggedOut" }, false);
+      const logout = yield* formatOutput(LoggedOut.make({}), false);
       expect(logout).toContain("NO fue revocado");
     })
 );
@@ -79,19 +94,25 @@ it.effect("rejects impossible local status representations at the published outp
   Effect.gen(function* () {
     const grant = yield* Schema.encodeEffect(Schema.toCodecJson(SavedGrant))(saved.grant);
 
+    const absent = LocalStatusAbsent.make({ availability: "absent" });
+
     const invalid = [
-      { _tag: "LocalStatus", availability: "absent", grant },
-      { _tag: "LocalStatus", availability: "available", grant: null },
-      { _tag: "LocalStatus", availability: "expired", grant: null },
+      { ...absent, grant },
+      { ...absent, availability: "available", grant: null },
+      { ...absent, availability: "expired", grant: null },
     ];
 
-    for (const input of invalid) {
-      const result = yield* Schema.decodeEffect(Schema.toCodecJson(PublicOutput), {
-        onExcessProperty: "error",
-      })(input).pipe(Effect.exit);
+    yield* Effect.forEach(
+      invalid,
+      Effect.fnUntraced(function* (input) {
+        const result = yield* Schema.decodeEffect(Schema.toCodecJson(PublicOutput), {
+          onExcessProperty: "error",
+        })(input).pipe(Effect.exit);
 
-      expect(Exit.isFailure(result)).toBe(true);
-    }
+        expect(Exit.isFailure(result)).toBe(true);
+      }),
+      { discard: true }
+    );
   })
 );
 
@@ -101,52 +122,60 @@ it("gives revocation and fresh-pairing recovery for an ambiguous claim", () => {
   expect(human).toContain("nueva vinculación");
 });
 
+const recordUrl =
+  (opened: Array<string>) =>
+  (url: string): Effect.Effect<void> =>
+    Effect.sync(() => {
+      opened.push(url);
+    });
+
 it.effect(
   "opens only the public approval link, with a no-browser fallback and no duplicate flag side effects",
   () =>
     Effect.gen(function* () {
-      for (const noBrowser of [false, true]) {
-        const fixture = makeLoginFixture();
-        const opened: Array<string> = [];
-        const emitted: Array<PublicOutput> = [];
-        const args = ["login", "--recipient", "Mi agente", "--scopes", "read", "--lifetime", "7"];
+      yield* Effect.forEach(
+        [false, true],
+        Effect.fnUntraced(function* (noBrowser) {
+          const fixture = makeLoginFixture();
+          const opened: Array<string> = [];
+          const emitted: Array<PublicOutput> = [];
+          const args = ["login", "--recipient", "Mi agente", "--scopes", "read", "--lifetime", "7"];
 
-        if (noBrowser) args.push("--no-browser");
+          if (noBrowser) args.push("--no-browser");
 
-        const fiber = yield* runCommand(
-          args,
-          {
-            ...fixture.dependencies,
-            readLine: () => Effect.die("unexpected prompt"),
-            emit: (event) =>
-              Effect.sync(() => {
-                emitted.push(event);
-              }),
-          },
-          (url) =>
-            Effect.sync(() => {
-              opened.push(url);
-            })
-        ).pipe(Effect.forkChild);
+          const fiber = yield* runCommand(
+            args,
+            {
+              ...fixture.dependencies,
+              readLine: () => Effect.die("unexpected prompt"),
+              emit: (event) =>
+                Effect.sync(() => {
+                  emitted.push(event);
+                }),
+            },
+            recordUrl(opened)
+          ).pipe(Effect.forkChild);
 
-        yield* TestClock.adjust("5 seconds");
-        yield* Fiber.join(fiber);
-        expect(opened).toEqual(
-          noBrowser ? [] : ["https://app.fidyapp.com/connect/cli?cliCode=BCDF-GHJK"]
-        );
-        expect(emitted[0]).toMatchObject({
-          publicCode: "BCDF-GHJK",
-          approvalUrl: "https://app.fidyapp.com/connect/cli?cliCode=BCDF-GHJK",
-        });
+          yield* TestClock.adjust("5 seconds");
+          yield* Fiber.join(fiber);
+          expect(opened).toEqual(
+            noBrowser ? [] : ["https://app.fidyapp.com/connect/cli?cliCode=BCDF-GHJK"]
+          );
+          expect(emitted[0]).toMatchObject({
+            publicCode: "BCDF-GHJK",
+            approvalUrl: "https://app.fidyapp.com/connect/cli?cliCode=BCDF-GHJK",
+          });
 
-        const encoded = yield* Schema.encodeEffect(
-          Schema.fromJsonString(Schema.Array(PublicOutput))
-        )(emitted);
+          const encoded = yield* Schema.encodeEffect(
+            Schema.fromJsonString(Schema.Array(PublicOutput))
+          )(emitted);
 
-        expect(encoded).not.toContain(privateProof);
-        expect(encoded).not.toContain(secret);
-        expect(fixture.saved).toHaveLength(1);
-      }
+          expect(encoded).not.toContain(privateProof);
+          expect(encoded).not.toContain(secret);
+          expect(fixture.saved).toHaveLength(1);
+        }),
+        { discard: true }
+      );
 
       const fixture = makeLoginFixture();
 
@@ -167,10 +196,12 @@ it.effect(
 
 const privateProof = "p".repeat(secretLength);
 
-const makeLoginFixture = (): Readonly<{
+type LoginFixture = Readonly<{
   dependencies: LoginDependencies;
   saved: Array<Credential>;
-}> => {
+}>;
+
+const makeLoginFixture = (): LoginFixture => {
   const saved: Array<Credential> = [];
 
   const pairing = Schema.decodeSync(Schema.toCodecJson(StartedPATPairing))({
@@ -247,46 +278,45 @@ it.effect("interrupted saving settles local persistence without success output o
     yield* Deferred.succeed(release, undefined);
     yield* Fiber.join(interrupted);
     const exit = yield* Fiber.await(fiber);
-    expect(Exit.isFailure(exit)).toBe(true);
+    assert(Exit.isFailure(exit));
 
-    if (Exit.isFailure(exit)) {
-      expect(Cause.hasInterrupts(exit.cause)).toBe(true);
-      expect(exit.cause.reasons.filter(Cause.isFailReason)).toHaveLength(1);
-      deepStrictEqual(
-        exit,
-        Exit.failCause(
-          Cause.fromReasons(
-            exit.cause.reasons.map((reason) =>
-              Cause.isInterruptReason(reason)
-                ? reason
-                : Cause.makeFailReason(new CliFailure({ reason: "LoginSaveInterrupted" })).annotate(
-                    Cause.reasonAnnotations(reason)
-                  )
-            )
+    expect(Cause.hasInterrupts(exit.cause)).toBe(true);
+    expect(exit.cause.reasons.filter(Cause.isFailReason)).toHaveLength(1);
+    deepStrictEqual(
+      exit,
+      Exit.failCause(
+        Cause.fromReasons(
+          exit.cause.reasons.map((reason) =>
+            Cause.isInterruptReason(reason)
+              ? reason
+              : Cause.makeFailReason(
+                  new CliFailure({ reason: "LoginSaveInterrupted", cause: Option.none() })
+                ).annotate(Cause.reasonAnnotations(reason))
           )
         )
-      );
+      )
+    );
 
-      for (const json of [false, true]) {
-        const failure = formatCommandFailure({ cause: exit.cause, json });
-        expect(failure.interrupted).toBe(true);
-        expect(failure.message).toContain("puede haberse guardado");
-        expect(failure.message).toContain("fidy status");
-        expect(failure.message).not.toContain(secret);
-        expect(failure.message).not.toContain(privateProof);
-
-        if (json) {
-          expect(
-            yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(failure.message)
-          ).toMatchObject({ code: "LoginSaveInterrupted" });
-        }
-      }
+    for (const json of [false, true]) {
+      const failure = formatCommandFailure({ cause: exit.cause, json });
+      expect(failure.interrupted).toBe(true);
+      expect(failure.message).toContain("puede haberse guardado");
+      expect(failure.message).toContain("fidy status");
+      expect(failure.message).not.toContain(secret);
+      expect(failure.message).not.toContain(privateProof);
     }
 
-    expect(output.some((event) => event._tag === "LoggedIn")).toBe(false);
+    expect(
+      yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(
+        formatCommandFailure({ cause: exit.cause, json: true }).message
+      )
+    ).toMatchObject({ code: "LoginSaveInterrupted" });
+
+    expect(output.some((event) => Predicate.isTagged(event, "LoggedIn"))).toBe(false);
     expect(clears).toBe(0);
     yield* runCommand(["status"], dependencies);
-    expect(output.at(-1)).toMatchObject({ _tag: "LocalStatus", availability: "expired" });
+    expect(Predicate.isTagged(output.at(-1), "LocalStatus")).toBe(true);
+    expect(output.at(-1)).toMatchObject({ availability: "expired" });
   })
 );
 
@@ -334,28 +364,26 @@ it.effect(
       yield* Deferred.await(dispatched);
       yield* Fiber.interrupt(fiber);
       const exit = yield* Fiber.await(fiber);
-      expect(Exit.isFailure(exit)).toBe(true);
+      assert(Exit.isFailure(exit));
 
-      if (Exit.isFailure(exit)) {
-        for (const json of [false, true]) {
-          const failure = formatCommandFailure({ cause: exit.cause, json });
-          expect(failure.interrupted).toBe(true);
-          expect(failure.message).toContain("No se puede confirmar si el servidor entregó");
-          expect(failure.message).toContain("revoca");
-          expect(failure.message).not.toContain(secret);
-          expect(failure.message).not.toContain(privateProof);
-
-          if (json) {
-            expect(
-              yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(failure.message)
-            ).toMatchObject({ code: "ClaimAmbiguous" });
-          }
-        }
+      for (const json of [false, true]) {
+        const failure = formatCommandFailure({ cause: exit.cause, json });
+        expect(failure.interrupted).toBe(true);
+        expect(failure.message).toContain("No se puede confirmar si el servidor entregó");
+        expect(failure.message).toContain("revoca");
+        expect(failure.message).not.toContain(secret);
+        expect(failure.message).not.toContain(privateProof);
       }
+
+      expect(
+        yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(
+          formatCommandFailure({ cause: exit.cause, json: true }).message
+        )
+      ).toMatchObject({ code: "ClaimAmbiguous" });
 
       yield* TestClock.adjust("10 minutes");
       expect(claims).toBe(1);
-      expect(output.some((event) => event._tag === "LoggedIn")).toBe(false);
+      expect(output.some((event) => Predicate.isTagged(event, "LoggedIn"))).toBe(false);
       expect(fixture.saved).toHaveLength(0);
     })
 );

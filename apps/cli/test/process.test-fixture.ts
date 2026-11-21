@@ -1,4 +1,4 @@
-import { Data, Effect, Option, type Scope } from "effect";
+import { Data, Duration, Effect, Option, type Scope } from "effect";
 
 export class ProcessUnavailable extends Data.TaggedError("ProcessUnavailable")<{}> {}
 
@@ -7,13 +7,22 @@ export type TestProcess = Readonly<{
   exited: Effect.Effect<number, ProcessUnavailable>;
 }>;
 
+const releaseMillis = 500;
+
+const terminateMillis = 300;
+
+const killMillis = 1000;
+
 const unavailable = (): ProcessUnavailable => new ProcessUnavailable();
 
 type ProcessReader = ReturnType<Bun.Subprocess<"ignore", "pipe", "ignore">["stdout"]["getReader"]>;
 
 const releaseReader = (reader: ProcessReader): Effect.Effect<void, ProcessUnavailable> =>
   Effect.tryPromise({ try: () => reader.cancel(), catch: unavailable }).pipe(
-    Effect.timeoutOrElse({ duration: 500, orElse: () => Effect.fail(unavailable()) }),
+    Effect.timeoutOrElse({
+      duration: Duration.millis(releaseMillis),
+      orElse: () => Effect.fail(unavailable()),
+    }),
     Effect.ensuring(Effect.sync(() => reader.releaseLock()))
   );
 
@@ -29,12 +38,15 @@ const stopProcess = (
     yield* Effect.try({ try: () => child.kill("SIGTERM"), catch: unavailable });
     yield* awaitExit(child).pipe(
       Effect.timeoutOrElse({
-        duration: 300,
+        duration: Duration.millis(terminateMillis),
         orElse: () =>
           Effect.gen(function* () {
             yield* Effect.try({ try: () => child.kill("SIGKILL"), catch: unavailable });
             yield* awaitExit(child).pipe(
-              Effect.timeoutOrElse({ duration: 1000, orElse: () => Effect.fail(unavailable()) })
+              Effect.timeoutOrElse({
+                duration: Duration.millis(killMillis),
+                orElse: () => Effect.fail(unavailable()),
+              })
             );
           }),
       })
@@ -53,7 +65,7 @@ export const scopedProcess = Effect.fn(function* (
           stdin: stdin ?? "ignore",
           stdout: "pipe",
           stderr: "ignore",
-          ...(env === undefined ? {} : { env }),
+          env: env ?? process.env,
         });
 
         const reader = child.stdout.getReader();

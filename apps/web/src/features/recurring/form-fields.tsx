@@ -47,7 +47,7 @@ export const ScheduleFields = ({
           options={frequencies.map(([value, label]) => ({ value, label }))}
         />
       </Field>
-      <div data-recurring-slot="date-fields" className="grid min-w-0 gap-3">
+      <div data-recurring-slot="date-fields" className="grid min-w-0 gap-5">
         <Field label="Primera fecha" name="firstDate">
           <RecurringDateField
             name="firstDate"
@@ -148,7 +148,7 @@ const MonthDays = ({ initial }: Readonly<{ initial: Partial<PlanInput> }>): JSX.
         Para dos veces al mes, elige dos días. Los meses cortos usan su último día y conservan el
         día original.
       </p>
-      <div data-recurring-slot="date-fields" className="grid min-w-0 gap-3">
+      <div data-recurring-slot="date-fields" className="grid min-w-0 gap-5">
         <Field label="Primer día del mes" name="day1">
           <Input
             id="recurring-day1"

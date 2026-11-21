@@ -6,63 +6,11 @@ import { Input } from "@/ui/components/input";
 import { ChoiceField } from "./fields";
 import { Field, IdentityFields, ScheduleFields } from "./form-fields";
 import type { Category, PlanInput } from "./model";
-import {
-  type PlanDraft,
-  PlanFeedbackContext,
-  type PlanProblem,
-  findPlanProblems,
-  parseMonthDay,
-} from "./plan-validation";
+import { PlanFeedbackContext, type PlanProblem, findPlanProblems } from "./plan-validation";
+import { planDraft, planFields } from "./plan-fields";
 
-const value = (form: FormData, key: string): string => {
-  const entry = form.get(key);
-
-  return typeof entry === "string" ? entry.trim() : "";
-};
-
-const planDraft = (form: FormData): PlanDraft => ({
-  kind: value(form, "kind"),
-  cardPayment: value(form, "cardPayment") === "yes",
-  frequency: value(form, "frequency"),
-  firstDate: value(form, "firstDate"),
-  endDate: value(form, "endDate"),
-  day1: value(form, "day1"),
-  day2: value(form, "day2"),
-});
-
-const parsePlan = (form: FormData, timeZone: PlanInput["timeZone"]): Option.Option<PlanInput> => {
-  const currency = value(form, "currency").toUpperCase();
-  const amountMode = value(form, "amountMode");
-  const frequency = value(form, "frequency");
-
-  const optional = Object.fromEntries(
-    ["endDate", "counterparty", "categoryId"].flatMap((key) =>
-      value(form, key) === "" ? [] : [[key, value(form, key)]]
-    )
-  );
-
-  return Schema.decodeOption(Schema.toCodecJson(RecurringPlanInput))({
-    name: value(form, "name"),
-    kind: value(form, "kind"),
-    currency,
-    amountMode,
-    frequency,
-    timeZone,
-    firstDate: value(form, "firstDate"),
-    cardPayment: value(form, "cardPayment") === "yes",
-    ...optional,
-    ...(amountMode === "unknown" ? {} : { money: { amount: value(form, "amount"), currency } }),
-    ...(frequency === "twice-monthly"
-      ? Option.match(
-          Option.all([parseMonthDay(value(form, "day1")), parseMonthDay(value(form, "day2"))]),
-          {
-            onNone: () => ({}),
-            onSome: (monthDays) => ({ monthDays }),
-          }
-        )
-      : {}),
-  });
-};
+const parsePlan = (form: FormData, timeZone: PlanInput["timeZone"]): Option.Option<PlanInput> =>
+  Schema.decodeOption(Schema.toCodecJson(RecurringPlanInput))(planFields({ form, timeZone }));
 
 export const PlanForm = ({
   initial,

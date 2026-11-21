@@ -1,12 +1,13 @@
 import { it } from "@effect/vitest";
 import {
+  type ClassifiedFailure,
   type DurableTraceContext,
   type SpanDescriptor,
   TelemetryAttempt,
   TelemetryCount,
   TelemetryWorkRecord,
 } from "../../src/shell/observability/contract";
-import { Clock, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
+import { Array as Arr, Clock, Data, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { WorkerTelemetryEvent } from "./telemetry/contract";
 import { TestClock } from "effect/testing";
 import { expect, vi } from "vitest";
@@ -22,6 +23,10 @@ import {
   workTraceHeaders,
   workerRelease,
 } from "./telemetry/operations";
+
+const SpanMetadata = Data.taggedEnum<SpanDescriptor["metadata"]>();
+
+const ClassifiedFailureCase = Data.taggedEnum<ClassifiedFailure>();
 
 it.effect("reports a durable attempt without replacing its rejection or exporting its cause", () =>
   Effect.gen(function* () {
@@ -264,7 +269,7 @@ it.effect("connects root, child and Work exports using server-generated metadata
           workKind: "hosted_turn",
           trigger: "queue",
           spanOperation: "agent.turn",
-          metadata: { _tag: "None" },
+          metadata: SpanMetadata.None(),
         },
         Effect.void
       ),
@@ -311,20 +316,23 @@ it.effect("retains bounded breadcrumbs and model usage while excluding raw failu
         workKind: "model_call",
         trigger: "api",
         spanOperation: "agent.model",
-        metadata: { _tag: "Model", model: "openai" },
+        metadata: SpanMetadata.Model({ model: "openai" }),
       },
       Effect.gen(function* () {
-        for (let attempt = 1; attempt <= 40; attempt++) {
-          yield* telemetry.addBreadcrumb({
-            category: "agent",
-            action: "model_started",
-            component: "agent",
-            outcome: Option.none(),
-            error: Option.none(),
-            attempt: Option.some(TelemetryAttempt.make(attempt)),
-            durationMilliseconds: Option.none(),
-          });
-        }
+        yield* Effect.forEach(
+          Arr.range(1, 40),
+          (attempt) =>
+            telemetry.addBreadcrumb({
+              category: "agent",
+              action: "model_started",
+              component: "agent",
+              outcome: Option.none(),
+              error: Option.none(),
+              attempt: Option.some(TelemetryAttempt.make(attempt)),
+              durationMilliseconds: Option.none(),
+            }),
+          { discard: true }
+        );
 
         yield* telemetry.recordModelUsage({
           attempt: TelemetryAttempt.make(2),
@@ -336,19 +344,20 @@ it.effect("retains bounded breadcrumbs and model usage while excluding raw failu
           error: Option.some("model_response_rejected"),
           retryable: false,
         });
-        yield* telemetry.captureFailure({
-          _tag: "ExhaustedOperationalFailure",
-          component: "agent",
-          operation: "model.openAi",
-          error: "model_response_rejected",
-          provider: Option.some("openai"),
-          retryable: false,
-          cause: {
-            prompt: "prompt-canary",
-            credential: "token-canary",
-            url: "https://secret.invalid",
-          },
-        });
+        yield* telemetry.captureFailure(
+          ClassifiedFailureCase.ExhaustedOperationalFailure({
+            component: "agent",
+            operation: "model.openAi",
+            error: "model_response_rejected",
+            provider: Option.some("openai"),
+            retryable: false,
+            cause: {
+              prompt: "prompt-canary",
+              credential: "token-canary",
+              url: "https://secret.invalid",
+            },
+          })
+        );
       })
     );
     const events = captured.filter(Schema.is(WorkerTelemetryEvent));
@@ -395,7 +404,7 @@ it.effect("contains span sink failures while cleaning up active trace state", ()
       trigger: "api",
       spanOperation: "fidy.operation",
       workKind: "canonical_operation",
-      metadata: { _tag: "None" },
+      metadata: SpanMetadata.None(),
     } as const;
 
     const context = yield* telemetry.rootSpan(descriptor, telemetry.captureDurableContext);
@@ -458,7 +467,7 @@ it.effect("runs authoritative work when hostile span metadata prevents startup",
       trigger: "api",
       spanOperation: "fidy.operation",
       workKind: "canonical_operation",
-      get metadata(): Readonly<{ _tag: "None" }> {
+      get metadata(): Data.TaggedEnum.Value<SpanDescriptor["metadata"], "None"> {
         throw new Error("private-startup-sentinel");
       },
     };
@@ -485,7 +494,7 @@ it.effect("bounds simultaneous active spans and releases capacity after completi
       trigger: "api",
       spanOperation: "fidy.operation",
       workKind: "canonical_operation",
-      metadata: { _tag: "None" },
+      metadata: SpanMetadata.None(),
     } as const;
 
     const ready = yield* Deferred.make<void>();
@@ -538,7 +547,7 @@ it.effect(
         trigger: "api",
         spanOperation: "agent.model",
         workKind: "model_round",
-        metadata: { _tag: "None" },
+        metadata: SpanMetadata.None(),
       } as const;
 
       const rejected = yield* Effect.exit(
@@ -602,7 +611,7 @@ it.effect("exports bounded hosted round usage only from an approved model span",
         trigger: "api",
         spanOperation: "agent.model",
         workKind: "model_round",
-        metadata: { _tag: "None" },
+        metadata: SpanMetadata.None(),
       },
       telemetry.recordModelUsage(usage)
     );
@@ -613,7 +622,7 @@ it.effect("exports bounded hosted round usage only from an approved model span",
         trigger: "api",
         spanOperation: "fidy.operation",
         workKind: "canonical_operation",
-        metadata: { _tag: "None" },
+        metadata: SpanMetadata.None(),
       },
       telemetry.recordModelUsage(usage)
     );
@@ -657,15 +666,19 @@ it.effect(
 
       const work = { version: 1, operation: "durable-domain-work", identity: "owned-work" };
 
-      for (const traceContext of [
-        "bearer-canary",
-        { ...context, payload: "private-canary" },
-        { ...context, capturedAtUnixMilliseconds: 0 },
-        { ...context, capturedAtUnixMilliseconds: now + 1 },
-        { ...context, traceId: "0".repeat(32) },
-      ]) {
-        expect(yield* sanitizeWorkTrace({ ...work, traceContext })).toEqual(work);
-      }
+      yield* Effect.forEach(
+        [
+          "bearer-canary",
+          { ...context, payload: "private-canary" },
+          { ...context, capturedAtUnixMilliseconds: 0 },
+          { ...context, capturedAtUnixMilliseconds: now + 1 },
+          { ...context, traceId: "0".repeat(32) },
+        ],
+        Effect.fnUntraced(function* (traceContext) {
+          expect(yield* sanitizeWorkTrace({ ...work, traceContext })).toEqual(work);
+        }),
+        { discard: true }
+      );
 
       expect(yield* sanitizeWorkTrace({ ...work, traceContext: context })).toEqual({
         ...work,

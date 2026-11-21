@@ -3,11 +3,22 @@ import { admitPurge, caseDriver } from "../erasure-purge.test-fixture";
 import type { Miniflare } from "miniflare";
 import { it } from "@effect/vitest";
 import { NodeFileSystem } from "@effect/platform-node";
-import { DateTime, Effect, Fiber, Schedule, Schema } from "effect";
+import {
+  Array as Arr,
+  Data,
+  DateTime,
+  Effect,
+  Exit,
+  Fiber,
+  Predicate,
+  Schedule,
+  Schema,
+} from "effect";
 import { expect } from "vitest";
 import { allowancePeriod } from "../../src/core/quotas/operations";
 import { freeForwardedEmailCap } from "../../src/core/ingestion/contract";
 import {
+  type EmailCapacityCommand,
   directoryName,
   emailCapacityUrl,
   outstandingEmailLimit,
@@ -15,6 +26,17 @@ import {
 } from "../directory/contract";
 import { alice, bob, seed } from "../financial-user-store.test-fixture";
 import { native, nativeBillingPlatform, nativePurgePlatform } from "../user-store.test-fixture";
+
+const CapacityCommandWire = Data.taggedEnum<typeof EmailCapacityCommand.Encoded>();
+
+const decodeCapacityClaim = Schema.decodeUnknownSync(
+  Schema.Struct({
+    id: Schema.String,
+    expires_at_ms: Schema.Int,
+    capacity_slot: Schema.Int,
+    capacity_generation: Schema.Int,
+  })
+);
 
 const storedText = Schema.decodeUnknownSync(Schema.String);
 
@@ -115,10 +137,16 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* native(() => bucket.head(key))).toBeNull();
         expect((yield* admitPurge(runtime)).status).toBe(202);
 
-        for (let step = 0; step < 4; step++) expect(yield* cases.step()).toBe("Draining");
+        yield* Effect.forEach(
+          Arr.range(1, 4),
+          Effect.fnUntraced(function* () {
+            expect(yield* cases.step()).toBe("Draining");
+          }),
+          { discard: true }
+        );
         yield* fixtureControl(user, "release-original");
         const sent = yield* Fiber.await(sending);
-        expect(sent._tag === "Failure" || sent.value.status !== 204).toBe(true);
+        expect(Exit.isFailure(sent) || sent.value.status !== 204).toBe(true);
 
         const phase = yield* cases
           .step()
@@ -222,22 +250,26 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           )
         );
 
-        for (const recipient of [first, second]) {
-          yield* recipient.owner.exec(
-            "CREATE TRIGGER stop_claim_ack BEFORE UPDATE OF capacity_claimed ON forwarded_email_receipts WHEN NEW.capacity_claimed=1 BEGIN SELECT RAISE(ABORT,'fixture'); END"
-          );
-        }
+        yield* Effect.forEach(
+          [first, second],
+          Effect.fnUntraced(function* (recipient) {
+            yield* recipient.owner.exec(
+              "CREATE TRIGGER stop_claim_ack BEFORE UPDATE OF capacity_claimed ON forwarded_email_receipts WHEN NEW.capacity_claimed=1 BEGIN SELECT RAISE(ABORT,'fixture'); END"
+            );
+          }),
+          { discard: true }
+        );
 
         const attempts = yield* Effect.all(
           [Effect.exit(first.send(false)), Effect.exit(second.send(false))],
           { concurrency: 2 }
         );
 
-        expect(attempts.filter((item) => item._tag === "Failure")).toHaveLength(1);
-        const admitted = attempts[0]._tag === "Failure" ? first : second;
+        expect(attempts.filter((item) => Exit.isFailure(item))).toHaveLength(1);
+        const admitted = Exit.isFailure(attempts[0]) ? first : second;
         const refused = admitted === first ? second : first;
-        const refusal = attempts.find((item) => item._tag === "Success");
-        expect(refusal?._tag === "Success" && refusal.value.status).toBe(422);
+        const refusal = attempts.find((item) => Exit.isSuccess(item));
+        expect(Predicate.isTagged(refusal, "Success") && refusal.value.status).toBe(422);
 
         const [claim] = yield* admitted.owner.exec(
           "SELECT id,expires_at_ms,capacity_slot,capacity_generation,capacity_claimed FROM forwarded_email_receipts WHERE state='storing'"
@@ -252,9 +284,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           )
         ).toEqual([{ n: outstandingEmailLimit }]);
 
-        for (const recipient of [first, second]) {
-          yield* recipient.owner.exec("DROP TRIGGER stop_claim_ack");
-        }
+        yield* Effect.forEach(
+          [first, second],
+          Effect.fnUntraced(function* (recipient) {
+            yield* recipient.owner.exec("DROP TRIGGER stop_claim_ack");
+          }),
+          { discard: true }
+        );
 
         expect((yield* admitted.send(false)).status).toBe(204);
 
@@ -295,19 +331,22 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           first.runtime.getDurableObjectNamespace("DIRECTORY", "core")
         );
 
+        const target = decodeCapacityClaim(claim);
+
         const mutate = (
           action: "Claim" | "Release"
         ): Effect.Effect<Awaited<ReturnType<ReturnType<typeof ns.getByName>["fetch"]>>> =>
           native(() =>
             ns.getByName(directoryName).fetch(emailCapacityUrl, {
               method: "POST",
-              body: JSON.stringify({
-                _tag: action,
-                slot: claim?.capacity_slot,
-                generation: claim?.capacity_generation,
-                receipt: claim?.id,
-                expires: claim?.expires_at_ms,
-              }),
+              body: JSON.stringify(
+                CapacityCommandWire[action]({
+                  slot: target.capacity_slot,
+                  generation: target.capacity_generation,
+                  receipt: target.id,
+                  expires: target.expires_at_ms,
+                })
+              ),
             })
           );
 

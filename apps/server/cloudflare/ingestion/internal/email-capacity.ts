@@ -1,9 +1,15 @@
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Data, Effect, Option, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { EmailCapacitySlot, type IngestionCapacity } from "../../directory/contract";
+import {
+  type EmailCapacityCommand,
+  EmailCapacitySlot,
+  type IngestionCapacity,
+} from "../../directory/contract";
 import { sendIngestionCapacity } from "../../directory/operations";
 import { CanonicalAdmissionUnavailable } from "../../canonical-admission/contract";
 import { preserveStoreAlarm, withStoreCapacity } from "../../runtime/sqlite/operations";
+
+const capacityCommand = Data.taggedEnum<typeof EmailCapacityCommand.Type>();
 
 const stale = 409,
   full = 429,
@@ -55,7 +61,7 @@ const chooseSlot = Effect.fn(function* (
     return { slot: row.capacity_slot, generation: row.capacity_generation };
   }
 
-  const offered = yield* sendIngestionCapacity(directory, { _tag: "Offer" }, purpose);
+  const offered = yield* sendIngestionCapacity(directory, capacityCommand.Offer(), purpose);
 
   if (offered.status === full) return "full" as const;
 
@@ -90,13 +96,7 @@ const applyClaim = Effect.fn(function* (
 
   const claimed = yield* sendIngestionCapacity(
     directory,
-    {
-      _tag: "Claim",
-      slot,
-      generation,
-      receipt: id,
-      expires,
-    },
+    capacityCommand.Claim({ slot, generation, receipt: id, expires }),
     purpose
   );
 
@@ -123,43 +123,53 @@ const applyClaim = Effect.fn(function* (
   return saved.length === 1;
 });
 
-export const claimIngestionCapacity = Effect.fn(function* (
+const offerClaim = Effect.fn(function* (
   { directory, purpose }: CapacityTarget,
+  id: string,
+  storage: DurableObjectStorage
+) {
+  const selected = yield* lookup(id, purpose);
+
+  if (Option.isNone(selected) || selected.value.state !== "storing") return Option.some(false);
+  const row = selected.value;
+
+  if (row.capacity_claimed === 1) return Option.some(true);
+  const offer = yield* chooseSlot(directory, row, purpose);
+
+  if (offer === "retry") return Option.none<boolean>();
+
+  if (offer === "full") {
+    yield* discardStoring(id, storage, purpose);
+
+    return Option.some(false);
+  }
+
+  const { slot, generation } = offer;
+
+  const result = yield* applyClaim({ directory, purpose }, storage, {
+    id,
+    slot,
+    generation,
+    expires: row.expires_at_ms,
+  });
+
+  return result === "retry" ? Option.none<boolean>() : Option.some(result);
+});
+
+export const claimIngestionCapacity = Effect.fn(function* (
+  target: CapacityTarget,
   id: string,
   storage: DurableObjectStorage
 ) {
   const maxOffers = 4;
 
-  for (let attempt = 0; attempt < maxOffers; attempt++) {
-    const selected = yield* lookup(id, purpose);
+  const claimed = yield* offerClaim(target, id, storage).pipe(
+    Effect.repeat({ while: Option.isNone, times: maxOffers - 1 })
+  );
 
-    if (Option.isNone(selected) || selected.value.state !== "storing") return false;
-    const row = selected.value;
+  if (Option.isNone(claimed)) return yield* unavailable();
 
-    if (row.capacity_claimed === 1) return true;
-    const offer = yield* chooseSlot(directory, row, purpose);
-
-    if (offer === "retry") continue;
-
-    if (offer === "full") {
-      yield* discardStoring(id, storage, purpose);
-
-      return false;
-    }
-
-    const { slot, generation } = offer;
-
-    const result = yield* applyClaim({ directory, purpose }, storage, {
-      id,
-      slot,
-      generation,
-      expires: row.expires_at_ms,
-    });
-
-    if (result !== "retry") return result;
-  }
-
-  return yield* unavailable();
+  return claimed.value;
 });
 
 export const updateSharedCapacity = Effect.fn(function* (
@@ -181,13 +191,7 @@ export const updateSharedCapacity = Effect.fn(function* (
 
   const result = yield* sendIngestionCapacity(
     directory,
-    {
-      _tag: action,
-      slot,
-      generation,
-      receipt: id,
-      expires,
-    },
+    capacityCommand[action]({ slot, generation, receipt: id, expires }),
     purpose
   );
 

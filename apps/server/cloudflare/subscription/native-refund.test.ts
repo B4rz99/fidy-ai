@@ -1,10 +1,15 @@
 import type { Miniflare } from "miniflare";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, Schedule, Schema } from "effect";
+import { Data, Effect, Schedule, Schema } from "effect";
 import { expect } from "vitest";
 import { alice, bob, seed } from "../financial-user-store.test-fixture";
 import { native, nativeBillingPlatform } from "../user-store.test-fixture";
+import { type LocalRefundWork, type RefundRead, type RefundSupportAdmission } from "./contract";
+
+const RefundWire = Data.taggedEnum<
+  typeof RefundSupportAdmission.Encoded | typeof RefundRead.Encoded | typeof LocalRefundWork.Encoded
+>();
 
 const attempt = "40000000-0000-4000-8000-000000000001";
 
@@ -22,8 +27,7 @@ const submitTo =
     { amount = "4000", key = requestId, voidCard = false } = {}
   ): Effect.Effect<Response> =>
     Effect.gen(function* () {
-      const data = {
-        _tag: "BillingRefundSupport",
+      const data = RefundWire.BillingRefundSupport({
         authority: {
           operatorId: "refund-reviewer",
           permission: "billing.refund",
@@ -38,7 +42,7 @@ const submitTo =
             ? { kind: "card-void" }
             : { kind: "refund", money: { amount, currency: "COP" } },
         },
-      };
+      });
 
       const response = yield* native(() =>
         ns.getByName(target).fetch("https://user.invalid/billing/refund-support", {
@@ -59,12 +63,9 @@ const runVoidStep = (
     const response = yield* native(() =>
       users.getByName(target).fetch("https://user.invalid/work/refund", {
         method: "POST",
-        body: JSON.stringify({
-          _tag: "RunUserRefund",
-          userId: alice.user,
-          refundAttemptId: id,
-          verification,
-        }),
+        body: JSON.stringify(
+          RefundWire.RunUserRefund({ userId: alice.user, refundAttemptId: id, verification })
+        ),
       })
     );
 
@@ -101,79 +102,78 @@ const paidOwner = Effect.fn(function* (runtime: Miniflare) {
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "binds sandbox refund acceptance, exact replay and bounded reservations to the original paid User",
-    () =>
-      Effect.gen(function* () {
-        const runtime = yield* (yield* nativeBillingPlatform)();
+    Effect.fnUntraced(function* () {
+      const runtime = yield* (yield* nativeBillingPlatform)();
 
-        const provider = yield* native(() =>
-          runtime.unsafeGetDurableObjectStorage("wompi-fixture", "ProviderState", {
-            name: "provider",
-          })
+      const provider = yield* native(() =>
+        runtime.unsafeGetDurableObjectStorage("wompi-fixture", "ProviderState", {
+          name: "provider",
+        })
+      );
+
+      yield* native(() =>
+        provider.exec(
+          "CREATE TABLE refund_requests(reference TEXT NOT NULL,amount INTEGER NOT NULL)"
+        )
+      );
+      const owner = yield* paidOwner(runtime);
+      const ns = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
+      const submit = submitTo(ns);
+      const expires = owner.now + 600000;
+      expect((yield* submit(bob.user, expires)).status).toBe(403);
+      expect((yield* submit(alice.user, owner.now - 1)).status).toBe(403);
+
+      const [first, replay] = yield* Effect.all(
+        [submit(alice.user, expires), submit(alice.user, expires)],
+        { concurrency: 2 }
+      );
+
+      expect(first.status).toBe(202);
+      expect(replay.status).toBe(202);
+
+      const accepted = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.Struct({ id: Schema.String, status: Schema.String }) })
+      )(yield* native(() => first.json()));
+
+      expect(yield* native(() => replay.json())).toMatchObject({
+        data: { id: accepted.data.id },
+      });
+      expect((yield* submit(alice.user, expires, { amount: "5000" })).status).toBe(409);
+      expect((yield* submit(alice.user, expires, { amount: "8000", key: bob.user })).status).toBe(
+        409
+      );
+      expect(
+        yield* owner.exec(
+          "SELECT user_id,request_id,amount_in_cents FROM refund_attempts WHERE request_id IS NOT NULL"
+        )
+      ).toEqual([{ user_id: alice.user, request_id: requestId, amount_in_cents: 400000 }]);
+      yield* owner
+        .exec(
+          "SELECT status FROM refund_attempts WHERE id=? AND status='succeeded'",
+          accepted.data.id
+        )
+        .pipe(
+          Effect.filterOrFail(
+            (rows) => rows.length === 1,
+            () => "waiting for verification"
+          ),
+          Effect.retry({ times: 100, schedule: Schedule.spaced("60 millis") })
         );
+      expect(
+        yield* native(() => provider.exec("SELECT count(*) AS count FROM refund_requests"))
+      ).toEqual([{ count: 1 }]);
+      expect(
+        yield* owner.exec(
+          "SELECT count(*) AS count FROM subscription_renewal_fences WHERE user_id=?",
+          alice.user
+        )
+      ).toEqual([{ count: 1 }]);
 
-        yield* native(() =>
-          provider.exec(
-            "CREATE TABLE refund_requests(reference TEXT NOT NULL,amount INTEGER NOT NULL)"
-          )
-        );
-        const owner = yield* paidOwner(runtime);
-        const ns = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
-        const submit = submitTo(ns);
-        const expires = owner.now + 600000;
-        expect((yield* submit(bob.user, expires)).status).toBe(403);
-        expect((yield* submit(alice.user, owner.now - 1)).status).toBe(403);
-
-        const [first, replay] = yield* Effect.all(
-          [submit(alice.user, expires), submit(alice.user, expires)],
-          { concurrency: 2 }
-        );
-
-        expect(first.status).toBe(202);
-        expect(replay.status).toBe(202);
-
-        const accepted = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ data: Schema.Struct({ id: Schema.String, status: Schema.String }) })
-        )(yield* native(() => first.json()));
-
-        expect(yield* native(() => replay.json())).toMatchObject({
-          data: { id: accepted.data.id },
-        });
-        expect((yield* submit(alice.user, expires, { amount: "5000" })).status).toBe(409);
-        expect((yield* submit(alice.user, expires, { amount: "8000", key: bob.user })).status).toBe(
-          409
-        );
-        expect(
-          yield* owner.exec(
-            "SELECT user_id,request_id,amount_in_cents FROM refund_attempts WHERE request_id IS NOT NULL"
-          )
-        ).toEqual([{ user_id: alice.user, request_id: requestId, amount_in_cents: 400000 }]);
-        yield* owner
-          .exec(
-            "SELECT status FROM refund_attempts WHERE id=? AND status='succeeded'",
-            accepted.data.id
-          )
-          .pipe(
-            Effect.filterOrFail(
-              (rows) => rows.length === 1,
-              () => "waiting for verification"
-            ),
-            Effect.retry({ times: 100, schedule: Schedule.spaced("60 millis") })
-          );
-        expect(
-          yield* native(() => provider.exec("SELECT count(*) AS count FROM refund_requests"))
-        ).toEqual([{ count: 1 }]);
-        expect(
-          yield* owner.exec(
-            "SELECT count(*) AS count FROM subscription_renewal_fences WHERE user_id=?",
-            alice.user
-          )
-        ).toEqual([{ count: 1 }]);
-
-        const receipt = yield* native(() =>
-          ns.getByName(alice.user).fetch("https://user.invalid/billing/refund-support", {
-            method: "POST",
-            body: JSON.stringify({
-              _tag: "ReadBillingRefund",
+      const receipt = yield* native(() =>
+        ns.getByName(alice.user).fetch("https://user.invalid/billing/refund-support", {
+          method: "POST",
+          body: JSON.stringify(
+            RefundWire.ReadBillingRefund({
               authority: {
                 operatorId: "operator",
                 permission: "billing.refund",
@@ -181,18 +181,20 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               },
               userId: alice.user,
               refundAttemptId: accepted.data.id,
-            }),
-          })
-        );
+            })
+          ),
+        })
+      );
 
-        const replayWork = {
-          _tag: "RunUserRefund",
-          userId: alice.user,
-          refundAttemptId: accepted.data.id,
-          verification: 0,
-        };
+      const replayWork = RefundWire.RunUserRefund({
+        userId: alice.user,
+        refundAttemptId: accepted.data.id,
+        verification: 0,
+      });
 
-        for (const named of [alice.user, bob.user]) {
+      yield* Effect.forEach(
+        [alice.user, bob.user],
+        Effect.fnUntraced(function* (named) {
           const retry = yield* native(() =>
             ns.getByName(named).fetch("https://user.invalid/work/refund", {
               method: "POST",
@@ -201,19 +203,21 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           );
 
           expect(retry.status).toBe(204);
-        }
+        }),
+        { discard: true }
+      );
 
-        expect(
-          yield* native(() => provider.exec("SELECT count(*) AS count FROM refund_requests"))
-        ).toEqual([{ count: 1 }]);
-        expect(yield* native(() => receipt.json())).toMatchObject({
-          data: {
-            id: accepted.data.id,
-            status: "succeeded",
-            money: { amount: "4000", currency: "COP" },
-          },
-        });
-      })
+      expect(
+        yield* native(() => provider.exec("SELECT count(*) AS count FROM refund_requests"))
+      ).toEqual([{ count: 1 }]);
+      expect(yield* native(() => receipt.json())).toMatchObject({
+        data: {
+          id: accepted.data.id,
+          status: "succeeded",
+          money: { amount: "4000", currency: "COP" },
+        },
+      });
+    })
   );
   test.effect(
     "a lost sandbox card-void response stays pending until exact read-only confirmation and never repeats the charge mutation",

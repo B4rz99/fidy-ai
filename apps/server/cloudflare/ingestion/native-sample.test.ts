@@ -138,7 +138,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     })
   );
 
-  for (const invalidClaim of ["multiple", "organization", "unassigned"]) {
+  const invalidReviewClaims = ["multiple", "organization", "unassigned"];
+
+  const testInvalidReviewClaim = (invalidClaim: (typeof invalidReviewClaims)[number]): void => {
     test.effect(`refuses a signed review assertion with ${invalidClaim} authority`, () =>
       Effect.gen(function* () {
         const runtime = yield* (yield* nativeBrowserPlatform)();
@@ -163,7 +165,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(refused.status).toBe(401);
       })
     );
-  }
+  };
+
+  invalidReviewClaims.forEach(testInvalidReviewClaim);
 
   test.effect(
     "reviews and publishes only an exact structural revision from the originating User",

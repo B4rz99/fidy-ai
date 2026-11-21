@@ -41,7 +41,10 @@ const decodeFact = (raw: unknown): Option.Option<RecurringTransactionFact> =>
     return Schema.decodeOption(Schema.toCodecJson(RecurringTransactionFact))({
       id: row.id,
       money: { amount: row.amount, currency: row.currency },
-      ...(row.counterparty === null ? {} : { counterparty: row.counterparty }),
+      ...Option.match(Option.fromNullOr(row.counterparty), {
+        onNone: () => ({}),
+        onSome: (counterparty) => ({ counterparty }),
+      }),
       occurredAt: row.occurred_at,
       backfill:
         created.value.epochMilliseconds - occurred.value.epochMilliseconds >

@@ -64,9 +64,13 @@ export const receiveForwardedEmailWork = ({
         { concurrency: coordinatorDeliveryConcurrency }
       );
 
-      for (const outcome of outcomes) {
-        if (Exit.isFailure(outcome)) return yield* Effect.failCause(outcome.cause);
-      }
+      yield* Effect.forEach(
+        outcomes,
+        Effect.fnUntraced(function* (outcome) {
+          if (Exit.isFailure(outcome)) return yield* Effect.failCause(outcome.cause);
+        }),
+        { discard: true }
+      );
     })
   ).catch((error: unknown) => {
     if (error instanceof ForwardedEmailDeliveryUnavailable) throw error.cause;

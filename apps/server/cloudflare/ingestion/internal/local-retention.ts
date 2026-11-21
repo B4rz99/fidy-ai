@@ -9,7 +9,8 @@ import { newId } from "../../secret-material/operations";
 import { UserId } from "../../../src/core/identity/contract";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Effect, Result, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
+import { ConsentSubject } from "../../../src/shell/consent/contract";
 import { preserveStoreAlarm, withStoreCapacity } from "../../runtime/sqlite/operations";
 import { erasePrivateObject } from "../../private-objects/operations";
 import type { LocalIngestionEnvironment } from "../contract";
@@ -25,6 +26,8 @@ const retryMs = 60_000;
 const deferredRetryMs = 3_600_000;
 
 const row = Schema.Struct({ id: Schema.String, user_id: Schema.String });
+
+const countTrue = (outcomes: ReadonlyArray<boolean>): number => outcomes.filter(Boolean).length;
 
 export const repairIngestionAlarm = Effect.fn(function* (
   current: number,
@@ -90,23 +93,26 @@ const recoverStatements = Effect.fn(function* (
     })
   );
 
-  let failed = 0;
+  const failures = yield* Effect.forEach(
+    due,
+    Effect.fnUntraced(function* (raw) {
+      const item = yield* Schema.decodeUnknownEffect(row)(raw);
 
-  for (const raw of due) {
-    const item = yield* Schema.decodeUnknownEffect(row)(raw);
+      const sent = yield* Effect.option(
+        Effect.tryPromise(() =>
+          env.STATEMENT_EXTRACTION_QUEUE.send({
+            version: 1,
+            userId: item.user_id,
+            submissionId: item.id,
+          })
+        )
+      );
 
-    const sent = yield* Effect.option(
-      Effect.tryPromise(() =>
-        env.STATEMENT_EXTRACTION_QUEUE.send({
-          version: 1,
-          userId: item.user_id,
-          submissionId: item.id,
-        })
-      )
-    );
+      return Option.isNone(sent);
+    })
+  );
 
-    if (sent._tag === "None") failed++;
-  }
+  const failed = countTrue(failures);
 
   yield* expireDocuments(current, env);
   const documents = yield* recoverDocumentStages(current, storage, env);
@@ -139,16 +145,12 @@ export const recoverIngestion = Effect.fn(function* (
 
   const results = yield* Effect.all(tasks, { mode: "result", concurrency: 1 });
 
-  let attempted = 0,
-    failed = 0;
+  const outcomes = yield* Effect.forEach(results, Effect.fromResult);
 
-  for (const result of results) {
-    if (Result.isFailure(result)) return yield* result.failure;
-    attempted += result.success.attempted;
-    failed += result.success.failed;
-  }
-
-  return { attempted, failed };
+  return {
+    attempted: outcomes.reduce((sum, outcome) => sum + outcome.attempted, 0),
+    failed: outcomes.reduce((sum, outcome) => sum + outcome.failed, 0),
+  };
 });
 
 const expireDocuments = Effect.fn(function* (current: number, env: LocalIngestionEnvironment) {
@@ -157,25 +159,29 @@ const expireDocuments = Effect.fn(function* (current: number, env: LocalIngestio
   const expired =
     yield* sql`SELECT id,user_id,object_key FROM statement_documents WHERE disposition=1 OR expires_at_ms<=${current} ORDER BY expires_at_ms LIMIT ${pageSize}`;
 
-  for (const raw of expired) {
-    const item = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ ...row.fields, object_key: Schema.String })
-    )(raw);
+  yield* Effect.forEach(
+    expired,
+    Effect.fnUntraced(function* (raw) {
+      const item = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ ...row.fields, object_key: Schema.String })
+      )(raw);
 
-    yield* settleBeforeDisposal("statement", env.STATEMENT_STAGING_BUCKET, item);
-    yield* erasePrivateObject({
-      bucket: env.STATEMENT_STAGING_BUCKET,
-      userId: item.user_id,
-      key: item.object_key,
-    });
-    yield* withStoreCapacity("required")(
-      Effect.gen(function* () {
-        yield* sql`UPDATE statement_documents SET disposition=2,media_id='' WHERE user_id=${item.user_id} AND id=${item.id} AND disposition=1`;
-        yield* sql`DELETE FROM statement_documents WHERE user_id=${item.user_id} AND id=${item.id} AND expires_at_ms<=${current}`;
-        yield* sql`UPDATE statement_staging_objects SET object_deleted_at_ms=${current} WHERE id=${item.id} AND user_id=${item.user_id}`;
-      })
-    );
-  }
+      yield* settleBeforeDisposal("statement", env.STATEMENT_STAGING_BUCKET, item);
+      yield* erasePrivateObject({
+        bucket: env.STATEMENT_STAGING_BUCKET,
+        userId: item.user_id,
+        key: item.object_key,
+      });
+      yield* withStoreCapacity("required")(
+        Effect.gen(function* () {
+          yield* sql`UPDATE statement_documents SET disposition=2,media_id='' WHERE user_id=${item.user_id} AND id=${item.id} AND disposition=1`;
+          yield* sql`DELETE FROM statement_documents WHERE user_id=${item.user_id} AND id=${item.id} AND expires_at_ms<=${current}`;
+          yield* sql`UPDATE statement_staging_objects SET object_deleted_at_ms=${current} WHERE id=${item.id} AND user_id=${item.user_id}`;
+        })
+      );
+    }),
+    { discard: true }
+  );
 });
 
 const expireEmails = Effect.fn(function* (current: number, env: LocalIngestionEnvironment) {
@@ -184,37 +190,96 @@ const expireEmails = Effect.fn(function* (current: number, env: LocalIngestionEn
   const expired =
     yield* sql`SELECT id,user_id,object_key,state FROM forwarded_email_receipts WHERE state='discarding' OR (state IN ('storing','queued') AND expires_at_ms<=${current}) ORDER BY expires_at_ms LIMIT ${pageSize}`;
 
-  for (const raw of expired) {
-    const target = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ ...row.fields, object_key: Schema.String, state: Schema.String })
-    )(raw);
+  yield* Effect.forEach(
+    expired,
+    Effect.fnUntraced(function* (raw) {
+      const target = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ ...row.fields, object_key: Schema.String, state: Schema.String })
+      )(raw);
 
-    yield* settleBeforeDisposal("email", env.EMAIL_BUCKET, target);
-    yield* erasePrivateObject({
-      userId: target.user_id,
-      key: target.object_key,
-      bucket: env.EMAIL_BUCKET,
-    });
-    yield* updateSharedCapacity(
-      { directory: env.DIRECTORY, purpose: "email" },
-      target.id,
-      "Release"
-    );
-    yield* withStoreCapacity("required")(
-      Effect.gen(function* () {
-        if (target.state === "discarding") {
-          yield* sql`DELETE FROM forwarded_email_receipts WHERE id=${target.id} AND user_id=${target.user_id} AND state='discarding'`;
+      yield* settleBeforeDisposal("email", env.EMAIL_BUCKET, target);
+      yield* erasePrivateObject({
+        userId: target.user_id,
+        key: target.object_key,
+        bucket: env.EMAIL_BUCKET,
+      });
+      yield* updateSharedCapacity(
+        { directory: env.DIRECTORY, purpose: "email" },
+        target.id,
+        "Release"
+      );
+      yield* withStoreCapacity("required")(
+        Effect.gen(function* () {
+          if (target.state === "discarding") {
+            yield* sql`DELETE FROM forwarded_email_receipts WHERE id=${target.id} AND user_id=${target.user_id} AND state='discarding'`;
 
-          return;
-        }
+            return;
+          }
 
-        yield* sql`INSERT INTO ingestion_review_items(id,user_id,source_kind,email_receipt_id,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone) SELECT ${newId()},user_id,'email',id,'processing-interrupted',${current},expires_at_ms,'CO','es-CO',time_zone FROM forwarded_email_receipts WHERE id=${target.id} AND user_id=${target.user_id} AND outcome IS NULL AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=${target.user_id}) ON CONFLICT(email_receipt_id) DO NOTHING`;
-        yield* sql`UPDATE forwarded_email_receipts SET outcome='needs-review',outcome_review_id=(SELECT id FROM ingestion_review_items WHERE email_receipt_id=${target.id}) WHERE id=${target.id} AND outcome IS NULL AND EXISTS(SELECT 1 FROM ingestion_review_items WHERE email_receipt_id=${target.id})`;
-        yield* sql`UPDATE forwarded_email_receipts SET state='expired',object_key=NULL,deferred_checked_at_ms=NULL WHERE id=${target.id} AND user_id=${target.user_id} AND expires_at_ms<=${current}`;
-        yield* sql`DELETE FROM ingest_sample_candidates WHERE receipt_id=${target.id} AND user_id=${target.user_id} AND expires_at_ms<=${current}`;
-      })
-    );
-  }
+          yield* sql`INSERT INTO ingestion_review_items(id,user_id,source_kind,email_receipt_id,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone) SELECT ${newId()},user_id,'email',id,'processing-interrupted',${current},expires_at_ms,'CO','es-CO',time_zone FROM forwarded_email_receipts WHERE id=${target.id} AND user_id=${target.user_id} AND outcome IS NULL AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=${target.user_id}) ON CONFLICT(email_receipt_id) DO NOTHING`;
+          yield* sql`UPDATE forwarded_email_receipts SET outcome='needs-review',outcome_review_id=(SELECT id FROM ingestion_review_items WHERE email_receipt_id=${target.id}) WHERE id=${target.id} AND outcome IS NULL AND EXISTS(SELECT 1 FROM ingestion_review_items WHERE email_receipt_id=${target.id})`;
+          yield* sql`UPDATE forwarded_email_receipts SET state='expired',object_key=NULL,deferred_checked_at_ms=NULL WHERE id=${target.id} AND user_id=${target.user_id} AND expires_at_ms<=${current}`;
+          yield* sql`DELETE FROM ingest_sample_candidates WHERE receipt_id=${target.id} AND user_id=${target.user_id} AND expires_at_ms<=${current}`;
+        })
+      );
+    }),
+    { discard: true }
+  );
+});
+
+const dispatchEmail = Effect.fn(function* (
+  raw: unknown,
+  current: number,
+  env: LocalIngestionEnvironment
+) {
+  const sql = yield* SqliteClient;
+
+  const target = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      ...row.fields,
+      user_id: UserId,
+      deferred_checked_at_ms: Schema.NullOr(Schema.Int),
+    })
+  )(raw);
+
+  const claim = yield* withStoreCapacity("required")(
+    Effect.gen(function* () {
+      const authority = protectConsentStatement({
+        subject: ConsentSubject.User({ userId: target.user_id }),
+        requirement: "granted",
+        statement: {
+          sql: "SELECT 1 FROM users WHERE id=? AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=?)",
+          params: [target.user_id, target.user_id],
+        },
+      });
+
+      if ((yield* sql.unsafe(authority.sql, authority.params)).length !== 1) {
+        yield* sql`UPDATE forwarded_email_receipts SET outcome='consent-revoked' WHERE id=${target.id} AND outcome IS NULL`;
+
+        return false;
+      }
+
+      if (target.deferred_checked_at_ms !== null) {
+        yield* activateLocalEmail(target.user_id, target.id, current);
+      }
+
+      return (
+        (yield* sql`UPDATE forwarded_email_receipts SET dispatch_sent_at_ms=${current} WHERE id=${target.id} AND outcome IS NULL AND deferred_checked_at_ms IS NULL AND expires_at_ms>${current} RETURNING id`)
+          .length === 1
+      );
+    })
+  );
+
+  if (!claim) return Option.none<boolean>();
+  const trace = yield* captureWorkTrace;
+
+  const sent = yield* Effect.option(
+    Effect.tryPromise(() =>
+      env.FORWARDED_EMAIL_QUEUE.send({ receiptId: target.id, userId: target.user_id, ...trace })
+    )
+  );
+
+  return Option.some(Option.isNone(sent));
 });
 
 const recoverEmails = Effect.fn(function* (current: number, env: LocalIngestionEnvironment) {
@@ -224,66 +289,21 @@ const recoverEmails = Effect.fn(function* (current: number, env: LocalIngestionE
   const completed =
     yield* sql`SELECT id FROM forwarded_email_receipts WHERE state='queued' AND outcome IS NOT NULL AND capacity_claimed=1 AND capacity_settled=0 ORDER BY received_at_ms LIMIT ${pageSize}`;
 
-  for (const row of completed) {
-    const id = yield* Schema.decodeUnknownEffect(Schema.String)(row.id);
-    yield* settleSharedEmailCapacity(env.DIRECTORY, id);
-  }
+  yield* Effect.forEach(
+    completed,
+    (receipt) =>
+      Schema.decodeUnknownEffect(Schema.String)(receipt.id).pipe(
+        Effect.flatMap((id) => settleSharedEmailCapacity(env.DIRECTORY, id))
+      ),
+    { discard: true }
+  );
 
   const candidates =
     yield* sql`SELECT id,user_id,deferred_checked_at_ms FROM forwarded_email_receipts WHERE state='queued' AND outcome IS NULL AND expires_at_ms>${current} AND (deferred_checked_at_ms IS NULL OR deferred_checked_at_ms<=${current - deferredRetryMs}) AND (dispatch_sent_at_ms IS NULL OR dispatch_sent_at_ms<=${current - retryMs}) ORDER BY coalesce(dispatch_sent_at_ms,received_at_ms),id LIMIT ${pageSize}`;
 
-  let failed = 0,
-    attempted = 0;
+  const dispatches = yield* Effect.forEach(candidates, (raw) => dispatchEmail(raw, current, env));
 
-  for (const raw of candidates) {
-    const target = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({
-        ...row.fields,
-        user_id: UserId,
-        deferred_checked_at_ms: Schema.NullOr(Schema.Int),
-      })
-    )(raw);
+  const attempts = dispatches.filter(Option.isSome).map((attempt) => attempt.value);
 
-    const claim = yield* withStoreCapacity("required")(
-      Effect.gen(function* () {
-        const authority = protectConsentStatement({
-          subject: { _tag: "User", userId: target.user_id },
-          requirement: "granted",
-          statement: {
-            sql: "SELECT 1 FROM users WHERE id=? AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=?)",
-            params: [target.user_id, target.user_id],
-          },
-        });
-
-        if ((yield* sql.unsafe(authority.sql, authority.params)).length !== 1) {
-          yield* sql`UPDATE forwarded_email_receipts SET outcome='consent-revoked' WHERE id=${target.id} AND outcome IS NULL`;
-
-          return false;
-        }
-
-        if (target.deferred_checked_at_ms !== null) {
-          yield* activateLocalEmail(target.user_id, target.id, current);
-        }
-
-        return (
-          (yield* sql`UPDATE forwarded_email_receipts SET dispatch_sent_at_ms=${current} WHERE id=${target.id} AND outcome IS NULL AND deferred_checked_at_ms IS NULL AND expires_at_ms>${current} RETURNING id`)
-            .length === 1
-        );
-      })
-    );
-
-    if (!claim) continue;
-    attempted++;
-    const trace = yield* captureWorkTrace;
-
-    const sent = yield* Effect.option(
-      Effect.tryPromise(() =>
-        env.FORWARDED_EMAIL_QUEUE.send({ receiptId: target.id, userId: target.user_id, ...trace })
-      )
-    );
-
-    if (sent._tag === "None") failed++;
-  }
-
-  return { attempted, failed };
+  return { attempted: attempts.length, failed: countTrue(attempts) };
 });

@@ -24,6 +24,7 @@ import {
 } from "./wompi-model";
 import type { WompiTransportFactory } from "./wompi-runtime";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
+import { ConsentSubject } from "../../../src/shell/consent/contract";
 
 const noContentStatus = 204;
 
@@ -121,14 +122,18 @@ const observe = Effect.fn(function* (
   if (!(yield* admitGeneration(observation))) return absent();
   const outcome = yield* verifiedOutcome(captured.value, found);
 
-  for (const statement of nativeSettlementStatements({
-    attemptId: observation.attemptId,
-    transactionId: found.transactionId,
-    observedAtMs: yield* Clock.currentTimeMillis,
-    outcome,
-  })) {
-    yield* sql.unsafe(statement.text, statement.params);
-  }
+  const observedAtMs = yield* Clock.currentTimeMillis;
+
+  yield* Effect.forEach(
+    nativeSettlementStatements({
+      attemptId: observation.attemptId,
+      transactionId: found.transactionId,
+      observedAtMs,
+      outcome,
+    }),
+    (statement) => sql.unsafe(statement.text, statement.params),
+    { discard: true }
+  );
 
   return yield* scheduleObservation({
     id: observation.attemptId,
@@ -204,7 +209,7 @@ const claim = Effect.fn(function* (work: Work, captured: typeof Snapshot.Type, n
   }
 
   const guard = protectConsentStatement({
-    subject: { _tag: "User", userId: work.userId },
+    subject: ConsentSubject.User({ userId: work.userId }),
     requirement: "active",
     statement: {
       sql: `UPDATE billing_attempts SET collection_state='sent',collection_sent_at_ms=? WHERE id=? AND collection_state='armed' AND status='pending' AND wompi_environment=? AND wompi_reference=?

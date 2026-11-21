@@ -31,6 +31,8 @@ import {
 import { Clock, Data, Effect, Logger, Option, Schema } from "effect";
 import { dual } from "effect/Function";
 
+const SpanMetadata = Data.taggedEnum<SpanDescriptor["metadata"]>();
+
 export const makeWorkerTelemetry = (
   sink:
     | ((record: TelemetryWorkRecord) => void)
@@ -128,7 +130,7 @@ const runtimeDescriptor = (
     trigger,
     spanOperation: "fidy.operation",
     workKind: "canonical_operation",
-    metadata: { _tag: "None" },
+    metadata: SpanMetadata.None(),
   };
 };
 
@@ -353,6 +355,29 @@ type ResponseObservation = WorkerTraceContinuation &
     provider: ProviderName | "openai" | "cloudflare-workers";
   }>;
 
+type OutboundSpanFields = "spanOperation" | "workKind" | "metadata";
+
+type OutboundSpan =
+  | Pick<Extract<SpanDescriptor, { workKind: "model_call" }>, OutboundSpanFields>
+  | Pick<Extract<SpanDescriptor, { workKind: "provider_call" }>, OutboundSpanFields>;
+
+const providerSpan = (provider: ProviderName | "openai"): OutboundSpan =>
+  provider === "openai"
+    ? {
+        spanOperation: "agent.model" as const,
+        workKind: "model_call" as const,
+        metadata: SpanMetadata.Model({ model: "openai" as const }),
+      }
+    : {
+        spanOperation: "http.client" as const,
+        workKind: "provider_call" as const,
+        metadata: SpanMetadata.Provider({
+          provider,
+          attempt: TelemetryAttempt.make(1),
+          status: Option.none(),
+        }),
+      };
+
 const observeResponsePromise = (
   work: () => Promise<Response>,
   observation: ResponseObservation
@@ -369,22 +394,7 @@ const observeResponsePromise = (
             component: observation.provider === "openai" ? "agent" : "api",
             operation: observation.operation,
             trigger: "api",
-            ...(observation.provider === "openai"
-              ? {
-                  spanOperation: "agent.model" as const,
-                  workKind: "model_call" as const,
-                  metadata: { _tag: "Model" as const, model: "openai" as const },
-                }
-              : {
-                  spanOperation: "http.client" as const,
-                  workKind: "provider_call" as const,
-                  metadata: {
-                    _tag: "Provider" as const,
-                    provider: observation.provider,
-                    attempt: TelemetryAttempt.make(1),
-                    status: Option.none(),
-                  },
-                }),
+            ...providerSpan(observation.provider),
           },
     descriptor: TelemetryWorkDescriptor.make({
       ...workerDescriptor(workerRelease(observation.environment), observation.operation),

@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Array as Arr, Effect, FileSystem } from "effect";
 import { expect } from "vitest";
 import { Miniflare } from "miniflare";
 import { native } from "../user-store.test-fixture";
@@ -198,9 +198,16 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         yield* request("accept");
         yield* request("poison");
 
-        for (let attempt = 0; attempt < 7; attempt++) {
-          expect(yield* request("native-retry")).toMatchObject({ failedFamilies: 1, attempted: 0 });
-        }
+        yield* Effect.forEach(
+          Arr.range(1, 7),
+          Effect.fnUntraced(function* () {
+            expect(yield* request("native-retry")).toMatchObject({
+              failedFamilies: 1,
+              attempted: 0,
+            });
+          }),
+          { discard: true }
+        );
 
         yield* request("exhausted");
         yield* restart;

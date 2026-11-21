@@ -14,7 +14,8 @@ import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { IanaTimeZone, makeFidyClient } from "@/transport/client";
 import { RecurringFeature } from "@/features/recurring/feature";
-import type { PlanInput } from "@/features/recurring/model";
+import { type PlanInput, planningStart } from "@/features/recurring/model";
+import { PlanningMonthContext } from "@/features/recurring/planning-month";
 import { PlanForm } from "@/features/recurring/plan-form";
 
 const plans = [
@@ -118,8 +119,19 @@ const Workspace = (): ReturnType<typeof createElement> => {
   return createElement(RecurringFeature, props);
 };
 
+type Failing = Readonly<{ path: string; ready: string }>;
+
+const respond = (failing: Option.Option<Failing>, path: string, result: unknown): Response =>
+  Option.exists(failing, (failure) => failure.path === path)
+    ? Response.json({ message: "Unavailable" }, { status: 500 })
+    : Response.json(result);
+
 const withWorkspace = (
-  check: (container: HTMLElement) => Effect.Effect<void, Cause.UnknownError>
+  check: (
+    container: HTMLElement,
+    location: () => string
+  ) => Effect.Effect<void, Cause.UnknownError>,
+  failing: Option.Option<Failing> = Option.none()
 ): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -177,7 +189,7 @@ const withWorkspace = (
           return Effect.die(new Error("Unexpected recurring test request"));
         }
 
-        return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(result)));
+        return Effect.succeed(HttpClientResponse.fromWeb(request, respond(failing, path, result)));
       });
 
       const apiClient = makeFidyClient({
@@ -214,9 +226,16 @@ const withWorkspace = (
           )
         );
         yield* Effect.tryPromise(() =>
-          reactAssertion(() => expect(container.textContent).toContain("Ingreso de prueba"))
+          reactAssertion(() =>
+            expect(container.textContent).toContain(
+              Option.match(failing, {
+                onNone: () => "Ingreso de prueba",
+                onSome: (failure) => failure.ready,
+              })
+            )
+          )
         );
-        yield* check(container);
+        yield* check(container, () => router.latestLocation.searchStr);
       } finally {
         yield* Effect.tryPromise(() => reactWork(() => root.unmount()));
         registry.dispose();
@@ -290,6 +309,86 @@ const checkFilters = (presentation: string, container: HTMLElement): WorkspaceCh
 it.each(["Calendario", "Lista", "Todos los recurrentes"])(
   "applying and clearing recurring filters preserves %s and updates its results",
   (presentation) => withWorkspace((container) => checkFilters(presentation, container))
+);
+
+const monthChoice = (label: string): HTMLButtonElement => {
+  const found = document.body.querySelector(`button[aria-label="${label}"]`);
+
+  if (!Schema.is(Schema.instanceOf(HTMLButtonElement))(found)) throw Error(`Missing ${label}`);
+
+  return found;
+};
+
+const checkMonthPicker = (container: HTMLElement, location: () => string): WorkspaceCheck =>
+  Effect.gen(function* () {
+    expect(container.querySelector('button[aria-label="Mes anterior"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="Mes siguiente"]')).toBeNull();
+
+    const trigger = container.querySelector('[data-recurring-slot="month-picker"]');
+
+    if (!Schema.is(Schema.instanceOf(HTMLButtonElement))(trigger)) {
+      throw Error("Missing month picker");
+    }
+
+    expect(trigger.getAttribute("aria-label")).toBe("Elegir mes, octubre de 2026");
+    expect(trigger.closest("h2")).not.toBeNull();
+
+    yield* Effect.tryPromise(() => reactWork(() => trigger.click()));
+    yield* Effect.tryPromise(() =>
+      reactAssertion(() => {
+        expect(monthChoice("octubre de 2026").getAttribute("aria-pressed")).toBe("true");
+        expect(monthChoice("octubre de 2026").getAttribute("aria-current")).toBe("date");
+        expect(monthChoice("octubre de 2026").textContent).toBe("oct");
+      })
+    );
+
+    yield* Effect.tryPromise(() => reactWork(() => monthChoice("Año siguiente").click()));
+    yield* Effect.tryPromise(() => reactWork(() => monthChoice("Año siguiente").click()));
+    yield* Effect.tryPromise(() => reactWork(() => monthChoice("Año anterior").click()));
+    yield* Effect.tryPromise(() =>
+      reactAssertion(() => {
+        expect(monthChoice("marzo de 2027").getAttribute("aria-pressed")).toBe("false");
+        expect(monthChoice("marzo de 2027").hasAttribute("aria-current")).toBe(false);
+      })
+    );
+
+    yield* Effect.tryPromise(() => reactWork(() => monthChoice("marzo de 2027").click()));
+    yield* Effect.tryPromise(() =>
+      reactAssertion(() => {
+        expect(location()).toBe("?month=2027-03");
+        expect(document.body.querySelector('button[aria-label="marzo de 2027"]')).toBeNull();
+      })
+    );
+  });
+
+it("jumps directly to a month of another year from the month heading", () =>
+  withWorkspace(checkMonthPicker));
+
+const checkFailedRetry = (container: HTMLElement): WorkspaceCheck =>
+  Effect.gen(function* () {
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Vuelve a intentarlo."
+    );
+    expect(container.textContent).not.toContain("Reintentar recurrentes");
+
+    yield* Effect.tryPromise(() => click(container, "Reintentar"));
+    yield* Effect.tryPromise(() =>
+      reactAssertion(() =>
+        expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+          "El reintento no funcionóVuelve a intentarlo en unos minutos."
+        )
+      )
+    );
+    expect(button(container, "Reintentar").disabled).toBe(false);
+  });
+
+it.each(["/user", "/recurring-plans"])(
+  "explains a failed %s load and a retry that fails again",
+  (path) =>
+    withWorkspace(
+      checkFailedRetry,
+      Option.some({ path, ready: "No pudimos cargar tus recurrentes" })
+    )
 );
 
 const checkEarlierDisclosure = (container: HTMLElement): WorkspaceCheck =>
@@ -524,3 +623,44 @@ it("opens a blank creation form after an untouched form or an explicit cancellat
       yield* Effect.tryPromise(expectBlankCreation);
     })
   ));
+
+const planningNote = (firstDate: string): string => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  document.body.append(container);
+  act(() =>
+    createRoot(container).render(
+      createElement(
+        PlanningMonthContext,
+        { value: Option.some("2026-12") },
+        createElement(PlanForm, {
+          initial: { name: "Arriendo", timeZone: IanaTimeZone.make("America/Bogota"), firstDate },
+          categories: [],
+          disabled: false,
+          onSubmit: vi.fn(),
+        })
+      )
+    )
+  );
+
+  return container.querySelector('output[for="recurring-firstDate"]')?.textContent ?? "";
+};
+
+it("starts a new plan in the month being planned unless that month is the current one", () => {
+  expect(planningStart({ month: "2026-12", today: "2026-11-21" })).toBe("2026-12-01");
+  expect(planningStart({ month: "2026-10", today: "2026-11-21" })).toBe("2026-10-01");
+  expect(planningStart({ month: "2026-11", today: "2026-11-21" })).toBe("2026-11-21");
+});
+
+it("states when the first date falls outside the month being planned", () => {
+  expect(planningNote("2026-12-01")).toBe("");
+  expect(planningNote("2026-11-15")).toBe(
+    "Empieza antes de diciembre de 2026, así que también tendrá pagos en noviembre de 2026."
+  );
+  expect(planningNote("2026-10-05")).toBe(
+    "Empieza antes de diciembre de 2026, así que también tendrá pagos desde octubre de 2026."
+  );
+  expect(planningNote("2027-01-10")).toBe(
+    "Empieza después de diciembre de 2026, así que no aparecerá en este mes."
+  );
+});

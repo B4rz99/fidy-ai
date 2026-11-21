@@ -204,7 +204,7 @@ export type VisibleAgentReply = Readonly<{
   awaitingVisibility: boolean;
   id: string;
   onVisible: () => void;
-  confirm: Option.Option<() => void>;
+  decision: Option.Option<Readonly<{ confirm: () => void; discard: () => void }>>;
 }>;
 
 type ConversationView = Readonly<{
@@ -214,6 +214,7 @@ type ConversationView = Readonly<{
   statusKind: "waiting" | "warning" | "information";
   empty: boolean;
   canSubmit: boolean;
+  canDiscard: boolean;
   canCheckProgress: boolean;
   canRetryDelivery: boolean;
 }>;
@@ -226,26 +227,40 @@ const presentStatusKind = (tag: Turn["tag"]): ConversationView["statusKind"] => 
   return "information";
 };
 
+const hasProposal = (turn: Turn): turn is Extract<Turn, { value: Proposal }> =>
+  "value" in turn && !("status" in turn.value);
+
+const discardable = (turn: Turn): turn is Extract<Turn, { value: Proposal }> =>
+  hasProposal(turn) && turn.tag === "completed" && turn.value.confirmation !== undefined;
+
+const presentReply = (
+  turn: Turn,
+  actions: Readonly<{ onVisible: () => void; confirm: () => void; discard: () => void }>
+): Option.Option<VisibleAgentReply> =>
+  hasProposal(turn)
+    ? Option.some({
+        text: turn.value.text,
+        awaitingVisibility: turn.tag === "proposal",
+        id: turn.value.turnId,
+        onVisible: actions.onVisible,
+        decision:
+          turn.value.confirmation === undefined
+            ? Option.none()
+            : Option.some({ confirm: actions.confirm, discard: actions.discard }),
+      })
+    : Option.none();
+
 const presentConversation = (
   { turn, history }: Conversation,
-  actions: Readonly<{ onVisible: () => void; confirm: () => void }>
+  actions: Readonly<{ onVisible: () => void; confirm: () => void; discard: () => void }>
 ): ConversationView => ({
   history,
-  reply:
-    "value" in turn && !("status" in turn.value)
-      ? Option.some({
-          text: turn.value.text,
-          awaitingVisibility: turn.tag === "proposal",
-          id: turn.value.turnId,
-          onVisible: actions.onVisible,
-          confirm:
-            turn.value.confirmation === undefined ? Option.none() : Option.some(actions.confirm),
-        })
-      : Option.none(),
+  reply: presentReply(turn, actions),
   status: status[turn.tag],
   statusKind: presentStatusKind(turn.tag),
   empty: history.length === 0 && turn.tag === "idle",
   canSubmit: canSubmit(turn),
+  canDiscard: discardable(turn),
   canCheckProgress: turn.tag === "processing" || turn.tag === "uncertain",
   canRetryDelivery: turn.tag === "unconfirmed",
 });
@@ -297,6 +312,22 @@ const submitConversation = ({
   propose({ payload: decoded.value, entryId: entry.id });
 };
 
+const archiveDiscarded = (setConversation: SetConversation, proposal: Proposal): void => {
+  const archived: ReadonlyArray<Entry> = [
+    { id: proposal.turnId, from: "assistant", text: proposal.text },
+    {
+      id: `${proposal.turnId}-discarded`,
+      from: "assistant",
+      text: "Cambio descartado. No se aplicó ningún cambio.",
+    },
+  ];
+
+  setConversation((current) => ({
+    turn: { tag: "idle" },
+    history: [...current.history, ...archived].slice(-visibleHistoryLimit),
+  }));
+};
+
 export const presentHostedConversation = ({
   conversation,
   setConversation,
@@ -337,8 +368,12 @@ export const presentHostedConversation = ({
     if (isCurrent() && turn.tag === "proposal") deliver(turn.value);
   };
 
+  const discard = (): void => {
+    if (isCurrent() && discardable(turn)) archiveDiscarded(setConversation, turn.value);
+  };
+
   return {
-    display: presentConversation(conversation, { onVisible, confirm }),
+    display: presentConversation(conversation, { onVisible, confirm, discard }),
     submit: (text): void => {
       if (isCurrent()) {
         submitConversation({ text, displayText: text, turn, setConversation, propose });

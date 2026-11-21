@@ -57,7 +57,9 @@ const FixtureWorkspace = ({
             : capture}
         </output>
       }
-      month={() => setCapture("El escenario fija octubre de 2026 para comparar las mismas fechas.")}
+      selectMonth={() =>
+        setCapture("El escenario fija octubre de 2026 para comparar las mismas fechas.")
+      }
       earlier={() => setCapture("Sin más meses en este escenario de prueba.")}
     />
   );

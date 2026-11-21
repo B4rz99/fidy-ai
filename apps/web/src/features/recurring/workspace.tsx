@@ -1,5 +1,6 @@
 import { type RecurringNavigation, useRecurringNavigation } from "./navigation";
 import { emptyTransactionFilters } from "./transaction-filters";
+import { PlanningMonthContext } from "./planning-month";
 import {
   CreationDraftContext,
   type CreationDraftControl,
@@ -45,6 +46,7 @@ import {
   currentPlan,
   type planStatus,
   planToday,
+  planningStart,
 } from "./model";
 
 const OccurrenceDetails = lazyRouteComponent(() => import("./details"), "OccurrenceDetails");
@@ -85,7 +87,7 @@ type Props = Readonly<{
   filters: Filters;
   previous: Option.Option<string>;
   applyFilters: (filters: Filters) => void;
-  month: (step: number) => void;
+  selectMonth: (month: string) => void;
   earlier: (month: string) => void;
   revealEarlier: RefCallback<HTMLDetailsElement>;
   timeZone: PlanInput["timeZone"];
@@ -136,13 +138,15 @@ const Editor = ({
 
   if (panel.kind === "create") {
     return (
-      <CreatePlan
-        {...panel}
-        categories={categories}
-        disabled={disabled}
-        save={save}
-        created={created}
-      />
+      <PlanningMonthContext value={Option.some(view.month)}>
+        <CreatePlan
+          {...panel}
+          categories={categories}
+          disabled={disabled}
+          save={save}
+          created={created}
+        />
+      </PlanningMonthContext>
     );
   }
 
@@ -456,7 +460,7 @@ const useDraftingPanel = (
   ): void => setPanel(Option.some({ kind: "create", initial, seriesId: Option.none(), restored }));
 
   const blank = (): void =>
-    creation({ firstDate: props.view.today, timeZone: props.timeZone }, false);
+    creation({ firstDate: planningStart(props.view), timeZone: props.timeZone }, false);
 
   return {
     ...workspace,
@@ -623,7 +627,7 @@ const WorkspaceBody = ({
           filtered={Object.keys(filters).length > 0}
           calendar={calendar}
           setCalendar={setCalendar}
-          month={props.month}
+          selectMonth={props.selectMonth}
         />
       ) : null}
       <InvalidFulfillments view={view} save={save} disabled={disabled} />

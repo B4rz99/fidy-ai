@@ -145,7 +145,7 @@ export const drainLocalUser = Effect.fn(function* (
       AND NOT EXISTS(SELECT 1 FROM ingest_sample_reservations)
       AND NOT EXISTS(SELECT 1 FROM ingest_sample_decisions WHERE phase IN('approved','removing') OR (phase='published' AND sample_id>erasure_requests.sample_cursor))
       AND NOT EXISTS(SELECT 1 FROM whatsapp_deliveries WHERE started_ms IS NOT NULL AND state NOT IN('delivered','rejected'))
-      AND NOT EXISTS(SELECT 1 FROM billing_attempts WHERE collection_state='sent' AND status='pending')
+      AND NOT EXISTS(SELECT 1 FROM billing_attempts WHERE collection_state='sent' AND status='pending' AND no_charge_confirmed_at_ms IS NULL)
       AND NOT EXISTS(SELECT 1 FROM subscription_cancellations WHERE source_cancellation_state='void-pending' AND void_started_at_ms IS NOT NULL)
       AND NOT EXISTS(SELECT 1 FROM payment_enrollments WHERE source_creation='issued' OR state IN('creating','verifying'))
       AND NOT EXISTS(SELECT 1 FROM login_email_proofs WHERE state='sending')

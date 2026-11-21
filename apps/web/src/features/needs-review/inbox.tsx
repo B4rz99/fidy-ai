@@ -14,6 +14,7 @@ import type { JSX } from "react";
 import { Button } from "@/ui/components/button";
 import { Checkbox } from "@/ui/components/checkbox";
 import { type Item, type Workspace, deadline, sources, statuses } from "./model";
+import type { Filter } from "./view-navigation";
 import { reviewAmount, reviewExpiry, reviewTitle } from "./presentation";
 
 const pageSize = 50;
@@ -23,6 +24,7 @@ export type InboxProps = Readonly<{
   contextLoading: boolean;
   unfilteredItems: ReadonlyArray<Item>;
   view: Workspace;
+  filter: Filter;
   selected: Option.Option<Item["id"]>;
   checked: ReadonlyArray<Item["id"]>;
   choose: (item: Item) => void;
@@ -35,7 +37,11 @@ export type InboxProps = Readonly<{
 export const Inbox = (props: InboxProps): JSX.Element => (
   <aside data-review="inbox" aria-label="Bandeja de revisión">
     <div data-review="inbox-head">
-      <h2>Vencen primero</h2>
+      <h2>
+        {props.filter === "pending"
+          ? "Vencen primero"
+          : "Por fecha límite, las más antiguas primero"}
+      </h2>
       <span>
         {props.view.items.length} de {props.view.total}{" "}
         {props.view.total === 1 ? "elemento" : "elementos"}

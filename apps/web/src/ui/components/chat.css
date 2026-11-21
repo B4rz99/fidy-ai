@@ -146,10 +146,21 @@
   border-color: var(--fidy-semantic-warning-foreground);
   font-size: var(--fidy-type-body-font-size);
 }
+.chat-confirmations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
 .chat-confirm {
   border-radius: var(--fidy-radius-control);
-  width: 100%;
+  flex: 1 1 10rem;
   min-height: 56px;
+}
+.chat-discard {
+  border-radius: var(--fidy-radius-control);
+  flex: 0 1 auto;
+  min-height: 56px;
+  padding-inline: 24px;
 }
 .chat-composer {
   display: grid;
@@ -251,7 +262,8 @@
   .chat-confirmation {
     padding: 10px 12px;
   }
-  .chat-confirm {
+  .chat-confirm,
+  .chat-discard {
     min-height: 44px;
   }
   .chat-composer {

@@ -3,7 +3,7 @@ import type { BudgetChoice } from "./budget-options";
 import { PendingRead } from "@/ui/components/pending-read";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link } from "@tanstack/react-router";
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import { useId, useState } from "react";
 import type { FormEvent, JSX, ReactNode } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
@@ -68,11 +68,13 @@ export const DashboardBudgetEditor = ({
     />
   );
 
-  if (budgets._tag === "Initial" || categories._tag === "Initial") {
+  if (Predicate.isTagged(budgets, "Initial") || Predicate.isTagged(categories, "Initial")) {
     return <PendingRead label="Cargando presupuestos" />;
   }
 
-  if (budgets._tag !== "Ready" || categories._tag !== "Ready") return retry;
+  if (!Predicate.isTagged(budgets, "Ready") || !Predicate.isTagged(categories, "Ready")) {
+    return retry;
+  }
 
   if ([budgets.refreshFailure, categories.refreshFailure].some(Option.isSome)) return retry;
 

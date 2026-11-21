@@ -1,3 +1,4 @@
+import { browserRuntime } from "@/transport/browser-runtime";
 import { Effect } from "effect";
 import { Atom } from "effect/reactivity";
 import type { ReviewWorkspaceQuery } from "./decisions";
@@ -39,7 +40,7 @@ export const observeReviewQuery = (source: ReviewWorkspaceQuery): ReviewWorkspac
     get.subscribe(focusSignal, refresh);
     get.subscribe(source, (value) => get.setSelf(value));
 
-    const timer = Effect.runFork(
+    const timer = browserRuntime.runFork(
       Effect.forever(Effect.sleep(pollMilliseconds).pipe(Effect.andThen(Effect.sync(refresh))))
     );
 

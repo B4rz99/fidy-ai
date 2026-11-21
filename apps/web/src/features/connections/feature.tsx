@@ -1,3 +1,4 @@
+import { browserRuntime } from "@/transport/browser-runtime";
 import { PendingRead } from "@/ui/components/pending-read";
 
 import { ConnectionResult } from "./result";
@@ -7,7 +8,7 @@ import { useSession } from "@/session/session-context";
 import { WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter, useSearch } from "@tanstack/react-router";
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, type Data, DateTime, Effect, Option, Predicate, Schema } from "effect";
 import { Atom } from "effect/reactivity";
 import { type JSX, type MouseEvent, useState } from "react";
 import { ConnectionAttemptReference, type ConnectionContinuationReview } from "@/transport/client";
@@ -81,9 +82,9 @@ const BankHandoff = ({
   );
 };
 
-const useExpiry = (
-  expiresAt: DateTime.Utc
-): Readonly<{ expired: boolean; check: () => boolean }> => {
+type Expiry = Readonly<{ expired: boolean; check: () => boolean }>;
+
+const useExpiry = (expiresAt: DateTime.Utc): Expiry => {
   const { webAuthClient: client, registry } = useRouter().options.context;
 
   const [expiry] = useState(() => {
@@ -98,8 +99,8 @@ const useExpiry = (
 
     return Atom.writable(
       (get) =>
-        get(timer).pipe(presentCanonicalQuery)._tag === "Ready" ||
-        expiresAt.epochMilliseconds <= Effect.runSync(Clock.currentTimeMillis),
+        Predicate.isTagged(get(timer).pipe(presentCanonicalQuery), "Ready") ||
+        expiresAt.epochMilliseconds <= browserRuntime.runSync(Clock.currentTimeMillis),
       (context, _value: void) => context.setSelf(true)
     );
   });
@@ -107,7 +108,10 @@ const useExpiry = (
   return {
     expired: useAtomValue(expiry),
     check: () => {
-      if (expiresAt.epochMilliseconds > Effect.runSync(Clock.currentTimeMillis)) return true;
+      if (expiresAt.epochMilliseconds > browserRuntime.runSync(Clock.currentTimeMillis)) {
+        return true;
+      }
+
       registry.set(expiry, undefined);
 
       return false;
@@ -205,7 +209,10 @@ const ReviewNotices = ({
   </>
 );
 
-type ReadyContinuation = Extract<ReturnType<typeof useContinuation>["result"], { _tag: "Ready" }>;
+type ReadyContinuation = Data.TaggedEnum.Value<
+  ReturnType<typeof useContinuation>["result"],
+  "Ready"
+>;
 
 const ContinuationReview = ({
   task,
@@ -254,9 +261,9 @@ const Continuation = ({ attempt }: Readonly<{ attempt: AttemptReference }>): JSX
   const task = useContinuation(attempt);
   const { result, mounted } = task;
 
-  if (result._tag === "Initial") return <PendingRead label="Cargando solicitud" />;
+  if (Predicate.isTagged(result, "Initial")) return <PendingRead label="Cargando solicitud" />;
 
-  if (result._tag === "Failure") return <Unavailable attempt={attempt} />;
+  if (Predicate.isTagged(result, "Failure")) return <Unavailable attempt={attempt} />;
 
   return (
     <div ref={mounted} className="flex w-full max-w-md flex-col gap-3">
@@ -310,8 +317,10 @@ export const ConnectionResultFeature = (): JSX.Element => {
         </Button>
       </WorkspaceHeader>
       <div className="flex max-w-2xl flex-col gap-5 p-5">
-        {result._tag === "Initial" ? <PendingRead label="Consultando conexión" /> : null}
-        {result._tag === "Failure" ? (
+        {Predicate.isTagged(result, "Initial") ? (
+          <PendingRead label="Consultando conexión" />
+        ) : null}
+        {Predicate.isTagged(result, "Failure") ? (
           <div role="alert">
             <p>
               No pudimos verificar la conexión. Inicia sesión con la cuenta de Fidy que comenzó la
@@ -322,12 +331,14 @@ export const ConnectionResultFeature = (): JSX.Element => {
             </Button>
           </div>
         ) : null}
-        {result._tag === "Ready" && Option.isSome(result.refreshFailure) ? (
+        {Predicate.isTagged(result, "Ready") && Option.isSome(result.refreshFailure) ? (
           <p role="alert">
             No pudimos actualizar el estado. La información mostrada puede estar desactualizada.
           </p>
         ) : null}
-        {result._tag === "Ready" ? <ConnectionResult connections={result.value.data} /> : null}
+        {Predicate.isTagged(result, "Ready") ? (
+          <ConnectionResult connections={result.value.data} />
+        ) : null}
         <div>
           <Button variant="outline" render={<Link to="/app/transactions" />}>
             Volver a Fidy

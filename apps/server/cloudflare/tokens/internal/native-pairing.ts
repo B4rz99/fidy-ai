@@ -8,7 +8,7 @@ import {
   PATPairingId,
   StartPATPairingPayload,
 } from "../../../src/core/tokens/contract";
-import { decidePATPairingClaim } from "../../../src/core/tokens/operations";
+import { decidePATPairingClaim, pairingWrongProofLimit } from "../../../src/core/tokens/operations";
 import { maxPairingsPerWindow } from "../../../src/shell/tokens/operations";
 import { newId } from "../../secret-material/operations";
 import { withStoreCapacity } from "../../runtime/sqlite/operations";
@@ -102,6 +102,10 @@ const pollingDestination = Effect.fn(function* (id: string, proofDigest: string)
       attemptedAt: DateTime.makeUnsafe(current),
     });
     if (decision._tag === "WrongProof") {
+      if (decision.wrongProofAttempts >= pairingWrongProofLimit) {
+        yield* sql`DELETE FROM pat_bootstrap WHERE id=${id} AND user_id IS NULL`;
+        return invalid();
+      }
       yield* sql`UPDATE pat_bootstrap SET wrong_attempts=${decision.wrongProofAttempts} WHERE id=${id}`;
       return invalid();
     }

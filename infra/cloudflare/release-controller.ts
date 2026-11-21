@@ -110,7 +110,7 @@ const matchesVersions = (observed: Deployment, versions: Deployment["versions"])
 const observeCommitted = Effect.fn(function* (
   port: ReleasePort,
   name: string,
-  input: { versions: Deployment["versions"]; previousId: string }
+  input: { versions: Deployment["versions"]; previousId: string; readRetries: number }
 ) {
   return yield* Effect.gen(function* () {
     const observed = yield* port.current(name);
@@ -118,20 +118,23 @@ const observeCommitted = Effect.fn(function* (
       return yield* Effect.fail(Error("Worker write not confirmed; inspect deployment state"));
     }
     return observed;
-  }).pipe(Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 6 }));
+  }).pipe(Effect.retry({ schedule: Schedule.spaced("500 millis"), times: input.readRetries }));
 });
 
-const deployExact = Effect.fn(function* (
+const deploymentReadRetries = 6;
+const interruptedPromotionReadRetries = 24;
+
+const deployObserved = Effect.fn(function* (
   port: ReleasePort,
   name: string,
-  versions: Deployment["versions"]
+  { versions, readRetries }: { versions: Deployment["versions"]; readRetries: number }
 ) {
   const previous = yield* port.current(name);
   const reported = yield* port.deploy(name, versions).pipe(
     Effect.catchCauseIf(
       (cause) => !Cause.hasInterrupts(cause),
       (writeCause) =>
-        observeCommitted(port, name, { versions, previousId: previous.id }).pipe(
+        observeCommitted(port, name, { versions, previousId: previous.id, readRetries }).pipe(
           Effect.catchCause((observationCause) =>
             Effect.failCause(Cause.combine(observationCause, writeCause))
           )
@@ -140,13 +143,20 @@ const deployExact = Effect.fn(function* (
   );
   const result =
     reported.id === previous.id
-      ? yield* observeCommitted(port, name, { versions, previousId: previous.id })
+      ? yield* observeCommitted(port, name, { versions, previousId: previous.id, readRetries })
       : reported;
   yield* requireDeployment(port, name, { id: result.id, versions }).pipe(
-    Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 6 })
+    Effect.retry({ schedule: Schedule.spaced("500 millis"), times: readRetries })
   );
   return result;
 });
+
+const deployExact = (
+  port: ReleasePort,
+  name: string,
+  versions: Deployment["versions"]
+): ReturnType<typeof deployObserved> =>
+  deployObserved(port, name, { versions, readRetries: deploymentReadRetries });
 
 const captureRelease = Effect.fn(function* (
   port: ReleasePort,
@@ -311,6 +321,30 @@ const promoteRelease = Effect.fn(function* (
   return { publicDeploymentId: publicPromoted.id, coreDeploymentId: corePromoted.id };
 });
 
+const finishIngressPromotion = Effect.fn(function* (
+  port: ReleasePort,
+  release: StagedRelease,
+  coreDeploymentId: string
+) {
+  const { snapshot } = release;
+  yield* requireTrunk(port, snapshot.revision);
+  yield* requireDeployment(port, snapshot.core.name, {
+    id: coreDeploymentId,
+    versions: [{ id: release.coreVersionId, percentage: 100 }],
+  });
+  const ingressStaged = staged(
+    snapshot.public,
+    release.publicVersionId,
+    release.publicDeploymentId
+  );
+  yield* requireDeployment(port, snapshot.public.name, ingressStaged);
+  const ingress = yield* deployObserved(port, snapshot.public.name, {
+    versions: [{ id: release.publicVersionId, percentage: 100 }],
+    readRetries: interruptedPromotionReadRetries,
+  });
+  return { publicDeploymentId: ingress.id, coreDeploymentId };
+});
+
 const isolateRelease = Effect.fn(function* (
   port: ReleasePort,
   snapshot: ReleaseSnapshot,
@@ -379,6 +413,7 @@ export const releaseController = {
   deployExact,
   stageRelease,
   promoteRelease,
+  finishIngressPromotion,
   isolateRelease,
   verifyRetirement,
 };

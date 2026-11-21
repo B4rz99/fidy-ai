@@ -10,9 +10,10 @@ from uuid import UUID
 from zipfile import ZipFile
 
 from successor_artifacts import (
-    ACTIVE_STEPS, RECOVERY_STEPS, RESUMED_STAGE_STEPS, RESUME_CAPTURE_STEP,
-    STAGE_STEPS, WORKFLOW, active_successor, continuation_steps, main,
-    recovered_successor, require_sealed_source, sealed_successor,
+    ACCOUNTING_FORWARD_PROOF, ACCOUNTING_FORWARD_RUN, ACCOUNTING_FORWARD_STEPS,
+    ACCOUNTING_FORWARD_VERIFIER, ACTIVE_STEPS, RECOVERY_STEPS, RESUMED_STAGE_STEPS, RESUME_CAPTURE_STEP,
+    STAGE_STEPS, WORKFLOW, accounting_forward_receipt, active_successor, continuation_steps, main,
+    recovered_successor, require_active_forward, require_sealed_source, sealed_successor,
 )
 from successor_partial import (
     CORE_VERSION, INGRESS_VERSION, PLAN, PLAN_RUN, REVISION,
@@ -81,8 +82,8 @@ class ArchiveEvidence:
     def __init__(self):
         self.documents = {}
 
-    def add(self, artifact_id, producer, prefix, files, steps):
-        run_id = str(int(artifact_id) + 100)
+    def add(self, artifact_id, producer, prefix, files, steps, *, run_id=None, conclusion="success"):
+        run_id = run_id or str(int(artifact_id) + 100)
         stream = BytesIO()
         with ZipFile(stream, "w") as archive:
             for name, contents in files.items():
@@ -98,10 +99,10 @@ class ArchiveEvidence:
             "id": int(run_id), "repository": {"full_name": REPO},
             "head_repository": {"full_name": REPO}, "path": ".github/workflows/" + WORKFLOW,
             "head_branch": "trunk", "head_sha": producer, "event": "workflow_dispatch",
-            "conclusion": "success", "run_attempt": 1,
+            "conclusion": conclusion, "run_attempt": 1,
         }).encode()
         self.documents[f"runs/{run_id}/attempts/1/jobs?per_page=100"] = json.dumps({
-            "total_count": 1, "jobs": [{"name": "plan", "conclusion": "success", "steps": [
+            "total_count": 1, "jobs": [{"name": "plan", "conclusion": conclusion, "steps": [
                 {"name": name, "conclusion": conclusion} for name, conclusion in steps.items()
             ]}],
         }).encode()
@@ -110,6 +111,50 @@ class ArchiveEvidence:
 
     def get(self, path):
         return self.documents[path]
+
+
+
+class AccountingForwardArchiveTests(unittest.TestCase):
+    def test_receipt_requires_the_exact_protected_failure_and_unchanged_stage(self):
+        evidence = ArchiveEvidence()
+        stage = {"publicDeploymentId": "original", "coreDeploymentId": "staged", "snapshot": {}}
+
+        def lineage(operation, *revisions):
+            self.assertEqual((operation, revisions), ("merge-base", (ACCOUNTING_FORWARD_VERIFIER, CHECKOUT)))
+            return ACCOUNTING_FORWARD_VERIFIER
+
+        def check(files, steps=ACCOUNTING_FORWARD_STEPS, run_id=ACCOUNTING_FORWARD_RUN):
+            ref = evidence.add(ACCOUNTING_FORWARD_PROOF["artifactId"], ACCOUNTING_FORWARD_VERIFIER,
+                               "native-fixture-successor-rollout-diagnostics-", files, steps,
+                               run_id=run_id, conclusion="failure")
+            proof = {**ACCOUNTING_FORWARD_PROOF, **ref}
+            with patch("successor_artifacts.ACCOUNTING_FORWARD_PROOF", proof):
+                return accounting_forward_receipt(stage, CHECKOUT, evidence.get, lineage)
+
+        files = {"native-release.json": stage}
+        self.assertEqual(check(files)["coreDeploymentId"], ACCOUNTING_FORWARD_PROOF["coreDeploymentId"])
+        with self.assertRaisesRegex(ValueError, "Unexpected accounting partial rollout"):
+            check(files, run_id="66")
+        with self.assertRaisesRegex(ValueError, "did not stop at promotion"):
+            check(files, {**ACCOUNTING_FORWARD_STEPS, "Upload the reviewed active successor pair": "success"})
+        with self.assertRaisesRegex(ValueError, "differs from its exact stage"):
+            check({"native-release.json": {**stage, "coreDeploymentId": "changed"}})
+        with self.assertRaises(ValueError):
+            check({**files, "native-release.json.promoted": {}})
+
+    def test_active_forward_requires_proof_only_when_preserving_exact_partial_core(self):
+        promotion = {"release": {"publicDeploymentId": "original", "snapshot": {"public": {"deploymentId": "stable"}}},
+                     "promoted": {"coreDeploymentId": ACCOUNTING_FORWARD_PROOF["coreDeploymentId"],
+                                  "publicDeploymentId": str(UUID(int=99))}}
+        with self.assertRaisesRegex(ValueError, "lacks the authenticated partial"):
+            require_active_forward(promotion, None, CHECKOUT, None, None)
+        with patch("successor_artifacts.accounting_forward_receipt", return_value=ACCOUNTING_FORWARD_PROOF) as receipt:
+            require_active_forward(promotion, ACCOUNTING_FORWARD_PROOF, CHECKOUT, None, None)
+            receipt.assert_called_once_with(promotion["release"], CHECKOUT, None, None)
+        promotion["promoted"]["coreDeploymentId"] = "different"
+        require_active_forward(promotion, None, CHECKOUT, None, None)
+        with self.assertRaisesRegex(ValueError, "Unexpected accounting partial"):
+            require_active_forward(promotion, ACCOUNTING_FORWARD_PROOF, CHECKOUT, None, None)
 
 
 def resumed_stage():

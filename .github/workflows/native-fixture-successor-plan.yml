@@ -19,6 +19,7 @@ on:
             rollout-resumed,
             inspect-accounting,
             resume-accounting,
+            forward-accounting,
             rollout-accounting,
           ]
         required: true
@@ -76,7 +77,8 @@ jobs:
       FIXTURE_SUCCESSOR_RESEAL: ${{ inputs.operation == 'reseal' }}
       FIXTURE_ACCOUNTING_ROLLOUT: ${{ endsWith(inputs.operation, '-accounting') }}
       FIXTURE_ACCOUNTING_INSPECTION: ${{ inputs.operation == 'inspect-accounting' }}
-      FIXTURE_ACCOUNTING_CONTINUATION: ${{ inputs.operation == 'resume-accounting' }}
+      FIXTURE_ACCOUNTING_CONTINUATION: ${{ inputs.operation == 'resume-accounting' || inputs.operation == 'forward-accounting' }}
+      FIXTURE_ACCOUNTING_FORWARD: ${{ inputs.operation == 'forward-accounting' }}
       SUCCESSOR_WORKFLOW_ARTIFACT: ${{ inputs.workflow_artifact }}
       SUCCESSOR_WORKFLOW_DIGEST: ${{ inputs.workflow_sha256 }}
       APPROVED_PLAN_ARTIFACT: ${{ inputs.plan_artifact }}
@@ -87,7 +89,7 @@ jobs:
       SUCCESSOR_RECOVERY_DIGEST: ${{ inputs.recovery_sha256 }}
       NATIVE_STORAGE_ADMISSION: ${{ vars.NATIVE_STORAGE_ADMISSION }}
       NATIVE_STORAGE_HOSTS: ${{ vars.NATIVE_STORAGE_HOSTS || 'acceptance' }}
-      RELEASE_GIT_SHA: ${{ (inputs.operation == 'resume' || inputs.operation == 'reseal' || endsWith(inputs.operation, '-resumed')) && 'de04a192c3836be0efb488b170a7b93b9f98f28f' || inputs.operation == 'resume-accounting' && 'c85cb1574464a8d00223f80c48a83f55efd61958' || github.sha }}
+      RELEASE_GIT_SHA: ${{ (inputs.operation == 'resume' || inputs.operation == 'reseal' || endsWith(inputs.operation, '-resumed')) && 'de04a192c3836be0efb488b170a7b93b9f98f28f' || (inputs.operation == 'resume-accounting' || inputs.operation == 'forward-accounting') && 'c85cb1574464a8d00223f80c48a83f55efd61958' || github.sha }}
       RELEASE_ATTEMPT_ID: ${{ github.run_id }}-${{ github.run_attempt }}
       RELEASE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
       ALCHEMY_PROFILE: ci
@@ -373,6 +375,7 @@ jobs:
             ${{ runner.temp }}/native-verification.json
             ${{ runner.temp }}/fixture-successor-seal-reference.json
             ${{ runner.temp }}/fixture-successor-recovery-reference.json
+            ${{ runner.temp }}/fixture-successor-accounting-forward.json
           if-no-files-found: error
       - name: Retain successor active rollout diagnostics
         if: always() && env.FIXTURE_RELEASE_OPERATION == 'rollout-fixture-successor'

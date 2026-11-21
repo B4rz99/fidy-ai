@@ -161,17 +161,19 @@ export const validProviderRedirect = ({
   );
 };
 
-export const hostOnlyProviderCookie = (cookies: Cookies.Cookies, provider: Provider): boolean =>
-  Option.exists(
-    Cookies.get(cookies, "__Host-fidy_" + provider),
-    ({ value, options }) =>
-      value !== "" &&
-      options?.path === "/" &&
-      options.secure === true &&
-      options.httpOnly === true &&
-      options.sameSite === "lax" &&
-      options.domain === undefined
-  );
+export const hostOnlyProviderCookie =
+  (provider: Provider) =>
+  (cookies: Cookies.Cookies): boolean =>
+    Option.exists(
+      Cookies.get(cookies, "__Host-fidy_" + provider),
+      ({ value, options }) =>
+        value !== "" &&
+        options?.path === "/" &&
+        options.secure === true &&
+        options.httpOnly === true &&
+        options.sameSite === "lax" &&
+        options.domain === undefined
+    );
 const signupRefusal = (message: string): Effect.Effect<never, Error> =>
   Effect.logError(message).pipe(Effect.andThen(Effect.fail(Error(message))));
 const readSignupResponse = Effect.fn(function* <Value>(
@@ -213,7 +215,7 @@ export const verifyCanonicalSignupRedirects = Effect.fn(function* (client: HttpC
       const redirectValid = yield* Effect.try(() =>
         validProviderRedirect({ authorization: location.authorizationUrl, provider })
       );
-      const cookieValid = hostOnlyProviderCookie(response.cookies, provider);
+      const cookieValid = hostOnlyProviderCookie(provider)(response.cookies);
       const originValid = response.headers["access-control-allow-origin"] === production.browser;
       if (!redirectValid || !cookieValid || !originValid) {
         return yield* signupRefusal(

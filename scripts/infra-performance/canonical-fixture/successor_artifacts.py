@@ -35,6 +35,18 @@ ACCOUNTING_FORWARD_PROOF = {
     "sha256": "3603da988969660966a3b750e9c10536ed05da1c79cf7bed4eeebf82ebbc6f88",
     "coreDeploymentId": "5d4b1c00-19ca-4695-9c5d-127acd697154",
 }
+ACCOUNTING_FINALIZE_RUN = "44845324719"
+ACCOUNTING_FINALIZE_VERIFIER = "b8947823ad6c509943143e5585f49173fe360f1d"
+ACCOUNTING_FINALIZE_FILE = "fixture-successor-accounting-finalize.json"
+ACCOUNTING_FINALIZE_PROOF = {
+    "artifactId": "14681738859",
+    "sha256": "01cad3f7f266a4ba0bbf7951ef9b5629e871492899ca80b972ee42583b9bac4a",
+    "coreDeploymentId": ACCOUNTING_FORWARD_PROOF["coreDeploymentId"],
+    "publicDeploymentId": "7b177329-2aa9-4f51-b5e1-c83885e4a54a",
+}
+PROMOTE_STEP = "Verify and promote the active successor with its tested return pair"
+VERIFY_STEP = "Verify the installed successor and retained controls"
+RESTORE_STEP = "Restore the sealed dormant pair after failed verification"
 OWNERS = ("user", "directory", "pricing", "maintenance", "erasure")
 STAGE_STEPS = {
     "Authenticate the original release, receipt, and exact erasure": "success",
@@ -117,21 +129,31 @@ ACCOUNTING_FORWARD_STEPS = {
 }
 
 
-def artifacts(revision, reference, prefix, expected_steps, filenames, get=actions_get, *, optional=()):
+ACCOUNTING_FINALIZE_STEPS = {
+    **ACCOUNTING_FORWARD_STEPS, PROMOTE_STEP: "success", VERIFY_STEP: "failure", RESTORE_STEP: "failure",
+}
+
+
+def artifacts(revision, reference, prefix, expected_steps, filenames, get=actions_get,
+              *, optional=(), steps_for_file=None):
     run, body = protected_archive(revision, reference["artifactId"], reference["sha256"], prefix=prefix,
                                   conclusions={"success"}, get=get, workflow=WORKFLOW)
     inventory = json.loads(get(f"runs/{run}/attempts/1/jobs?per_page=100"))
     job, = inventory["jobs"]
-    steps = [(step["name"], step["conclusion"]) for step in job["steps"] if step["name"] in expected_steps]
-    if (inventory["total_count"] != 1 or job["name"] != "plan" or job["conclusion"] != "success"
-            or steps != list(expected_steps.items())):
-        raise ValueError("Protected successor operation or step outcomes differ")
     with ZipFile(BytesIO(body)) as archive:
         rows = archive.infolist()
         names = {row.filename for row in rows}
         if (len(rows) != len(names) or not set(filenames) <= names <= set(filenames) | set(optional)
                 or any(not 0 < row.file_size <= 128_000 for row in rows)):
             raise ValueError("Unexpected protected successor evidence")
+        expected_steps = expected_steps.copy()
+        for filename, overrides in (steps_for_file or {}).items():
+            if filename in names:
+                expected_steps.update(overrides)
+        steps = [(step["name"], step["conclusion"]) for step in job["steps"] if step["name"] in expected_steps]
+        if (inventory["total_count"] != 1 or job["name"] != "plan" or job["conclusion"] != "success"
+                or steps != list(expected_steps.items())):
+            raise ValueError("Protected successor operation or step outcomes differ")
         return {row.filename:json.loads(archive.read(row)) for row in rows}
 
 
@@ -379,6 +401,52 @@ def require_active_forward(promotion, proof, verifier, get, git):
         raise ValueError("Active accounting forward proof differs")
 
 
+def accounting_finalize_receipt(staged, verifier, get=actions_get, git=git_read):
+    if (verifier == ACCOUNTING_FINALIZE_VERIFIER
+            or git("merge-base", ACCOUNTING_FINALIZE_VERIFIER, verifier) != ACCOUNTING_FINALIZE_VERIFIER):
+        raise ValueError("Accounting finalization receipt is outside the protected verifier lineage")
+    run, body = protected_archive(
+        ACCOUNTING_FINALIZE_VERIFIER, ACCOUNTING_FINALIZE_PROOF["artifactId"], ACCOUNTING_FINALIZE_PROOF["sha256"],
+        prefix="native-fixture-successor-rollout-diagnostics-", conclusions={"failure"},
+        get=get, workflow=WORKFLOW,
+    )
+    if run != ACCOUNTING_FINALIZE_RUN:
+        raise ValueError("Unexpected failed accounting verification run")
+    inventory = json.loads(get(f"runs/{run}/attempts/1/jobs?per_page=100"))
+    job, = inventory["jobs"]
+    steps = [(step["name"], step["conclusion"]) for step in job["steps"] if step["name"] in ACCOUNTING_FINALIZE_STEPS]
+    if (inventory["total_count"] != 1 or job["name"] != "plan" or job["conclusion"] != "failure"
+            or steps != list(ACCOUNTING_FINALIZE_STEPS.items())):
+        raise ValueError("Protected accounting rollout did not fail after forward promotion")
+    with ZipFile(BytesIO(body)) as archive:
+        rows = archive.infolist()
+        if (len(rows) != 2 or {row.filename for row in rows} != {"native-release.json", "native-release.json.promoted"}
+                or any(not 0 < row.file_size <= 128_000 for row in rows)):
+            raise ValueError("Unexpected promoted accounting evidence")
+        if json.loads(archive.read("native-release.json")) != staged:
+            raise ValueError("Promoted accounting archive differs from its exact stage")
+        promotion = json.loads(archive.read("native-release.json.promoted"))
+    coordinates = {key: ACCOUNTING_FINALIZE_PROOF[key] for key in ("coreDeploymentId", "publicDeploymentId")}
+    if (promotion != {"release": staged, "promoted": coordinates, "rollbackTested": True}
+            or promotion["rollbackTested"] is not True):
+        raise ValueError("Promoted accounting archive differs from the verified live pair")
+    return promotion, ACCOUNTING_FINALIZE_PROOF.copy()
+
+
+def require_active_finalize(promotion, proof, verifier, get, git):
+    promoted = promotion.get("promoted", {})
+    exact_pair = all(promoted.get(key) == ACCOUNTING_FINALIZE_PROOF[key] for key in ("coreDeploymentId", "publicDeploymentId"))
+    if not exact_pair:
+        if proof is not None:
+            raise ValueError("Unexpected accounting finalization for a different pair")
+        return
+    if proof != ACCOUNTING_FINALIZE_PROOF:
+        raise ValueError("Active accounting lacks its exact finalization receipt")
+    previous, expected = accounting_finalize_receipt(promotion["release"], verifier, get, git)
+    if promotion != previous or proof != expected:
+        raise ValueError("Active accounting finalization differs from the captured promotion")
+
+
 def accounting_continuation_producer(reference, verifier, get, git):
     artifact_id = reference["artifactId"]
     if not re.fullmatch(r"[1-9][0-9]{0,19}", artifact_id or ""):
@@ -408,7 +476,8 @@ def active_successor(revision, reference, get=actions_get, *, verifier=None, git
     files = artifacts(producer, reference, "native-fixture-successor-active-",
                       continuation_steps(resumed, steps),
                       [promotion_name, installation_name, seal_name, recovery_name], get,
-                      optional=(ACCOUNTING_FORWARD_FILE,) if continuing_accounting else ())
+                      optional=(ACCOUNTING_FORWARD_FILE, ACCOUNTING_FINALIZE_FILE) if continuing_accounting else (),
+                      steps_for_file={ACCOUNTING_FINALIZE_FILE: {PROMOTE_STEP: "skipped"}})
     promotion, installed = files[promotion_name], files[installation_name]
     accounting = installed.get("nativeAccountingWitness", False)
     if (type(accounting) is not bool or (continuing_accounting and not accounting)
@@ -424,6 +493,9 @@ def active_successor(revision, reference, get=actions_get, *, verifier=None, git
         if ACCOUNTING_FORWARD_FILE in files and files[ACCOUNTING_FORWARD_FILE] is None:
             raise ValueError("Invalid accounting partial proof")
         require_active_forward(promotion, files.get(ACCOUNTING_FORWARD_FILE), producer, get, git)
+        if ACCOUNTING_FINALIZE_FILE in files and files[ACCOUNTING_FINALIZE_FILE] is None:
+            raise ValueError("Invalid accounting finalization proof")
+        require_active_finalize(promotion, files.get(ACCOUNTING_FINALIZE_FILE), producer, get, git)
     snapshot = release["snapshot"]
     smoke, = [worker for worker in installed["workers"] if worker["role"] == "Smoke"]
     if (("resume" in stage) != (resumed or accounting) or promotion["rollbackTested"] is not True or snapshot["revision"] != revision
@@ -457,12 +529,14 @@ def main():
     continuation = env.get("FIXTURE_ACCOUNTING_CONTINUATION", "false")
     continuing_accounting = continuation == "true"
     forward = env.get("FIXTURE_ACCOUNTING_FORWARD", "false")
+    finalize = env.get("FIXTURE_ACCOUNTING_FINALIZE", "false")
     if (operation not in ("recover-fixture-successor", "rollout-fixture-successor")
             or not re.fullmatch(r"[a-f0-9]{40}", verifier)
             or mode not in ("true", "false") or accounting_mode not in ("true", "false")
             or (accounting and (resumed or revision == REVISION or operation != "rollout-fixture-successor"))
             or (resumed and (revision != REVISION or revision == verifier))
             or continuation not in ("true", "false") or forward not in ("true", "false")
+            or finalize not in ("true", "false") or (finalize == "true" and forward != "true")
             or (forward == "true" and not continuing_accounting)
             or (continuing_accounting and (not accounting or revision != STAGED_ACCOUNTING_REVISION or revision == verifier))
             or (not resumed and not continuing_accounting and revision != verifier)
@@ -491,6 +565,10 @@ def main():
             files["native-release.json.controls"] = {"digest": stage["controlsDigest"]}
             if forward == "true":
                 files[ACCOUNTING_FORWARD_FILE] = accounting_forward_receipt(staged, verifier)
+                if finalize == "true":
+                    promotion, proof = accounting_finalize_receipt(staged, verifier)
+                    files["native-release.json.promoted"] = promotion
+                    files[ACCOUNTING_FINALIZE_FILE] = proof
     if ("resume" in stage) != (resumed or accounting):
         raise ValueError("Successor seal does not match the protected resume mode")
     files.update({"fixture-successor-seal-reference.json":seal, "fixture-successor-source.json":stage["predecessor"]})

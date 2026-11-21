@@ -3,6 +3,7 @@ import type { ProactivityTemplateSender } from "./contract";
 import { buildWeeklyQuestionSender } from "~/shell/channels/whatsapp/internal/weekly-question";
 import { Effect, Option, type Redacted } from "effect";
 import {
+  LookupCorrelation,
   decodeLifecycleStatus,
   lookupLifecycleStatus,
   projectHostedStatus,
@@ -73,7 +74,7 @@ export const makeDeliveryVerifier = (
       status: "delivered",
     });
 
-    return verified._tag === "Correlated" &&
+    return LookupCorrelation.$is("Correlated")(verified) &&
       verified.value.evidence.correlationToken === request.correlationToken
       ? Option.some(verified.value.evidence)
       : Option.none();

@@ -13,7 +13,7 @@ import {
   type WhatsAppSentMessage,
 } from "~/shell/channels/whatsapp/contract";
 import { TelemetryHttpStatus } from "~/shell/observability/contract";
-import { type OutboundHttpFailure } from "~/shell/outbound-http/contract";
+import { type OutboundHttpFailure, OutboundHttpRequest } from "~/shell/outbound-http/contract";
 import { OutboundHttp, type OutboundHttpService } from "~/shell/outbound-http/operations";
 import {
   firstServerErrorStatus,
@@ -164,20 +164,19 @@ const encodeTextMessage = ({
     messaging_product: "whatsapp",
     recipient_type: "individual",
     ...address,
-    ...(Option.isNone(confirmation)
-      ? { type: "text", text: { body: text } }
-      : {
-          type: "interactive",
-          interactive: {
-            type: "button",
-            body: { text },
-            action: {
-              buttons: [
-                { type: "reply", reply: { id: confirmation.value.command, title: "Confirmar" } },
-              ],
-            },
+    ...Option.match(confirmation, {
+      onNone: () => ({ type: "text", text: { body: text } }),
+      onSome: ({ command }) => ({
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: { text },
+          action: {
+            buttons: [{ type: "reply", reply: { id: command, title: "Confirmar" } }],
           },
-        }),
+        },
+      }),
+    }),
     ...Option.match(opaqueCallbackData, {
       onNone: () => ({}),
       onSome: (value) => ({ biz_opaque_callback_data: value }),
@@ -277,7 +276,7 @@ export const sendKapsoMessage = ({
 }>): Effect.Effect<WhatsAppSentMessage, WhatsAppSendFailed> =>
   Effect.gen(function* () {
     const response = yield* outboundHttp
-      .execute({ _tag: "KapsoMessages", businessPhoneNumberId, body })
+      .execute(OutboundHttpRequest.KapsoMessages({ businessPhoneNumberId, body }))
       .pipe(Effect.mapError(mapExternalKapsoFailure));
 
     const decodedStatus = Schema.decodeOption(TelemetryHttpStatus)(response.status);
@@ -323,21 +322,20 @@ export const sendKapsoMessage = ({
 export class KapsoClient extends Context.Service<KapsoClient, WhatsAppDelivery>()(
   "@fidy/server/shell/channels/whatsapp/internal/kapso-client/KapsoClient"
 ) {
-  static readonly layer = Layer.effect(
-    this,
-    Effect.gen(function* () {
-      const outboundHttp = yield* OutboundHttp;
+  static readonly make = Effect.gen(function* () {
+    const outboundHttp = yield* OutboundHttp;
 
-      const deliveryMode = yield* Config.Literals(
-        ["bsuid", "sandbox-phone"],
-        "WHATSAPP_DELIVERY_MODE"
-      ).pipe(Config.withDefault("bsuid"));
+    const deliveryMode = yield* Config.Literals(
+      ["bsuid", "sandbox-phone"],
+      "WHATSAPP_DELIVERY_MODE"
+    ).pipe(Config.withDefault("bsuid"));
 
-      return makeWhatsAppDelivery({
-        deliveryMode,
-        outboundHttp,
-        sandboxPhoneNumberId: Option.none(),
-      });
-    })
-  );
+    return makeWhatsAppDelivery({
+      deliveryMode,
+      outboundHttp,
+      sandboxPhoneNumberId: Option.none(),
+    });
+  });
+
+  static readonly layer = Layer.effect(this, this.make);
 }

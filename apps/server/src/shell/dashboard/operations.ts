@@ -1,4 +1,9 @@
-import { type DashboardFailure, type DashboardIssue } from "~/core/dashboard/contract";
+import {
+  type DashboardFailure,
+  type DashboardIssue,
+  type InvalidDashboardResult,
+  type WidgetNotFound,
+} from "~/core/dashboard/contract";
 import { NotFound, type SuggestedOperation, ValidationFailed } from "~/shell/public-http/contract";
 import {
   type SuggestedOperationCaller,
@@ -6,7 +11,7 @@ import {
   suggestOperation,
 } from "~/shell/canonical-operations/operations";
 
-import { Effect, Option, Schema } from "effect";
+import { Effect, Match, Option, Predicate, Schema } from "effect";
 import {
   type DashboardApiFailure,
   type DashboardCategoryNotFound,
@@ -20,7 +25,7 @@ const decodeDashboardView = Schema.decodeEffect(Schema.toType(DashboardView));
 export const renderDashboardView: typeof render = (input) =>
   render(input).pipe(
     Effect.flatMap(decodeDashboardView),
-    Effect.mapError(() => new DashboardUnavailable())
+    Effect.mapError((cause) => new DashboardUnavailable({ cause }))
   );
 
 const dashboardRecovery = (caller: SuggestedOperationCaller): ReadonlyArray<SuggestedOperation> =>
@@ -46,7 +51,7 @@ const categoryRecovery = (caller: SuggestedOperationCaller): ReadonlyArray<Sugge
   });
 
 const widgetNotFoundFailure = (
-  failure: Readonly<Extract<DashboardFailure, { readonly _tag: "WidgetNotFound" }>>,
+  failure: WidgetNotFound,
   caller: SuggestedOperationCaller
 ): NotFound =>
   NotFound.make({
@@ -62,7 +67,7 @@ const widgetNotFoundFailure = (
 
 type NonInvalidDashboardFailure = Exclude<
   DashboardFailure | DashboardCategoryNotFound,
-  { readonly _tag: "InvalidDashboardResult" }
+  InvalidDashboardResult
 >;
 
 const categoryNotFoundFailure = (
@@ -86,23 +91,21 @@ const categoryNotFoundFailure = (
 const toNonInvalidApiFailure = (
   failure: NonInvalidDashboardFailure,
   caller: SuggestedOperationCaller
-): DashboardApiFailure => {
-  switch (failure._tag) {
-    case "WidgetNotFound":
-      return widgetNotFoundFailure(failure, caller);
-    case "DashboardCategoryNotFound":
-      return categoryNotFoundFailure(failure, caller);
-    case "DuplicateWidgetId":
-      return ValidationFailed.make({
+): DashboardApiFailure =>
+  Match.valueTags(failure, {
+    WidgetNotFound: (failure) => widgetNotFoundFailure(failure, caller),
+    DashboardCategoryNotFound: (failure) => categoryNotFoundFailure(failure, caller),
+    DuplicateWidgetId: (failure) =>
+      ValidationFailed.make({
         error: {
           code: "validation_failed",
           message: `WidgetId ${failure.widgetId} is already present in the dashboard. Generate a fresh WidgetId and resend the complete edit.`,
           fields: [{ path: "widget.id", message: "Expected a fresh WidgetId." }],
         },
         next: dashboardRecovery(caller),
-      });
-    case "LastWidgetRemoval":
-      return ValidationFailed.make({
+      }),
+    LastWidgetRemoval: () =>
+      ValidationFailed.make({
         error: {
           code: "validation_failed",
           message:
@@ -110,9 +113,9 @@ const toNonInvalidApiFailure = (
           fields: [{ path: "widgetId", message: "Expected a removable non-final widget." }],
         },
         next: dashboardRecovery(caller),
-      });
-    case "RootRegionResize":
-      return ValidationFailed.make({
+      }),
+    RootRegionResize: () =>
+      ValidationFailed.make({
         error: {
           code: "validation_failed",
           message:
@@ -120,18 +123,18 @@ const toNonInvalidApiFailure = (
           fields: [{ path: "widgetIds", message: "Expected a child region inside a split." }],
         },
         next: dashboardRecovery(caller),
-      });
-    case "RegionNotFound":
-      return NotFound.make({
+      }),
+    RegionNotFound: () =>
+      NotFound.make({
         error: {
           code: "not_found",
           message:
             "No current layout region contains exactly those widgets. Get the latest dashboard and choose one complete child region.",
         },
         next: dashboardRecovery(caller),
-      });
-    case "SelfPlacement":
-      return ValidationFailed.make({
+      }),
+    SelfPlacement: () =>
+      ValidationFailed.make({
         error: {
           code: "validation_failed",
           message: "A widget cannot be placed beside itself. Choose a different placement target.",
@@ -140,9 +143,8 @@ const toNonInvalidApiFailure = (
           ],
         },
         next: dashboardRecovery(caller),
-      });
-  }
-};
+      }),
+  });
 
 const toFieldIssue = (issue: DashboardIssue): ValidationFailed["error"]["fields"][number] =>
   Option.match(issue.path, {
@@ -157,7 +159,7 @@ export const toApiFailure = ({
   readonly failure: DashboardFailure | DashboardCategoryNotFound;
   readonly caller: SuggestedOperationCaller;
 }): DashboardApiFailure =>
-  failure._tag === "InvalidDashboardResult"
+  Predicate.isTagged(failure, "InvalidDashboardResult")
     ? ValidationFailed.make({
         error: {
           code: "validation_failed",

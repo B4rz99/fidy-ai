@@ -1,21 +1,26 @@
-import { DateTime, Option, Schema } from "effect";
+import { type Data, DateTime, Match, Option, Predicate, Schema } from "effect";
 import type { Prompt } from "effect/ai";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { listLaunchCategories } from "~/core/categories/operations";
 import type { User } from "~/core/identity/contract";
 import {
+  type AssistantTranscriptEntry,
+  type CanonicalToolOutcome,
+  type CanonicalToolResultEntry,
   ProactiveTranscriptEntry,
+  ToolOutputRejected,
   type TranscriptEntry,
   TranscriptEntryId,
   TranscriptText,
   TranscriptTurnId,
   UserTranscriptEntry,
 } from "~/core/agent/contract";
-import type {
+import {
+  HostedActiveRequest,
   HostedContextSection,
-  HostedConversationChannel,
-  HostedStructuredContext,
-  HostedTextContext,
+  type HostedConversationChannel,
+  type HostedStructuredContext,
+  type HostedTextContext,
 } from "~/shell/hosted-inference/contract";
 import type { HostedPromptProjection } from "./adapter";
 import { encodeHostedOperationWireName } from "~/shell/canonical-operations/operations";
@@ -162,30 +167,32 @@ export const turnPromptInternal = ({
       `La fecha local de hoy en ${timeZone} es ${DateTime.formatIsoDate(local)}. Resuelve hoy y ayer desde esa fecha local, nunca desde la fecha UTC. No tienes acceso a la fecha ni a la configuración del dispositivo del Usuario.`,
   });
 
-type TranscriptTextEntry = Extract<
-  TranscriptEntry,
-  { readonly _tag: "UserTranscriptEntry" | "AssistantTranscriptEntry" }
->;
+type TranscriptResultEntry = Pick<CanonicalToolResultEntry, "toolCallId" | "operation" | "outcome">;
 
-type TranscriptResultEntry = Pick<
-  Extract<TranscriptEntry, { readonly _tag: "CanonicalToolResultEntry" }>,
-  "toolCallId" | "operation" | "outcome"
->;
+type ToolResultPayload = Readonly<{ result: Schema.Json; failed: boolean }>;
 
-const exactTranscriptTextMessage = (entry: TranscriptTextEntry): Prompt.MessageEncoded => ({
-  role: entry._tag === "UserTranscriptEntry" ? "user" : "assistant",
+const toolResultPayload = (outcome: CanonicalToolOutcome): ToolResultPayload =>
+  Match.value(outcome).pipe(
+    Match.tag("Succeeded", (succeeded): ToolResultPayload => ({
+      result: succeeded.output,
+      failed: false,
+    })),
+    Match.tag("CommittedOutputUnavailable", (unavailable): ToolResultPayload => ({
+      result: unavailable,
+      failed: false,
+    })),
+    Match.orElse((rejected): ToolResultPayload => ({ result: rejected.failure, failed: true }))
+  );
+
+const exactTranscriptTextMessage = (
+  entry: UserTranscriptEntry | AssistantTranscriptEntry
+): Prompt.MessageEncoded => ({
+  role: Predicate.isTagged(entry, "UserTranscriptEntry") ? "user" : "assistant",
   content: entry.text,
 });
 
 const exactTranscriptResultMessage = (entry: TranscriptResultEntry): Prompt.MessageEncoded => {
-  const failed =
-    entry.outcome._tag !== "Succeeded" && entry.outcome._tag !== "CommittedOutputUnavailable";
-
-  let result: Schema.Json;
-
-  if (entry.outcome._tag === "Succeeded") result = entry.outcome.output;
-  else if (entry.outcome._tag === "CommittedOutputUnavailable") result = entry.outcome;
-  else result = entry.outcome.failure;
+  const { result, failed } = toolResultPayload(entry.outcome);
 
   return {
     role: "tool",
@@ -201,33 +208,31 @@ const exactTranscriptResultMessage = (entry: TranscriptResultEntry): Prompt.Mess
   };
 };
 
-const exactTranscriptMessage = (entry: TranscriptEntry): Prompt.MessageEncoded => {
-  switch (entry._tag) {
-    case "UserTranscriptEntry":
-    case "AssistantTranscriptEntry":
-      return exactTranscriptTextMessage(entry);
-    case "CanonicalToolCallEntry":
-      return {
-        role: "assistant",
-        content: [
-          {
-            type: "tool-call",
-            id: entry.toolCallId,
-            name: encodeHostedOperationWireName(CanonicalOperationId.make(entry.operation)),
-            params: entry.input,
-          },
-        ],
-      };
-    case "CanonicalToolResultEntry":
-      return exactTranscriptResultMessage(entry);
-    case "FailedTurnTranscriptEntry":
-      return { role: "user", content: `[TURN_FAILED:${entry.reason}]` };
-    case "InterruptedTurnTranscriptEntry":
-      return { role: "user", content: "[TURN_INTERRUPTED]" };
-    default:
-      return entry satisfies never;
-  }
-};
+const exactTranscriptMessage = (entry: TranscriptEntry): Prompt.MessageEncoded =>
+  Match.valueTags(entry, {
+    UserTranscriptEntry: exactTranscriptTextMessage,
+    AssistantTranscriptEntry: exactTranscriptTextMessage,
+    CanonicalToolCallEntry: (call): Prompt.MessageEncoded => ({
+      role: "assistant",
+      content: [
+        {
+          type: "tool-call",
+          id: call.toolCallId,
+          name: encodeHostedOperationWireName(CanonicalOperationId.make(call.operation)),
+          params: call.input,
+        },
+      ],
+    }),
+    CanonicalToolResultEntry: exactTranscriptResultMessage,
+    FailedTurnTranscriptEntry: (failed): Prompt.MessageEncoded => ({
+      role: "user",
+      content: `[TURN_FAILED:${failed.reason}]`,
+    }),
+    InterruptedTurnTranscriptEntry: (): Prompt.MessageEncoded => ({
+      role: "user",
+      content: "[TURN_INTERRUPTED]",
+    }),
+  });
 
 export const exactTranscriptPromptInternal = (
   entries: ReadonlyArray<TranscriptEntry>
@@ -256,7 +261,7 @@ const boundedTranscript = (
 ): ReadonlyArray<TranscriptEntry> =>
   entries.map((entry) => {
     if (
-      entry._tag !== "CanonicalToolResultEntry" ||
+      !Predicate.isTagged(entry, "CanonicalToolResultEntry") ||
       JSON.stringify(entry.outcome).length <= maximumToolResultCharacters
     ) {
       return entry;
@@ -264,19 +269,18 @@ const boundedTranscript = (
 
     return {
       ...entry,
-      outcome: {
-        _tag: "ToolOutputRejected" as const,
+      outcome: ToolOutputRejected.make({
         failure: {
           code: "tool_result_too_large",
           message: "The canonical result exceeded the model-context safety limit.",
         },
-      },
+      }),
     };
   });
 
 const projectTranscriptSection = (entry: TranscriptEntry): ReadonlyArray<Prompt.MessageEncoded> =>
   exactTranscriptPromptInternal(boundedTranscript([entry])).map((message) => {
-    if (typeof message.content !== "string") return message;
+    if (!Predicate.isString(message.content)) return message;
 
     if (message.role === "user") {
       return { ...message, content: untrustedText("transcript_user", message.content) };
@@ -290,37 +294,32 @@ const projectTranscriptSection = (entry: TranscriptEntry): ReadonlyArray<Prompt.
   });
 
 const projectEvidenceSection = (
-  section: Exclude<HostedContextSection, { readonly _tag: "AssistantPolicy" | "TurnStarted" }>
-): ReadonlyArray<Prompt.MessageEncoded> => {
-  switch (section._tag) {
-    case "ContinuityBoundary":
-      return [untrustedContinuityFrame(section.boundary)];
-    case "Memory":
-      return [quotedUserContext("memory", section.text)];
-    case "CompactedConversation":
-      return [quotedUserContext("compacted_conversation", section.text)];
-    case "Transcript":
-      return projectTranscriptSection(section.entry);
-    case "ProactiveReply":
-      return [
-        quotedUserContext(
-          "proactive_reply",
-          Schema.encodeSync(Schema.fromJsonString(Schema.toCodecJson(ProactiveTranscriptEntry)))(
-            section.entry
-          )
-        ),
-      ];
-    case "ToolResult":
-      return [exactTranscriptResultMessage(section)];
-    case "InvalidOutputFeedback":
-      return [{ role: "system", content: section.description }];
-    default:
-      return section satisfies never;
-  }
-};
+  section: Exclude<
+    HostedContextSection,
+    Data.TaggedEnum.Value<HostedContextSection, "AssistantPolicy" | "TurnStarted">
+  >
+): ReadonlyArray<Prompt.MessageEncoded> =>
+  Match.valueTags(section, {
+    ContinuityBoundary: ({ boundary }) => [untrustedContinuityFrame(boundary)],
+    Memory: ({ text }) => [quotedUserContext("memory", text)],
+    CompactedConversation: ({ text }) => [quotedUserContext("compacted_conversation", text)],
+    Transcript: ({ entry }) => projectTranscriptSection(entry),
+    ProactiveReply: ({ entry }) => [
+      quotedUserContext(
+        "proactive_reply",
+        Schema.encodeSync(Schema.fromJsonString(Schema.toCodecJson(ProactiveTranscriptEntry)))(
+          entry
+        )
+      ),
+    ],
+    ToolResult: (result) => [exactTranscriptResultMessage(result)],
+    InvalidOutputFeedback: ({ description }): ReadonlyArray<Prompt.MessageEncoded> => [
+      { role: "system", content: description },
+    ],
+  });
 
 const projectSection = (section: HostedContextSection): ReadonlyArray<Prompt.MessageEncoded> => {
-  if (section._tag === "AssistantPolicy") {
+  if (HostedContextSection.$is("AssistantPolicy")(section)) {
     return [
       {
         role: "system",
@@ -329,7 +328,7 @@ const projectSection = (section: HostedContextSection): ReadonlyArray<Prompt.Mes
     ];
   }
 
-  if (section._tag === "TurnStarted") {
+  if (HostedContextSection.$is("TurnStarted")(section)) {
     return [
       {
         role: "system",
@@ -345,7 +344,7 @@ const suppliedEvidenceInventory = (
   sections: ReadonlyArray<HostedContextSection>
 ): Prompt.SystemMessageEncoded => {
   const count = (source: HostedContextSection["_tag"]): number =>
-    sections.filter(({ _tag }) => _tag === source).length;
+    sections.filter(HostedContextSection.$is(source)).length;
 
   const evidenceCounts = {
     Memory: count("Memory"),
@@ -383,7 +382,7 @@ export const projectHostedTextContextInternal = (
 ): HostedPromptProjection => {
   const projected = context.sections.flatMap(projectSection);
 
-  if (context.activeRequest._tag === "Present") {
+  if (HostedActiveRequest.$is("Present")(context.activeRequest)) {
     return {
       prefix: [
         ...projected,
@@ -398,7 +397,7 @@ export const projectHostedTextContextInternal = (
   }
 
   const feedbackStart = context.sections.findIndex(
-    (section) => section._tag === "InvalidOutputFeedback"
+    HostedContextSection.$is("InvalidOutputFeedback")
   );
 
   return {
@@ -442,7 +441,6 @@ export const makeStartupTranscriptInternal = (
 
   return input.entries.map(({ text }, index) =>
     UserTranscriptEntry.make({
-      _tag: "UserTranscriptEntry",
       id: TranscriptEntryId.make(
         `00000000-0000-4000-8000-${index
           .toString(startupUuidHexRadix)

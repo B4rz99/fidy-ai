@@ -1,3 +1,4 @@
+import { ConsentSubject } from "~/shell/consent/contract";
 import { Effect, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { UserId, type WhatsAppCallerReference } from "~/core/identity/contract";
@@ -65,7 +66,7 @@ export const liveWebSessionAuthority = (
 
   return protectConsentAuthority({
     authority: credential,
-    subject: { _tag: "Owner", column: "web_sessions.user_id" },
+    subject: ConsentSubject.Owner({ column: "web_sessions.user_id" }),
     requirement: "unrevoked",
   });
 };

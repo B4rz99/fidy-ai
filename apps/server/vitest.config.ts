@@ -9,8 +9,8 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["src/**/*.test.ts"],
-    exclude: ["src/**/*.acceptance.test.ts"],
+    include: ["src/**/*.test.ts", "test/**/*.test.ts"],
+    exclude: ["src/**/*.acceptance.test.ts", "test/**/*.acceptance.test.ts"],
     clearMocks: true,
     environment: "node",
     pool: "forks",

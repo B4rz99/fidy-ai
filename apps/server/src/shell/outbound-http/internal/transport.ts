@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit, Option, Schema, Stream } from "effect";
+import { Cause, Effect, Exit, Match, Option, Schema, Stream } from "effect";
 import {
   Headers,
   HttpClient,
@@ -10,6 +10,7 @@ import {
 
 import {
   type DeclaredOutcome,
+  ProviderSpanMetadata,
   TelemetryAttempt,
   type TelemetryCode,
   TelemetryHttpStatus,
@@ -73,29 +74,47 @@ const retainedHeaders = (headers: Headers.Headers, names: ReadonlyArray<string>)
     Object.fromEntries(names.flatMap((name) => (name in headers ? [[name, headers[name]]] : [])))
   );
 
+const responseFailure = (
+  response: HttpClientResponse.HttpClientResponse,
+  retainedHeaderNames: ReadonlyArray<string>
+): OutboundHttpFailure =>
+  new OutboundHttpFailure({
+    reason: "transport-failed",
+    responseStatus: Option.some(response.status),
+    responseHeaders: retainedHeaders(response.headers, retainedHeaderNames),
+  });
+
+const requestFailure = (): OutboundHttpFailure =>
+  new OutboundHttpFailure({
+    reason: "transport-failed",
+    responseStatus: Option.none(),
+    responseHeaders: Headers.empty,
+  });
+
 const transportFailure = (
   error: HttpClientError.HttpClientError,
   retainedHeaderNames: ReadonlyArray<string>
-): OutboundHttpFailure => {
-  switch (error.reason._tag) {
-    case "StatusCodeError":
-    case "DecodeError":
-    case "EmptyBodyError":
-      return new OutboundHttpFailure({
-        reason: "transport-failed",
-        responseStatus: Option.some(error.reason.response.status),
-        responseHeaders: retainedHeaders(error.reason.response.headers, retainedHeaderNames),
-      });
-    case "TransportError":
-    case "EncodeError":
-    case "InvalidUrlError":
-      return new OutboundHttpFailure({
-        reason: "transport-failed",
-        responseStatus: Option.none(),
-        responseHeaders: Headers.empty,
-      });
-  }
-};
+): OutboundHttpFailure =>
+  Match.value(error.reason).pipe(
+    Match.tagsExhaustive({
+      StatusCodeError: (reason) => responseFailure(reason.response, retainedHeaderNames),
+      DecodeError: (reason) => responseFailure(reason.response, retainedHeaderNames),
+      EmptyBodyError: (reason) => responseFailure(reason.response, retainedHeaderNames),
+      TransportError: requestFailure,
+      EncodeError: requestFailure,
+      InvalidUrlError: requestFailure,
+    })
+  );
+
+const responseBodyFailure = (
+  status: number,
+  responseHeaders: Headers.Headers
+): OutboundHttpFailure =>
+  new OutboundHttpFailure({
+    reason: "response-body-failed",
+    responseStatus: Option.some(status),
+    responseHeaders,
+  });
 
 const collectResponse = (
   response: HttpClientResponse.HttpClientResponse,
@@ -111,18 +130,10 @@ const collectResponse = (
       : collectBoundedBytes(response.stream, maximumBytes);
 
   return read.pipe(
-    Effect.catchIf(
-      (error: HttpClientError.HttpClientError) => error.reason._tag === "EmptyBodyError",
-      () => Effect.succeedSome<Uint8Array>(new Uint8Array(0))
+    Effect.catchReason("HttpClientError", "EmptyBodyError", () =>
+      Effect.succeedSome<Uint8Array>(new Uint8Array(0))
     ),
-    Effect.mapError(
-      () =>
-        new OutboundHttpFailure({
-          reason: "response-body-failed",
-          responseStatus: Option.some(response.status),
-          responseHeaders,
-        })
-    ),
+    Effect.mapError(() => responseBodyFailure(response.status, responseHeaders)),
     Effect.flatMap(
       Option.match({
         onNone: () =>
@@ -232,12 +243,11 @@ const observeProviderAttempt = (
             trigger: "api",
             spanOperation: "http.client",
             workKind: "provider_call",
-            metadata: {
-              _tag: "Provider",
+            metadata: ProviderSpanMetadata.make({
               provider,
               attempt: TelemetryAttempt.make(1),
               status: Option.none(),
-            },
+            }),
           },
           Effect.onExit(work, (exit) => recordProviderExit(telemetry, exit))
         ),
@@ -255,7 +265,7 @@ type ProviderTransport = Readonly<{
   ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
 }>;
 
-export const makeProviderTransport =
+export const providerTransport =
   (provider: OutboundHttpProvider) =>
   (client: HttpClient.HttpClient): ProviderTransport => {
     const policy = outboundHttpPolicies[provider];

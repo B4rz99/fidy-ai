@@ -28,7 +28,7 @@ through `--group mutation`.
 
 ```sh
 bun run --cwd apps/server test:core src/core/_shared/money.test.ts --coverage.enabled=false
-bun run --cwd apps/server test src/shell/canonical-catalog/contract.test.ts --coverage.enabled=false
+bun run --cwd apps/server test test/shell/canonical-catalog/contract.test.ts --coverage.enabled=false
 bun run --cwd apps/web test src/transport/client.test.ts
 ```
 

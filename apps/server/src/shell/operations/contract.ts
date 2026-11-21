@@ -1,5 +1,5 @@
 import * as Arr from "effect/Array";
-import { type Brand, Option, Schema } from "effect";
+import { type Brand, Option, Predicate, Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import {
@@ -98,8 +98,8 @@ const mutationOperations = (catalog: OperationCatalog): ReadonlyArray<CatalogOpe
       operation.atomicBatchEligible &&
       operation.policy.kind === "mutation" &&
       (isUserOwnedAgentScoped(operation.policy.access) ||
-        operation.policy.access._tag === "FreshWebSessionOnly" ||
-        operation.policy.access._tag === "WebSessionOnly")
+        Predicate.isTagged(operation.policy.access, "FreshWebSessionOnly") ||
+        Predicate.isTagged(operation.policy.access, "WebSessionOnly"))
   );
 
 export const atomicBatchChildOperations = (
@@ -162,14 +162,14 @@ type AtomicBatchEndpoint = HttpApiEndpoint.HttpApiEndpoint<
 
 type OperationsGroup = HttpApiGroup.HttpApiGroup<"operations", AtomicBatchEndpoint>;
 
-const makeAtomicBatchSchemas = (
-  mutations: ReadonlyArray<CatalogOperation>
-): {
-  readonly call: AtomicBatchCallSchema;
-  readonly result: AtomicBatchResultSchema;
-  readonly input: AtomicBatchInputSchema;
-  readonly output: AtomicBatchOutputSchema;
-} => {
+type AtomicBatchSchemas = Readonly<{
+  call: AtomicBatchCallSchema;
+  result: AtomicBatchResultSchema;
+  input: AtomicBatchInputSchema;
+  output: AtomicBatchOutputSchema;
+}>;
+
+const makeAtomicBatchSchemas = (mutations: ReadonlyArray<CatalogOperation>): AtomicBatchSchemas => {
   const call = Schema.suspend(() =>
     Schema.make<Schema.Codec<AtomicBatchCall, Schema.Json>>(
       catalogUnion(mutations, mutationCallMember).ast
@@ -193,12 +193,14 @@ const makeAtomicBatchSchemas = (
   return { call, result, input, output };
 };
 
+export type ProjectedAtomicBatchSchemas = Readonly<{ input: Schema.Top; output: Schema.Top }>;
+
 export const projectAtomicBatchSchemas = (
   options: Readonly<{
     catalog: OperationCatalog;
     includeChild: (operation: CatalogOperation) => boolean;
   }>
-): { readonly input: Schema.Top; readonly output: Schema.Top } => {
+): ProjectedAtomicBatchSchemas => {
   const { input, output } = makeAtomicBatchSchemas(
     atomicBatchChildOperations(options.catalog).filter(options.includeChild)
   );

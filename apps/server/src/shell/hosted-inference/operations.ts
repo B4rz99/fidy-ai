@@ -7,7 +7,6 @@ import type {
   HostedConformanceFailure,
   HostedInferenceError,
   HostedInferenceService,
-  HostedInferenceStubBehavior,
 } from "./contract";
 import {
   verifyCanonicalMutation,
@@ -23,7 +22,6 @@ import {
   verifyTransactionCorrection,
   verifyTransactionDeletion,
 } from "~/shell/hosted-inference/internal/conformance";
-import { makeHostedInferenceStubInternal } from "~/shell/hosted-inference/internal/stub";
 
 export const makeHostedToolParameters = (): ReadonlyArray<
   Readonly<{ wireName: string; parameters: JsonSchema.JsonSchema }>
@@ -36,14 +34,14 @@ export const makeHostedToolParameters = (): ReadonlyArray<
 export class HostedInference extends Context.Service<HostedInference, HostedInferenceService>()(
   "@fidy/server/shell/hosted-inference/operations/HostedInference"
 ) {
+  static readonly make = <Error, Requirements>(
+    service: Effect.Effect<HostedInferenceService, Error, Requirements>
+  ): Effect.Effect<HostedInferenceService, Error, Requirements> => service;
+
   static readonly layer = <Error, Requirements>(
     service: Effect.Effect<HostedInferenceService, Error, Requirements>
-  ): Layer.Layer<HostedInference, Error, Requirements> => Layer.effect(this, service);
+  ): Layer.Layer<HostedInference, Error, Requirements> => Layer.effect(this, this.make(service));
 }
-
-export const makeHostedInferenceStub = (
-  behavior: HostedInferenceStubBehavior
-): HostedInferenceService => makeHostedInferenceStubInternal(behavior);
 
 export const verifyHostedInferenceConformanceChecks = (
   inference: HostedInferenceService

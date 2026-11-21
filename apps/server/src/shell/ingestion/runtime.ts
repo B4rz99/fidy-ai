@@ -1,31 +1,34 @@
-import { Effect, FileSystem, Path } from "effect";
+import { Array as Arr, Effect, FileSystem, Option, Order, Path } from "effect";
 import { EmailCatalogGenerationFailed } from "./contract";
 
 const discoverFormats = Effect.fn(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const entries = yield* fs.readDirectory(root);
-  const paths: Array<string> = [];
 
-  for (const entry of entries) {
-    const directory = path.join(root, entry);
+  const discovered = yield* Effect.forEach(entries, (entry) =>
+    Effect.gen(function* () {
+      const directory = path.join(root, entry);
 
-    if ((yield* fs.stat(directory)).type !== "Directory") continue;
+      if ((yield* fs.stat(directory)).type !== "Directory") return Option.none<string>();
 
-    if (!(yield* fs.exists(path.join(directory, "format.ts")))) continue;
+      if (!(yield* fs.exists(path.join(directory, "format.ts")))) return Option.none<string>();
 
-    if (!(yield* fs.exists(path.join(directory, "fixtures", "positive.synthetic.html")))) {
-      return yield* new EmailCatalogGenerationFailed({ reason: "missing-fixture" });
-    }
+      if (!(yield* fs.exists(path.join(directory, "fixtures", "positive.synthetic.html")))) {
+        return yield* new EmailCatalogGenerationFailed({ reason: "missing-fixture" });
+      }
 
-    paths.push(`${entry}/format.ts`);
-  }
+      return Option.some(`${entry}/format.ts`);
+    })
+  );
+
+  const paths = Arr.getSomes(discovered);
 
   if (paths.length === 0) {
     return yield* new EmailCatalogGenerationFailed({ reason: "missing-formats" });
   }
 
-  return paths.sort((left, right) => left.localeCompare(right));
+  return Arr.sort(paths, Order.String);
 });
 
 const catalogSource = (paths: ReadonlyArray<string>): string => {

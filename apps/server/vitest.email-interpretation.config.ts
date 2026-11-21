@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: { alias: { "~": fileURLToPath(new URL("./src", import.meta.url)) } },
   test: {
-    include: ["src/shell/ingestion/**/*.test.ts"],
+    include: ["test/shell/ingestion/**/*.test.ts"],
     clearMocks: true,
     environment: "node",
     pool: "forks",

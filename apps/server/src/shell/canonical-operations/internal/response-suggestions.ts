@@ -1,4 +1,4 @@
-import { Array as Arr, Option, Schema } from "effect";
+import { Array as Arr, Option, Predicate, Schema } from "effect";
 import type { CatalogOperation, OperationCatalog } from "~/shell/canonical-catalog/contract";
 import { SuggestedOperation } from "~/shell/public-http/contract";
 
@@ -12,11 +12,16 @@ type Scope = Omit<ResponseSuggestionsInput, "value">;
 
 const EncodedSuggestion = Schema.toEncoded(SuggestedOperation);
 
+const isJsonScalar = Predicate.or(
+  Predicate.or(Predicate.isNull, Predicate.isString),
+  Predicate.or(Predicate.isNumber, Predicate.isBoolean)
+);
+
 const permittedReference = (value: Option.Option<Schema.Json>, scope: Scope): boolean =>
   Option.match(value, {
     onNone: () => true,
     onSome: (reference) => {
-      if (typeof reference !== "string") return true;
+      if (!Predicate.isString(reference)) return true;
       const target = scope.catalog.byId.get(reference);
 
       return target === undefined || scope.available(target);
@@ -28,7 +33,7 @@ const hintedReferencesAvailable = (value: Schema.Json, scope: Scope): boolean =>
     return value.every((child) => hintedReferencesAvailable(child, scope));
   }
 
-  if (value === null || typeof value !== "object") return true;
+  if (isJsonScalar(value)) return true;
 
   return (
     permittedReference(Option.fromUndefinedOr(value.tool), scope) &&
@@ -38,8 +43,8 @@ const hintedReferencesAvailable = (value: Schema.Json, scope: Scope): boolean =>
 };
 
 const isCanonicalSuggestion = (value: Readonly<Record<string, Schema.Json>>): boolean =>
-  typeof value.tool === "string" &&
-  typeof value.hint === "string" &&
+  Predicate.isString(value.tool) &&
+  Predicate.isString(value.hint) &&
   Option.isSome(Schema.decodeUnknownOption(EncodedSuggestion)(value));
 
 const project = (value: Schema.Json, scope: Scope): Option.Option<Schema.Json> => {
@@ -51,7 +56,7 @@ const project = (value: Schema.Json, scope: Scope): Option.Option<Schema.Json> =
     );
   }
 
-  if (value === null || typeof value !== "object") return Option.some(value);
+  if (isJsonScalar(value)) return Option.some(value);
 
   if (isCanonicalSuggestion(value) && !hintedReferencesAvailable(value, scope)) {
     return Option.none();

@@ -5,14 +5,18 @@ import {
   TransactionId,
   UpdateTransactionInput,
 } from "~/core/transactions/contract";
-import { ToolCallId } from "~/core/agent/contract";
+import { ToolCallId, ToolSucceeded } from "~/core/agent/contract";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { RecurringCommand, RecurringDocument } from "~/core/recurring-plans/contract";
 import { projectRecurringMonth, summarizeRecurring } from "~/core/recurring-plans/operations";
 import { RecurringWorkspace } from "~/shell/recurring-plans/contract";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import {
+  HostedActiveRequest,
+  HostedContextSection,
+  type HostedContinuationEvent,
   HostedInferenceError,
+  HostedInferenceFailureReason,
   type HostedInferenceService,
   type HostedInitialTextContext,
   type HostedTextResult,
@@ -25,7 +29,9 @@ const representativeAmount = 42_000;
 
 const conformanceFailure = (): HostedInferenceError =>
   new HostedInferenceError({
-    reason: { _tag: "InvalidOutput", description: "Hosted provider response was invalid" },
+    reason: HostedInferenceFailureReason.InvalidOutput({
+      description: "Hosted provider response was invalid",
+    }),
     retryable: false,
     retryAfter: Option.none(),
   });
@@ -33,22 +39,20 @@ const conformanceFailure = (): HostedInferenceError =>
 const context = (text: string): HostedInitialTextContext =>
   makeInitialContext({
     sections: [
-      {
-        _tag: "AssistantPolicy",
+      HostedContextSection.AssistantPolicy({
         channel: "web",
         user: {
           serviceMarket: "CO",
           locale: "es-CO",
           timeZone: IanaTimeZone.make("America/Bogota"),
         },
-      },
-      {
-        _tag: "TurnStarted",
+      }),
+      HostedContextSection.TurnStarted({
         timeZone: "America/Bogota",
         startedAt: DateTime.makeUnsafe("2026-09-22T12:00:00Z"),
-      },
+      }),
     ],
-    activeRequest: { _tag: "Present", text },
+    activeRequest: HostedActiveRequest.Present({ text }),
   });
 
 const requireTextEvidence = (
@@ -325,6 +329,58 @@ const verifyRecurringReadAnswer = (answer: unknown): Effect.Effect<void, HostedI
     }
   });
 
+const recurringReadOutput = (
+  call: HostedTextResult["toolCalls"][number]
+): Effect.Effect<HostedContinuationEvent, HostedInferenceError> =>
+  Effect.gen(function* () {
+    if (call.operation !== "recurringPlans.getRecurringWorkspace") {
+      return yield* conformanceFailure();
+    }
+
+    const args = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({
+        query: Schema.Struct({
+          month: Schema.optionalKey(Schema.Literals(["2026-09", "2026-10"])),
+        }),
+      })
+    )(call.params).pipe(Effect.mapError(conformanceFailure));
+
+    const output = yield* representativeRecurringWorkspace(
+      args.query.month ?? "2026-09",
+      "2026-09-18"
+    );
+
+    return HostedContextSection.ToolResult({
+      toolCallId: yield* Schema.decodeEffect(ToolCallId)(call.id).pipe(
+        Effect.mapError(conformanceFailure)
+      ),
+      operation: call.operation,
+      outcome: ToolSucceeded.make({ output: { data: output, next: [] } }),
+    });
+  });
+
+type RecurringReads = Readonly<{ result: HostedTextResult; reads: number }>;
+
+const continueRecurringReads = (
+  state: RecurringReads,
+  remainingRounds: number
+): Effect.Effect<RecurringReads, HostedInferenceError> =>
+  remainingRounds === 0 || state.result.toolCalls.length === 0
+    ? Effect.succeed(state)
+    : Effect.forEach(state.result.toolCalls, recurringReadOutput).pipe(
+        Effect.flatMap((outputs) =>
+          state.result.continuation.prepare(outputs).pipe(
+            Effect.flatMap((next) => next.execute),
+            Effect.flatMap((result) =>
+              continueRecurringReads(
+                { result, reads: state.reads + outputs.length },
+                remainingRounds - 1
+              )
+            )
+          )
+        )
+      );
+
 export const verifyRecurringPlanRead = (
   inference: HostedInferenceService
 ): Effect.Effect<void, HostedInferenceError> =>
@@ -343,44 +399,10 @@ export const verifyRecurringPlanRead = (
       maximumToolCalls: HostedToolCallMaximum.make(maximumReads),
     });
 
-    let result = yield* prepared.execute;
-    let reads = 0;
-
-    for (let round = 0; round < maximumReads && result.toolCalls.length > 0; round++) {
-      const outputs = yield* Effect.forEach(result.toolCalls, (call) =>
-        Effect.gen(function* () {
-          if (call.operation !== "recurringPlans.getRecurringWorkspace") {
-            return yield* conformanceFailure();
-          }
-
-          const args = yield* Schema.decodeUnknownEffect(
-            Schema.Struct({
-              query: Schema.Struct({
-                month: Schema.optionalKey(Schema.Literals(["2026-09", "2026-10"])),
-              }),
-            })
-          )(call.params).pipe(Effect.mapError(conformanceFailure));
-
-          const output = yield* representativeRecurringWorkspace(
-            args.query.month ?? "2026-09",
-            "2026-09-18"
-          );
-
-          return {
-            _tag: "ToolResult" as const,
-            toolCallId: yield* Schema.decodeEffect(ToolCallId)(call.id).pipe(
-              Effect.mapError(conformanceFailure)
-            ),
-            operation: call.operation,
-            outcome: { _tag: "Succeeded" as const, output: { data: output, next: [] } },
-          };
-        })
-      );
-
-      reads += outputs.length;
-      const next = yield* result.continuation.prepare(outputs);
-      result = yield* next.execute;
-    }
+    const { result, reads } = yield* continueRecurringReads(
+      { result: yield* prepared.execute, reads: 0 },
+      maximumReads
+    );
 
     if (reads === 0 || result.toolCalls.length !== 0) return yield* conformanceFailure();
     yield* verifyRecurringReadAnswer(result.text);
@@ -418,14 +440,13 @@ export const verifyRecurringLifecycle = (
     const output = yield* representativeRecurringWorkspace();
 
     const next = yield* discovery.continuation.prepare([
-      {
-        _tag: "ToolResult",
+      HostedContextSection.ToolResult({
         toolCallId: yield* Schema.decodeEffect(ToolCallId)(query.id).pipe(
           Effect.mapError(conformanceFailure)
         ),
         operation: query.operation,
-        outcome: { _tag: "Succeeded", output: { data: output, next: [] } },
-      },
+        outcome: ToolSucceeded.make({ output: { data: output, next: [] } }),
+      }),
     ]);
 
     const result = yield* next.execute;
@@ -488,11 +509,10 @@ export const verifyInvalidOutputRecovery = (
     yield* forbidTextEvidence(first.text, "pesos colombianos");
 
     const corrected = yield* first.continuation.prepare([
-      {
-        _tag: "InvalidOutputFeedback",
+      HostedContextSection.InvalidOutputFeedback({
         description:
           "La respuesta anterior no fue válida. Corrígela e incluye exactamente la frase: pesos colombianos.",
-      },
+      }),
     ]);
 
     const result = yield* corrected.execute;
@@ -572,18 +592,16 @@ export const verifyConversationalSpanish = (
     const call = requested.toolCalls[0];
 
     const next = yield* requested.continuation.prepare([
-      {
-        _tag: "ToolResult",
+      HostedContextSection.ToolResult({
         toolCallId: ToolCallId.make(call.id),
         operation,
-        outcome: {
-          _tag: "Succeeded",
+        outcome: ToolSucceeded.make({
           output: {
             data: yield* representativeProStatus,
             next: [],
           },
-        },
-      },
+        }),
+      }),
     ]);
 
     const answer = yield* next.execute;

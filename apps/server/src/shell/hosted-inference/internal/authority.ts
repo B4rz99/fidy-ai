@@ -12,7 +12,7 @@ const opaque = <Behavior extends object>(properties: Behavior): Behavior => {
 
   for (const key of Reflect.ownKeys(authority)) {
     Object.defineProperty(authority, key, {
-      value: Reflect.get(authority, key),
+      value: Object.getOwnPropertyDescriptor(authority, key)?.value,
       enumerable: false,
       writable: false,
       configurable: false,
@@ -28,15 +28,15 @@ const textAuthority = Brand.nominal<PreparedHostedText>();
 
 const continuationAuthority = Brand.nominal<HostedTextContinuation>();
 
-export const makePreparedTextAuthority = (
+export const authorizePreparedText = (
   behavior: Brand.Brand.Unbranded<PreparedHostedText>
 ): PreparedHostedText => textAuthority(opaque(behavior));
 
-export const makeContinuationAuthority = (
+export const authorizeContinuation = (
   behavior: Brand.Brand.Unbranded<HostedTextContinuation>
 ): HostedTextContinuation => continuationAuthority(opaque(behavior));
 
-export const makePreparedStructuredAuthority = <Output>(
+export const authorizePreparedStructured = <Output>(
   behavior: Brand.Brand.Unbranded<PreparedHostedStructured<Output>>
 ): PreparedHostedStructured<Output> =>
   Brand.nominal<PreparedHostedStructured<Output>>()(opaque(behavior));
@@ -65,7 +65,7 @@ export type OneShotPreparation = Readonly<{
   readonly consume: () => void;
 }>;
 
-export const makeOneShotPreparation = (): OneShotPreparation => {
+export const oneShotPreparation = (): OneShotPreparation => {
   let available = true;
 
   return {

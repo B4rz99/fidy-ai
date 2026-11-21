@@ -17,15 +17,31 @@ export const AuditOutcome = Schema.Literals(["succeeded", "rejected", "failed"])
 
 export type AuditOutcome = typeof AuditOutcome.Type;
 
+export const PatAuditCaller = Schema.TaggedStruct("PAT", { patId: PATId });
+
+export const OAuthAuditCaller = Schema.TaggedStruct("OAuthAgent", {
+  connectionId: OAuthConnectionId,
+  credentialId: OAuthCredentialId,
+});
+
+export const WebSessionAuditCaller = Schema.TaggedStruct("WebSession", {
+  webSessionId: WebSessionId,
+});
+
+export const HostedAuditCaller = Schema.TaggedStruct("HostedAgentSession", {
+  hostedAgentSessionId: HostedAgentSessionId,
+});
+
+export const HostedTurnAuditCaller = Schema.TaggedStruct("HostedTurn", {
+  turnId: TranscriptTurnId,
+});
+
 export const AuditCaller = Schema.Union([
-  Schema.TaggedStruct("PAT", { patId: PATId }),
-  Schema.TaggedStruct("OAuthAgent", {
-    connectionId: OAuthConnectionId,
-    credentialId: OAuthCredentialId,
-  }),
-  Schema.TaggedStruct("WebSession", { webSessionId: WebSessionId }),
-  Schema.TaggedStruct("HostedAgentSession", { hostedAgentSessionId: HostedAgentSessionId }),
-  Schema.TaggedStruct("HostedTurn", { turnId: TranscriptTurnId }),
+  PatAuditCaller,
+  OAuthAuditCaller,
+  WebSessionAuditCaller,
+  HostedAuditCaller,
+  HostedTurnAuditCaller,
 ]).annotate({ identifier: "AuditCaller" });
 
 export type AuditCaller = typeof AuditCaller.Type;

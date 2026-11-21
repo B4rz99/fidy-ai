@@ -5,7 +5,7 @@ import { Clock, Effect, Result, Schema } from "effect";
 import { UserId } from "../../../src/core/identity/contract";
 import { BillingAttemptId } from "../../../src/core/subscription/contract";
 import { preserveStoreAlarm, withStoreCapacity } from "../../runtime/sqlite/operations";
-import { BillingRegistration, type LocalBillingCollection, pricingName } from "../contract";
+import { BillingRegistration, LocalBillingCollection, pricingName } from "../contract";
 import type { EnrollmentContext, NativeEnrollmentEnv } from "./enrollment-session";
 import { recoverCandidate } from "./local-enrollment-submit";
 import { cancelRegistration, requestCodec } from "./local-billing-admission";
@@ -65,7 +65,13 @@ export const recoverLocalBilling = Effect.fn(function* (context: BillingRecovery
   const renewals =
     yield* sql`SELECT id FROM billing_attempts WHERE NOT EXISTS(SELECT 1 FROM erasure_requests) AND followup_due_at_ms<=${now} ORDER BY followup_due_at_ms LIMIT ${pageSize}`;
 
-  for (const row of renewals) yield* processRenewal(String(row.id), context);
+  yield* Effect.forEach(
+    renewals,
+    Effect.fnUntraced(function* (row) {
+      yield* processRenewal(String(row.id), context);
+    }),
+    { discard: true }
+  );
 
   const send = yield* withStoreCapacity("required")(
     Effect.gen(function* () {
@@ -84,11 +90,9 @@ export const recoverLocalBilling = Effect.fn(function* (context: BillingRecovery
     send,
     (row) =>
       Effect.tryPromise(() =>
-        env.BILLING_COLLECTION_QUEUE.send({
-          _tag: "CollectUserBillingAttempt",
-          userId: row.user_id,
-          attemptId: row.id,
-        })
+        env.BILLING_COLLECTION_QUEUE.send(
+          LocalBillingCollection.make({ userId: row.user_id, attemptId: row.id })
+        )
       ).pipe(Effect.timeout("5 seconds"), Effect.result),
     { concurrency: 4 }
   );
@@ -96,14 +100,24 @@ export const recoverLocalBilling = Effect.fn(function* (context: BillingRecovery
   const expired =
     yield* sql`SELECT request FROM billing_admissions WHERE outcome IS NULL AND json_extract(request,'$.deadlineMs')<=${now} LIMIT ${pageSize}`;
 
-  for (const row of expired) {
-    yield* cancelRegistration(yield* Schema.decodeUnknownEffect(requestCodec)(row.request), owns);
-  }
+  yield* Effect.forEach(
+    expired,
+    Effect.fnUntraced(function* (row) {
+      yield* cancelRegistration(yield* Schema.decodeUnknownEffect(requestCodec)(row.request), owns);
+    }),
+    { discard: true }
+  );
 
   const due =
     yield* sql`SELECT id FROM payment_enrollments WHERE state IN('prepared','verifying') AND next_lookup_ms<=${now} LIMIT ${pageSize}`;
 
-  for (const row of due) yield* recoverCandidate(context, String(row.id));
+  yield* Effect.forEach(
+    due,
+    Effect.fnUntraced(function* (row) {
+      yield* recoverCandidate(context, String(row.id));
+    }),
+    { discard: true }
+  );
   yield* acknowledgeOutcomes(env, now);
   yield* billingWake(storage);
 
@@ -116,26 +130,30 @@ const acknowledgeOutcomes = Effect.fn(function* (env: Environment, now: number) 
   const ack =
     yield* sql`UPDATE billing_admissions SET ack_due_ms=${now + cooldown} WHERE operation_id IN(SELECT operation_id FROM billing_admissions WHERE ack_due_ms<=${now} ORDER BY ack_due_ms LIMIT ${pageSize}) RETURNING operation_id,request,outcome`;
 
-  for (const row of ack) {
-    const request = yield* Schema.decodeUnknownEffect(requestCodec)(row.request);
+  yield* Effect.forEach(
+    ack,
+    Effect.fnUntraced(function* (row) {
+      const request = yield* Schema.decodeUnknownEffect(requestCodec)(row.request);
 
-    const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-      request,
-      outcome: row.outcome,
-    });
+      const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+        request,
+        outcome: row.outcome,
+      });
 
-    const reply = yield* Effect.result(
-      Effect.tryPromise(() =>
-        env.PRICING.getByName(pricingName).fetch("https://pricing.internal/ack", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body,
-        })
-      )
-    );
+      const reply = yield* Effect.result(
+        Effect.tryPromise(() =>
+          env.PRICING.getByName(pricingName).fetch("https://pricing.internal/ack", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body,
+          })
+        )
+      );
 
-    if (Result.isSuccess(reply) && reply.success.ok) {
-      yield* sql`UPDATE billing_admissions SET ack_due_ms=NULL WHERE operation_id=${row.operation_id} AND outcome=${row.outcome}`;
-    }
-  }
+      if (Result.isSuccess(reply) && reply.success.ok) {
+        yield* sql`UPDATE billing_admissions SET ack_due_ms=NULL WHERE operation_id=${row.operation_id} AND outcome=${row.outcome}`;
+      }
+    }),
+    { discard: true }
+  );
 });

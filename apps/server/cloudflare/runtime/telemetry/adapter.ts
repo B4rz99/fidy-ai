@@ -1,4 +1,4 @@
-import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Clock, Effect, Exit, Match, Option, Predicate, Schema } from "effect";
 import {
   DeclaredOutcome,
   type ProjectedTraceData,
@@ -48,7 +48,9 @@ const spanStatus = (state: ActiveSpan): Option.Option<TelemetryHttpStatus> =>
   Option.orElse(state.status, () => {
     const value = state.descriptor.metadata;
 
-    return value._tag === "Http" || value._tag === "Provider" ? value.status : Option.none();
+    return Predicate.isTagged(value, "Http") || Predicate.isTagged(value, "Provider")
+      ? value.status
+      : Option.none();
   });
 
 const modelRoundMetadata = (
@@ -80,35 +82,38 @@ const metadata = (state: ActiveSpan): Partial<ProjectedTraceData> => {
     }),
   });
 
-  switch (value._tag) {
-    case "None":
-      return modelRoundMetadata(state, usage);
-    case "Http":
-      return { ...http, "http.request.method": value.method, "http.route": value.route };
-    case "Database":
-      return {
+  return Match.value(value).pipe(
+    Match.tagsExhaustive({
+      None: () => modelRoundMetadata(state, usage),
+      Http: (value) => ({
+        ...http,
+        "http.request.method": value.method,
+        "http.route": value.route,
+      }),
+      Database: (value) => ({
         "db.system.name": value.system,
         "fidy.repository_operation": value.repositoryOperation,
-      };
-    case "Queue":
-      return {
+      }),
+      Queue: (value) => ({
         "fidy.attempt": value.attempt,
         "fidy.input_count": value.inputCount,
         ...Option.match(value.delayMilliseconds, {
           onNone: () => ({}),
           onSome: (delay) => ({ "fidy.delay_milliseconds": delay }),
         }),
-      };
-    case "Provider":
-      return { ...http, "fidy.provider": value.provider, "fidy.attempt": value.attempt };
-    case "Model":
-      return {
+      }),
+      Provider: (value) => ({
+        ...http,
+        "fidy.provider": value.provider,
+        "fidy.attempt": value.attempt,
+      }),
+      Model: (value) => ({
         "gen_ai.request.model": value.model,
         ...usage,
-      };
-    case "Schedule":
-      return { "fidy.attempt": value.attempt };
-  }
+      }),
+      Schedule: (value) => ({ "fidy.attempt": value.attempt }),
+    })
+  );
 };
 
 const isPureInterruption = (cause: Cause.Cause<unknown>): boolean =>
@@ -239,17 +244,20 @@ const captureFailure =
         operation: failure.operation,
         error: failure.error,
         classification: failure._tag,
-        retryable: failure._tag === "ExhaustedOperationalFailure" && failure.retryable,
+        retryable: Predicate.isTagged(failure, "ExhaustedOperationalFailure") && failure.retryable,
         ...Option.match(span, {
           onNone: () => ({}),
           onSome: (value) => ({ traceId: value.traceId, spanId: value.spanId }),
         }),
-        ...(failure._tag === "ExhaustedOperationalFailure"
-          ? Option.match(failure.provider, {
+        ...Match.value(failure).pipe(
+          Match.tag("ExhaustedOperationalFailure", (exhausted) =>
+            Option.match(exhausted.provider, {
               onNone: () => ({}),
               onSome: (provider) => ({ provider }),
             })
-          : {}),
+          ),
+          Match.orElse(() => ({}))
+        ),
       })
     );
 
@@ -276,8 +284,8 @@ const spanUpdates = (
     recordResponseStatus: (span, status) =>
       update(span, (state) => {
         if (
-          state.descriptor.metadata._tag === "Http" ||
-          state.descriptor.metadata._tag === "Provider"
+          Predicate.isTagged(state.descriptor.metadata, "Http") ||
+          Predicate.isTagged(state.descriptor.metadata, "Provider")
         ) {
           state.status = Option.some(TelemetryHttpStatus.make(status));
         }
@@ -285,7 +293,7 @@ const spanUpdates = (
     recordModelUsage: (span, value) =>
       update(span, (state) => {
         if (
-          state.descriptor.metadata._tag === "Model" ||
+          Predicate.isTagged(state.descriptor.metadata, "Model") ||
           state.descriptor.workKind === "model_round"
         ) {
           state.usage = Option.some(

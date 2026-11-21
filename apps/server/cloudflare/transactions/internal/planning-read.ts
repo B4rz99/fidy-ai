@@ -1,6 +1,6 @@
 import { understoodCategory } from "./sqlite-history";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Array as Arr, DateTime, Effect, Option, Schema } from "effect";
 import { UtcTimestamp } from "../../../src/core/_shared/time";
 import type { PlanningTransactionFacts, PlanningTransactionRange } from "../contract";
 import type { Transaction } from "../../../src/core/transactions/contract";
@@ -71,13 +71,9 @@ export const localPlanningReferences = Effect.fn(function* (
   user: string,
   ids: ReadonlyArray<string>
 ) {
-  const transactions: Transaction[] = [];
+  const pages = yield* Effect.forEach(Arr.chunksOf(ids, maximumSelection), (selection) =>
+    localFacts(idsPage(user, selection, true))
+  );
 
-  for (let offset = 0; offset < ids.length; offset += maximumSelection) {
-    const page = idsPage(user, ids.slice(offset, offset + maximumSelection), true);
-    const found = yield* localFacts(page);
-    transactions.push(...found.transactions);
-  }
-
-  return transactions;
+  return pages.flatMap((found): Transaction[] => [...found.transactions]);
 });

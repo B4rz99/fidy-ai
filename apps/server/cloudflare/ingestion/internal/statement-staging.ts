@@ -78,18 +78,17 @@ const failedProjection = (
     ...base,
     completedAt: stored.completedAt.value,
     failureReason: stored.failureReason.value,
-    ...(Option.isSome(stored.inputRows) &&
-    Option.isSome(stored.acceptedRows) &&
-    Option.isSome(stored.needsReviewRows)
-      ? {
-          accounting: {
-            inputRows: stored.inputRows.value,
-            acceptedRows: stored.acceptedRows.value,
-            needsReviewRows: stored.needsReviewRows.value,
-            ...decisionAccounting(stored),
-          },
-        }
-      : {}),
+    ...Option.match(
+      Option.all({
+        inputRows: stored.inputRows,
+        acceptedRows: stored.acceptedRows,
+        needsReviewRows: stored.needsReviewRows,
+      }),
+      {
+        onNone: () => ({}),
+        onSome: (rows) => ({ accounting: { ...rows, ...decisionAccounting(stored) } }),
+      }
+    ),
     startedAt: stored.startedAt.value,
     status: "failed",
   });
@@ -98,8 +97,14 @@ const failedProjection = (
 const decisionAccounting = (
   stored: StoredStatementSubmission
 ): Pick<StatementAccounting, "skippedRows" | "abandonedRows"> => ({
-  ...(stored.skippedRows > 0 ? { skippedRows: stored.skippedRows } : {}),
-  ...(stored.abandonedRows > 0 ? { abandonedRows: stored.abandonedRows } : {}),
+  ...Option.match(
+    Option.liftPredicate(stored.skippedRows, (rows) => rows > 0),
+    { onNone: () => ({}), onSome: (skippedRows) => ({ skippedRows }) }
+  ),
+  ...Option.match(
+    Option.liftPredicate(stored.abandonedRows, (rows) => rows > 0),
+    { onNone: () => ({}), onSome: (abandonedRows) => ({ abandonedRows }) }
+  ),
 });
 
 const completedProjection = (

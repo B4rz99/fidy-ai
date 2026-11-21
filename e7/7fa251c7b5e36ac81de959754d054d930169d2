@@ -1,0 +1,14 @@
+docs/security/ledger.md
+  h_c6d49c804e0ad2 5-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e77fa251c7b5e36ac81de959754d054d930169d2",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

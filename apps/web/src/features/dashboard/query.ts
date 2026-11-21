@@ -1,12 +1,12 @@
 import { queryLifetime } from "@/transport/query-lifetime";
 import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
-import { type Context, Data, Effect, Option, Schema } from "effect";
+import { Data, Effect, Option, Schema } from "effect";
 import type { AnyRouter } from "@tanstack/react-router";
 import { HttpClientError } from "effect/http";
 import { type AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
 
-type Client = Context.Service.Shape<FidyClient>;
+type Client = FidyClient["Service"];
 
 type DashboardError =
   | Effect.Error<ReturnType<Client["dashboard"]["getDashboardView"]>>

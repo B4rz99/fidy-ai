@@ -1,3 +1,4 @@
+import { browserRuntime } from "@/transport/browser-runtime";
 import { type Duration, Effect, Exit, Option, Scope } from "effect";
 import { type ReactNode, type RefCallback, useState } from "react";
 import { type SensitiveClipboard, createSensitiveClipboard } from "./sensitive-clipboard";
@@ -29,7 +30,7 @@ const makeMountedClipboard = (lifetime: Duration.Input): MountedSensitiveClipboa
     if (node === null) return;
     const scope = Scope.makeUnsafe();
 
-    const mountedCommand = Effect.runSync(
+    const mountedCommand = browserRuntime.runSync(
       createSensitiveClipboard(
         Option.fromUndefinedOr(globalThis.navigator.clipboard),
         lifetime

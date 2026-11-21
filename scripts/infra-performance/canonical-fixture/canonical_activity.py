@@ -24,6 +24,7 @@ CORE = "fidy-native-storage-core"
 OPEN = "native-verification.json.canonical-open"
 SIGNUP = r"fidy\.operational component=canonical-signup operation=(google|microsoft) state=created\b"
 WATCHDOG = r"fidy\.operational component=inspection-coverage operation=(ownerInspections) state=complete\b"
+WATCHDOG_WRAP = r"fidy\.operational component=watchdog operation=coverage state=(wrapped)\b"
 RECOVERY_ARTIFACT = "14596469892"
 RECOVERY_RUN = "44662489274"
 RECOVERY_DIGEST = "6e62f659994e237a7787ea326cda069e101344bc2b40960489a93ccaf348f5e0"
@@ -176,6 +177,9 @@ def outcomes(opening, account, end, read=query, read_canary=native_canary, *, ob
     else:
         raise ActivityRefused(f"Expected one native provider account creation, observed {len(signups)}")
     complete = exact_events(account, version, signup["at"], end, "component=inspection-coverage", WATCHDOG, read)
+    if not complete:
+        complete = exact_events(account, version, signup["at"], end,
+                                "component=watchdog operation=coverage state=wrapped", WATCHDOG_WRAP, read)
     if not complete:
         raise ActivityRefused("No completed native watchdog traversal was observed after canonical signup")
     first = min(complete, key=lambda row: row["at"])

@@ -46,13 +46,15 @@ class CanonicalActivityTest(unittest.TestCase):
     def test_missing_signup_log_uses_explicit_operator_time_for_background_checks(self):
         opening = {"openedAt": "1970-01-01T00:00:01Z",
                    "workers": {CORE: {"version": VERSION}}}
-        traversal = event("fidy.operational component=inspection-coverage operation=ownerInspections state=complete",
+        traversal = event("fidy.operational component=watchdog operation=coverage state=wrapped severity=none",
                           "event-2", 3_000)
 
         def read(_path, request):
             since = request["timeframe"]["from"]
             self.assertIn(since, (START, 2_000))
-            return {"success": True, "result": {"events": {"events": [] if since == START else [traversal]}}}
+            label = request["parameters"]["filters"][2]["value"]
+            rows = [traversal] if label.endswith("state=wrapped") else []
+            return {"success": True, "result": {"events": {"events": rows}}}
 
         def canary(account, since, until):
             self.assertEqual((account, since, until), ("account", 2_000, NOW))

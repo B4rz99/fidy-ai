@@ -13,116 +13,16 @@ import {
   repairCancellationAlarm as inspectCancellation,
   retainCancellation,
 } from "./internal/local-cancellation";
-import { prepareBoundSubscriptionRead as prepareRead } from "./internal/bound-read";
-import { cancellationRefusal, prepareCancellation } from "./internal/cancellation";
-import type {
-  CanonicalMutationPreparation,
-  CanonicalMutationRefusal,
-  CanonicalPreparationWork,
-} from "../canonical-operations/contract";
-import { claimSubscriptionRenewal } from "./internal/subscription-renewal";
 import {
-  type RefundAttempt,
-  type RefundStartFailure,
   SubscriptionCancellation,
   SubscriptionOffers,
   SubscriptionStatus,
 } from "../../src/core/subscription/contract";
-import {
-  type RefundReadCall,
-  type RefundStartCall,
-  RefundSupportAdmission,
-  type SubscriptionQueryInput,
-  SubscriptionRenewalAdmission,
-  pricingName,
-  refundSupportBasePath,
-  refundSupportReadPath,
-} from "./contract";
+import { pricingName, refundSupportBasePath, refundSupportReadPath } from "./contract";
 import { Effect, Option, Schema } from "effect";
-import { refundFailureResponse, refundResultResponse } from "./internal/refund-http-response";
-import {
-  startRefund as acceptRefund,
-  getRefund as observeRefund,
-} from "./internal/refund-acceptance";
-
-import { queryUpgrade } from "./internal/upgrade-query";
-import { pendingBillingWork } from "./internal/operational-observation";
-import { executeProtectedSubscriptionQuery as observe } from "./internal/subscription-queries";
-
-export const startRefund = (
-  call: RefundStartCall
-): Effect.Effect<RefundAttempt, RefundStartFailure> => acceptRefund(call);
-
-export const getRefund = (call: RefundReadCall): Effect.Effect<RefundAttempt, RefundStartFailure> =>
-  observeRefund(call);
 
 export const refundSupportRoute = (path: string): boolean =>
   path === refundSupportBasePath || refundSupportReadPath.test(path);
-
-export const executeRefundSupportAdmission = (
-  input: Readonly<{
-    db: D1Database;
-    environment: string;
-    candidate: unknown;
-    userId: string;
-  }>
-): Effect.Effect<Response> => {
-  const admission = Schema.decodeUnknownOption(RefundSupportAdmission)(input.candidate);
-  if (Option.isNone(admission) || admission.value.input.userId !== input.userId) {
-    return Effect.succeed(refundFailureResponse("unsupported"));
-  }
-  return refundResultResponse({
-    status: 202,
-    result: acceptRefund({
-      db: input.db,
-      environment: input.environment,
-      authority: admission.value.authority,
-      input: admission.value.input,
-    }),
-  });
-};
-
-export const executeProtectedSubscriptionQuery = (
-  input: SubscriptionQueryInput
-): Effect.Effect<Response> =>
-  input.operation === "subscription.getUpgradeUrl" ? queryUpgrade(input) : observe(input);
-
-export const prepareBillingWorkObservation = (
-  input: Readonly<{
-    db: D1Database;
-    limit: number;
-  }>
-): D1PreparedStatement => pendingBillingWork(input);
-
-export const executeSubscriptionRenewalAdmission = (
-  input: Readonly<{
-    db: D1Database;
-    userId: string;
-    environment: string;
-    candidate: unknown;
-    now: number;
-  }>
-): Effect.Effect<Response> => {
-  const work = Schema.decodeUnknownOption(SubscriptionRenewalAdmission)(input.candidate);
-  if (Option.isNone(work) || work.value.userId !== input.userId) {
-    return Effect.succeed(new Response(null, { status: 403 }));
-  }
-  return claimSubscriptionRenewal({ ...input, ...work.value }).pipe(
-    Effect.as(new Response(null, { status: 202 })),
-    Effect.orElseSucceed(() => new Response(null, { status: 503 }))
-  );
-};
-
-export const prepareSubscriptionCancellation = (
-  work: CanonicalPreparationWork
-): Effect.Effect<CanonicalMutationPreparation> => prepareCancellation(work);
-
-export const subscriptionCancellationRefusal = (
-  work: CanonicalPreparationWork
-): CanonicalMutationRefusal => cancellationRefusal(work);
-
-export const prepareBoundSubscriptionRead: typeof prepareRead = (operation) =>
-  prepareRead(operation);
 
 export const retainSubscriptionCancellation: typeof retainCancellation = (input) =>
   retainCancellation(input);

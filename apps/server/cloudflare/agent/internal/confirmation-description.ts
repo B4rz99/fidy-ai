@@ -3,7 +3,7 @@ import { RecurringSeriesPage } from "../../../src/core/recurring/contract";
 import { ApproveBrowserLoginPairingPayload } from "../../../src/shell/browser-login/contract";
 
 import { collectLayoutWidgets } from "../../../src/core/dashboard/operations";
-import { type UserId, UserPreferences } from "../../../src/core/identity/contract";
+import { UserPreferences } from "../../../src/core/identity/contract";
 import {
   DashboardDocument,
   DashboardEdit,
@@ -14,9 +14,7 @@ import {
   type RecurringPlanInput,
 } from "../../../src/core/recurring-plans/contract";
 import { RecurringWorkspace } from "../../../src/shell/recurring-plans/contract";
-import { describeRecurringLifecycle } from "../../recurring-plans/operations";
-import { findInsight } from "../../insights/operations";
-import { InsightEventId, ReminderScheduleEdit } from "../../../src/core/insights/contract";
+import { ReminderScheduleEdit } from "../../../src/core/insights/contract";
 import {
   NeedsReviewItem,
   ReviewCommand,
@@ -49,8 +47,7 @@ export type ConfirmationRead = (
   operation: CanonicalOperationId,
   input: Schema.Json
 ) => Effect.Effect<Option.Option<Schema.Json>>;
-type ConfirmationContext = Readonly<{ read: ConfirmationRead; timeZone: string }>;
-type Context = ConfirmationContext | (ConfirmationContext & { db: D1Database; userId: UserId });
+type Context = Readonly<{ read: ConfirmationRead; timeZone: string }>;
 const addressed = Schema.Struct({ params: Schema.Struct({ id: Schema.String }) });
 const quote = (text: string): string => `«${text}»`;
 const decode = <A>(schema: Schema.Decoder<A>, input: unknown): Option.Option<A> =>
@@ -520,11 +517,6 @@ const recurringSuggestionName = (
   edit: RecurringCommand["edit"]
 ): Effect.Effect<Option.Option<string>> =>
   edit.kind === "suggestion" ? recurringSeriesName(context, edit.seriesId) : Effect.succeedNone;
-const describeLifecycle = (
-  context: Context,
-  command: RecurringCommand
-): Effect.Effect<Option.Option<string>> =>
-  "db" in context ? describeRecurringLifecycle({ ...context, command }) : Effect.succeedNone;
 const describeRecurringChange = (
   context: Context,
   operation: string,
@@ -539,7 +531,7 @@ const describeRecurringChange = (
       return yield* describeRecurringCreation(context, edit);
     }
     if (edit.kind === "lifecycle") {
-      return yield* describeLifecycle(context, command);
+      return Option.none();
     }
     const today = yield* DateTime.now;
     let date = DateTime.formatIsoDate(DateTime.setZoneNamedUnsafe(today, context.timeZone));
@@ -578,46 +570,14 @@ const reminderCadence = (cadence: ReminderScheduleEdit["cadence"]): string => {
   }
 };
 const timeZoneName = (zone: string): string => zone.split("/").at(-1)?.replaceAll("_", " ") ?? zone;
-const describeInsightChange = (
-  context: Context,
-  operation: string,
-  input: unknown
-): Effect.Effect<Option.Option<string>> =>
-  Effect.gen(function* () {
-    if (operation === "insights.updateReminderSchedule") {
-      return Option.map(
+const describeInsightChange = (operation: string, input: unknown): Option.Option<string> =>
+  operation === "insights.updateReminderSchedule"
+    ? Option.map(
         decode(Schema.Struct({ payload: Schema.toCodecJson(ReminderScheduleEdit) }), input),
         ({ payload }) =>
           `Cambiar tus recordatorios para recibirlos ${reminderCadence(payload.cadence)} a las ${String(payload.timing.hour).padStart(2, "0")}:${String(payload.timing.minute).padStart(2, "0")}, hora de ${timeZoneName(payload.timeZone)}.`
-      );
-    }
-    const target = decode(Schema.Struct({ params: Schema.Struct({ id: InsightEventId }) }), input);
-    if (Option.isNone(target)) return Option.none();
-    if (!("db" in context)) return Option.none();
-    const found = yield* findInsight({
-      db: context.db,
-      userId: context.userId,
-      id: target.value.params.id,
-    }).pipe(Effect.orElseSucceed(() => Option.none()));
-    if (Option.isNone(found)) return Option.none();
-    const date = localDateText({ date: found.value.scheduledAt, timeZone: found.value.timeZone });
-    if (Option.isNone(date)) return Option.none();
-    const kinds = {
-      "weekly-summary": "resumen semanal",
-      "budget-threshold": "aviso de presupuesto",
-      "manual-entry-reminder": "recordatorio de gastos",
-      "new-recurring-series": "aviso de gasto recurrente",
-    };
-    const label = kinds[found.value.kind];
-    const action = {
-      "insights.markInsightRead": "Marcar como leído",
-      "insights.dismissInsight": "Descartar",
-      "insights.markInsightDelivered": "Marcar como entregado",
-    }[operation];
-    return action === undefined
-      ? Option.none()
-      : Option.some(`${action} el ${label} del ${date.value}.`);
-  });
+      )
+    : Option.none();
 const reviewSource = (item: NeedsReviewItem): string => {
   if ("recordNumber" in item) return `de la fila ${item.recordNumber} del extracto`;
   return item.sourceChannel === "forwarded-email" ? "del correo" : "del archivo";
@@ -754,7 +714,7 @@ const describeFeature = (
       return yield* describeRecurringChange(context, operation, input);
     }
     if (operation.startsWith("insights.")) {
-      return yield* describeInsightChange(context, operation, input);
+      return describeInsightChange(operation, input);
     }
     if (operation.startsWith("ingestion.")) {
       return yield* describeReviewChange(context, operation, input);

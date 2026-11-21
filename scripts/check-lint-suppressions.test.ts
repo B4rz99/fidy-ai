@@ -182,11 +182,6 @@ it("keeps refactored lint rules enabled", () =>
       expect(sequential).toEqual([]);
       expect(overrides.some(({ rules }) => "effect-guards/no-nullable-type" in rules)).toBe(false);
       expect(
-        overrides.find(({ files }) =>
-          files.includes("apps/server/cloudflare/subscription/internal/payment-enrollment.ts")
-        )?.rules["max-params"]
-      ).toBeUndefined();
-      expect(
         overrides.flatMap(({ rules }) =>
           ["max-depth", "max-params"].filter((rule) => rules[rule] === "off")
         )

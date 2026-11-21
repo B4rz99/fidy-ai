@@ -1,31 +1,10 @@
-import { preparePredicateAssertion } from "../../../src/shell/sql-assertions/operations";
-import { Data, Effect, Option, Schema } from "effect";
-import { UserId } from "../../../src/core/identity/contract";
+import { Effect, Option, Schema } from "effect";
 import { Currency } from "../../../src/core/_shared/money";
 import {
   RecurringSeries,
   RecurringSeriesId,
   RecurringSeriesPage,
 } from "../../../src/core/recurring/contract";
-import {
-  findRecurringSnapshot,
-  prepareFactRevisionProjection,
-  prepareRecurringFactGuard,
-} from "../../transactions/operations";
-import {
-  prepareAuthorizedAuditCall,
-  recordCanonicalPATWork,
-} from "../../../src/shell/audit/operations";
-import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
-import {
-  type QueryCaller,
-  callerAuthority,
-  isPATCaller,
-  transactionFailure,
-  transactionId,
-  transactionUnavailable,
-} from "../../canonical-work/operations";
-import { RecurringUnavailable } from "../contract";
 import { pageSize } from "./models";
 
 export const maximumCursorLength = 1024;
@@ -47,69 +26,6 @@ const Row = Schema.Struct({
   id: RecurringSeriesId,
   series_json: Schema.String,
 });
-type Call = Readonly<{
-  db: D1Database;
-  subject: QueryCaller;
-  current: number;
-  accepted: boolean;
-}>;
-const auditStatements = ({
-  db,
-  subject,
-  current,
-  accepted,
-}: Call): ReadonlyArray<D1PreparedStatement> => {
-  const authority = callerAuthority({ subject, current });
-  const outcome = accepted ? "accepted" : "rejected";
-  let audit: D1PreparedStatement;
-  if (isPATCaller(subject)) {
-    const auditStatement = recordCanonicalPATWork({
-      authority: livePATAuthority({ subject, current }),
-      input: {
-        id: transactionId(),
-        operation: "recurring.listRecurringSeries",
-        current,
-        outcome,
-        afterOwnerWrite: false,
-      },
-    });
-    audit = db.prepare(auditStatement.sql).bind(...auditStatement.params);
-  } else {
-    audit = prepareAuthorizedAuditCall({
-      db,
-      authority,
-      id: transactionId(),
-      operation: "recurring.listRecurringSeries",
-      current,
-      outcome,
-      afterOwnerWrite: false,
-    });
-  }
-  return [
-    ...(isPATCaller(subject)
-      ? [recordLivePATUse({ subject, current })].map(({ sql, params }) =>
-          db.prepare(sql).bind(...params)
-        )
-      : []),
-    audit,
-    db
-      .prepare(
-        `INSERT INTO sql_assertions (scope, accepted) VALUES ('recurring', CASE WHEN changes() = 1 AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted = excluded.accepted`
-      )
-      .bind(...authority.bindings),
-  ];
-};
-export const invalidCursor = (call: Call): Effect.Effect<Response> =>
-  Effect.tryPromise(() => call.db.batch([...auditStatements({ ...call, accepted: false })])).pipe(
-    Effect.map(() =>
-      transactionFailure({
-        code: "validation_failed",
-        status: 400,
-        message: "Invalid recurring-series cursor.",
-      })
-    ),
-    Effect.orElseSucceed(transactionUnavailable)
-  );
 const statusOf = (
   status: Option.Option<typeof Status.Type>
 ): (typeof RecurringSeriesPage.Type)["evaluation"] => {
@@ -127,8 +43,6 @@ const statusOf = (
     onSome: (asOf) => ({ kind: "current", asOf }) as const,
   });
 };
-class RecurringCursorChanged extends Data.TaggedError("RecurringCursorChanged") {}
-const statusResultPosition = -2;
 export const readStatus = (
   raw: unknown
 ): Effect.Effect<Option.Option<typeof Status.Type>, Schema.SchemaError> =>
@@ -169,77 +83,3 @@ export const pageData = ({
     });
     return data;
   });
-const pageStatements = (
-  call: Call,
-  cursor: Option.Option<typeof Cursor.Type>
-): ReadonlyArray<D1PreparedStatement> => {
-  const { db, subject } = call;
-  const authority = callerAuthority({ subject, current: call.current });
-  const position = Option.match(cursor, {
-    onNone: () => ["", "", ""],
-    onSome: (value) => [value.currency, value.key, value.id],
-  });
-  return [
-    prepareFactRevisionProjection({
-      db,
-      statement: {
-        sql: `SELECT f.revision AS factRevision, p.evaluated_revision AS evaluatedRevision, p.phase, p.evaluated_at_ms AS evaluatedAt FROM transaction_fact_revisions f LEFT JOIN (SELECT rowid,user_id,revision,phase,cursor_at_ms,cursor_id,group_key,evaluated_at_ms,evaluated_revision,first_captured_at_ms,time_zone FROM recurring_evaluation_records WHERE kind='progress') p ON p.user_id = f.userId WHERE f.userId = ?`,
-        params: [subject.userId],
-      },
-    }),
-    db
-      .prepare(
-        `SELECT currency, counterparty_key, id, series_json FROM recurring_series WHERE user_id = ? AND valid = 1 AND (currency, counterparty_key, id) > (?, ?, ?) AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) ORDER BY currency, counterparty_key, id LIMIT ${pageSize + 1}`
-      )
-      .bind(subject.userId, ...position, ...authority.bindings),
-  ];
-};
-export const readPage = ({
-  call,
-  cursor,
-}: Readonly<{ call: Call; cursor: Option.Option<typeof Cursor.Type> }>): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    const { db, subject } = call;
-    const userId = yield* Schema.decodeEffect(UserId)(subject.userId);
-    const snapshot = yield* findRecurringSnapshot({ db, userId });
-    const results = yield* Effect.tryPromise({
-      try: () => db.batch([...pageStatements(call, cursor)]),
-      catch: () => new RecurringUnavailable(),
-    });
-    const status = yield* readStatus(results.at(statusResultPosition)?.results[0]);
-    const revision = Option.match(status, {
-      onNone: () => 0,
-      onSome: (value) => value.evaluatedRevision ?? 0,
-    });
-    if (Option.isSome(cursor) && cursor.value.revision !== revision) {
-      return yield* new RecurringCursorChanged();
-    }
-    const data = yield* pageData({ raw: results.at(-1)?.results, status });
-    yield* Effect.tryPromise({
-      try: () =>
-        db.batch([
-          ...Option.toArray(
-            Option.map(snapshot, (value) =>
-              prepareRecurringFactGuard({ db, userId, revision: value.revision })
-            )
-          ),
-          preparePredicateAssertion({
-            db,
-            scope: "recurring_cursor",
-            predicate: {
-              sql: "SELECT 1 WHERE ? = COALESCE((SELECT evaluated_revision FROM (SELECT rowid,user_id,revision,phase,cursor_at_ms,cursor_id,group_key,evaluated_at_ms,evaluated_revision,first_captured_at_ms,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id = ?), 0)",
-              params: [revision, subject.userId],
-            },
-          }),
-          ...auditStatements(call),
-        ]),
-      catch: (cause) =>
-        String(cause).includes("recurring_cursor_changed")
-          ? new RecurringCursorChanged()
-          : new RecurringUnavailable(),
-    });
-    return Response.json({ data, next: [] }, { headers: { "cache-control": "no-store" } });
-  }).pipe(
-    Effect.catchTag("RecurringCursorChanged", () => invalidCursor(call)),
-    Effect.orElseSucceed(transactionUnavailable)
-  );

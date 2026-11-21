@@ -1,36 +1,6 @@
-import { requiredCategory } from "./projection";
-import { keywordRulesFromRows, keywordRulesQuery } from "./keyword-rules";
-import { type CategoryId, type KeywordRule } from "../../../src/core/categories/contract";
-import { Effect, Option } from "effect";
-
-export const HTTP_BAD_REQUEST = 400;
 export const HTTP_NOT_FOUND = 404;
 
 export const keywordRuleJsonHeaders = {
   "cache-control": "no-store",
   "content-type": "application/json; charset=utf-8",
 } as const;
-
-export const findOwnedKeywordRules = ({
-  db,
-  userId,
-}: Readonly<{ db: D1Database; userId: string }>): Promise<
-  Option.Option<ReadonlyArray<KeywordRule>>
-> => {
-  const query = keywordRulesQuery({ userId });
-  return db
-    .prepare(query.sql)
-    .bind(...query.params)
-    .all()
-    .then((result) => keywordRulesFromRows(result.results));
-};
-
-export const findExistingCategory = ({
-  db,
-  categoryId,
-}: Readonly<{ db: D1Database; categoryId: CategoryId }>): Effect.Effect<Option.Option<boolean>> =>
-  requiredCategory({ db, categoryId }).pipe(
-    Effect.as(Option.some(true)),
-    Effect.catchTag("CategoryNotFound", () => Effect.succeedSome(false)),
-    Effect.orElseSucceed(() => Option.none())
-  );

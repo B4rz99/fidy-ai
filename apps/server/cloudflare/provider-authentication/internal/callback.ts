@@ -1,20 +1,11 @@
-import { Cause, Clock, Effect, Option, Schema } from "effect";
-import type { HttpClient } from "effect/http";
-import { digestBytes } from "../../secret-material/operations";
-import type { ProviderConfiguration, ProviderEnvironment } from "../contract";
+import { Cause, Option } from "effect";
+import type { ProviderConfiguration } from "../contract";
 import { providerConfiguration } from "./configuration";
-import { validateGoogleToken } from "./google-token";
-import { validateMicrosoftToken } from "./microsoft-token";
-import { ProviderVerificationFailure, type Validation } from "./token-contract";
+import { ProviderVerificationFailure } from "./token-contract";
 import type { AuthenticationProvider } from "../../../src/shell/provider-authentication/contract";
 
 const redirectStatus = 303;
 const maximumCodeLength = 4096;
-const Attempt = Schema.Struct({
-  id: Schema.String,
-  nonce: Schema.String,
-  expires_at_ms: Schema.Int,
-});
 export const validCode = (query: URLSearchParams): boolean => {
   const code = query.get("code") ?? "";
   return (
@@ -42,55 +33,6 @@ export const rejectionReason = (
   if (failure instanceof ProviderVerificationFailure) return failure.reason;
   return Cause.isTimeoutError(failure) ? "verification_timed_out" : "verification_failed";
 };
-const verifyAttempt = (
-  input: Validation & Readonly<{ environment: ProviderEnvironment }>
-): Effect.Effect<void, never, HttpClient.HttpClient> =>
-  Effect.gen(function* () {
-    if (!validCode(input.query)) return yield* Effect.fail("invalid" as const);
-    const identity = yield* input.provider === "google"
-      ? validateGoogleToken(input)
-      : validateMicrosoftToken(input);
-    const settled = yield* Clock.currentTimeMillis;
-    const changed = yield* Effect.tryPromise(() =>
-      input.environment.DB.prepare(
-        `UPDATE provider_authentication_attempts SET state='verified',issuer=?,subject=?,contact_email=?,expires_at_ms=MIN(expires_at_ms,?) WHERE id=? AND state='exchanging' AND expires_at_ms>?`
-      )
-        .bind(
-          identity.issuer,
-          identity.subject,
-          Option.getOrNull(identity.contactEmail),
-          identity.expiresAtMs,
-          input.attempt.id,
-          settled
-        )
-        .run()
-    );
-    if (changed.meta.changes !== 1) {
-      return yield* Effect.fail("invalid" as const);
-    }
-  }).pipe(
-    Effect.timeout("10 seconds"),
-    Effect.catch((failure) =>
-      Effect.tryPromise(() =>
-        input.environment.DB.prepare(
-          "UPDATE provider_authentication_attempts SET state='rejected' WHERE id=? AND state='exchanging'"
-        )
-          .bind(input.attempt.id)
-          .run()
-      ).pipe(
-        Effect.tap(() =>
-          Effect.log({
-            component: "api",
-            operation: "provider.authentication",
-            provider: input.provider,
-            reason: rejectionReason(failure),
-          })
-        ),
-        Effect.asVoid,
-        Effect.orElseSucceed(() => undefined)
-      )
-    )
-  );
 export const callbackRedirect = ({
   environment,
   provider,
@@ -113,50 +55,3 @@ export const callbackRedirect = ({
         : {}),
     },
   });
-export const providerCallback = ({
-  request,
-  environment,
-  provider,
-}: Readonly<{
-  request: Request;
-  environment: ProviderEnvironment;
-  provider: AuthenticationProvider;
-}>): Effect.Effect<Response, never, HttpClient.HttpClient> =>
-  Effect.gen(function* () {
-    if (!providerConfiguration({ environment, provider }).configured) {
-      return callbackRedirect({ environment, provider, clearCookie: false });
-    }
-    const query = new URL(request.url).searchParams;
-    const state = query.get("state") ?? "";
-    const cookie = cookieVerifier({
-      request,
-      cookieName: providerConfiguration({ environment, provider }).cookieName,
-    });
-    if (
-      !/^[A-Za-z0-9_-]{43}$/u.test(state) ||
-      Option.isNone(cookie) ||
-      query.getAll("state").length !== 1
-    ) {
-      return callbackRedirect({ environment, provider, clearCookie: false });
-    }
-    const current = yield* Clock.currentTimeMillis;
-    const digest = yield* digestBytes(new TextEncoder().encode(cookie.value));
-    const row = yield* Effect.tryPromise(() =>
-      environment.DB.prepare(`UPDATE provider_authentication_attempts SET state = 'exchanging'
-    WHERE id = ? AND provider = ? AND cookie_digest = ? AND state = 'pending' AND expires_at_ms > ?
-    RETURNING id,nonce,expires_at_ms`)
-        .bind(state, provider, digest, current)
-        .first()
-    );
-    const attempt = yield* Schema.decodeUnknownEffect(Attempt)(row);
-    yield* verifyAttempt({
-      environment,
-      provider,
-      query,
-      verifier: cookie.value,
-      attempt,
-    });
-    return callbackRedirect({ environment, provider, clearCookie: true });
-  }).pipe(
-    Effect.orElseSucceed(() => callbackRedirect({ environment, provider, clearCookie: false }))
-  );

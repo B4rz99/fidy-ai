@@ -21,24 +21,17 @@ import {
 import { Hex } from "effect/encoding";
 import { digestBytes } from "../secret-material/operations";
 import {
-  type BillingCollectionFailure,
   type BillingObservationWorkflow,
-  type BillingQueuePublisher,
-  type BillingRuntime,
   type BillingWorkRouting,
   type BillingWorkflowActivity,
-  type EnrollmentEnvironment,
+  type BillingWorkflowEnvironment,
   type LocalBillingCollection,
   LocalRefundWork,
   LocalSourceCancellationWork,
   type PricingEnvironment,
-  type RefundDispatchInput,
   type RefundReceiveInput,
   type RefundSupportEnvironment,
   RefundWorkFailure,
-  type RefundWorkflowExecution,
-  type SubscriptionCancellationDispatchInput,
-  type SubscriptionRenewalDispatchInput,
   WompiBillingEvent,
   type WompiBindings,
   type WompiEventEnvironment,
@@ -67,16 +60,10 @@ import { boundedJsonBody } from "../http/operations";
 import { publishPrice } from "./internal/publish-price";
 import { makeWompiTransport } from "./internal/wompi-runtime";
 import { OutboundHttpLive, installedProviderFetch } from "../outbound-http/runtime";
-import { dispatchCancellations } from "./internal/source-cancellation";
-import { dispatchSubscriptionRenewals as dispatchRenewals } from "./internal/subscription-renewal";
 import {
-  dispatchRefunds as dispatchCorrections,
-  dispatchVoidVerification as dispatchVerification,
-  runRefundWorkflow as executeRefundWorkflow,
   receiveRefunds as receiveCorrections,
   isRefundWork as recognizesRefund,
 } from "./internal/refund-workflow";
-import { handlePaymentEnrollment as enroll } from "./internal/payment-enrollment";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { Cause, Clock, Context, Effect, Layer, Option, Result, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
@@ -93,16 +80,10 @@ import {
 } from "../runtime/telemetry/operations";
 import {
   receiveWompiBillingEvent as acceptEvent,
-  dispatchBillingCollection as dispatch,
-  receiveBillingCollection as receive,
   isBillingCollectionWork as recognizesWork,
   runBillingCollectionWorkflow as runWorkflow,
 } from "./internal/billing-workflow";
-import {
-  receiveLocalSourceCancellation,
-  reconcileBillingCandidates as reconcile,
-} from "./internal/billing-observation";
-import { sweepExpiredEnrollmentAdmission as sweep } from "./internal/enrollment-admission";
+import { receiveLocalSourceCancellation } from "./internal/billing-observation";
 
 import {
   type BillingRecovery,
@@ -158,20 +139,10 @@ const refundWorkFailure = (error: unknown): RefundWorkFailure =>
     reason: Schema.isSchemaError(error) ? "invalid-work" : "unavailable",
   });
 
-export const dispatchRefunds = (
-  input: RefundDispatchInput
-): Effect.Effect<void, RefundWorkFailure> =>
-  dispatchCorrections(input).pipe(Effect.mapError(refundWorkFailure));
-
 export const receiveRefunds = (input: RefundReceiveInput): Effect.Effect<void, RefundWorkFailure> =>
   receiveCorrections(input).pipe(Effect.mapError(refundWorkFailure));
 
 export const isRefundWork = (body: unknown): boolean => recognizesRefund(body);
-
-export const dispatchVoidVerification = (
-  input: RefundDispatchInput
-): Effect.Effect<void, RefundWorkFailure> =>
-  dispatchVerification(input).pipe(Effect.mapError(refundWorkFailure));
 
 export const handleRefundSupport = (
   input: Readonly<{ request: Request; environment: RefundSupportEnvironment }>
@@ -197,14 +168,6 @@ export const handleRefundSupport = (
       })
     ),
     { signal: input.request.signal }
-  );
-
-export const runRefundWorkflow = (input: RefundWorkflowExecution): Promise<void> =>
-  Effect.runPromise(
-    Effect.tryPromise({
-      try: () => executeRefundWorkflow({ ...input, wompiHttp: wompiOutboundHttp }),
-      catch: refundWorkFailure,
-    })
   );
 
 export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<
@@ -242,25 +205,6 @@ export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<
   }
 }
 
-export const dispatchBillingCollection = (
-  input: Readonly<
-    { DB: D1Database; BILLING_COLLECTION_QUEUE: BillingQueuePublisher } & {
-      identity: Option.Option<string>;
-    }
-  >
-): Effect.Effect<void, BillingCollectionFailure> => dispatch(input);
-
-export const receiveBillingCollection = (
-  input: Readonly<{
-    environment: BillingWorkRouting &
-      Readonly<{
-        DB: D1Database;
-        BILLING_COLLECTION_WORKFLOW: BillingObservationWorkflow;
-      }>;
-    batch: Readonly<{ messages: ReadonlyArray<{ body: unknown; ack: () => void }> }>;
-  }>
-): Effect.Effect<void, BillingCollectionFailure> => receive(input);
-
 export const receiveWompiBillingEvent = (
   input: Readonly<{
     request: Request;
@@ -268,18 +212,10 @@ export const receiveWompiBillingEvent = (
   }>
 ): Effect.Effect<Response> => acceptEvent(input);
 
-export const reconcileBillingCandidates = (
-  input: Readonly<{ DB: D1Database; BILLING_COLLECTION_WORKFLOW: BillingObservationWorkflow }>
-): Effect.Effect<void, BillingCollectionFailure> => reconcile(input);
-
 export const isBillingCollectionWork = (body: unknown): boolean => recognizesWork(body);
 
-export const sweepExpiredEnrollmentAdmission = (
-  input: Readonly<{ db: D1Database; now: number }>
-): Effect.Effect<void, Cause.UnknownError> => sweep(input);
-
 export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<
-  Omit<BillingRuntime, "DB"> & AcceptanceWindowBindings,
+  BillingWorkflowEnvironment & AcceptanceWindowBindings,
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
@@ -310,7 +246,7 @@ export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<
 
 export const runBillingCollectionWorkflow = (
   input: Readonly<{
-    environment: Omit<BillingRuntime, "DB">;
+    environment: BillingWorkflowEnvironment;
     payload: unknown;
     sleep: (name: string, duration: number) => Promise<void>;
   }> &
@@ -324,18 +260,6 @@ export const runBillingCollectionWorkflow = (
     observe: "observe" in input ? Option.some(input.observe) : Option.none(),
     wompiHttp: wompiOutboundHttp,
   });
-
-export const handlePaymentEnrollment = (
-  input: Readonly<{ request: Request; environment: EnrollmentEnvironment }>
-): Promise<Response> => enroll({ ...input, wompiHttp: wompiOutboundHttp });
-
-export const dispatchSubscriptionRenewals = (
-  input: SubscriptionRenewalDispatchInput
-): Effect.Effect<void, BillingCollectionFailure> => dispatchRenewals(input);
-
-export const dispatchSubscriptionCancellations = (
-  input: SubscriptionCancellationDispatchInput
-): Effect.Effect<void, BillingCollectionFailure> => dispatchCancellations(input);
 
 export class Pricing {
   private readonly version: string;

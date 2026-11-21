@@ -1,11 +1,8 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { UpdateTransactionsInput } from "../../../src/shell/transactions/contract";
 import { Effect, Option, Schema } from "effect";
 import { Currency } from "../../../src/core/_shared/money";
 import { Direction, TransactionId } from "../../../src/core/transactions/contract";
 import { type TransactionBoundaryFailure, boundaryFailure } from "../../canonical-work/operations";
-import type { OAuthMutationReview } from "../../oauth-confirmation/contract";
-import { oauthMutationReview } from "../../oauth-confirmation/operations";
 import {
   type StoredTransaction,
   TransactionOutput,
@@ -92,19 +89,6 @@ const snapshotSql = `WITH roots(id) AS (SELECT ? UNION SELECT ?),
       (first_transaction_id IN roots OR second_transaction_id IN roots)) OR
       (first_transaction_id = ? AND second_transaction_id = ?))),
   ${snapshotBody}`;
-const groupSnapshotSql = `WITH roots(id) AS (SELECT json_extract(value,'$.id') FROM json_each(?)),
-  decisions AS (SELECT * FROM transaction_reconciliation_decisions
-    WHERE user_id = ? AND state = 'linked'
-      AND (first_transaction_id IN roots OR second_transaction_id IN roots)),
-  ${snapshotBody}`;
-
-export type ObservedTransactions = Readonly<{
-  retained: ReadonlyArray<StoredTransaction>;
-  effective: ReadonlyArray<StoredTransaction>;
-  decisions: typeof Snapshot.Type.decisions;
-  members: typeof Snapshot.Type.members;
-  review: (effect: string) => Option.Option<OAuthMutationReview>;
-}>;
 
 const decodeFacts = (
   rows: ReadonlyArray<typeof FactRow.Type>
@@ -114,96 +98,6 @@ const decodeFacts = (
       boundaryFailure("invalid_transaction_snapshot")
     )
   );
-
-const readSnapshot = ({
-  db,
-  sql,
-  params,
-}: Readonly<{
-  db: D1Database;
-  sql: string;
-  params: ReadonlyArray<string>;
-}>): Effect.Effect<ObservedTransactions, TransactionBoundaryFailure | Schema.SchemaError> =>
-  Effect.gen(function* () {
-    const raw = yield* Effect.tryPromise({
-      try: () =>
-        db
-          .prepare(sql)
-          .bind(...params)
-          .first(),
-      catch: boundaryFailure,
-    });
-    const { snapshot } = yield* Schema.decodeUnknownEffect(SnapshotRow)(raw);
-    const retained = yield* decodeFacts(snapshot.retained);
-    const effective = yield* decodeFacts(snapshot.effective);
-    const encoded = yield* Schema.decodeUnknownEffect(Schema.Struct({ snapshot: Schema.String }))(
-      raw
-    );
-    return {
-      retained,
-      effective,
-      decisions: snapshot.decisions,
-      members: snapshot.members,
-      review: (effect: string): Option.Option<OAuthMutationReview> =>
-        Option.some(
-          oauthMutationReview({
-            db,
-            effect,
-            revision: encoded.snapshot,
-            guard: {
-              sql: `SELECT 1 FROM (${sql}) WHERE snapshot = ?`,
-              params: [...params, encoded.snapshot],
-            },
-          })
-        ),
-    };
-  });
-
-export const observeOAuthTransactions = (
-  input: Readonly<{
-    db: D1Database;
-    userId: string;
-    firstId: string;
-    secondId: string;
-  }>
-): Effect.Effect<ObservedTransactions, TransactionBoundaryFailure | Schema.SchemaError> =>
-  readSnapshot({
-    db: input.db,
-    sql: snapshotSql,
-    params: [
-      input.firstId,
-      input.secondId,
-      input.userId,
-      input.firstId,
-      input.secondId,
-      input.userId,
-      input.userId,
-      input.userId,
-    ],
-  });
-
-const encodeSelection = Schema.encodeSync(
-  Schema.fromJsonString(UpdateTransactionsInput.fields.transactions)
-);
-
-export const observeOAuthGroup = (
-  input: Readonly<{
-    db: D1Database;
-    userId: string;
-    transactions: typeof UpdateTransactionsInput.Type.transactions;
-  }>
-): Effect.Effect<ObservedTransactions, TransactionBoundaryFailure | Schema.SchemaError> =>
-  readSnapshot({
-    db: input.db,
-    sql: groupSnapshotSql,
-    params: [
-      encodeSelection(input.transactions),
-      input.userId,
-      input.userId,
-      input.userId,
-      input.userId,
-    ],
-  });
 
 export const discloseTransactions = (
   transactions: ReadonlyArray<typeof TransactionOutput.Type>

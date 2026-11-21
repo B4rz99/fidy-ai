@@ -1,9 +1,7 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { listLaunchCategories } from "../../../src/core/categories/operations";
-import type { CanonicalReadFinalization } from "../../canonical-admission/contract";
-import { UserContext, UserId } from "../../../src/core/identity/contract";
+import { UserContext, type UserId } from "../../../src/core/identity/contract";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { prepareUserContext } from "../../identity/user-context/operations";
 import type { Category } from "../../../src/core/categories/contract";
 import {
   type DashboardDocument,
@@ -16,32 +14,25 @@ import {
 } from "../../../src/core/dashboard/operations";
 import { type DashboardFacts, DashboardUnavailable } from "../../../src/shell/dashboard/contract";
 import type { Budget } from "../../../src/core/budgets/contract";
-import type { DashboardTransactionSnapshot } from "../../transactions/contract";
-import { prepareBudgetCaps, readLocalBudgetCaps } from "../../budgets/operations";
-import {
-  readDashboardTransactions,
-  readLocalDashboardTransactions,
-} from "../../transactions/operations";
-import { unchangedUserDocument } from "../../user-documents/operations";
+import type {
+  DashboardTransactionList,
+  DashboardTransactionSnapshot,
+} from "../../transactions/contract";
+import { readLocalBudgetCaps } from "../../budgets/operations";
+import { readLocalDashboardTransactions } from "../../transactions/operations";
 
-export type DashboardReadContext = Readonly<{
-  context: UserContext;
-  categories: ReadonlyArray<Category>;
-  document: Option.Option<Readonly<{ encoded: string; revision: number }>>;
-}>;
 type LayoutWidgets = ReturnType<typeof collectLayoutWidgets>;
 type RangePlan = Readonly<{
   plans: ReadonlyArray<Readonly<{ id: string; ranges: ReadonlyArray<DashboardProjectionRange> }>>;
   unique: ReadonlyMap<string, Readonly<{ from: number; toExclusive: number }>>;
 }>;
-type ListQueries = Parameters<typeof readDashboardTransactions>[0]["lists"];
+type ListQueries = ReadonlyArray<DashboardTransactionList>;
 type ListPlan = Readonly<{
   queries: ListQueries;
   widgets: ReadonlyArray<Readonly<{ id: string; query: number }>>;
 }>;
 type FinancialSnapshot = DashboardTransactionSnapshot<ReadonlyArray<Budget>>;
 const monthLabelLength = 7;
-const sameContext = Schema.toEquivalence(UserContext);
 
 const planRanges = (widgets: LayoutWidgets, now: DateTime.Utc, context: UserContext): RangePlan => {
   const plans = widgets
@@ -80,62 +71,6 @@ const planLists = (widgets: LayoutWidgets): ListPlan => {
   return { queries, widgets: selected };
 };
 
-const findFinancialSnapshot = ({
-  db,
-  userId,
-  initial,
-  finalization,
-  lists,
-  plan,
-  now,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  initial: DashboardReadContext;
-  lists: ListQueries;
-  plan: RangePlan;
-  now: DateTime.Utc;
-  finalization: Option.Option<CanonicalReadFinalization>;
-}>): Effect.Effect<Option.Option<FinancialSnapshot>> => {
-  const { context, categories } = initial;
-  const month = DateTime.formatIsoDate(
-    DateTime.setZone(now, DateTime.zoneMakeNamedUnsafe(context.timeZone))
-  ).slice(0, monthLabelLength);
-  const caps = prepareBudgetCaps({ db, userId, month });
-  if (Option.isNone(caps)) return Effect.succeedNone;
-  const source = unchangedUserDocument({ userId, kind: "dashboard", observed: initial.document });
-  return readDashboardTransactions({
-    finalization,
-    db,
-    userId,
-    categories,
-    lists,
-    ranges: [...plan.unique.values()],
-    snapshot: {
-      statements: [
-        prepareUserContext({
-          db,
-          userId: UserId.make(userId),
-          statement: {
-            sql: `SELECT serviceMarket, locale, timeZone FROM identity_user_context
-              WHERE (SELECT accepted FROM (${source.sql}))='true'
-              AND json(CASE WHEN serviceMarket=? AND locale=? AND timeZone=? THEN 'true' ELSE '' END)='true'`,
-            params: [...source.params, context.serviceMarket, context.locale, context.timeZone],
-          },
-        }),
-        caps.value.statement,
-      ],
-      accepts: (rows): boolean => {
-        if (rows.length !== 1) return false;
-        const decoded = Schema.decodeUnknownOption(UserContext)(rows[0]);
-        return Option.isSome(decoded) && sameContext(decoded.value, context);
-      },
-      decode: (rows): Effect.Effect<Option.Option<ReadonlyArray<Budget>>> =>
-        rows[1] === undefined ? Effect.succeedNone : caps.value.decode(rows[1].results),
-    },
-  });
-};
-
 const restoreGroups = (
   plan: RangePlan,
   selected: FinancialSnapshot
@@ -154,38 +89,6 @@ const restoreGroups = (
   }
   return Option.some(groups);
 };
-
-export const loadDashboardFacts = ({
-  db,
-  userId,
-  document,
-  now,
-  initial,
-  finalization,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  document: DashboardDocument;
-  now: DateTime.Utc;
-  initial: DashboardReadContext;
-  finalization: Option.Option<CanonicalReadFinalization>;
-}>): Effect.Effect<Option.Option<DashboardFacts>> =>
-  Effect.gen(function* () {
-    const widgets = collectLayoutWidgets(document.layout);
-    const plan = planRanges(widgets, now, initial.context);
-    const lists = planLists(widgets);
-    const selected = yield* findFinancialSnapshot({
-      finalization,
-      db,
-      userId,
-      initial,
-      lists: lists.queries,
-      plan,
-      now,
-    });
-    if (Option.isNone(selected)) return Option.none();
-    return assembleDashboardFacts({ ...initial, plan, lists, selected: selected.value });
-  }).pipe(Effect.orElseSucceed(() => Option.none()));
 
 const assembleDashboardFacts = ({
   context,

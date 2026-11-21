@@ -1,8 +1,6 @@
 import {
   PAT,
   PATScopes,
-  TokenBearer,
-  TokenShortId,
   patBearerPrefix,
   patShortIdLength,
 } from "../../../src/core/tokens/contract";
@@ -13,12 +11,10 @@ import {
   pairingMilliseconds,
 } from "../../../src/shell/tokens/operations";
 import { patPairingUnavailableBody } from "../../../src/shell/tokens/contract";
-import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
-import { freshSessionExists } from "../../../src/shell/web-session/operations";
 import { RequestBodyPolicy } from "../../http/contract";
 import { readBoundedRequestBody } from "../../http/operations";
-import { browserSession } from "../../web-session/operations";
 
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 1024,
@@ -33,7 +29,6 @@ export const shortLength = patShortIdLength;
 const sampleSize = 16;
 export const httpBadRequest = 400;
 export const httpUnauthorized = 401;
-export const httpNotFound = 404;
 export const httpUnavailable = 503;
 export const httpConflict = 409;
 export const httpTooManyRequests = 429;
@@ -79,18 +74,6 @@ export const digest = (text: string): Promise<Uint8Array> =>
     .digest("SHA-256", new TextEncoder().encode(text))
     .then((bytes) => new Uint8Array(bytes));
 
-export const equalsDigest = ({
-  stored,
-  candidate,
-}: Readonly<{ stored: ReadonlyArray<number>; candidate: Uint8Array }>): boolean => {
-  if (stored.length !== digestBytes || candidate.length !== digestBytes) return false;
-  let difference = 0;
-  for (let index = 0; index < digestBytes; index++) {
-    difference |= (stored[index] ?? 0) ^ (candidate[index] ?? 0);
-  }
-  return difference === 0;
-};
-
 export const newProof = (): string =>
   Base64Url.encode(crypto.getRandomValues(new Uint8Array(digestBytes)));
 
@@ -106,7 +89,6 @@ export const newShortId = (): string => {
   return shortId;
 };
 export const newBearer = (shortId: string): string => `${patBearerPrefix}${shortId}_${newProof()}`;
-export const validBearer = (value: string): boolean => Schema.is(TokenBearer)(value);
 
 export const decodeBody = <Decoded, Encoded>({
   request,
@@ -151,23 +133,6 @@ export const patFrom = (row: PATRow): Option.Option<PAT> => {
     revokedAt: Option.map(Option.fromNullishOr(row.revoked_at_ms), DateTime.makeUnsafe),
   });
 };
-
-export const webSession = ({
-  request,
-  db,
-  fresh,
-}: Readonly<{ request: Request; db: D1Database; fresh: boolean }>): Effect.Effect<
-  Option.Option<SessionRow>,
-  Cause.UnknownError
-> =>
-  Effect.gen(function* () {
-    const current = yield* Clock.currentTimeMillis;
-    return yield* Effect.tryPromise(() =>
-      browserSession({ request, db, input: { current, fresh } })
-    );
-  });
-
-export const sessionExists = freshSessionExists;
 export const response = ({ body, status }: Readonly<{ body: unknown; status: number }>): Response =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
 export const canonical = (data: unknown): Response =>
@@ -214,10 +179,3 @@ export const rejected = (): Response =>
     },
     status: httpBadRequest,
   });
-export const notFound = (): Response =>
-  response({
-    body: { error: { code: "not_found", message: "PAT not found." }, next: [] },
-    status: httpNotFound,
-  });
-
-export const shortIdIsValid = (value: string): boolean => Schema.is(TokenShortId)(value);

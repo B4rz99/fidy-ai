@@ -124,23 +124,3 @@ export const dashboardListStatement = ({
     params: [userId, limit],
   };
 };
-
-export const dashboardTransactionQueries = ({
-  db,
-  userId,
-  lists,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  lists: ReadonlyArray<
-    Readonly<{
-      categories: ReadonlyArray<string>;
-      search: Option.Option<string>;
-      limit: number;
-    }>
-  >;
-}>): ReadonlyArray<D1PreparedStatement> =>
-  lists.map((list) => {
-    const statement = dashboardListStatement({ userId, ...list });
-    return db.prepare(statement.sql).bind(...statement.params);
-  });

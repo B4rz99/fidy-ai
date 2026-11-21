@@ -1,49 +1,10 @@
 import { PATPairingDirectGroup, PATsGroup } from "../../../src/shell/tokens/contract";
 import { HttpApi } from "effect/http-api";
-import { claimPATPairing } from "./pat-claim";
-import { approvePATPairing, inspectPATPairing, startPATPairing } from "./pat-pairing";
-import { getActivity } from "./pat-activity";
-import { authenticateCanonicalWebSession } from "../../web-session/operations";
-import { unauthorized } from "./pat-shared";
-import { createManualPAT, listPATs, revokeAllPATs, revokePAT } from "./pat-management";
 import { matchesRouteTemplate } from "../../../src/shell/public-http/operations";
-import { type Cause, Clock, Effect, Option, type Schema } from "effect";
-import { type ConsentUnavailable } from "../../consent/contract";
-
-type PATHandlerFailure = Cause.UnknownError | Schema.SchemaError | ConsentUnavailable;
-
-type PATHandler = (
-  input: Readonly<{ request: Request; db: D1Database; path: string }>
-) => Effect.Effect<Response, PATHandlerFailure>;
-type OperationName =
-  | keyof typeof PATPairingDirectGroup.endpoints
-  | keyof typeof PATsGroup.endpoints;
-const handlers = {
-  start: startPATPairing,
-  claim: claimPATPairing,
-  inspectPATPairing,
-  approvePATPairing,
-  listPATs,
-  getPATActivity: ({ request, db, path }): Effect.Effect<Response, PATHandlerFailure> =>
-    Effect.gen(function* () {
-      const current = yield* Clock.currentTimeMillis;
-      const subject = yield* Effect.tryPromise(() =>
-        authenticateCanonicalWebSession({ request, db, current })
-      );
-      if (Option.isNone(subject)) return unauthorized();
-      return yield* getActivity({ db, subject: subject.value, shortId: path.split("/")[2] ?? "" });
-    }),
-  createManualPAT,
-  revokeAllPATs,
-  revokePAT: ({ request, db, path }): Effect.Effect<Response, PATHandlerFailure> =>
-    revokePAT({ request, db, shortId: path.split("/").at(-1) ?? "" }),
-} satisfies Record<OperationName, PATHandler>;
-const handlersByName: ReadonlyMap<string, PATHandler> = new Map(Object.entries(handlers));
 
 const declared = HttpApi.make("patWorker").add(PATPairingDirectGroup).add(PATsGroup);
 type Route = Readonly<{
   group: string;
-  name: string;
   method: string;
   template: string;
 }>;
@@ -51,10 +12,8 @@ const routes: Array<Route> = [];
 HttpApi.reflect(declared, {
   onGroup: () => {},
   onEndpoint: ({ endpoint, group }) => {
-    if (!handlersByName.has(endpoint.identifier)) throw new Error("Unimplemented PAT operation");
     routes.push({
       group: group.identifier,
-      name: endpoint.identifier,
       method: endpoint.method,
       template: endpoint.path,
     });
@@ -70,15 +29,3 @@ export const patBrowserRoute = (path: string): boolean =>
   forPath(path).some((route) => route.group === PATsGroup.identifier);
 export const patMethods = (path: string): ReadonlyArray<string> =>
   Array.from(new Set(forPath(path).map((route) => route.method)));
-
-export const handlePATRequest = ({
-  request,
-  db,
-}: Readonly<{ request: Request; db: D1Database }>): Effect.Effect<Response, PATHandlerFailure> => {
-  const path = new URL(request.url).pathname;
-  const route = forPath(path).find((candidate) => candidate.method === request.method);
-  const handler = route === undefined ? undefined : handlersByName.get(route.name);
-  return handler === undefined
-    ? Effect.succeed(Response.json({ status: "method_not_allowed" }, { status: 405 }))
-    : handler({ request, db, path });
-};

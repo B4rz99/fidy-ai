@@ -1,6 +1,3 @@
-import { Effect } from "effect";
-import { ConnectionRetentionUnavailable } from "../contract";
-
 const attemptRetentionMilliseconds = 86400000;
 const maximumRetentionRows = 128;
 
@@ -36,15 +33,3 @@ export const retentionStatements = (
     params: [current - attemptRetentionMilliseconds, maximumRetentionRows],
   },
 ];
-export const sweepAttempts = (
-  input: Readonly<{ db: D1Database; current: number }>
-): Effect.Effect<void, ConnectionRetentionUnavailable> =>
-  Effect.tryPromise({
-    try: () =>
-      input.db.batch(
-        retentionStatements(input.current).map(({ sql, params }) =>
-          input.db.prepare(sql).bind(...params)
-        )
-      ),
-    catch: () => new ConnectionRetentionUnavailable(),
-  }).pipe(Effect.asVoid);

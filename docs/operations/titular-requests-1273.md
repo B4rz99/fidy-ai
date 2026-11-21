@@ -126,7 +126,7 @@ person's User, records or credentials exist during verification.
 
 For access/correction, obtain the actual scoped result through the applicable owner and its real
 proofs; record the restricted result reference with `RecordOwnerResult`. A case entry cannot authorize
-a direct D1 query, a foreign-User operation or a canonical call after its Consent basis has ended.
+a direct SQLite query, a foreign-User operation or a canonical call after its Consent basis has ended.
 If the necessary privacy-purpose owner authority is not executable, escalate that capability gap;
 do not substitute operator access or call an empty result completed access.
 

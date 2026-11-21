@@ -1,14 +1,7 @@
-import { DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type { RecurringWorkspaceQuery } from "../../../src/shell/recurring-plans/contract";
-import { type RecurringPlanningUnavailable, type RecurringReadProjection } from "../contract";
-import {
-  decodeReadProjection,
-  preparePlanningRows,
-  prepareSelectedDocument,
-  readLocalCompactProjection,
-  readLocalDocument,
-} from "./store";
+import { readLocalCompactProjection, readLocalDocument } from "./store";
 
 export const workspaceMonths = (
   query: typeof RecurringWorkspaceQuery.Type
@@ -67,48 +60,6 @@ const revisionSelection = (
         )
       )(windows),
     ],
-  };
-};
-
-export const prepareReadProjection = ({
-  db,
-  users,
-  query,
-  now,
-}: Readonly<{
-  db: D1Database;
-  users: OwnedStatement;
-  query: typeof RecurringWorkspaceQuery.Type;
-  now: DateTime.Utc;
-}>): Readonly<{
-  statements: ReadonlyArray<D1PreparedStatement>;
-  decode: (
-    rows: ReadonlyArray<D1Result>
-  ) => Effect.Effect<RecurringReadProjection, RecurringPlanningUnavailable>;
-}> => {
-  const months = workspaceMonths(query);
-  if (query.view !== "compact") {
-    const full = prepareSelectedDocument({ db, users });
-    return {
-      statements: full.statements,
-      decode: (rows): Effect.Effect<RecurringReadProjection, RecurringPlanningUnavailable> =>
-        full
-          .decode(rows)
-          .pipe(Effect.map((document) => ({ schedule: document, editing: document, months }))),
-    };
-  }
-  const source = preparePlanningRows({
-    db,
-    users,
-    revisions: Option.some(revisionSelection(users, months, now)),
-  });
-  return {
-    statements: source.statements,
-    decode: (rows) =>
-      source.decode(rows).pipe(
-        Effect.flatMap((rows) => decodeReadProjection({ rows, now })),
-        Effect.map((projection) => ({ ...projection, months }))
-      ),
   };
 };
 

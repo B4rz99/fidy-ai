@@ -7,7 +7,8 @@ import {
   ReviewStatus,
   ReviewSummary,
 } from "../../../src/core/ingestion/contract";
-import { categorizeCaptures } from "../../categories/operations";
+import type { CaptureCategoryInput } from "../../categories/contract";
+import type { CategoryId } from "../../../src/core/categories/contract";
 import { TransactionId } from "../../../src/core/transactions/contract";
 
 export const ReviewRow = Schema.Struct({
@@ -25,52 +26,14 @@ export const reviewProjection = `id, source, reason, time_zone AS timeZone,
   created_at_ms AS createdAt, expires_at_ms AS expiresAt, transaction_id AS transactionId,revision,draft_json,suggestions_json`;
 export const reviewDraftJson = Schema.fromJsonString(Schema.toCodecJson(ReviewDraft));
 
-export const readReviewDetail = ({
-  db,
-  userId,
-  id,
-  current,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  id: string;
-  current: number;
-}>): Effect.Effect<Option.Option<ReviewDetail>, ReviewUnavailable> =>
-  Effect.gen(function* () {
-    const raw = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`SELECT ${reviewProjection}
-    FROM ingestion_review_sources WHERE user_id = ? AND id = ?`)
-        .bind(current, userId, id)
-        .first()
-    );
-    if (raw === null) return Option.none();
-    const row = yield* Schema.decodeUnknownEffect(ReviewRow)(raw);
-    return Option.some(yield* projectReviewDetail({ db, userId, row, current }));
-  }).pipe(Effect.mapError(() => new ReviewUnavailable()));
-
-export const projectReviewDetail = (
-  input: Readonly<{
-    db: D1Database;
-    userId: string;
-    row: typeof ReviewRow.Type;
-    current: number;
-  }>
-): Effect.Effect<ReviewDetail, ReviewUnavailable> =>
-  projectReviewDetailFromSnapshot({
-    row: input.row,
-    current: input.current,
-    categorize: (captures) => categorizeCaptures({ db: input.db, userId: input.userId, captures }),
-  });
-
 export const projectReviewDetailFromSnapshot = <E, R = never>({
   row,
   current,
   categorize,
 }: Readonly<{
   categorize: (
-    captures: Parameters<typeof categorizeCaptures>[0]["captures"]
-  ) => Effect.Effect<Effect.Success<ReturnType<typeof categorizeCaptures>>, E, R>;
+    captures: ReadonlyArray<CaptureCategoryInput>
+  ) => Effect.Effect<ReadonlyArray<CategoryId>, E, R>;
   row: typeof ReviewRow.Type;
   current: number;
 }>): Effect.Effect<ReviewDetail, ReviewUnavailable, R> =>
@@ -140,8 +103,8 @@ const suggestReviewCategory = <E, R = never>({
   draft,
 }: Readonly<{
   categorize: (
-    captures: Parameters<typeof categorizeCaptures>[0]["captures"]
-  ) => Effect.Effect<Effect.Success<ReturnType<typeof categorizeCaptures>>, E, R>;
+    captures: ReadonlyArray<CaptureCategoryInput>
+  ) => Effect.Effect<ReadonlyArray<CategoryId>, E, R>;
   draft: Option.Option<ReviewDraft>;
 }>): Effect.Effect<Option.Option<ReviewDraft>, ReviewUnavailable, R> =>
   Effect.gen(function* () {

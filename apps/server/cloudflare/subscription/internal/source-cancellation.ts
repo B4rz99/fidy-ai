@@ -1,23 +1,9 @@
-import { captureWorkTrace } from "../../runtime/telemetry/operations";
-import { Clock, Effect, Option, Schema } from "effect";
-import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
+import { Effect, Option, Schema } from "effect";
 import { UnknownJsonString } from "../../../src/shell/schema-codecs/contract";
-import { UserId } from "../../../src/core/identity/contract";
-import {
-  BillingCollectionFailure,
-  type BillingRuntime,
-  type SubscriptionCancellationDispatchInput,
-  type SubscriptionCancellationWork,
-} from "../contract";
-import { BillingAttemptId, SubscriptionId } from "../../../src/core/subscription/contract";
-import { PaymentSourceId, WompiSourceId } from "./wompi-model";
+import { BillingCollectionFailure } from "../contract";
+import { WompiSourceId } from "./wompi-model";
 import { type WompiTransportFactory } from "./wompi-runtime";
 
-const wait = <A>(run: () => Promise<A>): Effect.Effect<A, BillingCollectionFailure> =>
-  Effect.tryPromise({
-    try: run,
-    catch: (cause) => new BillingCollectionFailure({ cause: Option.some(cause) }),
-  });
 const decode = <A, E>(
   schema: Schema.Codec<A, E>,
   value: unknown
@@ -25,16 +11,6 @@ const decode = <A, E>(
   Schema.decodeUnknownEffect(schema)(value).pipe(
     Effect.mapError((cause) => new BillingCollectionFailure({ cause: Option.some(cause) }))
   );
-const Snapshot = Schema.Struct({
-  subscription_id: SubscriptionId,
-  paid_attempt_id: BillingAttemptId,
-  payment_source_id: PaymentSourceId,
-  cancelled_at_ms: Schema.Int,
-  paid_through_ms: Schema.Int,
-  wompi_source_id: WompiSourceId,
-  wompi_environment: WompiEnvironment,
-  void_started_at_ms: Schema.OptionFromNullOr(Schema.Int),
-});
 const Source = Schema.Struct({
   data: Schema.Struct({
     id: WompiSourceId,
@@ -42,118 +18,8 @@ const Source = Schema.Struct({
     status: Schema.Literals(["AVAILABLE", "VOIDED"]),
   }),
 });
-const offerCooldownMs = 60_000;
-const pendingSnapshotCondition = `subscription_id=(SELECT id FROM subscriptions WHERE user_id=?)
- AND subscription_id=? AND paid_attempt_id=? AND payment_source_id=?
- AND cancelled_at_ms=? AND paid_through_ms=? AND source_cancellation_state='void-pending'
- AND EXISTS (SELECT 1 FROM payment_source_context source
- JOIN billing_attempt_context a ON a.id=subscription_cancellations.paid_attempt_id
- AND a.user_id=source.user_id AND a.payment_source_id=source.id
- WHERE source.id=subscription_cancellations.payment_source_id
- AND source.subscription_id=subscription_cancellations.subscription_id
- AND source.method='daviplata' AND source.wompi_source_id=?
- AND source.wompi_environment=? AND a.wompi_environment=?)`;
-const snapshotBindings = (
-  userId: string,
-  source: typeof Snapshot.Type
-): ReadonlyArray<string | number> => [
-  userId,
-  source.subscription_id,
-  source.paid_attempt_id,
-  source.payment_source_id,
-  source.cancelled_at_ms,
-  source.paid_through_ms,
-  source.wompi_source_id,
-  source.wompi_environment,
-  source.wompi_environment,
-];
 const httpSuccessMinimum = 200;
 const httpSuccessMaximum = 300;
-
-export const dispatchCancellations = (
-  input: SubscriptionCancellationDispatchInput
-): Effect.Effect<void, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    const trace = yield* captureWorkTrace;
-    const now = yield* Clock.currentTimeMillis;
-    const result = yield* wait(() =>
-      input.DB.prepare(`SELECT user_id FROM subscription_cancellation_context WHERE source_cancellation='void-pending'
-    AND verification_count<8 AND (last_offered_at_ms IS NULL OR last_offered_at_ms<?) ORDER BY last_offered_at_ms,user_id LIMIT 32`)
-        .bind(now - offerCooldownMs)
-        .all()
-    );
-    const rows = yield* decode(Schema.Array(Schema.Struct({ user_id: UserId })), result.results);
-    for (const row of rows) {
-      yield* wait(() =>
-        input.DB.prepare(
-          "UPDATE subscription_cancellations SET last_offered_at_ms=? WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?)"
-        )
-          .bind(now, row.user_id)
-          .run()
-      );
-      yield* wait(() =>
-        input.BILLING_COLLECTION_QUEUE.send({
-          ...trace,
-          version: 1,
-          kind: "source-cancellation",
-          userId: row.user_id,
-        })
-      );
-    }
-  });
-type SourceCancellationInput = Readonly<{
-  environment: BillingRuntime;
-  work: Pick<typeof SubscriptionCancellationWork.Type, "userId">;
-  wompiHttp: WompiTransportFactory;
-}>;
-
-export const cancelSource = (
-  input: SourceCancellationInput
-): Effect.Effect<void, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    const { DB: db } = input.environment;
-    const row = yield* wait(() =>
-      db
-        .prepare(`SELECT c.subscription_id,c.paid_attempt_id,c.payment_source_id,c.cancelled_at_ms,c.paid_through_ms,
-    source.wompi_source_id,a.wompi_environment,c.void_started_at_ms
-    FROM subscription_cancellation_context c JOIN payment_source_context source ON source.id=c.payment_source_id AND source.user_id=c.user_id
-    JOIN billing_attempt_context a ON a.id=c.paid_attempt_id AND a.user_id=c.user_id
-    AND a.payment_source_id=source.id AND a.wompi_environment=source.wompi_environment
-    WHERE c.user_id=? AND source.method='daviplata' AND c.source_cancellation='void-pending' AND c.verification_count<8`)
-        .bind(input.work.userId)
-        .first()
-    );
-    if (row === null) return;
-    const source = yield* decode(Snapshot, row);
-    if (source.wompi_environment !== input.environment.WOMPI_ENVIRONMENT) {
-      return yield* new BillingCollectionFailure({ cause: Option.none() });
-    }
-    const http = yield* input.wompiHttp({
-      ...input.environment,
-      WOMPI_ENVIRONMENT: source.wompi_environment,
-    });
-    const now = yield* Clock.currentTimeMillis;
-    yield* submitVoid({ db, userId: input.work.userId, source, http, now });
-    const reservation = yield* wait(() =>
-      db
-        .prepare(
-          `UPDATE subscription_cancellations SET verification_count=verification_count+1 WHERE ${pendingSnapshotCondition} AND verification_count<8`
-        )
-        .bind(...snapshotBindings(input.work.userId, source))
-        .run()
-    );
-    if (reservation.meta.changes !== 1) return;
-    if (!(yield* verifyVoidedSource(http, source.wompi_source_id))) return;
-    const verifiedAt = yield* Clock.currentTimeMillis;
-    yield* wait(() =>
-      db
-        .prepare(
-          `UPDATE subscription_cancellations SET source_cancellation_state='voided',void_verified_at_ms=? WHERE ${pendingSnapshotCondition}`
-        )
-        .bind(verifiedAt, ...snapshotBindings(input.work.userId, source))
-        .run()
-    );
-  });
 
 export const verifyVoidedSource = Effect.fnUntraced(function* (
   http: Effect.Success<ReturnType<WompiTransportFactory>>,
@@ -172,30 +38,3 @@ export const verifyVoidedSource = Effect.fnUntraced(function* (
   }
   return verified.data.status === "VOIDED";
 });
-
-const submitVoid = (
-  input: Readonly<{
-    db: D1Database;
-    userId: string;
-    source: typeof Snapshot.Type;
-    http: Effect.Success<ReturnType<WompiTransportFactory>>;
-    now: number;
-  }>
-): Effect.Effect<void, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    if (Option.isNone(input.source.void_started_at_ms)) {
-      const claim = yield* wait(() =>
-        input.db
-          .prepare(
-            `UPDATE subscription_cancellations SET void_started_at_ms=? WHERE ${pendingSnapshotCondition} AND void_started_at_ms IS NULL AND verification_count<8`
-          )
-          .bind(input.now, ...snapshotBindings(input.userId, input.source))
-          .run()
-      );
-      if (claim.meta.changes === 1) {
-        yield* input.http
-          .execute({ _tag: "WompiVoidPaymentSource", sourceId: input.source.wompi_source_id })
-          .pipe(Effect.ignore);
-      }
-    }
-  });

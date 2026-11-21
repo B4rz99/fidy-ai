@@ -26,7 +26,7 @@ available at `https://unpkg.com/effect@4.1.4/src/<module>.ts` and
 | ------------------------ | ----------------------------------------------------------------------------------------------- |
 | HTTP                     | `effect/http`; `src/http/{HttpClient,HttpClientRequest,HttpClientResponse,FetchHttpClient}.ts`  |
 | API / OpenAPI            | `effect/http-api`; `src/http-api/{HttpApi,HttpApiClient,OpenApi}.ts`                            |
-| SQL                      | `effect/sql`; `src/sql/SqlClient.ts`; installed `@effect/sql-d1` source                         |
+| SQL                      | `effect/sql`; `src/sql/SqlClient.ts`; installed `@effect/sql-sqlite-do` source                  |
 | Atom / Reactivity        | `effect/reactivity`; `src/reactivity/{Atom,AtomRegistry,AtomHttpApi,AsyncResult,Reactivity}.ts` |
 | React bindings           | `@effect/atom-react`; `src/{Hooks,RegistryContext}.ts`                                          |
 | Inference                | `effect/ai`; `src/ai/{LanguageModel,Prompt,Response,Tool,Toolkit}.ts`                           |

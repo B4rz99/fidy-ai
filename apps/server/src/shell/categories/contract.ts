@@ -1,5 +1,4 @@
-import type { AuditAuthority } from "~/shell/audit/contract";
-import { type Option, Schema } from "effect";
+import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api";
 import {
   Category,
@@ -114,8 +113,3 @@ export const CategoriesGroup = HttpApiGroup.make("categories")
       )
       .annotateMerge(destructiveWrite)
   );
-
-export type CategoryReadInput = Readonly<{
-  db: D1Database;
-  authority: Option.Option<AuditAuthority>;
-}>;

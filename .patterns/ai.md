@@ -61,7 +61,7 @@ metadata into toolkit definitions. A tool hidden by policy must not remain reach
 alternate model or HTTP path.
 
 Tool handlers call canonical operations with the authenticated User context. They do not import
-repositories, D1, Durable Object, Queue, Workflow, R2, or provider implementation modules. Hosted
+repositories, SQLite, Durable Object, Queue, Workflow, R2, or provider implementation modules. Hosted
 inference receives only bounded projections and returns safe typed failures such as unavailable,
 invalid-output, resource-limit, or provider-failure.
 

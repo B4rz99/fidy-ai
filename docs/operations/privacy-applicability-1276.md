@@ -126,7 +126,7 @@ The owner-authorized [bounded live drill](https://github.com/B4rz99/fidy-ai/blob
 records native scheduled warning and resolution emails independently observed in the company
 mailbox, ordinary API revocation of a synthetic read-only PAT, stale-bearer refusal, an unaffected
 control PAT and verified temporary-authority cleanup. The signal was injected downstream of the
-HTTP detector; live raw-threshold detection and runtime D1-outage fallback were not established.
+HTTP detector; live raw-threshold detection and runtime SQLite-outage fallback were not established.
 No human acknowledgement is claimed. The earlier quota-constrained attempt remains in the record.
 This is actual bounded technical evidence, not completion of all #1262 requirements.
 

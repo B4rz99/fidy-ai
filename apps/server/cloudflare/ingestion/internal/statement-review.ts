@@ -1,19 +1,10 @@
-import { Clock, Data, DateTime, Effect, Option, Result, Schema } from "effect";
+import { DateTime, Option, Schema } from "effect";
 import {
   EmailNeedsReviewItem,
-  NeedsReviewItem,
   NeedsReviewStatus,
   StatementNeedsReviewItem,
 } from "../../../src/core/ingestion/contract";
-import { loadMediaItems } from "./media-review";
-import type { QueryCaller } from "../../canonical-work/operations";
-import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { commitReadAudit, unavailableStatement, validationFailed } from "./statement-ingestion";
 
-class ReviewReadUnavailable extends Data.TaggedError("ReviewReadUnavailable")<{}> {}
-
-const noStore = { "cache-control": "no-store" };
-const output = Schema.toCodecJson(Schema.Array(NeedsReviewItem));
 export const pageSize = 50;
 const maximumOffset = 10_000;
 export const ReviewPage = Schema.Struct({
@@ -123,187 +114,9 @@ export const projectEmailRow = ({
   });
 };
 
-const loadStatementItems = ({
-  database,
-  userId,
-  asOf,
-  scope,
-  status,
-  limit,
-}: Readonly<{
-  database: D1Database;
-  userId: string;
-  asOf: number;
-  scope: Option.Option<OwnedStatement>;
-  status: Option.Option<typeof NeedsReviewStatus.Type>;
-  limit: number;
-}>): Effect.Effect<Option.Option<ReadonlyArray<StatementNeedsReviewItem>>, ReviewReadUnavailable> =>
-  Effect.gen(function* () {
-    const guard = Option.getOrElse(scope, () => ({ sql: "1 = 1", params: [] }));
-    const rows = yield* Effect.tryPromise({
-      try: () =>
-        database
-          .prepare(`SELECT * FROM (SELECT r.id, r.submission_id, r.record_number, r.reason,
-    coalesce(d.decision, CASE WHEN c.clarification_state = 'abandoned' OR c.clarification_expires_at_ms <= ? THEN 'abandoned'
-      WHEN r.evidence_expires_at_ms > ? THEN r.status ELSE 'expired' END) AS status,
-    d.transaction_id, d.decided_at_ms, r.created_at_ms, r.service_market, r.locale, r.time_zone,
-    r.source_format, r.parser_revision, r.extractor_revision
-    FROM statement_review_context r LEFT JOIN ingestion_statement_review_decisions d ON d.review_id = r.id
-    LEFT JOIN statement_submissions c ON c.id = r.submission_id
-    WHERE r.user_id = ? AND (${guard.sql})
-    ) AS projected WHERE (? IS NULL OR status = ?)
-    ORDER BY created_at_ms DESC, id DESC LIMIT ?`)
-          .bind(
-            asOf,
-            asOf,
-            userId,
-            ...guard.params,
-            Option.getOrNull(status),
-            Option.getOrNull(status),
-            limit
-          )
-          .all(),
-      catch: () => new ReviewReadUnavailable(),
-    });
-    const items: Array<StatementNeedsReviewItem> = [];
-    for (const raw of rows.results) {
-      const row = Schema.decodeUnknownOption(reviewRow)(raw);
-      if (Option.isNone(row)) return Option.none();
-      const item = projectReviewRow(row.value);
-      if (Option.isNone(item)) return Option.none();
-      items.push(item.value);
-    }
-    return Option.some(items);
-  });
-
-const loadEmailItems = (
-  database: D1Database,
-  userId: string,
-  asOf: number
-): Effect.Effect<Option.Option<ReadonlyArray<NeedsReviewItem>>, ReviewReadUnavailable> =>
-  Effect.gen(function* () {
-    const rows = yield* Effect.tryPromise({
-      try: () =>
-        database
-          .prepare(`SELECT e.id,e.email_receipt_id AS receipt_id,e.reason,
-    e.created_at_ms,e.evidence_expires_at_ms,e.time_zone
-    FROM ingestion_review_items e WHERE e.user_id=? AND e.source_kind='email'
-    AND NOT EXISTS(SELECT 1 FROM ingestion_review_workspace_state n WHERE n.id=e.id AND n.user_id=e.user_id AND n.status!='pending')
-    ORDER BY e.created_at_ms DESC,e.id DESC LIMIT ?`)
-          .bind(userId, maximumOffset + pageSize)
-          .all(),
-      catch: () => new ReviewReadUnavailable(),
-    });
-    const items: Array<NeedsReviewItem> = [];
-    for (const raw of rows.results) {
-      const row = Schema.decodeUnknownOption(emailReviewRow)(raw);
-      if (Option.isNone(row)) return Option.none();
-      const item = projectEmailRow({ row: row.value, asOf });
-      if (Option.isNone(item)) return Option.none();
-      items.push(item.value);
-    }
-    return Option.some(items);
-  });
-
 export const reviewPage = (url: URL): Option.Option<typeof ReviewPage.Type> =>
   Schema.decodeUnknownOption(ReviewPage)({
     offset: url.searchParams.get("offset") ?? "0",
     limit: url.searchParams.get("limit") ?? String(pageSize),
     status: url.searchParams.get("status"),
-  });
-
-export const selectReviewPage = ({
-  items,
-  page,
-}: Readonly<{
-  items: ReadonlyArray<NeedsReviewItem>;
-  page: typeof ReviewPage.Type;
-}>): ReadonlyArray<NeedsReviewItem> =>
-  items
-    .filter(({ status }) => Option.isNone(page.status) || Option.contains(page.status, status))
-    .slice(page.offset, page.offset + page.limit);
-
-export const listNeedsReviewItems = (
-  input: Readonly<{
-    database: D1Database;
-    environment: Parameters<typeof commitReadAudit>[0]["environment"];
-    subject: QueryCaller;
-    url: URL;
-  }>
-): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    const page = reviewPage(input.url);
-    if (Option.isNone(page)) return validationFailed("Invalid review page.");
-    const refusal = yield* commitReadAudit({
-      environment: input.environment,
-      subject: input.subject,
-      read: {
-        submissionId: "",
-        operation: "ingestion.listNeedsReviewItems",
-      },
-    });
-    if (Option.isSome(refusal)) return refusal.value;
-    return yield* readCanonicalReviewPage({
-      database: input.database,
-      userId: input.subject.userId,
-      asOf: yield* Clock.currentTimeMillis,
-      scope: Option.none(),
-      includeEmail: true,
-      page: page.value,
-    });
-  });
-
-export const readCanonicalReviewPage = (
-  input: Readonly<{
-    database: D1Database;
-    userId: string;
-    asOf: number;
-    scope: Option.Option<OwnedStatement>;
-    includeEmail: boolean;
-    page: typeof ReviewPage.Type;
-  }>
-): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    const { asOf } = input;
-    const loaded = yield* Effect.result(
-      Effect.all(
-        [
-          loadStatementItems({
-            database: input.database,
-            userId: input.userId,
-            asOf,
-            scope: input.scope,
-            status: input.page.status,
-            limit: input.page.offset + input.page.limit,
-          }),
-          input.includeEmail
-            ? loadEmailItems(input.database, input.userId, asOf)
-            : Effect.succeedSome([]),
-          input.includeEmail
-            ? loadMediaItems({
-                db: input.database,
-                userId: input.userId,
-                asOf,
-                limit: maximumOffset + pageSize,
-              })
-            : Effect.succeedSome([]),
-        ],
-        { concurrency: "unbounded" }
-      )
-    );
-    if (Result.isFailure(loaded)) return unavailableStatement();
-    const [statement, email, media] = loaded.success;
-    if (Option.isNone(statement) || Option.isNone(email) || Option.isNone(media)) {
-      return unavailableStatement();
-    }
-    const items = [...statement.value, ...email.value, ...media.value];
-    items.sort(
-      (left, right) =>
-        DateTime.toEpochMillis(right.createdAt) - DateTime.toEpochMillis(left.createdAt)
-    );
-    const encoded = yield* Effect.result(
-      Schema.encodeEffect(output)(selectReviewPage({ items, page: input.page }))
-    );
-    if (Result.isFailure(encoded)) return unavailableStatement();
-    return Response.json({ data: encoded.success, next: [] }, { headers: noStore });
   });

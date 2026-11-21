@@ -1,29 +1,15 @@
-import type { BootstrapUnavailable } from "../contract";
-import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
-import { DateTime, Effect, type PlatformError, Redacted, Schema } from "effect";
-import { OAuthConnectionId } from "../../../src/core/oauth-agents/contract";
-import {
-  isReviewedOAuthExpiration,
-  oauthAuthorizationCodeExpiresAt,
-} from "../../../src/core/oauth-agents/operations";
-import { PATScopes } from "../../../src/core/tokens/contract";
+import { type OAuthConnectionId } from "../../../src/core/oauth-agents/contract";
 import {
   type OAuthAuthorization,
-  OAuthConnected,
   type OAuthRegistration,
   type OAuthReviewChoice,
-  oauthIssuer,
 } from "../../../src/shell/oauth-agents/contract";
 import type { FreshSessionSubject } from "../../../src/shell/web-session/contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { freshSessionConditions } from "../../../src/shell/web-session/operations";
-import { grantOAuthConsent, protectConsentStatement } from "../../../src/shell/consent/operations";
-import { newId, newSecret, secretDigest } from "../../secret-material/operations";
-import { dbWork, invalidRequest } from "./bootstrap";
-import { oauthResponse } from "./response";
+import { protectConsentStatement } from "../../../src/shell/consent/operations";
 
 type ApprovalInput = Readonly<{
-  db: D1Database;
   current: number;
   session: FreshSessionSubject;
   pending: OAuthAuthorization;
@@ -40,7 +26,7 @@ export const grantStatement = ({
   input,
   material,
 }: {
-  input: Omit<ApprovalInput, "db">;
+  input: ApprovalInput;
   material: ApprovalMaterial;
 }): OwnedStatement => {
   const fresh = freshSessionConditions(input);
@@ -69,74 +55,3 @@ export const grantStatement = ({
     },
   });
 };
-const commitApproval = (
-  input: ApprovalInput,
-  material: ApprovalMaterial
-): Effect.Effect<unknown, BootstrapUnavailable> =>
-  dbWork(() => {
-    const auditStatement = grantStatement({ input, material });
-    const auditStatement2 = grantOAuthConsent({
-      id: newId(),
-      connectionId: material.connectionId,
-      session: input.session,
-      current: input.current,
-      scopes: input.choice.scopes,
-      expiresAt: material.expiresAt,
-    });
-    return input.db.batch([
-      input.db.prepare(auditStatement.sql).bind(...auditStatement.params),
-      input.db.prepare(auditStatement2.sql).bind(...auditStatement2.params),
-
-      input.db
-        .prepare(
-          `UPDATE oauth_connections SET code_digest=incoming.digest,code_challenge=incoming.challenge,code_expires_at_ms=incoming.expires_at_ms FROM (SELECT ? AS digest,? AS connection_id,? AS challenge,? AS expires_at_ms WHERE changes() = 1) AS incoming WHERE oauth_connections.id=incoming.connection_id AND oauth_connections.code_digest IS NULL`
-        )
-        .bind(
-          material.digest,
-          material.connectionId,
-          input.pending.code_challenge,
-          oauthAuthorizationCodeExpiresAt(input.current)
-        ),
-      input.db
-        .prepare("DELETE FROM oauth_review_requests WHERE id = ? AND user_id = ? AND changes() = 1")
-        .bind(input.choice.requestId, input.session.user_id),
-      prepareChangedRowAssertion({ db: input.db, scope: "oauth_atomic" }),
-    ]);
-  });
-
-export const approveRequest = (
-  input: ApprovalInput
-): Effect.Effect<
-  Response,
-  BootstrapUnavailable | PlatformError.PlatformError | Schema.SchemaError
-> =>
-  Effect.gen(function* () {
-    const reviewedAt = DateTime.toEpochMillis(input.choice.reviewedAt);
-    const expiresAt = DateTime.toEpochMillis(input.choice.expiresAt);
-    if (
-      !isReviewedOAuthExpiration({
-        current: input.current,
-        reviewedAt,
-        expiresAt,
-        lifetimeDays: input.choice.lifetimeDays,
-      })
-    ) {
-      return invalidRequest();
-    }
-    const connectionId = OAuthConnectionId.make(newId());
-    const code = yield* newSecret;
-    const digest = yield* secretDigest({ purpose: "oauth-code", value: code });
-    const scopesJson = yield* Schema.encodeEffect(Schema.fromJsonString(PATScopes))(
-      input.choice.scopes
-    );
-    const callback = new URL(input.pending.redirect_uri);
-    callback.searchParams.set("code", Redacted.value(code));
-    callback.searchParams.set("iss", oauthIssuer);
-    if (input.pending.state !== undefined) callback.searchParams.set("state", input.pending.state);
-    const body = yield* Schema.encodeEffect(OAuthConnected)({
-      connectionId,
-      callback: callback.href,
-    });
-    yield* commitApproval(input, { connectionId, digest, scopesJson, expiresAt });
-    return oauthResponse({ body, status: 200 });
-  });

@@ -132,16 +132,6 @@ const standingAndIntent = <Statement>(
   ];
 };
 
-export const recordVerifiedBillingEvidence = (
-  input: Settlement & { db: D1Database }
-): Promise<void> =>
-  input.db
-    .batch([
-      ...evidenceAndOutcome(input.db, input),
-      ...standingAndIntent(input.db, input, "audit_entries"),
-    ])
-    .then(() => undefined);
-
 type LocalStatement = Readonly<{ text: string; params: ReadonlyArray<unknown> }>;
 export const nativeSettlementStatements = (input: Settlement): ReadonlyArray<LocalStatement> => {
   const builder: Binder<LocalStatement> = {

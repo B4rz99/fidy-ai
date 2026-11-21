@@ -273,7 +273,7 @@ that it received `"12.345"` would prove only a call path, not the `Money` contra
 Treat these as prompts to check a test's seam and purpose, not blanket bans:
 
 - It asserts call counts or order for first-party collaborators instead of caller-visible behaviour.
-- It proves ordinary operation behaviour by reading D1 or R2 behind the owning interface. Direct
+- It proves ordinary operation behaviour by reading SQLite or R2 behind the owning interface. Direct
   platform assertions belong in adapter/integration tests whose contract is persistence, atomicity,
   durability, or resource behaviour.
 - It tests thin delegation or trivial mapping without a distinct caller-visible contract.
@@ -360,16 +360,16 @@ Cross-cutting scopes:
 
 <!-- commit-scopes:cross-cutting -->
 
-| scope        | when to use                                |
-| ------------ | ------------------------------------------ |
-| `api`        | API assembly, transport, and authorization |
-| `channels`   | vendor adapters and callbacks              |
-| `agent`      | hosted agent and its harness               |
-| `frontend`   | web app                                    |
-| `cloudflare` | Worker, D1, DO, Queue, Workflow, R2, or AI |
-| `repo`       | tooling, configuration, hooks, and CI      |
-| `deps`       | dependency updates                         |
-| `docs`       | documentation                              |
+| scope        | when to use                                    |
+| ------------ | ---------------------------------------------- |
+| `api`        | API assembly, transport, and authorization     |
+| `channels`   | vendor adapters and callbacks                  |
+| `agent`      | hosted agent and its harness                   |
+| `frontend`   | web app                                        |
+| `cloudflare` | Worker, SQLite, DO, Queue, Workflow, R2, or AI |
+| `repo`       | tooling, configuration, hooks, and CI          |
+| `deps`       | dependency updates                             |
+| `docs`       | documentation                                  |
 
 ## The two design smells
 

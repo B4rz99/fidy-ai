@@ -1,17 +1,8 @@
-import {
-  approvedRecoveryBrowserPairingQuery,
-  pendingRecoveryBrowserPairingQuery,
-  prepareRecoveryBrowserPairingApproval,
-} from "../../browser-login/operations";
-import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { emailPairingAllowsUser } from "../../../src/shell/email-authentication/operations";
 import { BackupRecoveryCode } from "../../../src/core/recovery/contract";
 import { recoveryCodeDigest } from "./material";
 import { type JWKSCacheInput, createRemoteJWKSet, customFetch, jwksCache, jwtVerify } from "jose";
 import { type OutboundHttpService } from "../../../src/shell/outbound-http/operations";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
-import { newId } from "../../secret-material/operations";
-import { admitOperator } from "./admission";
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
 
@@ -67,11 +58,9 @@ const httpBadRequest = 400;
 const httpUnauthorized = 401;
 const httpTooManyRequests = 429;
 const httpServiceUnavailable = 503;
-const httpOk = 200;
 const maximumAssertionLength = 8192;
 const maximumAssertionLifetimeSeconds = 900;
 const millisecondsPerSecond = 1_000;
-const digestBytes = 32;
 const response = (status: number, body: object): Response =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
 const notApproved = (): Response => response(httpBadRequest, { status: "not_approved" });
@@ -139,100 +128,12 @@ const verifySupportAccess = ({
     })
     .catch(() => Option.none());
 };
-
-const recoveryCandidateQuery = ({
-  codeDigest,
-  publicCode,
-  now,
-}: Readonly<{ codeDigest: Uint8Array; publicCode: string; now: number }>): OwnedStatement => {
-  const pending = pendingRecoveryBrowserPairingQuery({ publicCode, current: now });
-  return emailPairingAllowsUser({
-    subject: {
-      sql: `SELECT p.pairingId, b.user_id AS userId FROM (${pending.sql}) AS p
-        JOIN backup_recovery_credentials AS b ON b.code_digest = ? AND b.consumed_at_ms IS NULL
-        WHERE NOT EXISTS (SELECT 1 FROM support_recovery_cases WHERE pairing_id = p.pairingId)`,
-      params: [...pending.params, codeDigest],
-    },
-  });
-};
-
-const matchingRecoveryCandidate = (
-  db: D1Database,
-  input: Readonly<{ codeDigest: Uint8Array; publicCode: string; now: number }>
-): Promise<boolean> => {
-  const candidateStatement = recoveryCandidateQuery(input);
-  return db
-    .prepare(candidateStatement.sql)
-    .bind(...candidateStatement.params)
-    .first()
-    .then((candidate) => candidate !== null);
-};
-
-const recoveryCredentialConsume = ({
-  ready,
-  codeDigest,
-  now,
-}: Readonly<{ ready: OwnedStatement; codeDigest: Uint8Array; now: number }>): OwnedStatement => ({
-  sql: `UPDATE backup_recovery_credentials SET code_digest = ?, consumed_at_ms = ?
-    WHERE code_digest = ? AND consumed_at_ms IS NULL
-      AND EXISTS (SELECT 1 FROM (${ready.sql}) AS p
-        WHERE p.userId = backup_recovery_credentials.user_id) AND changes() = 1`,
-  params: [crypto.getRandomValues(new Uint8Array(digestBytes)), now, codeDigest, ...ready.params],
-});
-
-const supportCaseInsert = ({
-  ready,
-  caseId,
-  operator,
-  now,
-}: Readonly<{
-  ready: OwnedStatement;
-  caseId: string;
-  operator: { issuer: string; subject: string };
-  now: number;
-}>): OwnedStatement => ({
-  sql: `INSERT INTO support_recovery_cases (id, user_id, pairing_id,
-    operator_issuer, operator_subject, credential_revision, opened_at_ms, expires_at_ms,
-    state, closed_at_ms) SELECT ?, p.userId, p.pairingId, ?, ?, b.revision, ?, p.expiresAt,
-    'approved', ? FROM (${ready.sql}) AS p
-    JOIN backup_recovery_credentials AS b ON b.user_id = p.userId
-    WHERE b.consumed_at_ms = ? AND changes() = 1`,
-  params: [caseId, operator.issuer, operator.subject, now, now, ...ready.params, now],
-});
 type CaseDecision = Readonly<{
   operator: { issuer: string; subject: string };
   codeDigest: Uint8Array;
   publicCode: string;
   now: number;
 }>;
-
-const approveCase = (db: D1Database, input: CaseDecision): Promise<boolean> => {
-  const caseId = newId();
-  const assertionScope = `support-recovery:${caseId}`;
-  const { operator, codeDigest, publicCode, now } = input;
-  const ready = approvedRecoveryBrowserPairingQuery({ publicCode, current: now });
-  const credentialStatement = recoveryCredentialConsume({ ready, codeDigest, now });
-  const caseStatement = supportCaseInsert({ ready, caseId, operator, now });
-  return db
-    .batch([
-      prepareRecoveryBrowserPairingApproval({
-        db,
-        subject: recoveryCandidateQuery(input),
-        current: now,
-      }),
-      db.prepare(credentialStatement.sql).bind(...credentialStatement.params),
-      db.prepare(caseStatement.sql).bind(...caseStatement.params),
-      db
-        .prepare("INSERT INTO sql_assertions(scope,accepted) VALUES(?,changes()=1)")
-        .bind(assertionScope),
-      db.prepare("DELETE FROM sql_assertions WHERE scope=?").bind(assertionScope),
-    ])
-    .then(
-      (pairing) =>
-        (pairing[0]?.meta.changes ?? 0) > 0 &&
-        pairing.slice(1).every((entry) => entry.meta.changes === 1)
-    );
-};
 
 const configuredAccess = (config: {
   CLOUDFLARE_ACCESS_ISSUER: string;
@@ -242,33 +143,12 @@ const configuredAccess = (config: {
 const admissionResponse = (admission: "limited" | "unavailable"): Response =>
   admission === "limited" ? response(httpTooManyRequests, { status: "limited" }) : unavailable();
 
-const decideSupportCase = (db: D1Database, input: CaseDecision): Promise<Response> =>
-  Promise.resolve()
-    .then(() => approveCase(db, input))
-    .catch((error: unknown) => {
-      if (isD1Failure(error)) return false;
-      throw error;
-    })
-    .then((approved) =>
-      approved
-        ? response(httpOk, { status: "approved" })
-        : matchingRecoveryCandidate(db, input).then((matches) =>
-            matches ? unavailable() : notApproved()
-          )
-    );
-
 class SupportBoundaryFailure extends Data.TaggedError("SupportBoundaryFailure")<{}> {}
-
-const isD1Failure = (error: unknown): boolean =>
-  error instanceof Error && /^D1_(?:EXEC_)?ERROR(?::|$)/u.test(error.message);
 
 const waitFor = <A>(run: () => Promise<A>): Effect.Effect<A, SupportBoundaryFailure> =>
   Effect.tryPromise({
     try: run,
-    catch: (cause) => {
-      if (isD1Failure(cause)) return new SupportBoundaryFailure();
-      throw cause;
-    },
+    catch: () => new SupportBoundaryFailure(),
   });
 
 export const handleSupportProof = ({
@@ -322,18 +202,3 @@ export const handleSupportProof = ({
     return yield* waitFor(() => approve(decision));
   }).pipe(Effect.catchTag("SupportBoundaryFailure", () => Effect.succeed(unavailable())));
 };
-
-export const handleSupportRecovery = (input: {
-  request: Request;
-  db: D1Database;
-  http: OutboundHttpService;
-  config: { CLOUDFLARE_ACCESS_ISSUER: string; CLOUDFLARE_ACCESS_AUDIENCE: string };
-}): Effect.Effect<Response> =>
-  handleSupportProof({
-    ...input,
-    admit: (operator, now) => admitOperator({ db: input.db, operator, now }),
-    approve: (decision) =>
-      matchingRecoveryCandidate(input.db, decision).then((matches) =>
-        matches ? decideSupportCase(input.db, decision) : notApproved()
-      ),
-  });

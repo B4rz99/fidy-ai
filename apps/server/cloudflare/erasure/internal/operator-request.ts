@@ -1,13 +1,10 @@
-import { initializeRegistry } from "./initialize";
-import { releaseRestore, restoreNext } from "./restore";
 import { Clock, Effect, Option, Schema } from "effect";
 import type { OutboundHttpService } from "../../../src/shell/outbound-http/operations";
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
 import {
   ErasureOperatorAction,
-  type ErasureOperatorEnvironment,
-  ErasureRegistryMigration,
+  type ErasureRegistryNamespace,
   erasureRegistryName,
 } from "../contract";
 import {
@@ -26,17 +23,20 @@ const invalidStatus = 400;
 const unauthorizedStatus = 401;
 const reply = (status: number): Response =>
   new Response(null, { status, headers: { "cache-control": "no-store" } });
-type NativeEnvironment = Pick<
-  ErasureOperatorEnvironment,
-  | "CLOUDFLARE_ACCESS_ISSUER"
-  | "CLOUDFLARE_ACCESS_AUDIENCE"
-  | "ERASURE_SUPPORT_AUDIENCE"
-  | "BILLING_SUPPORT_AUDIENCE"
-  | "PRICING_PUBLISH_AUDIENCE"
-  | "BETA_PRO_AUDIENCE"
-  | "SAMPLE_REVIEW_AUDIENCE"
-  | "ERASURE"
->;
+type NativeEnvironment = Readonly<{
+  CLOUDFLARE_ACCESS_ISSUER: string;
+  CLOUDFLARE_ACCESS_AUDIENCE: string;
+}> &
+  Partial<
+    Readonly<{
+      ERASURE_SUPPORT_AUDIENCE: string;
+      BILLING_SUPPORT_AUDIENCE: string;
+      PRICING_PUBLISH_AUDIENCE: string;
+      BETA_PRO_AUDIENCE: string;
+      SAMPLE_REVIEW_AUDIENCE: string;
+      ERASURE: ErasureRegistryNamespace;
+    }>
+  >;
 type OperatorCall = { request: Request; environment: NativeEnvironment; http: OutboundHttpService };
 type Admitted = {
   command: typeof ErasureOperatorAction.Type;
@@ -79,98 +79,6 @@ export const nativeOperatorRequest = (input: OperatorCall): Effect.Effect<Respon
       });
     }
     return Effect.succeed(reply(invalidStatus));
-  });
-export const operatorRequest = (
-  input: OperatorCall & { environment: ErasureOperatorEnvironment; storeIds: ReadonlyArray<string> }
-): Effect.Effect<Response> =>
-  admittedCommand(input, (admission) =>
-    input.environment.USER_STORE !== undefined && input.environment.ERASURE === undefined
-      ? Effect.succeed(reply(unavailableStatus))
-      : dispatchOperator({ ...input, ...admission })
-  );
-
-const dispatchOperator = (
-  input: Readonly<{
-    request: Request;
-    environment: ErasureOperatorEnvironment;
-    storeIds: ReadonlyArray<string>;
-    http: OutboundHttpService;
-    command: typeof ErasureOperatorAction.Type;
-    operator: Readonly<{ operatorRef: string; expiresAtMs: number }>;
-    current: number;
-  }>
-): Effect.Effect<Response, ErasureUnavailable | Schema.SchemaError> =>
-  Effect.gen(function* () {
-    const { command, operator, current } = input;
-    if (
-      input.environment.ERASURE !== undefined &&
-      ["MigrateRegistry", "Initialize", "Restore", "ReleaseRestore"].includes(command.action)
-    ) {
-      return reply(invalidStatus);
-    }
-    if (command.action === "MigrateRegistry") {
-      return yield* forwardMigration({
-        environment: input.environment,
-        request: input.request,
-        operator,
-        current,
-      });
-    }
-    if (command.action === "Initialize") return yield* initializeRegistry(input.environment);
-    if (command.action === "Restore") {
-      return yield* restoreNext({
-        ...input,
-        operator,
-        signal: input.request.signal,
-      });
-    }
-    if (command.action === "ReleaseRestore") {
-      return yield* releaseRestore({
-        ...input,
-        operator,
-        signal: input.request.signal,
-      });
-    }
-    return yield* forwardCommand({
-      target: () =>
-        input.environment.ERASURE?.getByName(erasureRegistryName) ??
-        input.environment.USER_TRANSACTION_COORDINATOR.getByName(command.userId),
-      ...input,
-      command,
-      operator,
-      current,
-    });
-  });
-
-const forwardMigration = (
-  input: Readonly<{
-    environment: ErasureOperatorEnvironment;
-    request: Request;
-    operator: Readonly<{ operatorRef: string; expiresAtMs: number }>;
-    current: number;
-  }>
-): Effect.Effect<Response, Schema.SchemaError | ErasureUnavailable> =>
-  Effect.gen(function* () {
-    const namespace = input.environment.ERASURE_REGISTRY_COORDINATOR;
-    const expectedRelease = input.environment.RELEASE_GIT_SHA;
-    if (namespace === undefined || expectedRelease === undefined) return reply(unavailableStatus);
-    const body = yield* Schema.encodeEffect(Schema.fromJsonString(ErasureRegistryMigration))({
-      expectedRelease,
-      deadlineMs: Math.min(input.current + admissionLifetimeMs, input.operator.expiresAtMs),
-      authority: { permission: "titular.erase", ...input.operator },
-    });
-    return yield* Effect.tryPromise({
-      try: () =>
-        namespace.getByName(erasureRegistryName, { locationHint: "enam" }).fetch(
-          new Request("https://erasure-registry.invalid/migrate", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body,
-            signal: input.request.signal,
-          })
-        ),
-      catch: () => new ErasureUnavailable(),
-    });
   });
 
 type UserCommand = Exclude<

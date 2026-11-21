@@ -13,7 +13,6 @@ import { wompiCredentialPrefixes } from "../../../src/shell/secret-material/oper
 import { browserOrigins } from "../../runtime/contract";
 import { RequestBodyPolicy } from "../../http/contract";
 import { readBoundedRequestBody } from "../../http/operations";
-import type { EnrollmentEnvironment } from "../contract";
 
 const hexBase = 16;
 const Origin = Schema.Literals([
@@ -100,10 +99,14 @@ export const enrollmentConfigured = (environment: unknown): boolean => {
   );
 };
 export const daviplataPolicy = (
-  environment: Pick<
-    EnrollmentEnvironment,
-    "WOMPI_DAVIPLATA_ACTIVATED" | "WOMPI_DAVIPLATA_OTP_SEND_URL" | "WOMPI_DAVIPLATA_OTP_CONFIRM_URL"
-  > & { readonly WOMPI_ENVIRONMENT: string }
+  environment: Readonly<{ WOMPI_ENVIRONMENT: string }> &
+    Partial<
+      Readonly<{
+        WOMPI_DAVIPLATA_ACTIVATED: string;
+        WOMPI_DAVIPLATA_OTP_SEND_URL: string;
+        WOMPI_DAVIPLATA_OTP_CONFIRM_URL: string;
+      }>
+    >
 ): Option.Option<DaviplataOtpPolicy> => {
   if (
     environment.WOMPI_ENVIRONMENT === "production" &&

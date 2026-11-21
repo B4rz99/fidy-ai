@@ -16,7 +16,6 @@ import {
   workerRelease,
 } from "../../runtime/telemetry/operations";
 import type { WorkerTraceContinuation } from "../../runtime/telemetry/contract";
-import type { EmailDeliveryEnvironment } from "../contract";
 
 export type ProviderCertainty = "accepted" | "rejected" | "ambiguous";
 
@@ -24,7 +23,7 @@ export const sendClaimedProof = (
   input: WorkerTraceContinuation &
     Readonly<{
       purpose: Parameters<EmailDeliveryPortService["send"]>[0]["purpose"];
-      environment: Pick<EmailDeliveryEnvironment, "RESEND_API_KEY">;
+      environment: Readonly<{ RESEND_API_KEY: string }>;
       to: EmailAddress;
       combinedCode: EmailVerificationCode;
       id: string;

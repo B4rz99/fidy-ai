@@ -121,8 +121,6 @@ export type DashboardView = typeof DashboardView.Type;
 
 const DashboardEditFailures = [NotFound, ValidationFailed] as const;
 
-export const InitializeDashboardCanonicalInput = Schema.Struct({});
-
 export class DashboardUninitialized extends Schema.Error<
   DashboardUninitialized,
   Brand.Brand<"DashboardUninitialized">
@@ -140,8 +138,6 @@ export class DashboardUninitialized extends Schema.Error<
 
 export const GetDashboardCanonicalInput = Schema.Struct({});
 export const GetDashboardViewCanonicalInput = Schema.Struct({});
-
-export const ApplyDashboardEditCanonicalInput = Schema.Struct({ payload: DashboardEdit });
 
 export const DashboardGroup = HttpApiGroup.make("dashboard")
   .add(

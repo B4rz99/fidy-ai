@@ -11,7 +11,7 @@ bun run --cwd apps/server test:cloudflare cloudflare/oauth-agents
 ```
 
 Run the Production journey with Bun. It uses real Claude Code and Codex clients,
-a real browser, and the deployed ingress/Core/D1 path. A local canned model chooses
+a real browser, and the deployed ingress/Core/User SQLite path. A local canned model chooses
 the tool calls, so the check needs no paid inference.
 
 ```sh
@@ -29,7 +29,7 @@ The scope is private operator configuration, not a credential. Supply these fiel
   "fixtureUserId": "EXISTING_SYNTHETIC_USER_UUID",
   "portfolio": "EXISTING_SYNTHETIC_PORTFOLIO",
   "accountId": "CLOUDFLARE_ACCOUNT_ID",
-  "databaseId": "PRODUCTION_D1_UUID",
+  "databaseId": "RETIRED_PRODUCTION_D1_UUID",
   "revision": "DEPLOYED_TRUNK_COMMIT_SHA",
   "coreVersion": "DEPLOYED_CORE_VERSION_UUID",
   "ingressVersion": "DEPLOYED_INGRESS_VERSION_UUID",
@@ -80,7 +80,7 @@ The local confirmation bridge uses `native-confirmation-hosts.ts`; it never runs
 Production OAuth. See the opt-in instructions in the owning confirmation test.
 
 The local bridge forwards native acceptance without any per-operation browser decision. Acceptance,
-cancellation and headless cases traverse the same public ingress/Core/D1 path. The owner accepted
+cancellation and headless cases traverse the same public ingress/Core/User SQLite path. The owner accepted
 client-asserted approval in #1564: this harness does not establish physical human presence.
 Loopback forwarding rewrites Host along with the fixture URL so public ingress retains Host/Origin
 checks. The retained evidence was refreshed for #1564 with Claude Code 2.1.289 and Codex 0.160.0.

@@ -53,7 +53,7 @@ Use PubSub when every subscriber needs the event rather than competing consumers
 in a burst. `PartitionedSemaphore` shares one permit pool fairly across keys; it is not one mutex
 per User. Ref, Queue, RcMap, and keyed streams cannot supply durable per-User serialization.
 
-Fidy's per-User coordination belongs to its Durable Object boundary, with committed state in D1
+Fidy's per-User coordination belongs to its Durable Object boundary, with committed state in its SQLite storage
 and asynchronous delivery through Queues/Workflows. Extend those owners for turn batching, retry,
 or admission. A process-local worker loop is appropriate only for explicitly volatile work.
 

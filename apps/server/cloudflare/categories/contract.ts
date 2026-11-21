@@ -15,11 +15,6 @@ export type CategoryAuditOperation =
   | "categories.updateKeywordRule"
   | "categories.deleteKeywordRule";
 
-export type KeywordRuleOperation = Extract<
-  CategoryAuditOperation,
-  "categories.createKeywordRule" | "categories.updateKeywordRule" | "categories.deleteKeywordRule"
->;
-
 export type CaptureCategoryInput = Readonly<{
   caller: Option.Option<CategoryId>;
   counterparty: Option.Option<string>;

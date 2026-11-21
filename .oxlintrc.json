@@ -353,13 +353,6 @@
       }
     },
     {
-      "files": ["apps/server/cloudflare/subscription/internal/payment-enrollment.ts"],
-      "rules": {
-        "complexity": "off",
-        "max-lines-per-function": "off"
-      }
-    },
-    {
       "files": ["apps/server/cloudflare/resource-admission/resource-admission.test.ts"],
       "rules": {
         "import/extensions": "off"

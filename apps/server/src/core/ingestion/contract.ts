@@ -555,7 +555,6 @@ const hoursPerDay = 24;
 const minutesPerHour = 60;
 const secondsPerMinute = 60;
 const millisecondsPerSecond = 1000;
-const maximumSweepRows = 200;
 const maximumOutstandingSubmissions = 5;
 const maximumSubmissionsPerHour = 20;
 
@@ -564,25 +563,11 @@ export const statementStagingLifetimeMilliseconds =
 
 export const statementSubmissionRetentionMilliseconds = statementStagingLifetimeMilliseconds;
 
-export const maximumStatementStagingSweep = maximumSweepRows;
-
 export const maximumOutstandingStatementSubmissions = maximumOutstandingSubmissions;
 
 export const maximumStatementSubmissionsPerHour = maximumSubmissionsPerHour;
 
 export const statementParserRevision = InterpretationRevision.make("statement-parser-v1");
-
-export const StatementStagingFailureReason = Schema.Literals([
-  "resource-limit",
-  "unsupported-format",
-  "malformed-file",
-  "cancelled",
-  "retention-expired",
-  "not-found",
-  "conflict",
-  "paywall",
-]);
-export type StatementStagingFailureReason = typeof StatementStagingFailureReason.Type;
 
 export const ReviewStatus = Schema.Literals(["pending", "created", "skipped", "expired"]);
 const maximumReviewPreviewLength = 120;

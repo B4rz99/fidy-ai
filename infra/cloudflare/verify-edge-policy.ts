@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "6a9d3bb970a16c86d4da105f4b17439d4980bb1a2be2c79df5904b2a2ed09b8d";
+const expectedEdgePolicyDigest = "c7c66858b2cc89974430e785406bdb83a02be1e085f4c42b1d6a7463c6993919";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -497,9 +497,6 @@ const securityArtifacts = [
     new URL("../../apps/server/cloudflare/user-store/internal/identity-change.ts", import.meta.url)
   ).text(),
   await Bun.file(
-    new URL("../../apps/server/cloudflare/web-authentication/contract.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
     new URL("../../apps/server/cloudflare/web-authentication/operations.ts", import.meta.url)
   ).text(),
 
@@ -849,31 +846,13 @@ const securityArtifacts = [
     new URL("../../apps/server/cloudflare/erasure/contract.ts", import.meta.url)
   ).text(),
   await Bun.file(
-    new URL("../../apps/server/cloudflare/erasure/internal/checkpoint.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
     new URL("../../apps/server/cloudflare/erasure/internal/generation.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/erasure/internal/initialize.ts", import.meta.url)
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/erasure/internal/operator-request.ts", import.meta.url)
   ).text(),
   await Bun.file(
-    new URL("../../apps/server/cloudflare/erasure/internal/restore-case.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/erasure/internal/restore.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/erasure/internal/registry-cutover.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
     new URL("../../apps/server/cloudflare/erasure/internal/registry-object.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/erasure/internal/registry-owner.ts", import.meta.url)
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/erasure/internal/registry-storage.ts", import.meta.url)
@@ -891,12 +870,6 @@ const securityArtifacts = [
     new URL("../../apps/server/cloudflare/erasure/runtime.ts", import.meta.url)
   ).text(),
   await Bun.file(
-    new URL("../../apps/server/cloudflare/erasure/internal/database.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/erasure/internal/measurement.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
     new URL("../../apps/server/cloudflare/budgets/internal/workspace-encoding.ts", import.meta.url)
   ).text(),
   await Bun.file(
@@ -904,21 +877,6 @@ const securityArtifacts = [
   ).text(),
   await Bun.file(
     new URL("../../apps/server/src/core/budgets/operations.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/budgets/internal/budget-audit.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/budgets/internal/budget-latches.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/budgets/internal/bound-workspace.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/budgets/internal/planned-caps.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/budgets/internal/workspace-read.ts", import.meta.url)
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/budgets/internal/budget-report.ts", import.meta.url)
@@ -935,9 +893,6 @@ const securityArtifacts = [
   await Bun.file(new URL("../../patches/alchemy@2.0.0-beta.80.patch", import.meta.url)).text(),
   await Bun.file(new URL("./smoke-exchange.ts", import.meta.url)).text(),
   await Bun.file(
-    new URL("../../apps/server/cloudflare/user-documents/operations.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
     new URL("../../apps/server/cloudflare/dashboard/operations.ts", import.meta.url)
   ).text(),
   await Bun.file(
@@ -951,15 +906,6 @@ const securityArtifacts = [
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/dashboard/internal/dashboard-view.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/dashboard/internal/dashboard-timing.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/categories/internal/projection.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/transactions/internal/dashboard-read.ts", import.meta.url)
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/budgets/operations.ts", import.meta.url)
@@ -990,22 +936,10 @@ const securityArtifacts = [
     )
   ).text(),
   await Bun.file(
-    new URL("../../apps/server/cloudflare/connections/internal/activation.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
     new URL("../../apps/server/cloudflare/connections/internal/grant.ts", import.meta.url)
   ).text(),
   await Bun.file(
-    new URL("../../apps/server/cloudflare/connections/internal/accounts.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
     new URL("../../apps/server/cloudflare/core-http/internal/http.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
-    new URL(
-      "../../apps/server/cloudflare/subscription/internal/payment-enrollment.ts",
-      import.meta.url
-    )
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/oauth-agents/internal/management.ts", import.meta.url)
@@ -1017,12 +951,6 @@ const securityArtifacts = [
     new URL("../../apps/server/cloudflare/resource-admission/operations.ts", import.meta.url)
   ).text(),
   await Bun.file(
-    new URL("../../apps/server/cloudflare/web-session/internal/binding.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/web-session/internal/current-user.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
     new URL("../../apps/server/cloudflare/web-session/operations.ts", import.meta.url)
   ).text(),
   await Bun.file(
@@ -1030,15 +958,6 @@ const securityArtifacts = [
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/canonical-admission/operations.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
-    new URL(
-      "../../apps/server/cloudflare/canonical-admission/internal/protection.ts",
-      import.meta.url
-    )
-  ).text(),
-  await Bun.file(
-    new URL("../../apps/server/src/shell/sql-assertions/operations.ts", import.meta.url)
   ).text(),
   await Bun.file(
     new URL("../../apps/server/src/core/connections/contract.ts", import.meta.url)
@@ -1102,12 +1021,6 @@ const securityArtifacts = [
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/transactions/operations.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
-    new URL(
-      "../../apps/server/cloudflare/categories/internal/canonical-category.ts",
-      import.meta.url
-    )
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/categories/operations.ts", import.meta.url)
@@ -1249,13 +1162,7 @@ const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/transactions/internal/recovery-alarm.ts", import.meta.url)
   ).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/ingestion/internal/publication-wake.ts", import.meta.url)
-  ).text(),
   await Bun.file(new URL("../../apps/server/cloudflare/agent/contract.ts", import.meta.url)).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/agent/internal/service.ts", import.meta.url)
-  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/connections/contract.ts", import.meta.url)
   ).text(),
@@ -1267,9 +1174,6 @@ const securityArtifacts = [
       "../../apps/server/cloudflare/connections/internal/institution-registration.ts",
       import.meta.url
     )
-  ).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/connections/internal/initiation.ts", import.meta.url)
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/connections/runtime.ts", import.meta.url)

@@ -1,14 +1,9 @@
-import {
-  captureWorkTrace,
-  sanitizeWorkTrace,
-  workTraceHeaders,
-} from "../../runtime/telemetry/operations";
+import { sanitizeWorkTrace, workTraceHeaders } from "../../runtime/telemetry/operations";
 import type { WorkflowStepConfig } from "cloudflare:workers";
-import { Cause, Clock, Effect, Exit, Option, Result, Schema } from "effect";
+import { Cause, Effect, Exit, Option, Schema } from "effect";
 import {
   StatementCoordinatorActivity,
   StatementDeliveryUnavailable,
-  type StatementQueue,
   StatementWork,
   type StatementWorkflow,
   statementWorkflowRetention as retention,
@@ -17,14 +12,6 @@ import { maximumStatementChunkActivities } from "./statement-processing-limits";
 
 const Work = StatementWork;
 const CoordinatorWork = StatementCoordinatorActivity;
-const OutboxRow = Schema.Struct({
-  user_id: Schema.String.check(Schema.isUUID()),
-  submission_id: StatementWork.fields.submissionId,
-  revision: Schema.Literal(1),
-});
-const SubmissionState = Schema.Struct({
-  status: Schema.Literals(["queued", "processing", "completed", "failed"]),
-});
 const WorkflowState = Schema.Struct({
   status: Schema.Literals([
     "queued",
@@ -39,8 +26,6 @@ const WorkflowState = Schema.Struct({
     "unknown",
   ]),
 });
-const dispatchLimit = 32;
-const dispatchCooldownMs = 60_000;
 
 const attempt = <A>(run: () => PromiseLike<A>): Effect.Effect<A, StatementDeliveryUnavailable> =>
   Effect.tryPromise({
@@ -50,56 +35,6 @@ const attempt = <A>(run: () => PromiseLike<A>): Effect.Effect<A, StatementDelive
 
 export const isStatementExtractionWork = (body: unknown): boolean =>
   Option.isSome(Schema.decodeUnknownOption(Work)(body));
-
-export const dispatchStatementExtraction = (
-  environment: Readonly<{
-    DB: D1Database;
-    userId: Option.Option<string>;
-    STATEMENT_EXTRACTION_QUEUE: StatementQueue;
-    STATEMENT_EXTRACTION_WORKFLOW: Option.Option<StatementWorkflow>;
-  }>
-): Effect.Effect<void, StatementDeliveryUnavailable> =>
-  Effect.gen(function* () {
-    const trace = yield* captureWorkTrace;
-    const now = yield* Clock.currentTimeMillis;
-    const rows = yield* attempt(() =>
-      environment.DB.prepare(`SELECT user_id, id AS submission_id, 1 AS revision
-        FROM statement_submissions
-        WHERE work_published_at_ms IS NOT NULL AND status IN ('queued', 'processing')
-          AND (work_last_attempt_at_ms IS NULL OR work_last_attempt_at_ms < ?)
-          ${Option.isSome(environment.userId) ? "AND user_id = ?" : ""}
-        ORDER BY work_published_at_ms, id LIMIT ?`)
-        .bind(now - dispatchCooldownMs, ...Option.toArray(environment.userId), dispatchLimit)
-        .all()
-    );
-    const entries = yield* Schema.decodeUnknownEffect(Schema.Array(OutboxRow))(rows.results).pipe(
-      Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))
-    );
-    let failed = false;
-    for (const entry of entries) {
-      const claimed = yield* attempt(() =>
-        environment.DB.prepare(`UPDATE statement_submissions SET work_last_attempt_at_ms = ?
-          WHERE work_published_at_ms IS NOT NULL AND id = ? AND user_id = ?
-          AND (work_last_attempt_at_ms IS NULL OR work_last_attempt_at_ms < ?)`)
-          .bind(now, entry.submission_id, entry.user_id, now - dispatchCooldownMs)
-          .run()
-      );
-      if (claimed.meta.changes !== 1) continue;
-      const offered = yield* Effect.exit(
-        offerStatementExtraction(environment, {
-          ...trace,
-          version: entry.revision,
-          userId: entry.user_id,
-          submissionId: entry.submission_id,
-        })
-      );
-      if (Exit.isFailure(offered)) {
-        if (Cause.hasInterrupts(offered.cause)) return yield* Effect.failCause(offered.cause);
-        failed = true;
-      }
-    }
-    if (failed) return yield* new StatementDeliveryUnavailable({ cause: "queue_unavailable" });
-  }).pipe(Effect.withSpan("ingestion.statementDispatch"));
 
 const missingWorkStatus = 404;
 type MessagePage = ReadonlyArray<Readonly<{ body: unknown; ack: () => void }>>;
@@ -175,58 +110,6 @@ export const receiveNativeStatementExtraction = (input: {
       }),
   });
 };
-export const receiveStatementExtraction = (input: {
-  environment: { DB: D1Database; STATEMENT_EXTRACTION_WORKFLOW: StatementWorkflow };
-  messages: MessagePage;
-}): Effect.Effect<void, StatementDeliveryUnavailable> =>
-  Effect.gen(function* () {
-    const now = yield* Clock.currentTimeMillis,
-      environment = input.environment,
-      workflow = environment.STATEMENT_EXTRACTION_WORKFLOW;
-    return yield* handoffStatements({
-      workflow,
-      messages: input.messages,
-      pending: (work) =>
-        Effect.gen(function* () {
-          const raw = yield* attempt(() =>
-            environment.DB.prepare(
-              "SELECT status FROM statement_submissions WHERE id=? AND user_id=? AND retention_expires_at_ms>?"
-            )
-              .bind(work.submissionId, work.userId, now)
-              .first()
-          );
-          if (raw === null) return false;
-          const item = yield* Schema.decodeUnknownEffect(SubmissionState)(raw).pipe(
-            Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))
-          );
-          return item.status === "queued" || item.status === "processing";
-        }),
-      reconcile: (work) => attempt(() => workflow.get(work.submissionId)).pipe(Effect.asVoid),
-    });
-  });
-
-const offerStatementExtraction = (
-  environment: Readonly<{
-    DB: D1Database;
-    STATEMENT_EXTRACTION_QUEUE: StatementQueue;
-    STATEMENT_EXTRACTION_WORKFLOW: Option.Option<StatementWorkflow>;
-  }>,
-  body: typeof Work.Type
-): Effect.Effect<void, StatementDeliveryUnavailable> =>
-  Effect.gen(function* () {
-    const workflow = environment.STATEMENT_EXTRACTION_WORKFLOW;
-    if (Option.isSome(workflow)) {
-      const delivered = yield* Effect.exit(
-        receiveStatementExtraction({
-          environment: { DB: environment.DB, STATEMENT_EXTRACTION_WORKFLOW: workflow.value },
-          messages: [{ body, ack: (): void => undefined }],
-        })
-      );
-      if (Exit.isSuccess(delivered)) return;
-      if (Cause.hasInterrupts(delivered.cause)) return yield* Effect.failCause(delivered.cause);
-    }
-    yield* attempt(() => environment.STATEMENT_EXTRACTION_QUEUE.send(body));
-  });
 
 type StatementCoordinator = Readonly<{
   getByName: (name: string) => Pick<Fetcher, "fetch">;
@@ -253,52 +136,6 @@ const workflowState = (
       Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))
     );
   });
-
-export const reconcileStatementExtraction = (
-  input: Readonly<{
-    DB: D1Database;
-    STATEMENT_EXTRACTION_WORKFLOW: Pick<StatementWorkflow, "get">;
-    userId: Option.Option<string>;
-    USER_TRANSACTION_COORDINATOR: StatementCoordinator;
-  }>
-): Effect.Effect<void, StatementDeliveryUnavailable> =>
-  Effect.gen(function* () {
-    const now = yield* Clock.currentTimeMillis;
-    const selected = yield* attempt(() =>
-      input.DB.prepare(`SELECT user_id, id AS submission_id, 1 AS revision
-      FROM statement_submissions
-      WHERE work_published_at_ms IS NOT NULL AND work_published_at_ms > 0
-        AND status IN ('queued', 'processing') AND retention_expires_at_ms > ?
-        ${Option.isSome(input.userId) ? "AND user_id = ?" : ""}
-      ORDER BY work_last_reconciled_at_ms, work_published_at_ms, id LIMIT ?`)
-        .bind(now, ...Option.toArray(input.userId), dispatchLimit)
-        .all()
-    );
-    const work = yield* Schema.decodeUnknownEffect(Schema.Array(OutboxRow))(selected.results).pipe(
-      Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))
-    );
-    for (const row of work) {
-      yield* attempt(() =>
-        input.DB.prepare(
-          `UPDATE statement_submissions SET work_last_reconciled_at_ms = ? WHERE work_published_at_ms IS NOT NULL AND id = ? AND user_id = ?`
-        )
-          .bind(now, row.submission_id, row.user_id)
-          .run()
-      );
-      const state = yield* Effect.result(
-        workflowState(input.STATEMENT_EXTRACTION_WORKFLOW, row.submission_id)
-      );
-      if (Result.isFailure(state)) continue;
-      if (!["errored", "terminated", "complete"].includes(state.success.status)) continue;
-      yield* attempt(() =>
-        coordinatedStatementStep(
-          input.USER_TRANSACTION_COORDINATOR,
-          { version: row.revision, userId: row.user_id, submissionId: row.submission_id },
-          "StatementFailed"
-        )
-      );
-    }
-  }).pipe(Effect.withSpan("ingestion.statementReconcile"));
 
 type Activity = <A extends boolean>(
   name: string,

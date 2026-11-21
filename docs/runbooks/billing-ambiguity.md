@@ -16,7 +16,7 @@ interval; it does not advance the calendar again.
 
 ## Recover a lost creation response
 
-1. Identify the BillingAttempt's exact reference and provider environment in privileged D1. The
+1. Identify the BillingAttempt's exact reference and provider environment in privileged User SQLite store. The
    Wompi merchant dashboard can search by reference in the matching environment. If it finds a
    transaction, retain its ID as investigation context. A screenshot, browser redirect, local failure or
    signed callback alone cannot authorize settlement or replacement.
@@ -53,7 +53,7 @@ reconciler cannot resolve it.
 
 If support explicitly confirms no charge exists for the exact reference/environment and cannot
 later approve, retain its genuine case ID and accountable operator before recording the guarded,
-write-once `no_charge_case_id`, `no_charge_operator_id` and `no_charge_confirmed_at_ms` fields on that BillingAttempt in privileged D1. This exception authorizes a
+write-once `no_charge_case_id`, `no_charge_operator_id` and `no_charge_confirmed_at_ms` fields on that BillingAttempt in privileged User SQLite store. This exception authorizes a
 new User decision, never another POST on the sent arm. Never invent support evidence or clear
 billing history. Match the operator's reviewed reference/environment against the immutable attempt
 in the same guarded write; those identities are derived rather than copied into no-charge evidence.

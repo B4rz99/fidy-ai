@@ -1,4 +1,4 @@
-import { DateTime } from "effect";
+import { DateTime, Predicate } from "effect";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { decideInsightDelivery } from "../../../src/core/insights/operations";
 
@@ -16,5 +16,7 @@ export const disclosureWindowAt = (current: number): number => {
     timeZone: zone,
   });
 
-  return decision._tag === "Deferred" ? decision.nextEligibleAt.epochMilliseconds : current;
+  return Predicate.isTagged(decision, "Deferred")
+    ? decision.nextEligibleAt.epochMilliseconds
+    : current;
 };

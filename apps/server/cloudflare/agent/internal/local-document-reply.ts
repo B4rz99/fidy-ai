@@ -1,5 +1,5 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Predicate, Schema } from "effect";
 import { CanonicalOperationId } from "../../../src/core/canonical-operations/contract";
 import { TranscriptText } from "../../../src/core/agent/contract";
 import { applyTool } from "./local-tool";
@@ -63,7 +63,7 @@ export const documentReply = Effect.fn(function* (turn: LocalTurn, storage: Dura
       { turn, iteration: 1, storage }
     );
 
-    if (result.outcome._tag === "Succeeded" && held.status === "completed") {
+    if (Predicate.isTagged(result.outcome, "Succeeded") && held.status === "completed") {
       text = Option.match(held.record, {
         onNone: () =>
           TranscriptText.make(

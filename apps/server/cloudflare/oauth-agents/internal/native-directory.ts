@@ -46,27 +46,33 @@ const begin = Effect.fn(function* (source: string, registration: boolean) {
 
     if (leases.length !== 0) return Option.none<string>();
 
-    const windows = [
+    const sourceWindows = [
       { key: "oauth/source/" + source, limit: limits.source },
       { key: "oauth/global", limit: limits.global },
-      ...(registration
-        ? [
-            { key: "oauth/reg/" + source, limit: limits.registrationSource },
-            { key: "oauth/registration", limit: limits.registrationGlobal },
-          ]
-        : []),
     ];
 
-    for (const { key, limit } of windows) {
-      const full =
-        yield* sql`SELECT 1 FROM bootstrap_admissions WHERE scope=${key} AND expires_at_ms>${now} LIMIT 1 OFFSET ${limit - 1}`;
+    const windows = registration
+      ? [
+          ...sourceWindows,
+          { key: "oauth/reg/" + source, limit: limits.registrationSource },
+          { key: "oauth/registration", limit: limits.registrationGlobal },
+        ]
+      : sourceWindows;
 
-      if (full.length !== 0) return Option.none<string>();
-    }
+    const saturated = yield* Effect.forEach(
+      windows,
+      ({ key, limit }) =>
+        sql`SELECT 1 FROM bootstrap_admissions WHERE scope=${key} AND expires_at_ms>${now} LIMIT 1 OFFSET ${limit - 1}`
+    );
 
-    for (const { key } of windows) {
-      yield* sql`INSERT INTO bootstrap_admissions(scope,expires_at_ms) VALUES(${key},${now + minute})`;
-    }
+    if (saturated.some((full) => full.length !== 0)) return Option.none<string>();
+
+    yield* Effect.forEach(
+      windows,
+      ({ key }) =>
+        sql`INSERT INTO bootstrap_admissions(scope,expires_at_ms) VALUES(${key},${now + minute})`,
+      { discard: true }
+    );
 
     const id = newId();
     yield* sql`INSERT INTO oauth_leases VALUES(${id},${now + leaseMs})`;
@@ -120,7 +126,7 @@ const authorize = Effect.fn(function* (request: Request, source: string, browser
     const inserted =
       yield* sql`INSERT INTO oauth_review_requests(id,client_id,request_json,source_digest,created_at_ms,expires_at_ms) VALUES(${id},${attempt.client_id},${encoded},${source},${current},${current + attemptLifetimeMs}) RETURNING id`;
 
-    if (inserted.length !== 1) return yield* new BootstrapUnavailable();
+    if (inserted.length !== 1) return yield* new BootstrapUnavailable({ cause: Option.none() });
     yield* sql`UPDATE oauth_public_clients SET last_used_at_ms=${current} WHERE id=${attempt.client_id}`;
 
     return new Response(null, {
@@ -144,10 +150,12 @@ const registerPublic = Effect.fn(function* (request: Request) {
     persist: (id, encoded) =>
       sql`INSERT INTO oauth_public_clients VALUES(${id},${encoded},${current},${current}) RETURNING id`.pipe(
         Effect.flatMap((rows) =>
-          rows.length === 1 ? Effect.void : Effect.fail(new BootstrapUnavailable())
+          rows.length === 1
+            ? Effect.void
+            : Effect.fail(new BootstrapUnavailable({ cause: Option.none() }))
         ),
         withStoreCapacity("growth"),
-        Effect.mapError(() => new BootstrapUnavailable())
+        Effect.mapError((cause) => new BootstrapUnavailable({ cause: Option.some(cause) }))
       ),
   });
 });

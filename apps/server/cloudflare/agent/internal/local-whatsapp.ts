@@ -14,7 +14,13 @@ import { WhatsAppTurnAdmission } from "../../whatsapp/contract";
 import { newId } from "../../secret-material/operations";
 import { withStoreCapacity } from "../../runtime/sqlite/operations";
 import { AgentUnavailable } from "../contract";
-import { beginTurn, channelReply, channelStatus, unavailable } from "./local-turn-store";
+import {
+  beginTurn,
+  channelReply,
+  channelStatus,
+  isResponse,
+  unavailable,
+} from "./local-turn-store";
 
 const dayMs = 86400000,
   futureToleranceMs = 300000,
@@ -60,7 +66,7 @@ const accept = Effect.fn(function* (event: Inbound, storage: DurableObjectStorag
 
   const turn = yield* beginTurn({ userId: event.userId, id: Option.none() }, event.text, storage);
 
-  if (turn instanceof Response) return turn;
+  if (isResponse(turn)) return turn;
   yield* sql`INSERT INTO hosted_whatsapp_inbound(turn_id,user_id,portfolio,bsuid,message,endpoint,occurred_ms,reply_to,sandbox_phone,media_id,correlation) VALUES(${turn.id},${turn.user_id},${event.portfolio},${event.bsuid},${event.message},${event.endpoint},${event.occurredAt},${Option.getOrNull(event.reply)},${Option.getOrNull(event.phone)},${Option.getOrNull(event.media)},${newId()})`;
 
   return turn;
@@ -79,7 +85,7 @@ export const hostedDocument = Effect.fn(
       storage
     );
 
-    if (turn instanceof Response) return Option.some(turn);
+    if (isResponse(turn)) return Option.some(turn);
 
     if (
       !(yield* retainLocalStatementDocumentOrigin({

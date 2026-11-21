@@ -1,5 +1,5 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Predicate, Result, Schema } from "effect";
 import { WeeklySchedule } from "../../../src/core/insights/contract";
 import { nextWeeklyOccurrence } from "../../../src/core/insights/operations";
 import { ConsentRecordId, DisclosureSnapshot } from "../../../src/core/consent/contract";
@@ -90,9 +90,9 @@ export const repairWeekly = Effect.fn(function* (now: number, storage: DurableOb
   const [row] =
     yield* sql`SELECT min(at) AS at FROM (SELECT attempt_ms AS at FROM reminder_disclosures WHERE state='ready' AND kind='weekly-summary' UNION ALL SELECT s.next_ms FROM weekly_schedules s JOIN proactive_grants g ON g.id=s.grant_id WHERE g.revoked_at_ms IS NULL AND NOT EXISTS(SELECT 1 FROM weekly_attention a WHERE a.grant_id=g.id AND (a.paused_ms IS NOT NULL OR (a.ask_ms IS NOT NULL AND a.question_delivered_ms IS NULL))) UNION ALL SELECT d.offer_ms FROM reminder_deliveries d JOIN proactive_grants g ON g.id=d.grant_id WHERE d.state='ready' AND g.kind='weekly-summary' UNION ALL SELECT min(expires_ms) FROM weekly_summary_reports UNION ALL SELECT min(ask_ms) FROM weekly_attention WHERE question_id IS NULL AND paused_ms IS NULL)`;
 
-  return typeof row?.at === "number"
-    ? yield* preserveStoreAlarm(storage, Math.max(now, row.at))
-    : false;
+  const at = row?.at;
+
+  return Predicate.isNumber(at) ? yield* preserveStoreAlarm(storage, Math.max(now, at)) : false;
 });
 
 export const offerWeeklyQuestions = Effect.fn(function* (
@@ -107,22 +107,17 @@ export const offerWeeklyQuestions = Effect.fn(function* (
     yield* sql`UPDATE reminder_disclosures SET attempt_ms=min(expires_ms,${now + retryMs}) WHERE id IN(SELECT id FROM reminder_disclosures WHERE state='ready' AND kind='weekly-summary' AND attempt_ms<=${now} ORDER BY attempt_ms LIMIT 8) RETURNING id,user_id`
   );
 
-  let failed = 0;
-
-  for (const job of jobs) {
+  const sent = yield* Effect.forEach(jobs, (job) => {
     const queue = env.WEEKLY_DELIVERY_QUEUE;
 
-    if (
-      queue === undefined ||
-      (yield* Effect.result(
-        Effect.tryPromise(() =>
+    return queue === undefined
+      ? Effect.succeed(false)
+      : Effect.tryPromise(() =>
           queue.send({ kind: "weekly-question", version: 1, userId: job.user_id, id: job.id })
-        )
-      ))._tag === "Failure"
-    ) {
-      failed++;
-    }
-  }
+        ).pipe(Effect.result, Effect.map(Result.isSuccess));
+  });
+
+  const failed = sent.filter((delivered) => !delivered).length;
 
   yield* repairWeekly(now, storage);
 

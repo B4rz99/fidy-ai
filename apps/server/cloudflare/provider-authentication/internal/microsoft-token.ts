@@ -3,6 +3,7 @@ import {
   Clock,
   type Config,
   ConfigProvider,
+  Data,
   DateTime,
   Effect,
   Option,
@@ -15,6 +16,8 @@ import { makeMicrosoftOutboundHttp } from "../../../src/shell/outbound-http/oper
 import type { ProviderOidcHttpService } from "../../../src/shell/outbound-http/contract";
 import { loadMicrosoftClientSecret } from "../../../src/shell/secret-material/operations";
 import type { Validation, VerifiedProviderIdentity } from "./token-contract";
+
+const OidcRequest = Data.taggedEnum<Parameters<ProviderOidcHttpService["execute"]>[0]>();
 
 const successStatus = 200;
 
@@ -104,7 +107,7 @@ const signingKeys = ({
   tenant: string;
 }>): Effect.Effect<ReturnType<typeof createLocalJWKSet>, ValidationFailure> =>
   Effect.gen(function* () {
-    const response = yield* http.execute({ _tag: "SigningKeys" });
+    const response = yield* http.execute(OidcRequest.SigningKeys());
 
     if (response.status !== successStatus) return yield* Effect.fail("invalid" as const);
 
@@ -150,11 +153,12 @@ export const validateMicrosoftToken = (
     if (code === null) return yield* Effect.fail("invalid" as const);
     const http = yield* microsoftHttp(input);
 
-    const response = yield* http.execute({
-      _tag: "TokenExchange",
-      code: Redacted.make(code),
-      verifier: Redacted.make(input.verifier),
-    });
+    const response = yield* http.execute(
+      OidcRequest.TokenExchange({
+        code: Redacted.make(code),
+        verifier: Redacted.make(input.verifier),
+      })
+    );
 
     if (response.status !== successStatus) return yield* Effect.fail("invalid" as const);
 

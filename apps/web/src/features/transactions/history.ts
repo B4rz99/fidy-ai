@@ -7,7 +7,11 @@ import {
   type FidyClient,
   TransactionQueryValues,
 } from "@/transport/client";
-import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
+import {
+  type CanonicalQueryFailure,
+  type CanonicalQueryState,
+  presentCanonicalQuery,
+} from "@/transport/canonical-query";
 
 type TransactionPage = CanonicalSuccess<"transactions.listTransactions">;
 
@@ -56,7 +60,9 @@ type History = Readonly<{
   action: Atom.Writable<Option.Option<void>, HistoryCommand>;
 }>;
 
-type ReadyPage = Extract<CanonicalQueryState<TransactionPage, unknown>, { _tag: "Ready" }>;
+const queryFailure = Data.taggedEnum<CanonicalQueryFailure<unknown>>();
+
+type ReadyPage = Data.TaggedEnum.Value<CanonicalQueryState<TransactionPage, unknown>, "Ready">;
 
 const continuationInput = Schema.Struct({
   query: Schema.Struct({
@@ -171,7 +177,7 @@ const browse = ({ first, navigation, period, locate, read }: Browse): BrowsedHis
       query: {
         ...first,
         value: { data },
-        refreshFailure: Option.some({ _tag: "BoundaryFailure" }),
+        refreshFailure: Option.some(queryFailure.BoundaryFailure()),
       },
     };
   }
@@ -226,7 +232,7 @@ const retainLoadedHistory = (
       value: previous.value.query.value,
       waiting: !failed,
       refreshFailure: failed
-        ? Option.some({ _tag: "BoundaryFailure" })
+        ? Option.some(queryFailure.BoundaryFailure())
         : current.query.refreshFailure,
     },
   };
@@ -248,7 +254,7 @@ const locationState = (
 };
 
 const readyLocation = (
-  query: ReadyPage | Extract<HistoryState["query"], { _tag: "Ready" }>,
+  query: ReadyPage | Data.TaggedEnum.Value<HistoryState["query"], "Ready">,
   continuation: HistoryState["continuation"],
   locate: string
 ): HistoryState["location"] => {
@@ -315,7 +321,7 @@ const readAction = (
 
 const historyActions = (input: HistoryActionInput): History["action"] =>
   Atom.fnSync<HistoryCommand>()((command, get): void => {
-    if (typeof command !== "string") {
+    if (!Predicate.isString(command)) {
       if ("refreshPages" in command) {
         get.set(input.navigation, {
           generation: get(input.navigation).generation + 1,

@@ -1,8 +1,8 @@
 import { PendingRead } from "@/ui/components/pending-read";
 
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import { Option } from "effect";
-import { type JSX, type RefCallback, useCallback, useRef, useState } from "react";
+import { Option, Predicate } from "effect";
+import { type JSX, type RefCallback, useRef, useState } from "react";
 import type { SensitiveClipboard } from "@/browser/sensitive-clipboard";
 import type { FidyClient } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
@@ -38,19 +38,19 @@ const ResumedPATCreation = (props: CreationProps): JSX.Element => {
   const consumed = useRef(false);
   const user = presentCanonicalQuery(result);
   const [draft, setDraft] = useState<Option.Option<Option.Option<PATDraft>>>(() => Option.none());
-  const userId = user._tag === "Ready" ? Option.some(user.value.data.id) : Option.none();
 
-  const mounted = useCallback<RefCallback<HTMLElement>>(
-    (node) => {
-      if (node !== null && Option.isSome(userId) && !consumed.current) {
-        consumed.current = true;
-        setDraft(Option.some(resumePATDraft(userId.value)));
-      }
-    },
-    [userId, setDraft]
-  );
+  const userId = Predicate.isTagged(user, "Ready")
+    ? Option.some(user.value.data.id)
+    : Option.none();
 
-  if (user._tag === "Failure") {
+  const mounted: RefCallback<HTMLElement> = (node) => {
+    if (node !== null && Option.isSome(userId) && !consumed.current) {
+      consumed.current = true;
+      setDraft(Option.some(resumePATDraft(userId.value)));
+    }
+  };
+
+  if (Predicate.isTagged(user, "Failure")) {
     return (
       <div role="alert">
         <p>No pudimos comprobar tu identidad. El formulario sigue guardado en esta pestaña.</p>

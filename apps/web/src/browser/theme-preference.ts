@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
 
 const Theme = Schema.Literals(["light", "dark"]);
 
@@ -10,7 +10,7 @@ export const readThemePreference = (): "light" | "dark" => {
   try {
     const stored = Schema.decodeUnknownOption(Theme)(localStorage.getItem(preferenceKey));
 
-    if (stored._tag === "Some") return stored.value;
+    if (Option.isSome(stored)) return stored.value;
   } catch {}
 
   return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";

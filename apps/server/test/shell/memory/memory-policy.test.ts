@@ -4,7 +4,7 @@ import { Cause, DateTime, Effect, Exit, Option } from "effect";
 import { Memory, MemoryCapacityExceeded, MemoryId, MemoryText } from "~/core/memory/contract";
 import { approvedOpenAiModel } from "~/shell/hosted-inference/contract";
 import { HostedInference } from "~/shell/hosted-inference/operations";
-import { makeOpenAiHostedInference } from "~/shell/hosted-inference/runtime";
+import { openAiHostedInference } from "~/shell/hosted-inference/runtime";
 import { countAndAdmitMemory, countAndAdmitMemoryRevision } from "~/shell/memory/operations";
 
 const assertTypedFailure = <E>(exit: Exit.Exit<unknown, E>, expected: E): void => {
@@ -25,7 +25,7 @@ const memory = (index: number, text: string): Memory =>
     updatedAt: at,
   });
 
-const localInference = makeOpenAiHostedInference({
+const localInference = openAiHostedInference({
   model: Option.some(approvedOpenAiModel),
   run: Option.some(() => Effect.die("Memory counting must not invoke OpenAI")),
 });

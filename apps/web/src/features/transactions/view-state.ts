@@ -111,12 +111,12 @@ export const matchesTransactionFilters = ({
   );
 };
 
-export const useTransactionFilters = (
-  scope: string
-): Readonly<{
+type TransactionFilterState = Readonly<{
   filters: TransactionFilters;
   change: (filters: TransactionFilters) => void;
-}> => {
+}>;
+
+export const useTransactionFilters = (scope: string): TransactionFilterState => {
   const router = useRouter();
   const binding = router.options.context.sessionBinding;
   const saved = useRouterState({ select: (state) => state.location.state });

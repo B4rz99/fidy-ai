@@ -31,7 +31,7 @@ export const present = (candidate: unknown): Effect.Effect<Response, Schema.Sche
     const now = yield* Clock.currentTimeMillis;
     const expired = row.value.handoffExpiresAt !== null && row.value.handoffExpiresAt <= now;
 
-    const review = yield* Schema.decodeUnknownEffect(Schema.toType(ConnectionContinuationReview))({
+    const fields = {
       connection: {
         id: row.value.id,
         institutionId: row.value.institutionId,
@@ -40,15 +40,24 @@ export const present = (candidate: unknown): Effect.Effect<Response, Schema.Sche
       institutionName: "Bancolombia",
       expiresAt: DateTime.makeUnsafe(row.value.expiresAtMilliseconds),
       phase: expired ? "failed" : row.value.phase,
-      ...(!expired && row.value.handoffUrl !== null && row.value.handoffExpiresAt !== null
-        ? {
-            authorization: yield* Schema.decodeEffect(ConnectionAuthorizationHandoff)({
+    };
+
+    const handoff =
+      !expired && row.value.handoffUrl !== null && row.value.handoffExpiresAt !== null
+        ? Option.some(
+            yield* Schema.decodeEffect(ConnectionAuthorizationHandoff)({
               url: row.value.handoffUrl,
               expiresAt: DateTime.formatIso(DateTime.makeUnsafe(row.value.handoffExpiresAt)),
-            }),
-          }
-        : {}),
-    });
+            })
+          )
+        : Option.none();
+
+    const review = yield* Schema.decodeUnknownEffect(Schema.toType(ConnectionContinuationReview))(
+      Option.match(handoff, {
+        onNone: () => fields,
+        onSome: (authorization) => ({ ...fields, authorization }),
+      })
+    );
 
     const body = yield* Schema.encodeEffect(Schema.toCodecJson(ConnectionContinuationReview))(
       review

@@ -10,20 +10,19 @@ export class TransactionBoundaryFailure extends Data.TaggedError("TransactionBou
 
 export type TransactionSubject = Readonly<{ id: string; userId: string; digest: Uint8Array }>;
 
-export type HostedCanonicalCaller = Readonly<{
-  _tag: "HostedCanonical";
-  userId: string;
-  turnId: string;
-  sessionId: string;
-  authorizedOperation: Option.Option<string>;
-  originTurns: OwnedStatement;
-  publicationOrigin: OwnedStatement;
-  authority: Readonly<{
+export class HostedCanonicalCaller extends Data.TaggedClass("HostedCanonical")<{
+  readonly userId: string;
+  readonly turnId: string;
+  readonly sessionId: string;
+  readonly authorizedOperation: Option.Option<string>;
+  readonly originTurns: OwnedStatement;
+  readonly publicationOrigin: OwnedStatement;
+  readonly authority: Readonly<{
     table: "hosted_turns";
     predicate: string;
     bindings: ReadonlyArray<string | number | Uint8Array>;
   }>;
-}>;
+}> {}
 
 export type TransactionCaller =
   | TransactionSubject

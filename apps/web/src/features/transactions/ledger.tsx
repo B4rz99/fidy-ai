@@ -416,12 +416,12 @@ const estimatedRowHeightPixels = 72;
 
 type LedgerRows = ReturnType<LedgerTable["getRowModel"]>["rows"];
 
-const useInitialViewportRows = (
-  sortedRows: LedgerRows
-): Readonly<{
+type InitialViewportRows = Readonly<{
   visible: LedgerRows;
   measure: RefCallback<HTMLTableSectionElement>;
-}> => {
+}>;
+
+const useInitialViewportRows = (sortedRows: LedgerRows): InitialViewportRows => {
   const [initial] = useState(() => ({
     all: sortedRows,
     visible: sortedRows.slice(

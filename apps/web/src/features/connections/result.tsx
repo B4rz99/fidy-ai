@@ -2,7 +2,7 @@ import { PendingRead } from "@/ui/components/pending-read";
 
 import { useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import { type JSX, useState } from "react";
 import type { CanonicalSuccess } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
@@ -44,11 +44,11 @@ const AuthorizedAccounts = ({ connection }: Readonly<{ connection: Connection }>
 
   const result = useAtomValue(query).pipe(presentCanonicalQuery);
 
-  if (result._tag === "Initial") {
+  if (Predicate.isTagged(result, "Initial")) {
     return <PendingRead label="Cargando cuentas autorizadas" />;
   }
 
-  if (result._tag !== "Ready") {
+  if (!Predicate.isTagged(result, "Ready")) {
     return <p>La consulta de cuentas autorizadas aún no está disponible.</p>;
   }
 

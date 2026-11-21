@@ -1,7 +1,9 @@
 import { type JSX, type ReactNode, type RefCallback, useCallback, useRef } from "react";
-import { Option } from "effect";
+import { Option, Schema } from "effect";
 import { Button } from "./button";
 import "./transactions.css";
+
+const isHTMLElement = Schema.is(Schema.instanceOf(HTMLElement));
 
 export const TransactionSurface = ({
   children,
@@ -71,7 +73,7 @@ const usePanelFocus = (active: boolean): RefCallback<HTMLDivElement> => {
       if (active) {
         const returnFocusId = Option.fromNullishOr(node.getAttribute("data-return-focus-id"));
 
-        if (document.activeElement instanceof HTMLElement) {
+        if (isHTMLElement(document.activeElement)) {
           if (Option.isSome(returnFocusId) || Option.isNone(restoreFocus.current)) {
             restoreFocus.current = Option.some(focusReturn(document.activeElement, returnFocusId));
           }

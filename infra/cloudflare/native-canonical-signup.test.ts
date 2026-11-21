@@ -1,11 +1,26 @@
 import { Option } from "effect";
+import { Cookies } from "effect/http";
 import { expect, it } from "vitest";
 import {
   addedSignupStore,
+  hostOnlyProviderCookie,
   requireCanonicalSignupBindings,
   signupUserCensus,
   validProviderRedirect,
 } from "./native-canonical-signup";
+
+it("verifies the provider cookie independently of other edge cookies and attribute casing", () => {
+  const cookie = "__Host-fidy_google=proof; path=/; secure; HTTPOnly; SameSite=lax";
+  const headers = ["edge-session=opaque; Path=/; Secure", cookie];
+  expect(hostOnlyProviderCookie(Cookies.fromSetCookie(headers), "google")).toBe(true);
+  expect(hostOnlyProviderCookie(Cookies.fromSetCookie(headers), "microsoft")).toBe(false);
+  expect(
+    hostOnlyProviderCookie(Cookies.fromSetCookie([cookie + "; Domain=fidyapp.com"]), "google")
+  ).toBe(false);
+  expect(
+    hostOnlyProviderCookie(Cookies.fromSetCookie([cookie.replace("; secure", "")]), "google")
+  ).toBe(false);
+});
 
 it("checks the canonical ordinary OAuth callback without exporting OAuth state", () => {
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");

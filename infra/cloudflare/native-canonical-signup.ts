@@ -2,7 +2,13 @@ import { isDeepStrictEqual } from "node:util";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { WhatsAppBusinessPhoneNumberId } from "@fidy/server/whatsapp-contract";
 import { Effect, Option, Schema } from "effect";
-import { HttpBody, type HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/http";
+import {
+  Cookies,
+  HttpBody,
+  type HttpClient,
+  HttpClientRequest,
+  type HttpClientResponse,
+} from "effect/http";
 import { webSignupDisclosure } from "../../apps/server/src/shell/consent/operations";
 
 const sharedChanges = [
@@ -155,16 +161,17 @@ export const validProviderRedirect = ({
   );
 };
 
-const hostOnlyProviderCookie = (header: string, provider: Provider): boolean => {
-  const parts = header.split(";").map((value) => value.trim());
-  return (
-    header.startsWith("__Host-fidy_" + provider + "=") &&
-    ["Path=/", "Secure", "HttpOnly", "SameSite=Lax"].every((attribute) =>
-      parts.includes(attribute)
-    ) &&
-    !/;\s*domain=/iu.test(header)
+export const hostOnlyProviderCookie = (cookies: Cookies.Cookies, provider: Provider): boolean =>
+  Option.exists(
+    Cookies.get(cookies, "__Host-fidy_" + provider),
+    ({ value, options }) =>
+      value !== "" &&
+      options?.path === "/" &&
+      options.secure === true &&
+      options.httpOnly === true &&
+      options.sameSite === "lax" &&
+      options.domain === undefined
   );
-};
 const signupRefusal = (message: string): Effect.Effect<never, Error> =>
   Effect.logError(message).pipe(Effect.andThen(Effect.fail(Error(message))));
 const readSignupResponse = Effect.fn(function* <Value>(
@@ -203,17 +210,22 @@ export const verifyCanonicalSignupRedirects = Effect.fn(function* (client: HttpC
         redirect,
         "Canonical " + provider + " start"
       );
-      const header = response.headers["set-cookie"] ?? "";
-      const valid = yield* Effect.try(() =>
+      const redirectValid = yield* Effect.try(() =>
         validProviderRedirect({ authorization: location.authorizationUrl, provider })
       );
-      if (
-        !valid ||
-        !hostOnlyProviderCookie(header, provider) ||
-        response.headers["access-control-allow-origin"] !== production.browser
-      ) {
+      const cookieValid = hostOnlyProviderCookie(response.cookies, provider);
+      const originValid = response.headers["access-control-allow-origin"] === production.browser;
+      if (!redirectValid || !cookieValid || !originValid) {
         return yield* signupRefusal(
-          "Canonical " + provider + " signup has an unexpected redirect, cookie or browser origin"
+          "Canonical " +
+            provider +
+            " signup verification failed. Redirect " +
+            redirectValid +
+            ", host-only cookie " +
+            cookieValid +
+            ", browser origin " +
+            originValid +
+            "."
         );
       }
       return { provider, canonicalCallback: true, hostOnlyCookie: true };

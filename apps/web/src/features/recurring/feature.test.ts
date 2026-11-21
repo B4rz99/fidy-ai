@@ -108,11 +108,17 @@ const Workspace = (): ReturnType<typeof createElement> => {
   return createElement(RecurringFeature, props);
 };
 
+type Failing = Readonly<{ path: string; ready: string }>;
+const respond = (failing: Option.Option<Failing>, path: string, result: unknown): Response =>
+  Option.exists(failing, (failure) => failure.path === path)
+    ? Response.json({ message: "Unavailable" }, { status: 500 })
+    : Response.json(result);
 const withWorkspace = (
   check: (
     container: HTMLElement,
     location: () => unknown
-  ) => Effect.Effect<void, Cause.UnknownError>
+  ) => Effect.Effect<void, Cause.UnknownError>,
+  failing: Option.Option<Failing> = Option.none()
 ): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -166,7 +172,7 @@ const withWorkspace = (
         if (request.method !== "GET" || !["/user", "/recurring-plans"].includes(path)) {
           return Effect.die(new Error("Unexpected recurring test request"));
         }
-        return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(result)));
+        return Effect.succeed(HttpClientResponse.fromWeb(request, respond(failing, path, result)));
       });
       const apiClient = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
@@ -198,7 +204,14 @@ const withWorkspace = (
           )
         );
         yield* Effect.tryPromise(() =>
-          reactAssertion(() => expect(container.textContent).toContain("Ingreso de prueba"))
+          reactAssertion(() =>
+            expect(container.textContent).toContain(
+              Option.match(failing, {
+                onNone: () => "Ingreso de prueba",
+                onSome: (failure) => failure.ready,
+              })
+            )
+          )
         );
         yield* check(container, () => router.latestLocation.search);
       } finally {
@@ -303,6 +316,31 @@ const checkMonthPicker = (container: HTMLElement, location: () => unknown): Work
 
 it("jumps directly to a month of another year from the month heading", () =>
   withWorkspace(checkMonthPicker));
+
+const checkFailedRetry = (container: HTMLElement): WorkspaceCheck =>
+  Effect.gen(function* () {
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Vuelve a intentarlo."
+    );
+    expect(container.textContent).not.toContain("Reintentar recurrentes");
+    yield* Effect.tryPromise(() => click(container, "Reintentar"));
+    yield* Effect.tryPromise(() =>
+      reactAssertion(() =>
+        expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+          "El reintento no funcionóVuelve a intentarlo en unos minutos."
+        )
+      )
+    );
+    expect(button(container, "Reintentar").disabled).toBe(false);
+  });
+it.each(["/user", "/recurring-plans"])(
+  "explains a failed %s load and a retry that fails again",
+  (path) =>
+    withWorkspace(
+      checkFailedRetry,
+      Option.some({ path, ready: "No pudimos cargar tus recurrentes" })
+    )
+);
 
 const checkEarlierDisclosure = (container: HTMLElement): WorkspaceCheck =>
   Effect.gen(function* () {

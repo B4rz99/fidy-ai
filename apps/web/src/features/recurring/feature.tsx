@@ -23,7 +23,6 @@ import {
 import { CaptureEditorContext, type CaptureEditorProps } from "./capture-context";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { RecurringQueryFailure } from "./query-failure";
-import { Button } from "@/ui/components/button";
 import { Alert, AlertDescription } from "@/ui/components/alert";
 import { RecurringWorkspace } from "./workspace";
 import { useRecurringWorkspaceView } from "./workspace-view";
@@ -194,11 +193,7 @@ export const RecurringFeature = ({
   const now = useAtomValue(clock);
   const { filters, applyFilters, previous, earlier, selectMonth } = useRecurringWorkspaceView();
   if (state._tag === "Failure") {
-    return (
-      <Button contentLayout="wrap" focusAppearance="subtle" onClick={refresh}>
-        Reintentar recurrentes
-      </Button>
-    );
+    return <RecurringQueryFailure states={[state]} waiting={state.waiting} retry={refresh} />;
   }
   if (state._tag !== "Ready") {
     return <PendingRead label="Cargando recurrentes" />;

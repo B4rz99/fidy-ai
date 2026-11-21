@@ -1,11 +1,14 @@
 import { statusDeliveryUrl } from "../whatsapp/contract";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Clock, DateTime, Effect, Schedule, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Schedule, Schema } from "effect";
 import { expect } from "vitest";
 import { alice, seed } from "../financial-user-store.test-fixture";
 import { native, nativeHostedPlatform } from "../user-store.test-fixture";
 import { ownerCheckUrl } from "../maintenance/contract";
+import type { WhatsAppLifecycleWork } from "../whatsapp/contract";
+
+const LifecycleWire = Data.taggedEnum<typeof WhatsAppLifecycleWork.Encoded>();
 
 const testReminder = Effect.fn(function* (beforeClaim: boolean, attention: boolean = false) {
   const create = yield* nativeHostedPlatform,
@@ -108,15 +111,14 @@ const testReminder = Effect.fn(function* (beforeClaim: boolean, attention: boole
     { times: 80, schedule: Schedule.spaced("75 millis") }
   );
 
-  if (attention) {
+  yield* Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
 
     const body = {
       userId: alice.user,
       operationId: message.operation_id,
       family: "proactivity",
-      evidence: {
-        _tag: "WhatsAppLifecycleEvent",
+      evidence: LifecycleWire.WhatsAppLifecycleEvent({
         portfolio: "123456789012345",
         recipientUserId: "CO.13491208655302741918",
         correlationToken: message.correlation,
@@ -125,7 +127,7 @@ const testReminder = Effect.fn(function* (beforeClaim: boolean, attention: boole
         outcome: "delivered",
         occurredAtMs: now,
         receivedAtMs: now,
-      },
+      }),
     };
 
     const proof = Effect.fnUntraced(function* () {
@@ -145,9 +147,9 @@ const testReminder = Effect.fn(function* (beforeClaim: boolean, attention: boole
     ).toEqual([{ unanswered: 3, asked: 1 }]);
     expect(yield* owner.exec("SELECT count(*) AS n FROM reminder_disclosures")).toEqual([{ n: 1 }]);
     expect(yield* owner.exec("SELECT count(*) AS n FROM proactive_transcript")).toEqual([{ n: 1 }]);
+  }).pipe(Effect.when(Effect.succeed(attention)));
 
-    return;
-  }
+  if (attention) return;
 
   yield* owner.exec(
     "UPDATE proactive_grants SET revoked_at_ms=? WHERE id=?",

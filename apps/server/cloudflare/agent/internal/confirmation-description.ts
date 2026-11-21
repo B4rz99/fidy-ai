@@ -1,3 +1,4 @@
+import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { UpdateTransactionsInput } from "../../../src/shell/transactions/contract";
 import { RecurringSeriesPage } from "../../../src/core/recurring/contract";
 import { ApproveBrowserLoginPairingPayload } from "../../../src/shell/browser-login/contract";
@@ -46,14 +47,14 @@ import {
 export type ConfirmationRead = (
   operation: CanonicalOperationId,
   input: Schema.Json
-) => Effect.Effect<Option.Option<Schema.Json>>;
+) => Effect.Effect<Option.Option<Schema.Json>, never, SqliteClient>;
 
 type Context = Readonly<{ read: ConfirmationRead; timeZone: string }>;
 
 const allPresent = <Item, Value>(
   items: Iterable<Item>,
-  present: (item: Item) => Effect.Effect<Option.Option<Value>>
-): Effect.Effect<Option.Option<ReadonlyArray<Value>>> =>
+  present: (item: Item) => Effect.Effect<Option.Option<Value>, never, SqliteClient>
+): Effect.Effect<Option.Option<ReadonlyArray<Value>>, never, SqliteClient> =>
   Effect.reduce(
     items,
     () => Option.some<ReadonlyArray<Value>>([]),
@@ -77,7 +78,7 @@ const load =
     operation: string,
     input: Schema.Json,
     schema: Schema.Codec<A, Schema.Json>
-  ): Effect.Effect<Option.Option<A>> =>
+  ): Effect.Effect<Option.Option<A>, never, SqliteClient> =>
     context
       .read(CanonicalOperationId.make(operation), input)
       .pipe(Effect.map(Option.flatMap(Schema.decodeUnknownOption(schema))));
@@ -113,7 +114,7 @@ const describeBudgetCreation = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.sync(() =>
     Option.flatMap(
       decode(Schema.Struct({ payload: Schema.toCodecJson(CreateBudgetInput) }), input),
@@ -126,7 +127,7 @@ const describeBudgetChange = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const target = decode(addressed, input);
 
@@ -163,7 +164,7 @@ const describeRemember = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.sync(() =>
     Option.map(
       decode(Schema.Struct({ payload: RememberInput }), input),
@@ -175,7 +176,7 @@ const describeMemoryChange = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const target = decode(addressed, input);
 
@@ -209,7 +210,7 @@ const describeKeywordChange = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     let previous = Option.none<KeywordRule>();
 
@@ -257,7 +258,7 @@ const describeTransactionCreation = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.sync(() => {
     const value = decode(
       Schema.Struct({ payload: Schema.toCodecJson(CreateTransactionInput) }),
@@ -326,7 +327,7 @@ const describeGroupCorrection = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.sync(() =>
     Option.gen(function* () {
       const { payload } = yield* decode(
@@ -351,7 +352,7 @@ const describeTransactionChange = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const target = decode(addressed, input);
 
@@ -395,7 +396,7 @@ type RecordDescription = (
   context: Context,
   operation: string,
   input: unknown
-) => Effect.Effect<Option.Option<string>>;
+) => Effect.Effect<Option.Option<string>, never, SqliteClient>;
 
 const recordDescriptions = new Map<string, RecordDescription>(
   Object.entries({
@@ -419,7 +420,7 @@ const describeRecord = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Option.match(Option.fromUndefinedOr(recordDescriptions.get(operation)), {
     onNone: () => Effect.succeedNone,
     onSome: (description) => description(context, operation, input),
@@ -481,7 +482,7 @@ const describeDashboardChange = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const decoded = decode(Schema.Struct({ payload: Schema.toCodecJson(DashboardEdit) }), input);
 
@@ -583,7 +584,10 @@ const recurringEditText = ({
   });
 };
 
-const recurringSeriesName = (context: Context, id: string): Effect.Effect<Option.Option<string>> =>
+const recurringSeriesName = (
+  context: Context,
+  id: string
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const observed = yield* load(context)(
       "recurring.listRecurringSeries",
@@ -606,7 +610,7 @@ const recurringSeriesName = (context: Context, id: string): Effect.Effect<Option
 const describeRecurringCreation = (
   context: Context,
   edit: Extract<RecurringCommand["edit"], { kind: "create" }>
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const plan = planText(edit.plan);
 
@@ -628,14 +632,14 @@ const describeRecurringCreation = (
 const recurringSuggestionName = (
   context: Context,
   edit: RecurringCommand["edit"]
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   edit.kind === "suggestion" ? recurringSeriesName(context, edit.seriesId) : Effect.succeedNone;
 
 const describeRecurringChange = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const decoded = decode(Schema.Struct({ payload: Schema.toCodecJson(RecurringCommand) }), input);
 
@@ -726,7 +730,10 @@ const previewText = (preview: ReviewDetail["item"]["preview"]): string =>
       `, con importe ${quote(value.amount)}${Option.isSome(value.currency) ? ` ${value.currency.value}` : ""}${value.counterparty === "" ? "" : `, de ${quote(value.counterparty)}`}`,
   });
 
-const reviewName = (context: Context, id: string): Effect.Effect<Option.Option<string>> =>
+const reviewName = (
+  context: Context,
+  id: string
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const observed = yield* load(context)(
       "ingestion.getReviewItem",
@@ -759,7 +766,7 @@ const reviewName = (context: Context, id: string): Effect.Effect<Option.Option<s
 const describeReviewSelection = (
   context: Context,
   edit: Data.TaggedEnum.Value<ReviewCommand, "Skip" | "Restore">
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   allPresent(edit.items, (item) => reviewName(context, item.id)).pipe(
     Effect.map(
       Option.map(
@@ -772,7 +779,7 @@ ${rows.map((name) => `- ${name}`).join("\n")}.`
 const describeReviewEdit = (
   context: Context,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const decoded = decode(Schema.Struct({ payload: Schema.toCodecJson(ReviewCommand) }), input);
 
@@ -804,7 +811,7 @@ const describeReviewChange = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     if (operation === "ingestion.applyReviewEdit") {
       return yield* describeReviewEdit(context, input);
@@ -860,7 +867,7 @@ const describeFeature = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     if (operation === "dashboard.applyDashboardEdit") {
       return yield* describeDashboardChange(context, operation, input);
@@ -895,7 +902,7 @@ const describeTransactionPair = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const decoded = decode(Schema.Struct({ payload: TransactionPairInput }), input);
 
@@ -943,7 +950,7 @@ const describeOtherChange = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     if (operation === "browserLogin.approvePairing") {
       return Option.map(
@@ -985,7 +992,7 @@ const describeSingle = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const description = yield* describeRecord(context, operation, input);
 
@@ -1000,7 +1007,9 @@ export const describeConfirmation = ({
   operation,
   input,
 }: Readonly<{ context: Context; operation: string; input: unknown }>): Effect.Effect<
-  Option.Option<string>
+  Option.Option<string>,
+  never,
+  SqliteClient
 > =>
   Effect.gen(function* () {
     if (operation === "operations.executeAtomicBatch") {

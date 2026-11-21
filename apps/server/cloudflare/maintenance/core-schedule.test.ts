@@ -16,16 +16,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) =>
         const runtime = yield* start();
         const core = yield* native(() => runtime.getWorker("core"));
 
-        for (let delivery = 0; delivery < 2; delivery++) {
-          const result = yield* native(() =>
-            core.scheduled({
-              cron: "* * * * *",
-              scheduledTime: DateTime.toDate(DateTime.makeUnsafe(scheduledTime)),
-            })
-          );
+        const deliver = native(() =>
+          core.scheduled({
+            cron: "* * * * *",
+            scheduledTime: DateTime.toDate(DateTime.makeUnsafe(scheduledTime)),
+          })
+        );
 
-          expect(result.outcome).toBe("ok");
-        }
+        expect((yield* deliver).outcome).toBe("ok");
+        expect((yield* deliver).outcome).toBe("ok");
 
         const progress = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("core", "Maintenance", { name: maintenanceName })

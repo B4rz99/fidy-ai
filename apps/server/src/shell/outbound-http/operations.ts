@@ -128,6 +128,26 @@ export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpServ
   });
 
   static readonly layer = Layer.effect(this, this.make);
+
+  static readonly kapso = (
+    apiKey: Redacted.Redacted<string>
+  ): Layer.Layer<OutboundHttp, never, HttpClient.HttpClient> =>
+    Layer.effect(
+      OutboundHttp,
+      Effect.map(Effect.service(HttpClient.HttpClient), (httpClient) =>
+        makeKapsoOutboundHttp({ apiKey, httpClient })
+      )
+    );
+
+  static readonly resend = (
+    apiKey: Redacted.Redacted<string>
+  ): Layer.Layer<OutboundHttp, never, HttpClient.HttpClient> =>
+    Layer.effect(
+      OutboundHttp,
+      Effect.map(Effect.service(HttpClient.HttpClient), (httpClient) =>
+        makeResendOutboundHttp({ apiKey, httpClient })
+      )
+    );
 }
 
 export const makeGoogleOutboundHttp = (
@@ -162,3 +182,24 @@ export const makeOpenAiOutboundHttp = (
     client: HttpClient.HttpClient;
   }>
 ): OpenAiHttpService => openAiHttp(input);
+
+export class ProviderOidcHttp extends Context.Service<ProviderOidcHttp, ProviderOidcHttpService>()(
+  "@fidy/server/shell/outbound-http/operations/ProviderOidcHttp"
+) {
+  static readonly make = (
+    input: Readonly<{
+      provider: "google" | "microsoft";
+      clientId: string;
+      clientSecret: Redacted.Redacted<string>;
+      redirectUri: string;
+    }>
+  ): Effect.Effect<ProviderOidcHttpService, never, HttpClient.HttpClient> =>
+    Effect.map(Effect.service(HttpClient.HttpClient), (httpClient) =>
+      oidcHttp({ ...input, httpClient })
+    );
+
+  static readonly layer = (
+    input: Parameters<typeof ProviderOidcHttp.make>[0]
+  ): Layer.Layer<ProviderOidcHttp, never, HttpClient.HttpClient> =>
+    Layer.effect(ProviderOidcHttp, ProviderOidcHttp.make(input));
+}

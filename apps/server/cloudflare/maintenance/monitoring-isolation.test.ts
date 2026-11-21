@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Clock, DateTime, Effect, Schedule, Schema } from "effect";
+import { Array as Arr, Clock, DateTime, Effect, Option, Result, Schedule, Schema } from "effect";
 import { expect } from "vitest";
 import { alice, bob, history, seed } from "../financial-user-store.test-fixture";
 import { native, nativeHealthPlatform } from "../user-store.test-fixture";
@@ -23,17 +23,27 @@ const delivery = "90000000-0000-4000-8000-000000000012",
 
 type Scenario = (typeof cases)[number];
 
-const expectedObservations = (scenario: Scenario): string[] => [
-  ...(scenario.category && scenario.missing !== "workflow"
-    ? ["proactivity-" + alice.user + "-" + delivery]
-    : []),
-  ...(scenario.weekly ? ["weekly-" + alice.user + "-weekly-question-" + question] : []),
-];
+const expectedObservations = (scenario: Scenario): string[] =>
+  Arr.getSomes([
+    scenario.category && scenario.missing !== "workflow"
+      ? Option.some("proactivity-" + alice.user + "-" + delivery)
+      : Option.none(),
+    scenario.weekly
+      ? Option.some("weekly-" + alice.user + "-weekly-question-" + question)
+      : Option.none(),
+  ]);
 
 const queueMetrics = (scenario: Scenario): number =>
   (scenario.weekly || scenario.category) && scenario.missing !== "queue" ? 1 : 0;
 
-const features = (scenario: Scenario): Record<string, string> => ({
+type Features = Readonly<{
+  ASYNC_HEALTH_ENABLED: "enabled";
+  WEEKLY_SUMMARY_ENABLED: "enabled" | "disabled";
+  PROACTIVITY_ENABLED: "enabled" | "disabled";
+  MONITOR_FIXTURE: Scenario["missing"];
+}>;
+
+const features = (scenario: Scenario): Features => ({
   ASYNC_HEALTH_ENABLED: "enabled",
   WEEKLY_SUMMARY_ENABLED: scenario.weekly ? "enabled" : "disabled",
   PROACTIVITY_ENABLED: scenario.category ? "enabled" : "disabled",
@@ -118,7 +128,7 @@ const testCase = Effect.fn(function* (scenario: Scenario) {
   ).pipe(Effect.result);
 
   const shouldFail = ["stall", "queue", "workflow"].includes(scenario.missing);
-  expect(ran._tag === "Success" && ran.success.outcome === "ok").toBe(!shouldFail);
+  expect(Result.isSuccess(ran) && ran.success.outcome === "ok").toBe(!shouldFail);
   const users = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
   const expectedIds = expectedObservations(scenario);
 

@@ -4,7 +4,7 @@ import { Clock, Effect } from "effect";
 import { expect } from "vitest";
 import type { Miniflare } from "miniflare";
 import { browserOrigins, productionTopology } from "./runtime/contract";
-import { native, nativeUserPlatform } from "./user-store.test-fixture";
+import { native, nativeHostedPlatform, nativeUserPlatform } from "./user-store.test-fixture";
 
 const bearerLength = 43;
 
@@ -236,6 +236,11 @@ export const makeNativeTransactionJourney = Effect.fn(function* (
 });
 
 export const nativeTransactionJourney = makeNativeTransactionJourney();
+
+export const nativeHostedTransactionJourney = makeNativeTransactionJourney(
+  undefined,
+  nativeHostedPlatform
+);
 
 const patPrefixLength = 4;
 

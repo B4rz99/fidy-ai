@@ -6,10 +6,10 @@ import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import {
   alice,
   bob,
-  makeNativeTransactionJourney,
   nativeBrowserWrite,
+  nativeHostedTransactionJourney,
 } from "../financial-user-store.test-fixture";
-import { native, nativeHostedPlatform } from "../user-store.test-fixture";
+import { native } from "../user-store.test-fixture";
 
 const httpAccepted = 202;
 
@@ -22,7 +22,7 @@ const observeProposal = Effect.fn(function* (
   return yield* Schema.decodeUnknownEffect(HostedTurnProposal)(yield* native(() => res.json()));
 });
 
-type Database = Effect.Success<ReturnType<typeof makeNativeTransactionJourney>>;
+type Database = Effect.Success<typeof nativeHostedTransactionJourney>;
 
 type Stub = ReturnType<
   Awaited<ReturnType<Database["runtime"]["getDurableObjectNamespace"]>>["getByName"]
@@ -41,7 +41,7 @@ type Journey = {
 };
 
 export const journey = Effect.fn(function* () {
-  const db = yield* makeNativeTransactionJourney(undefined, nativeHostedPlatform);
+  const db = yield* nativeHostedTransactionJourney;
 
   const snapshot = yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(
     currentDisclosureFor()

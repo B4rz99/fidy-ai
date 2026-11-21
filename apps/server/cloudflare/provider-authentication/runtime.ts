@@ -5,12 +5,11 @@ import {
 } from "../directory/contract";
 import { UserId } from "../../src/core/identity/contract";
 import { DateTime, Effect, Option, Predicate, Redacted, Result, Schema } from "effect";
-import { makeProviderHandoffSender } from "../../src/shell/provider-authentication/runtime";
+import { ProviderHandoffSender } from "../../src/shell/provider-authentication/runtime";
 import type {
   WhatsAppAuthenticatedInbound,
   WhatsAppIngressEnvironment,
 } from "../whatsapp/contract";
-import { HttpClient } from "effect/http";
 
 const noContentStatus = 204;
 
@@ -21,9 +20,8 @@ const sendInvitation = Effect.fn(function* (
   event: WhatsAppAuthenticatedInbound["event"],
   { owner, invitation }: { owner: Pick<Fetcher, "fetch">; invitation: string }
 ) {
-  const send = makeProviderHandoffSender({
+  const send = yield* ProviderHandoffSender.make({
     apiKey: Redacted.make(environment.KAPSO_API_KEY),
-    httpClient: yield* HttpClient.HttpClient,
     sandboxPhoneNumberId: Option.fromNullishOr(environment.WHATSAPP_SANDBOX_PHONE_NUMBER_ID),
   });
 

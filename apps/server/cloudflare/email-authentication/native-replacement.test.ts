@@ -1,7 +1,7 @@
 import { ownerCheckUrl } from "../maintenance/contract";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Clock, Effect, Schedule, Schema } from "effect";
+import { Array as Arr, Clock, Effect, Schedule, Schema } from "effect";
 import { expect } from "vitest";
 import { native, nativeBrowserPlatform } from "../user-store.test-fixture";
 import { alice, bob, seed } from "../financial-user-store.test-fixture";
@@ -15,30 +15,34 @@ const setup = Effect.fn(function* (next: string) {
   const prior = "old@example.test";
   const now = yield* Clock.currentTimeMillis;
 
-  for (const [store, subject, address] of [
-    [owner, alice, prior],
-    [other, bob, "other@example.test"],
-  ] as const) {
-    yield* store.exec(
-      "INSERT INTO verified_email_credentials(user_id,normalized_address,revision,verified_at_ms) VALUES(?,?,1,?)",
-      subject.user,
-      address,
-      now
-    );
-    yield* native(() =>
-      owner.directory.exec(
-        "INSERT INTO verified_email_routes VALUES(?,?,?,1)",
-        address,
+  yield* Effect.forEach(
+    [
+      [owner, alice, prior],
+      [other, bob, "other@example.test"],
+    ] as const,
+    Effect.fnUntraced(function* ([store, subject, address]) {
+      yield* store.exec(
+        "INSERT INTO verified_email_credentials(user_id,normalized_address,revision,verified_at_ms) VALUES(?,?,1,?)",
         subject.user,
-        subject.session
-      )
-    );
-  }
+        address,
+        now
+      );
+      yield* native(() =>
+        owner.directory.exec(
+          "INSERT INTO verified_email_routes VALUES(?,?,?,1)",
+          address,
+          subject.user,
+          subject.session
+        )
+      );
+    }),
+    { discard: true }
+  );
 
   const request = (
     subject: typeof alice,
     path: string,
-    body: object
+    body: Schema.Json
   ): Effect.Effect<Awaited<ReturnType<typeof runtime.dispatchFetch>>> =>
     native(() =>
       runtime.dispatchFetch("https://api.fidyapp.com" + path, {
@@ -257,18 +261,20 @@ const failedCompletion = Effect.fn(function* (failure: (typeof completionFailure
 
   expect(response.status).toBe(statuses[failure]);
 
-  if (failure === "revision") {
+  yield* Effect.gen(function* () {
     expect(yield* owner.exec("SELECT wrong_attempts FROM email_replacements")).toEqual([
       { wrong_attempts: 0 },
     ]);
-  }
+  }).pipe(Effect.when(Effect.succeed(failure === "revision")));
 
-  if (failure === "evidence") {
+  yield* Effect.gen(function* () {
     yield* owner.exec("DROP TRIGGER deny_evidence");
     expect((yield* verify(alice, next, code)).status).toBe(200);
-  }
+  }).pipe(Effect.when(Effect.succeed(failure === "evidence")));
 
-  if (failure === "lost-cleanup") expect((yield* verify(alice, next, code)).status).toBe(400);
+  yield* Effect.gen(function* () {
+    expect((yield* verify(alice, next, code)).status).toBe(400);
+  }).pipe(Effect.when(Effect.succeed(failure === "lost-cleanup")));
 });
 
 const sendOutcomes = ["accepted", "lost", "limited", "unsettled"] as const;
@@ -352,42 +358,48 @@ const rediscover = Effect.gen(function* () {
 const attempts = Effect.gen(function* () {
   const { owner, start, verify, next, inbox } = yield* setup("bounded@example.test");
 
-  for (let index = 0; index < 5; index++) {
-    expect((yield* start()).status).toBe(200);
+  yield* Effect.forEach(
+    Arr.range(0, 4),
+    Effect.fnUntraced(function* (index) {
+      expect((yield* start()).status).toBe(200);
 
-    const messages = yield* inbox().pipe(
-      Effect.repeat({
-        until: (values) => values.length > index,
-        times: 40,
-        schedule: Schedule.spaced("50 millis"),
-      })
-    );
-
-    const code = yield* Schema.decodeUnknownEffect(EmailVerificationCode)(
-      messages[index]?.split("\n\n")[1]
-    );
-
-    if (index > 0) {
-      const previous = yield* Schema.decodeUnknownEffect(EmailVerificationCode)(
-        messages[index - 1]?.split("\n\n")[1]
+      const messages = yield* inbox().pipe(
+        Effect.repeat({
+          until: (values) => values.length > index,
+          times: 40,
+          schedule: Schedule.spaced("50 millis"),
+        })
       );
 
-      expect((yield* verify(alice, next, previous)).status).toBe(400);
-      expect(yield* owner.exec("SELECT wrong_attempts FROM email_replacements")).toEqual([
-        { wrong_attempts: 0 },
-      ]);
-    }
+      const code = yield* Schema.decodeUnknownEffect(EmailVerificationCode)(
+        messages[index]?.split("\n\n")[1]
+      );
 
-    const failed = yield* Schema.decodeEffect(EmailVerificationCode)(
-      code.slice(0, -1) + (code.endsWith("A") ? "B" : "A")
-    );
+      yield* Effect.gen(function* () {
+        const previous = yield* Schema.decodeUnknownEffect(EmailVerificationCode)(
+          messages[index - 1]?.split("\n\n")[1]
+        );
 
-    for (let trial = 0; trial < 5; trial++) {
-      expect((yield* verify(alice, next, failed)).status).toBe(400);
-    }
+        expect((yield* verify(alice, next, previous)).status).toBe(400);
+        expect(yield* owner.exec("SELECT wrong_attempts FROM email_replacements")).toEqual([
+          { wrong_attempts: 0 },
+        ]);
+      }).pipe(Effect.when(Effect.succeed(index > 0)));
 
-    expect((yield* verify(alice, next, code)).status).toBe(400);
-  }
+      const failed = yield* Schema.decodeEffect(EmailVerificationCode)(
+        code.slice(0, -1) + (code.endsWith("A") ? "B" : "A")
+      );
+
+      expect(
+        yield* Effect.forEach(Arr.range(0, 4), () =>
+          verify(alice, next, failed).pipe(Effect.map(({ status }) => status))
+        )
+      ).toEqual([400, 400, 400, 400, 400]);
+
+      expect((yield* verify(alice, next, code)).status).toBe(400);
+    }),
+    { discard: true }
+  );
 
   expect((yield* start()).status).toBe(200);
   yield* Effect.sleep("100 millis");

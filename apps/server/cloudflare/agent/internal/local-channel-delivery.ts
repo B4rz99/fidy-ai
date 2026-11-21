@@ -11,7 +11,7 @@ import {
   WhatsAppBusinessScopedUserId,
 } from "../../../src/core/identity/contract";
 import { HostedDeliveryCorrelationToken } from "../../../src/shell/channels/whatsapp/contract";
-import { makeHostedSender } from "../../../src/shell/channels/whatsapp/runtime";
+import { HostedSender } from "../../../src/shell/channels/whatsapp/runtime";
 import { OutboundHttpLive } from "../../outbound-http/runtime";
 import type { ExternalEventBindings } from "../../directory/contract";
 import { claimRegisteredSend, recordRegisteredSend } from "../../whatsapp/operations";
@@ -56,6 +56,17 @@ const takeOffer = Effect.fn(function* (
   return Option.some(row);
 });
 
+const hostedSender = Effect.fn(function* (env: ChannelEnvironment) {
+  const clients = yield* Layer.build(OutboundHttpLive);
+
+  return yield* HostedSender.make({
+    apiKey: Redacted.make(env.KAPSO_API_KEY),
+    sandboxPhoneNumberId: Option.fromUndefinedOr(env.WHATSAPP_SANDBOX_PHONE_NUMBER_ID),
+  }).pipe(
+    Effect.provideService(HttpClient.HttpClient, Context.get(clients, HttpClient.HttpClient))
+  );
+});
+
 export const offerChannel = Effect.fn(function* (
   env: ChannelEnvironment,
   storage: DurableObjectStorage,
@@ -83,13 +94,7 @@ export const offerChannel = Effect.fn(function* (
     content: row.answer,
   });
 
-  const clients = yield* Layer.build(OutboundHttpLive);
-
-  const sender = makeHostedSender({
-    apiKey: Redacted.make(env.KAPSO_API_KEY),
-    httpClient: Context.get(clients, HttpClient.HttpClient),
-    sandboxPhoneNumberId: Option.fromUndefinedOr(env.WHATSAPP_SANDBOX_PHONE_NUMBER_ID),
-  });
+  const sender = yield* hostedSender(env);
 
   const challenge = yield* visibleChallenge(row.id, yield* Clock.currentTimeMillis);
   yield* claim.claim;

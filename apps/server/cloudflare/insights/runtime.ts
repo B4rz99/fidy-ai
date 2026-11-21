@@ -40,20 +40,12 @@ import {
   Schema,
   type Scope,
 } from "effect";
-import { HttpClient } from "effect/http";
 import {
   InsightTemplateConfiguration,
   WeeklyQuestionTemplateConfiguration,
 } from "../../src/shell/channels/whatsapp/contract";
-import {
-  makeInsightTemplateSender,
-  makeProactivityTemplateSender,
-  makeWeeklyQuestionSender,
-} from "../../src/shell/channels/whatsapp/runtime";
-import {
-  type OutboundHttpService,
-  makeKapsoOutboundHttp,
-} from "../../src/shell/outbound-http/operations";
+import { TemplateSenders } from "../../src/shell/channels/whatsapp/runtime";
+import { OutboundHttp } from "../../src/shell/outbound-http/operations";
 import {
   captureTraceHeaders,
   cloudflareWorkerTelemetry,
@@ -73,20 +65,22 @@ import {
 
 const ActivityResult = Data.taggedEnum<ProactivityActivityResult>();
 
-const nativeOutbound = (
+const templateSenders = (
   environment: Partial<Readonly<{ KAPSO_API_KEY: string }>>
-): Effect.Effect<OutboundHttpService, InsightUnavailable, Scope.Scope> =>
+): Effect.Effect<TemplateSenders["Service"], InsightUnavailable, Scope.Scope> =>
   Effect.gen(function* () {
     if (environment.KAPSO_API_KEY === undefined || environment.KAPSO_API_KEY.length === 0) {
       return yield* new InsightUnavailable({ cause: Option.none() });
     }
 
-    const services = yield* Layer.build(OutboundHttpLive);
+    const services = yield* Layer.build(
+      TemplateSenders.layer.pipe(
+        Layer.provide(OutboundHttp.kapso(Redacted.make(environment.KAPSO_API_KEY))),
+        Layer.provide(OutboundHttpLive)
+      )
+    );
 
-    return makeKapsoOutboundHttp({
-      apiKey: Redacted.make(environment.KAPSO_API_KEY),
-      httpClient: Context.get(services, HttpClient.HttpClient),
-    });
+    return Context.get(services, TemplateSenders);
   });
 
 type Coordinator = Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
@@ -279,10 +273,7 @@ const localSender = Effect.fn(function* (env: NativeReminderEnvironment) {
     env.PROACTIVITY_TEMPLATE_JSON ?? ""
   );
 
-  return makeProactivityTemplateSender({
-    configuration: config,
-    outboundHttp: yield* nativeOutbound(env),
-  });
+  return (yield* templateSenders(env)).proactivity(config);
 });
 
 const weeklySummarySender = Effect.fn(function* (env: NativeReminderEnvironment) {
@@ -290,7 +281,7 @@ const weeklySummarySender = Effect.fn(function* (env: NativeReminderEnvironment)
     Schema.fromJsonString(InsightTemplateConfiguration)
   )(env.WEEKLY_SUMMARY_TEMPLATE_JSON ?? "");
 
-  return makeInsightTemplateSender({ configuration, outboundHttp: yield* nativeOutbound(env) });
+  return (yield* templateSenders(env)).insight(configuration);
 });
 
 const recoverWeekly = Effect.fn(function* (
@@ -328,7 +319,7 @@ const weeklyQuestionSender = Effect.fn(function* (env: NativeReminderEnvironment
     Schema.fromJsonString(WeeklyQuestionTemplateConfiguration)
   )(env.WEEKLY_QUESTION_TEMPLATE_JSON ?? "");
 
-  return makeWeeklyQuestionSender({ configuration, outboundHttp: yield* nativeOutbound(env) });
+  return (yield* templateSenders(env)).weeklyQuestion(configuration);
 });
 
 export const observedReminderChoice = Effect.fn(function* (

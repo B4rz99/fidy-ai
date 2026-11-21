@@ -1,14 +1,14 @@
 import { readFreshQuery } from "@/transport/fresh-query";
-import { Clock, DateTime, Effect, Layer, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Layer, Option, Predicate, Schema } from "effect";
 import { afterEach, expect, vi } from "vitest";
 import { it } from "@effect/vitest";
 import { AtomRegistry } from "effect/reactivity";
 import { HttpClient, HttpClientResponse, UrlParams } from "effect/http";
 import { makeFidyClient } from "@/transport/client";
-import { transactionRouteHistory } from "./route-history";
-import { TransactionSearch } from "./period";
-import { transactionHistory } from "./history";
-import { transactionFirstPage, transactionPageInitialValue } from "./query";
+import { transactionRouteHistory } from "@/features/transactions/route-history";
+import { TransactionSearch } from "@/features/transactions/period";
+import { transactionHistory } from "@/features/transactions/history";
+import { transactionFirstPage, transactionPageInitialValue } from "@/features/transactions/query";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -110,6 +110,7 @@ it.live(
       const to = DateTime.makeUnsafe("2026-10-01T05:00:00Z");
       const target = "25000000-0000-4000-8000-000000000021";
       const reads: Array<string> = [];
+      const twentySecondRead = Promise.withResolvers<void>();
       let failPage = false;
 
       const transport = Layer.succeed(
@@ -123,6 +124,8 @@ it.live(
           const page = Number(cursor.slice(-2)) + 1;
           const id = `25000000-0000-4000-8000-${String(page).padStart(12, "0")}`;
           reads.push(id);
+
+          if (reads.length === 22) twentySecondRead.resolve();
 
           if (failPage) {
             return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({})));
@@ -186,7 +189,7 @@ it.live(
             const state = registry.get(history.state);
             expect(state.continuation).toBe("available");
 
-            if (state.query._tag !== "Ready") throw new Error("History is not ready");
+            if (!Predicate.isTagged(state.query, "Ready")) throw new Error("History is not ready");
             expect(state.query.value.data).toHaveLength(20);
           })
         );
@@ -196,7 +199,7 @@ it.live(
           vi.waitFor(() => {
             const state = registry.get(history.state);
 
-            if (state.query._tag !== "Ready") throw new Error("History is not ready");
+            if (!Predicate.isTagged(state.query, "Ready")) throw new Error("History is not ready");
             expect(state.query.value.data.at(-1)?.id).toBe(target);
             expect(state.continuation).toBe("available");
           })
@@ -204,7 +207,8 @@ it.live(
         expect(reads).toHaveLength(21);
         const captured = registry.get(history.state).more;
         registry.set(history.action, captured);
-        yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toHaveLength(22)));
+        yield* Effect.tryPromise(() => twentySecondRead.promise);
+        expect(reads).toHaveLength(22);
         registry.set(history.action, captured);
         yield* Effect.sleep("10 millis");
         expect(reads).toHaveLength(22);
@@ -232,7 +236,17 @@ it.live(
       let failLookup = false;
       const requests: Array<string> = [];
 
-      const row = (): Record<string, unknown> => ({
+      type FixtureRow = Readonly<{
+        id: string;
+        occurredAt: string;
+        categoryId: string;
+        money: Readonly<{ amount: string; currency: string }>;
+        direction: string;
+        createdAt: string;
+        revision: number;
+      }>;
+
+      const row = (): FixtureRow => ({
         ...current,
         categoryId: "24000000-0000-4000-8000-000000000242",
         money: { amount: "25000", currency: "COP" },
@@ -322,7 +336,7 @@ it.live(
         expect(registry.get(history.state).location).toBe("LookupFailed");
         const retained = registry.get(history.state).query;
 
-        if (retained._tag !== "Ready") throw new Error("Missing retained history");
+        if (!Predicate.isTagged(retained, "Ready")) throw new Error("Missing retained history");
         expect(Option.isSome(retained.refreshFailure)).toBe(true);
         expect(retained.value.data[0]?.id).toBe(replacement);
         expect(requests).toHaveLength(5);
@@ -493,19 +507,19 @@ it.live(
         yield* ready;
         expect(reads).toBe(1);
 
-        for (const expected of [2, 4]) {
+        const refreshPages = Effect.fnUntraced(function* (expected: number) {
           const generation = registry.get(history.state).generation;
           registry.set(history.action, "refresh-pages");
           expect(registry.get(history.state).generation).toBe(generation + 1);
           expect(yield* readFreshQuery({ registry, query: history.firstPage })).toBe(true);
           expect(reads).toBe(expected);
+        });
 
-          if (expected === 2) {
-            registry.set(history.action, "reset");
-            yield* ready;
-            expect(reads).toBe(3);
-          }
-        }
+        yield* refreshPages(2);
+        registry.set(history.action, "reset");
+        yield* ready;
+        expect(reads).toBe(3);
+        yield* refreshPages(4);
       } finally {
         unmount();
         registry.dispose();

@@ -3,7 +3,7 @@ import { it as effectIt } from "@effect/vitest";
 import { Cause, Clock, Effect, Exit, Fiber, Option, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import { expect, it, vi } from "vitest";
-import { NequiAuthorizationFailed, withApprovedNequiWithWompi } from "./wompi-nequi";
+import { NequiAuthorizationFailed, withApprovedNequiWithWompi } from "@/transport/wompi-nequi";
 
 const tokenResponse = (
   status: "PENDING" | "APPROVED" | "DECLINED" | "ERROR",
@@ -122,12 +122,14 @@ it("binds Production authorization to its fixed origin and token environment", (
     })
   ));
 
-for (const outcome of [
-  { status: "APPROVED", id: "nequi_test_example", approved: true },
-  { status: "DECLINED", id: "nequi_test_example", approved: false },
-  { status: "ERROR", id: "nequi_test_example", approved: false },
-  { status: "APPROVED", id: "nequi_test_changed", approved: false },
-] as const) {
+(
+  [
+    { status: "APPROVED", id: "nequi_test_example", approved: true },
+    { status: "DECLINED", id: "nequi_test_example", approved: false },
+    { status: "ERROR", id: "nequi_test_example", approved: false },
+    { status: "APPROVED", id: "nequi_test_changed", approved: false },
+  ] as const
+).forEach((outcome) => {
   effectIt.effect(
     `polls the original authorization and handles ${outcome.status}/${outcome.id}`,
     () =>
@@ -169,7 +171,7 @@ for (const outcome of [
         });
       })
   );
-}
+});
 
 effectIt.effect("stops a pending authorization at the bounded approval deadline", () =>
   Effect.gen(function* () {
@@ -270,7 +272,7 @@ it("borrows approval once, wipes its token on consumer failure and never shows a
     })
   ));
 
-for (const status of ["APPROVED", "PENDING"] as const) {
+(["APPROVED", "PENDING"] as const).forEach((status) => {
   effectIt.effect(`evaluates the final allowed ${status} response before exhaustion`, () =>
     Effect.gen(function* () {
       const penultimate = Promise.withResolvers<Response>();
@@ -313,7 +315,7 @@ for (const status of ["APPROVED", "PENDING"] as const) {
       expect(consumer).toHaveBeenCalledTimes(status === "APPROVED" ? 1 : 0);
     })
   );
-}
+});
 
 effectIt.effect(
   "includes POST time in the original deadline and aborts an unresolved final lookup",

@@ -1,15 +1,16 @@
+import { Data, Schema } from "effect";
 import { browserSessionBindingPath } from "@fidy/server/browser-transport";
 
 type ResponseOutcome = Promise<PromiseSettledResult<Response>>;
 
-type ResponseClaim =
-  | Readonly<{
-      _tag: "Prepared";
-      result: ResponseOutcome;
-    }>
-  | Readonly<{
-      _tag: "Network";
-    }>;
+type ResponseClaim = Data.TaggedEnum<{
+  Prepared: { readonly result: ResponseOutcome };
+  Network: {};
+}>;
+
+const ResponseClaim = Data.taggedEnum<ResponseClaim>();
+
+const isRequest = Schema.is(Schema.instanceOf(Request));
 
 const successfulResponseStatus = 200;
 
@@ -105,29 +106,29 @@ export const beginInitialBrowserRequest = ({
     if (claimed.has(requested)) {
       if (requested === url.href) recheckUsable = false;
 
-      return { _tag: "Network" };
+      return ResponseClaim.Network();
     }
 
     if (requested === url.href) {
       claimed.add(requested);
 
-      return { _tag: "Prepared", result };
+      return ResponseClaim.Prepared({ result });
     }
 
     if (requested === identity && recheck !== undefined && recheckUsable) {
       claimed.add(requested);
 
-      return { _tag: "Prepared", result: recheck };
+      return ResponseClaim.Prepared({ result: recheck });
     }
 
-    return { _tag: "Network" };
+    return ResponseClaim.Network();
   };
 
   return { apiOrigin, context, transactions, url: url.href, result, ...lifetime, takeResponse };
 };
 
 const requestMethod = (...args: Parameters<typeof globalThis.fetch>): string =>
-  args[1]?.method ?? (args[0] instanceof Request ? args[0].method : "GET");
+  args[1]?.method ?? (isRequest(args[0]) ? args[0].method : "GET");
 
 export const initialRequestFetch = (initial: InitialBrowserRequest): typeof globalThis.fetch => {
   const nativeFetch = globalThis.fetch;
@@ -140,13 +141,14 @@ export const initialRequestFetch = (initial: InitialBrowserRequest): typeof glob
         throw new DOMException("Authentication lifetime ended", "AbortError");
       }
 
-      const url = input instanceof Request ? input.url : String(input);
+      const url = isRequest(input) ? input.url : String(input);
       const method = requestMethod(...args);
-      const prepared = method === "GET" ? initial.takeResponse(url) : { _tag: "Network" as const };
+      const prepared = method === "GET" ? initial.takeResponse(url) : ResponseClaim.Network();
 
-      return (
-        prepared._tag === "Network" ? settleResponse(nativeFetch, input, init) : prepared.result
-      ).then((result) => {
+      return ResponseClaim.$match(prepared, {
+        Network: () => settleResponse(nativeFetch, input, init),
+        Prepared: ({ result }) => result,
+      }).then((result) => {
         if (result.status === "rejected") throw result.reason;
 
         return result.value;

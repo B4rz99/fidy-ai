@@ -1,6 +1,6 @@
 import { BigDecimal } from "effect";
 import { describe, expect, it } from "vitest";
-import { formatMoney, formatMoneyWithCode, formatMoneyWithCompactCode } from "./money";
+import { formatMoney, formatMoneyWithCode, formatMoneyWithCompactCode } from "@/transport/money";
 
 describe("Explicit currency Money", () => {
   it.each([

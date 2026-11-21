@@ -1,12 +1,11 @@
 import { telemetryTraceHeader } from "@fidy/server/browser-transport";
-// @vitest-environment node
 
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import { TestClock } from "effect/testing";
 import { afterEach, beforeEach, vi } from "vitest";
-import { browserHttpClientLayer } from "./browser-http-policy";
+import { browserHttpClientLayer } from "@/transport/browser-http-policy";
 
 const origin = "https://api.test.fidyapp.com";
 
@@ -66,14 +65,12 @@ describe("browser transport diagnostics", () => {
         yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(calls)
       ).not.toContain(sentinel);
 
-      if (Exit.isFailure(result)) {
-        expect(yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result)).toContain(
-          traceId
-        );
-        expect(
-          yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result)
-        ).not.toContain(sentinel);
-      }
+      expect(yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result)).toContain(
+        traceId
+      );
+      expect(
+        yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result)
+      ).not.toContain(sentinel);
     })
   );
 

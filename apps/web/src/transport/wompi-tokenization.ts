@@ -198,6 +198,8 @@ export const tokenizeCardWithWompi: {
   }).pipe(
     Effect.scoped,
     Effect.timeout("15 seconds"),
-    Effect.mapError(() => new CardTokenizationFailed())
+    Effect.catchTag(["SchemaError", "TimeoutError"], () =>
+      Effect.fail(new CardTokenizationFailed())
+    )
   )
 );

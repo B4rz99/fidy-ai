@@ -20,7 +20,7 @@ import type { CanonicalSuccess, FidyClient } from "@/transport/client";
 import {
   type CaptureRetention,
   type TransactionCaptureTask,
-  makeCaptureRetention,
+  captureRetention,
 } from "./capture-task";
 import { currencyChoices } from "@/ui/currency-choices";
 
@@ -368,7 +368,7 @@ const CaptureEditor = ({ props }: Readonly<{ props: EditorProps }>): JSX.Element
 class CaptureIdentity extends Data.Class<Readonly<{ client: FidyClient; intentId: string }>> {}
 
 const retainedCaptures = Atom.family((_identity: CaptureIdentity) =>
-  makeCaptureRetention().pipe(Atom.keepAlive)
+  captureRetention().pipe(Atom.keepAlive)
 );
 
 const captureMeaning = (props: CaptureProps): string =>

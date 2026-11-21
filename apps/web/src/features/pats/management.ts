@@ -1,5 +1,5 @@
 import { RegistryContext, useAtomSet, useAtomValue } from "@effect/atom-react";
-import { Cause, Effect, Option } from "effect";
+import { Cause, Effect, Option, Predicate } from "effect";
 import { type AsyncResult, Atom, type AtomRegistry, Reactivity } from "effect/reactivity";
 import { type RefCallback, useCallback, useContext, useState } from "react";
 import { authenticationEndedEvent } from "@/session/authentication-events";
@@ -101,7 +101,7 @@ const revokeCommand = (apiClient: FidyClient): Atom.AtomResultFn<Command, void, 
         const client = yield* apiClient;
 
         const outcome: Outcome = yield* Reactivity.mutation(
-          command.target._tag === "One"
+          Predicate.isTagged(command.target, "One")
             ? client.pats
                 .revokePAT({ params: { shortId: command.target.pat.shortId } })
                 .pipe(
@@ -148,9 +148,9 @@ const readFreshListing = (
     const unsubscribe = get.registry.subscribe(
       query,
       (result) => {
-        if (result === before || result._tag === "Initial" || result.waiting) return;
+        if (result === before || Predicate.isTagged(result, "Initial") || result.waiting) return;
 
-        if (result._tag === "Success") resume(Effect.succeed(result.value));
+        if (Predicate.isTagged(result, "Success")) resume(Effect.succeed(result.value));
         else resume(Effect.failCause(result.cause));
       },
       { immediate: false }
@@ -209,11 +209,15 @@ const usable = ({ registry, query, observation }: Binding): boolean => {
   if (registry.get(query) !== observation) return false;
   const current = presentCanonicalQuery(registry.get(query));
 
-  return current._tag === "Ready" && !current.waiting && Option.isNone(current.refreshFailure);
+  return (
+    Predicate.isTagged(current, "Ready") &&
+    !current.waiting &&
+    Option.isNone(current.refreshFailure)
+  );
 };
 
 const review = (binding: Binding, target: Target): void => {
-  if (!live(binding) || !usable(binding) || binding.task._tag !== "Ready") return;
+  if (!live(binding) || !usable(binding) || !Predicate.isTagged(binding.task, "Ready")) return;
   binding.owner.change({ _tag: "Reviewing", target, outcome: binding.task.outcome });
 };
 
@@ -235,7 +239,7 @@ const admission = (
 const confirm = (binding: Binding): void => {
   const { owner, task } = binding;
 
-  if (!live(binding) || !usable(binding) || task._tag !== "Reviewing") return;
+  if (!live(binding) || !usable(binding) || !Predicate.isTagged(task, "Reviewing")) return;
   const current = admission(binding, "Revoking", task.target);
   binding.revoke({
     target: task.target,
@@ -251,9 +255,15 @@ const confirm = (binding: Binding): void => {
 const refresh = (binding: Binding): void => {
   const { owner, task } = binding;
 
-  if (!live(binding) || task._tag === "Revoking" || task._tag === "Refreshing") return;
+  if (
+    !live(binding) ||
+    Predicate.isTagged(task, "Revoking") ||
+    Predicate.isTagged(task, "Refreshing")
+  ) {
+    return;
+  }
 
-  if (task._tag !== "Uncertain") {
+  if (!Predicate.isTagged(task, "Uncertain")) {
     binding.registry.refresh(binding.query);
 
     return;
@@ -269,7 +279,9 @@ const refresh = (binding: Binding): void => {
         outcome: Option.some({
           _tag: "Observed",
           target,
-          active: target._tag === "One" && pats.some((pat) => pat.shortId === target.pat.shortId),
+          active:
+            Predicate.isTagged(target, "One") &&
+            pats.some((pat) => pat.shortId === target.pat.shortId),
         }),
       });
     },
@@ -283,14 +295,14 @@ const actions = (binding: Binding): PATManagementActions => ({
   reviewOne: (shortId) => {
     const current = presentCanonicalQuery(binding.registry.get(binding.query));
 
-    if (current._tag !== "Ready") return;
+    if (!Predicate.isTagged(current, "Ready")) return;
     const pat = current.value.data.pats.find((candidate) => candidate.shortId === shortId);
 
     if (pat !== undefined) review(binding, { _tag: "One", pat });
   },
   reviewAll: () => review(binding, { _tag: "All" }),
   cancel: () => {
-    if (live(binding) && binding.task._tag === "Reviewing") {
+    if (live(binding) && Predicate.isTagged(binding.task, "Reviewing")) {
       binding.owner.change({ _tag: "Ready", outcome: binding.task.outcome });
     }
   },

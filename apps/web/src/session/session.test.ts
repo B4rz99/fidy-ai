@@ -5,7 +5,7 @@ import { Atom, type AtomRegistry } from "effect/reactivity";
 import { act, createElement, useContext } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
-import { makeFreshQuery, readFreshQuery } from "@/transport/fresh-query";
+import { freshQuery, readFreshQuery } from "@/transport/fresh-query";
 import { SessionRegistryProvider } from "./session";
 import { type SessionContextValue, useSession } from "./session-context";
 
@@ -34,7 +34,7 @@ it.each([false, true])(
         const held = Deferred.makeUnsafe<void>();
         let reads = 0;
 
-        const query = makeFreshQuery({
+        const query = freshQuery({
           runtime: Atom.runtime(Layer.empty),
           load: Effect.sync(() => {
             reads += 1;

@@ -1,10 +1,13 @@
-import { BigDecimal, Effect, Layer, Option, Schema } from "effect";
+import { BigDecimal, Data, Effect, Layer, Option, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
 import { afterEach, expect, vi } from "vitest";
 import { makeFidyClient } from "@/transport/client";
-import { type TransactionCaptureTask, makeTransactionCapture } from "./capture-task";
+import {
+  type TransactionCaptureTask,
+  makeTransactionCapture,
+} from "@/features/transactions/capture-task";
 
 const categoryId = "24000000-0000-4000-8000-000000000242";
 
@@ -192,15 +195,21 @@ it.effect(
     })
 );
 
+class ValidationFailedBody extends Data.TaggedClass("ValidationFailed")<{
+  error: Readonly<{ code: string; message: string; fields: ReadonlyArray<never> }>;
+  next: ReadonlyArray<never>;
+}> {}
+
 it.effect("retains the correctable draft after a canonical nonadmission refusal", () =>
   Effect.gen(function* () {
     const harness = fixture();
     harness.behavior.status = 400;
-    harness.behavior.body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-      _tag: "ValidationFailed",
-      error: { code: "validation_failed", message: "Refused", fields: [] },
-      next: [],
-    });
+    harness.behavior.body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+      new ValidationFailedBody({
+        error: { code: "validation_failed", message: "Refused", fields: [] },
+        next: [],
+      })
+    );
     const command = { categories: [], invalidate: (): void => {}, onCreated: (): void => {} };
     harness.view().submit(command);
     yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(0));

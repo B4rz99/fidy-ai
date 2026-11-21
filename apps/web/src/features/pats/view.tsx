@@ -7,7 +7,7 @@ import {
   patScopeCopy,
   recipientLabelLimit,
 } from "@/transport/client";
-import { Clock, DateTime, Effect, Option, Redacted } from "effect";
+import { Clock, DateTime, Effect, Option, Predicate, Redacted } from "effect";
 import { type FormEvent, type JSX, type RefCallback, useState, useSyncExternalStore } from "react";
 import type { PATCreationActions, PATCreationDisplay, ReviewedManualPATGrant } from "./issuance";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
@@ -284,7 +284,7 @@ const refusalRecovery = (
   prepareReview: () => void,
   remaining: number
 ): JSX.Element => {
-  if (state.refusal._tag === "Consent") {
+  if (Predicate.isTagged(state.refusal, "Consent")) {
     return (
       <Button render={<Link to="/settings/privacy" />} variant="outline">
         Revisar privacidad
@@ -292,7 +292,7 @@ const refusalRecovery = (
     );
   }
 
-  if (state.refusal._tag === "Authority") {
+  if (Predicate.isTagged(state.refusal, "Authority")) {
     return (
       <Button render={<Link to="/login" reloadDocument />} variant="outline">
         Iniciar sesión
@@ -316,13 +316,12 @@ const RefusedState = ({
 }>): JSX.Element => {
   const now = useSyncExternalStore(subscribeRetryClock, currentRetrySecond);
 
-  const remaining =
-    state.refusal._tag === "RateLimited"
-      ? Math.max(
-          0,
-          Math.ceil(DateTime.toEpochMillis(state.refusal.retryAt) / retryClockMilliseconds) - now
-        )
-      : 0;
+  const remaining = Predicate.isTagged(state.refusal, "RateLimited")
+    ? Math.max(
+        0,
+        Math.ceil(DateTime.toEpochMillis(state.refusal.retryAt) / retryClockMilliseconds) - now
+      )
+    : 0;
 
   return (
     <div className="flex flex-col gap-4">
@@ -407,7 +406,7 @@ const CreationContent = ({
       return (
         <GrantReview
           grant={state.grant}
-          issuing={state._tag === "Issuing"}
+          issuing={Predicate.isTagged(state, "Issuing")}
           confirm={actions.confirm}
           edit={actions.edit}
         />

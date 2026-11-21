@@ -1,10 +1,10 @@
 import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
-import { type Context, Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { HttpClientError } from "effect/http";
-import { forwardFreshQuery, makeFreshQuery } from "./fresh-query";
+import { forwardFreshQuery, freshQuery } from "./fresh-query";
 import type { CanonicalSuccess, FidyClient } from "./client";
 
-type Client = Context.Service.Shape<FidyClient>;
+type Client = FidyClient["Service"];
 
 type ProfileError = Effect.Error<ReturnType<Client["identity"]["getCurrentUser"]>>;
 
@@ -50,7 +50,7 @@ const initialMetadata: (client: FidyClient) => Atom.Writable<MetadataValue, Meta
   );
 
 const workspaceMetadataQuery = Atom.family((client: FidyClient) => {
-  const remote = makeFreshQuery({
+  const remote = freshQuery({
     runtime: client.runtime,
     load: client
       .use((api) => api.identity.getCurrentUser())
@@ -123,7 +123,7 @@ export const workspaceProfileQuery: (client: FidyClient) => ProfileQuery = Atom.
 
 const workspaceCategoriesSource: (client: FidyClient) => CategoriesQuery = Atom.family(
   (client: FidyClient) => {
-    const individual = makeFreshQuery({
+    const individual = freshQuery({
       runtime: client.runtime,
       load: client
         .use((api) => api.categories.listCategories())
@@ -173,12 +173,15 @@ const workspaceCategoriesView = Atom.family((client: FidyClient) =>
   })
 );
 
-export const workspaceCategoriesQuery = (
-  client: FidyClient
-): Readonly<{
+export type WorkspaceCategoriesQueries = Readonly<{
   source: CategoriesQuery;
   view: CategoriesQuery;
-}> => ({ source: workspaceCategoriesSource(client), view: workspaceCategoriesView(client) });
+}>;
+
+export const workspaceCategoriesQuery = (client: FidyClient): WorkspaceCategoriesQueries => ({
+  source: workspaceCategoriesSource(client),
+  view: workspaceCategoriesView(client),
+});
 
 export const workspaceDashboardCatalogQuery: (client: FidyClient) => CatalogQuery = Atom.family(
   (client: FidyClient) =>

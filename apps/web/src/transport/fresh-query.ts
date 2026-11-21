@@ -1,5 +1,5 @@
 import { queryLifetime } from "./query-lifetime";
-import { Deferred, Effect, Exit, Option } from "effect";
+import { Deferred, Effect, Exit, Option, Predicate } from "effect";
 import { type AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 
 type Query<A, E> = Atom.Atom<AsyncResult.AsyncResult<A, E>>;
@@ -50,7 +50,7 @@ const observeFreshRead =
       const unsubscribe = registry.subscribe(
         runtime,
         (result) => {
-          if (result._tag === "Failure" && !result.waiting) {
+          if (Predicate.isTagged(result, "Failure") && !result.waiting) {
             Deferred.doneUnsafe(completion, Effect.succeed(false));
           }
         },
@@ -79,9 +79,7 @@ const observeFreshRead =
       );
     });
 
-export const makeFreshQuery = <R, ER, A, E>(
-  options: FreshOptions<R, ER, A, E>
-): Query<A, E | ER> => {
+export const freshQuery = <R, ER, A, E>(options: FreshOptions<R, ER, A, E>): Query<A, E | ER> => {
   const { runtime, load } = options;
   const requested = Atom.make<Option.Option<Request>>(Option.none());
 
@@ -126,7 +124,7 @@ export const forwardFreshQuery = <A, E>(
   freshReads.set(query, (registry) =>
     Effect.suspend(() => {
       if ("before" in options) options.before(registry);
-      const currentSources = typeof sources === "function" ? sources(registry) : sources;
+      const currentSources = Predicate.isFunction(sources) ? sources(registry) : sources;
 
       return Effect.forEach(currentSources, (query) => readFreshQuery({ registry, query })).pipe(
         Effect.map((results) => results.every(Boolean))

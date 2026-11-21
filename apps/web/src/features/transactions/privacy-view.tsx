@@ -3,7 +3,7 @@ import { TransactionPrivacyNotice } from "@/ui/components/transaction-privacy-no
 
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import { type JSX, Suspense, useState } from "react";
 import { Button } from "@/ui/components/button";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
@@ -40,11 +40,11 @@ export const PrivacyTransactions = (): JSX.Element => {
   const dispatch = useAtomSet(historyResource.action);
   const state = history.query;
 
-  if (state._tag === "Initial") {
+  if (Predicate.isTagged(state, "Initial")) {
     return <PrivacyPending />;
   }
 
-  if (state._tag === "Failure" || Option.isSome(state.refreshFailure)) {
+  if (Predicate.isTagged(state, "Failure") || Option.isSome(state.refreshFailure)) {
     return (
       <main className="p-5">
         <Alert variant="destructive">

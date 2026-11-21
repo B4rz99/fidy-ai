@@ -1,16 +1,16 @@
-// @vitest-environment jsdom
-
 import { afterEach, expect, it, vi } from "vitest";
-import { observeContinuation } from "./scroll-continuation";
+import { observeContinuation } from "@/features/transactions/scroll-continuation";
 
 afterEach(() => vi.unstubAllGlobals());
 
-const setup = (): Readonly<{
+type ContinuationHarness = Readonly<{
   deliver: (visible: ReadonlyArray<boolean>) => void;
   onMore: ReturnType<typeof vi.fn>;
   dispose: () => void;
   disconnect: ReturnType<typeof vi.fn>;
-}> => {
+}>;
+
+const setup = (): ContinuationHarness => {
   const element = document.createElement("div");
   const onMore = vi.fn();
   const disconnect = vi.fn();

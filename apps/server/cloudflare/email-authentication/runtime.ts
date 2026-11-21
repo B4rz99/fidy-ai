@@ -2,7 +2,7 @@ import { checkLoginMailbox, startLoginEmail } from "./internal/login-admission";
 import { verifyLoginEmail } from "./internal/login-completion";
 import { deliverPendingReplacement as deliverLocal } from "./internal/native-mail-delivery";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
 import {
   NativeLoginEmailWork,
   loginCheckUrl,
@@ -59,6 +59,8 @@ export const localLoginEmailRequest = Effect.fn(function* ({
 
 export const startLoginWorkflow: typeof startWorkflow = (...args) => startWorkflow(...args);
 
+const deliveryRuntime = ManagedRuntime.make(Layer.empty);
+
 export class BrowserPairingEmailWorkflowV1 extends WorkflowEntrypoint<
   { USER_STORE: DurableObjectNamespace },
   unknown
@@ -71,7 +73,7 @@ export class BrowserPairingEmailWorkflowV1 extends WorkflowEntrypoint<
     return observeWorkerPromise(
       () =>
         step.do("send-browser-pairing-email-v2", { retries: { limit: 0, delay: "1 second" } }, () =>
-          Effect.runPromise(runLoginDelivery(this.env.USER_STORE, work.value))
+          deliveryRuntime.runPromise(runLoginDelivery(this.env.USER_STORE, work.value))
         ),
       {
         environment: workerRelease(this.env),

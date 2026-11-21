@@ -105,17 +105,21 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         deadline
       );
 
-      for (const [index, id] of [first, second].entries()) {
-        yield* owner.exec(
-          "INSERT INTO ingestion_review_items(id,user_id,source_kind,statement_submission_id,record_number,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,original_evidence,issues_json,evidence_state) VALUES(?,?,'statement',?,?,'mapping-unavailable',?,?,'CO','es-CO','America/Bogota','csv','statement-v1','mechanical-v1','private-only','[]','retained')",
-          id,
-          alice.user,
-          submission,
-          index + 1,
-          owner.now,
-          deadline
-        );
-      }
+      yield* Effect.forEach(
+        [first, second].entries(),
+        Effect.fnUntraced(function* ([index, id]) {
+          yield* owner.exec(
+            "INSERT INTO ingestion_review_items(id,user_id,source_kind,statement_submission_id,record_number,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,original_evidence,issues_json,evidence_state) VALUES(?,?,'statement',?,?,'mapping-unavailable',?,?,'CO','es-CO','America/Bogota','csv','statement-v1','mechanical-v1','private-only','[]','retained')",
+            id,
+            alice.user,
+            submission,
+            index + 1,
+            owner.now,
+            deadline
+          );
+        }),
+        { discard: true }
+      );
 
       const protocol = protocolFor(runtime);
 

@@ -1,4 +1,4 @@
-import { Cause, Option } from "effect";
+import { Cause, Option, Schema } from "effect";
 import type { ProviderConfiguration } from "../contract";
 import { providerConfiguration } from "./configuration";
 import { ProviderVerificationFailure } from "./token-contract";
@@ -22,7 +22,10 @@ export const validCode = (query: URLSearchParams): boolean => {
 export const cookieVerifier = ({
   request,
   cookieName,
-}: Readonly<{ request: Request; cookieName: string }>): Option.Option<string> => {
+}: Readonly<{
+  request: Request;
+  cookieName: string;
+}>): Option.Option<string> => {
   const values = (request.headers.get("cookie") ?? "")
     .split(";")
     .map((part) => part.trim())
@@ -37,9 +40,34 @@ export const cookieVerifier = ({
 export const rejectionReason = (
   failure: unknown
 ): ProviderVerificationFailure["reason"] | "verification_failed" | "verification_timed_out" => {
-  if (failure instanceof ProviderVerificationFailure) return failure.reason;
+  if (isProviderVerificationFailure(failure)) return failure.reason;
 
   return Cause.isTimeoutError(failure) ? "verification_timed_out" : "verification_failed";
+};
+
+const isProviderVerificationFailure = Schema.is(Schema.instanceOf(ProviderVerificationFailure));
+
+const redirectHeaders = ({
+  environment,
+  provider,
+  clearCookie,
+}: Readonly<{
+  environment: ProviderConfiguration;
+  provider: AuthenticationProvider;
+  clearCookie: boolean;
+}>): Record<string, string> => {
+  const headers = {
+    location: `${environment.BROWSER_ORIGIN}/auth/${provider}-return`,
+    "cache-control": "no-store",
+    "referrer-policy": "no-referrer",
+  };
+
+  return clearCookie
+    ? {
+        ...headers,
+        "set-cookie": `${providerConfiguration({ environment, provider }).cookieName}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
+      }
+    : headers;
 };
 
 export const callbackRedirect = ({
@@ -53,14 +81,5 @@ export const callbackRedirect = ({
 }>): Response =>
   new Response(null, {
     status: redirectStatus,
-    headers: {
-      location: `${environment.BROWSER_ORIGIN}/auth/${provider}-return`,
-      "cache-control": "no-store",
-      "referrer-policy": "no-referrer",
-      ...(clearCookie
-        ? {
-            "set-cookie": `${providerConfiguration({ environment, provider }).cookieName}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
-          }
-        : {}),
-    },
+    headers: redirectHeaders({ environment, provider, clearCookie }),
   });

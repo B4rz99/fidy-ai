@@ -2,6 +2,8 @@ import { InsightUnavailable } from "../contract";
 import type { StoreCapacityUnavailable } from "../../runtime/sqlite/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { DateTime, Effect, Option, Schema } from "effect";
+import * as Arr from "effect/Array";
+import { ConsentSubject } from "./consent-subject";
 import {
   type ConfirmationDay,
   InsightEvent,
@@ -77,7 +79,7 @@ const eligible = Effect.fn(function* (row: Source) {
     original.id !== row.confirmation_id ||
     original.confirmedAt.epochMilliseconds !== row.confirmed_at_ms
   ) {
-    return yield* new InsightUnavailable();
+    return yield* new InsightUnavailable({ cause: Option.none() });
   }
 
   return original.announcement.kind === "eligible"
@@ -110,21 +112,24 @@ const freezeDay = Effect.fn(function* (
   const [closed] =
     yield* sql`SELECT event_id FROM recurring_digest_days WHERE from_ms=${day.from.epochMilliseconds} AND to_ms=${day.toExclusive.epochMilliseconds}`;
 
-  const items = [];
+  const matches = yield* Effect.forEach(
+    sources,
+    Effect.fnUntraced(function* (row) {
+      const match = yield* eligible(row);
+      const included = Option.isSome(match) && closed === undefined;
+      const disposition = sourceDecision(included, row);
+      yield* sql`INSERT INTO recurring_digest_claims VALUES(${row.confirmation_id},${day.from.epochMilliseconds},${day.toExclusive.epochMilliseconds},${disposition})`;
 
-  for (const row of sources) {
-    const match = yield* eligible(row);
-    const included = Option.isSome(match) && closed === undefined;
+      return included ? match : Option.none();
+    })
+  );
 
-    if (included) items.push(match.value);
-    const disposition = sourceDecision(included, row);
-    yield* sql`INSERT INTO recurring_digest_claims VALUES(${row.confirmation_id},${day.from.epochMilliseconds},${day.toExclusive.epochMilliseconds},${disposition})`;
-  }
+  const items = Arr.getSomes(matches);
 
   if (closed !== undefined) return;
   const first = sources[0];
 
-  if (first === undefined) return yield* new InsightUnavailable();
+  if (first === undefined) return yield* new InsightUnavailable({ cause: Option.none() });
   const id = items.length === 0 ? null : InsightEventId.make(newId());
 
   if (id !== null) {
@@ -163,7 +168,7 @@ const freezeDay = Effect.fn(function* (
 });
 
 const sourceAdmission = protectConsentStatement({
-  subject: { _tag: "Owner", column: "u.id" },
+  subject: ConsentSubject.Owner({ column: "u.id" }),
   requirement: "active",
   statement: {
     sql: "SELECT i.*,p.evaluated_at_ms AS cutoff FROM recurring_digest_instructions i JOIN users u ON u.id=i.user_id JOIN proactive_grants g ON g.user_id=u.id AND g.id=i.grant_id AND g.kind='new-recurring-series' AND g.revoked_at_ms IS NULL JOIN recurring_evaluation_records p ON p.kind='progress' AND p.user_id=u.id AND p.phase='complete' JOIN transaction_projection_state s ON s.user_id=u.id AND s.fact_revision=p.evaluated_revision WHERE i.next_ms<=? AND NOT EXISTS(SELECT 1 FROM erasure_requests)",

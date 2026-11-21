@@ -81,12 +81,12 @@ export const canonicalLocalRequest = Effect.fn(
 
     return {
       operation,
-      request: new Request(url.href, {
-        method: operation.method,
-        headers,
-        signal,
-        ...(body === undefined ? {} : { body }),
-      }),
+      request: new Request(
+        url.href,
+        body === undefined
+          ? { method: operation.method, headers, signal }
+          : { method: operation.method, headers, signal, body }
+      ),
       oauth: { subject, admission },
     };
   },

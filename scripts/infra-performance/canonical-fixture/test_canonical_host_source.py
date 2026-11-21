@@ -1,8 +1,14 @@
+from functools import partial
 import json
+from pathlib import Path
+import subprocess
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from canonical_host_source import WORKFLOW_REF, require_protected_preview, verified_source
+from canonical_host_source import (WORKFLOW_REF, protected_release_job, require_ordinary_source,
+                                   require_protected_preview, verified_source)
 
 VERIFIER = "a" * 40
 REVISION = "c" * 40
@@ -22,6 +28,54 @@ ENV = {
 
 
 class CanonicalHostSourceTest(unittest.TestCase):
+    def test_requires_exact_release_and_skipped_site(self):
+        release = {"name": "release", "status": "completed", "conclusion": "success", "steps": []}
+        site = {"name": "site", "status": "completed", "conclusion": "skipped", "steps": []}
+        jobs = {"total_count": 2, "jobs": [site, release]}
+        get = Mock(return_value=json.dumps(jobs))
+        self.assertEqual(protected_release_job("44849694523", get), release)
+        get.assert_called_once_with("runs/44849694523/attempts/1/jobs?per_page=100")
+        for rows in ([release], [release, site, site], [release, {**site, "conclusion": "success"}],
+                     [release, {**site, "name": "foreign"}], [{**release, "conclusion": "skipped"}, site],
+                     [release, {**site, "steps": [{"name": "Unexpected site work"}]}]):
+            with self.subTest(rows=rows), self.assertRaisesRegex(ValueError, "protected release jobs"):
+                protected_release_job("44849694523", Mock(return_value=json.dumps({
+                    "total_count": len(rows), "jobs": rows,
+                })))
+
+    def test_allows_only_exact_worker_types_dev_pin(self):
+        before = {"name": "@fidy/server", "devDependencies": {"@cloudflare/workers-types": "5.20261113.1"},
+                  "dependencies": {"some-runtime": "1.2.3"}}
+        after = {**before, "devDependencies": {"@cloudflare/workers-types": "5.20261114.1"}}
+        with TemporaryDirectory() as directory:
+            def git(*args):
+                return subprocess.check_output(["git", "-C", directory, *args], text=True, timeout=10).strip()
+
+            git("init", "-q")
+            manifest = Path(directory) / "apps/server/package.json"
+            manifest.parent.mkdir(parents=True)
+
+            def commit(value):
+                manifest.write_text(json.dumps(value), encoding="utf-8")
+                git("add", ".")
+                git("-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false",
+                    "commit", "--allow-empty", "-qm", "manifest fixture")
+                return git("rev-parse", "HEAD")
+
+            old = commit(before)
+            scoped_git = SimpleNamespace(run=partial(subprocess.run, cwd=directory),
+                                         check_output=partial(subprocess.check_output, cwd=directory))
+            with patch("canonical_host_source.subprocess", scoped_git):
+                require_ordinary_source(old, old)
+                require_ordinary_source(old, commit(after))
+                for changed in (
+                    {**after, "devDependencies": {"@cloudflare/workers-types": "5.20261115.1"}},
+                    {**after, "devDependencies": {**after["devDependencies"], "other-types": "1.0.0"}},
+                    {**after, "dependencies": {"some-runtime": "1.2.4"}},
+                ):
+                    with self.subTest(changed=changed), self.assertRaisesRegex(ValueError, "server manifest"):
+                        require_ordinary_source(old, commit(changed))
+
     def test_current_protected_workflow_only(self):
         known_head = Mock(return_value=VERIFIER)
         self.assertEqual(require_protected_preview(ENV, known_head), VERIFIER)

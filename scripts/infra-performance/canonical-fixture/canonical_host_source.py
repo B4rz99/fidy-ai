@@ -131,8 +131,7 @@ def verified_smoke(reference, source, verifier, get=actions_get, git=git_read):
 def approved_plan(reference, source, verifier, get=actions_get):
     run, body = protected_archive(verifier, reference["artifactId"], reference["sha256"],
                                   prefix="native-canonical-host-plan-", conclusions={"success"}, get=get)
-    inventory = json.loads(get(f"runs/{run}/attempts/1/jobs?per_page=100"))
-    job, = inventory["jobs"]
+    job = protected_release_job(run, get)
     required = {
         "Authenticate the exact closed active source for canonical host planning": "success",
         "Verify the scoped Access plan and closed canonical cutover prerequisites": "success",
@@ -142,8 +141,7 @@ def approved_plan(reference, source, verifier, get=actions_get):
         "Transfer and verify the two closed canonical hosts": "skipped",
     }
     observed = [(step["name"], step["conclusion"]) for step in job["steps"] if step["name"] in required]
-    if (inventory["total_count"] != 1 or job["name"] != "release" or job["conclusion"] != "success"
-            or observed != list(required.items())):
+    if observed != list(required.items()):
         raise ValueError("Canonical host plan has unexpected protected step outcomes")
     with ZipFile(BytesIO(body)) as archive:
         entries = archive.infolist()
@@ -158,6 +156,47 @@ def approved_plan(reference, source, verifier, get=actions_get):
     return plan
 
 
+def protected_release_job(run, get):
+    inventory = json.loads(get(f"runs/{run}/attempts/1/jobs?per_page=100"))
+    jobs = inventory["jobs"]
+    by_name = {job["name"]: job for job in jobs}
+    if (inventory["total_count"] != 2 or len(jobs) != 2 or set(by_name) != {"release", "site"}
+            or any(job["status"] != "completed" for job in jobs)
+            or by_name["release"]["conclusion"] != "success"
+            or by_name["site"]["conclusion"] != "skipped" or by_name["site"]["steps"] != []):
+        raise ValueError("Unexpected protected release jobs")
+    return by_name["release"]
+
+
+def strict_manifest_member(pairs):
+    members = dict(pairs)
+    if len(members) != len(pairs):
+        raise ValueError("Opening server manifest repeats a JSON member")
+    return members
+
+
+def require_server_manifest(application, verifier, manifest):
+    diff = subprocess.run(
+        ["git", "diff", "--quiet", application, verifier, "--", manifest],
+        check=False, timeout=20,
+    )
+    if diff.returncode == 0:
+        return
+
+    def read(revision):
+        content = subprocess.check_output(["git", "show", revision + ":" + manifest], text=True, timeout=20)
+        return json.loads(content, object_pairs_hook=strict_manifest_member)
+
+    before = read(application)
+    dev = before["devDependencies"]
+    key = "@cloudflare/workers-types"
+    if dev.get(key) != "5.20261113.1":
+        raise ValueError("Opening server manifest has a different historical Workers types pin")
+    expected = {**before, "devDependencies": {**dev, key: "5.20261114.1"}}
+    if json.dumps(read(verifier), sort_keys=True) != json.dumps(expected, sort_keys=True):
+        raise ValueError("Opening server manifest differs outside the reviewed Workers types dev pin")
+
+
 def require_ordinary_source(application, verifier):
     """Allow only the reviewed, outcome-only Native provider telemetry seam during opening."""
     provider = "apps/server/cloudflare/directory/internal/provider.ts"
@@ -165,14 +204,17 @@ def require_ordinary_source(application, verifier):
     ingress = "apps/server/cloudflare/public-worker.ts"
     core = "apps/server/cloudflare/core-http/runtime.ts"
     proof_test = "apps/server/cloudflare/storage-bootstrap/release.test.ts"
+    manifest = "apps/server/package.json"
+    require_server_manifest(application, verifier, manifest)
+    scope = ["apps/server", "packages", ":(exclude)" + manifest]
     delta = subprocess.run(
-        ["git", "diff", "--quiet", application, verifier, "--", "apps/server", "packages"],
+        ["git", "diff", "--quiet", application, verifier, "--", *scope],
         check=False, timeout=20,
     )
     if delta.returncode == 0:
         return
     subprocess.run(
-        ["git", "diff", "--quiet", application, verifier, "--", "apps/server", "packages",
+        ["git", "diff", "--quiet", application, verifier, "--", *scope,
          *[":(exclude)" + path for path in (provider, reporter, ingress, core, proof_test)]],
         check=True, timeout=20,
     )
@@ -232,8 +274,7 @@ def require_ordinary_source(application, verifier):
 def approved_transfer(reference, source, verifier, get=actions_get):
     run, body = protected_archive(verifier, reference["artifactId"], reference["sha256"],
                                   prefix="native-canonical-host-transfer-", conclusions={"success"}, get=get)
-    inventory = json.loads(get(f"runs/{run}/attempts/1/jobs?per_page=100"))
-    job, = inventory["jobs"]
+    job = protected_release_job(run, get)
     required = {
         "Authenticate the exact closed active source for canonical host planning": "success",
         "Fence the exact incumbent writers before transferring canonical hosts": "success",
@@ -242,8 +283,7 @@ def approved_transfer(reference, source, verifier, get=actions_get):
         "Retain the verified closed canonical host transfer": "success",
     }
     observed = [(step["name"], step["conclusion"]) for step in job["steps"] if step["name"] in required]
-    if (inventory["total_count"] != 1 or job["name"] != "release" or job["conclusion"] != "success"
-            or observed != list(required.items())):
+    if observed != list(required.items()):
         raise ValueError("Closed canonical transfer did not pass protected verification")
     with ZipFile(BytesIO(body)) as archive:
         entry, = archive.infolist()

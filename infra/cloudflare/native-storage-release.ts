@@ -1347,14 +1347,28 @@ const readCanonicalSource = Effect.fn(function* (
   });
   return { source, bindings };
 });
+const checkCanonicalPrerequisite =
+  (stage: string) =>
+  <A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    work.pipe(
+      Effect.tapCause((cause) =>
+        Effect.logError(
+          "Canonical host check failed at " + stage + ". " + resourceFailureMessage(cause)
+        )
+      )
+    );
 const checkCanonicalHosts = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
   { port, mode }: { port: ReleasePort; mode: "plan" | "transfer" | "transferred" }
 ) {
   const transferring = mode !== "transferred";
-  const { source, bindings } = yield* readCanonicalSource(env, client, port);
-  yield* verifyNativeEdge(env, client, "verify");
+  const { source, bindings } = yield* readCanonicalSource(env, client, port).pipe(
+    checkCanonicalPrerequisite("authenticated native source")
+  );
+  yield* verifyNativeEdge(env, client, "verify").pipe(
+    checkCanonicalPrerequisite("zone firewall policy")
+  );
   const edge = yield* inspectDeployedEdge(env, client, {
     installed: true,
     bindings,
@@ -1362,6 +1376,7 @@ const checkCanonicalHosts = Effect.fn(function* (
     staging: transferring,
     incumbentTransfer: transferring,
   }).pipe(
+    checkCanonicalPrerequisite("DNS, Workers Builds or protected Access"),
     Effect.mapError(
       () => new ReleaseFailure({ message: "Canonical DNS, host or Access inventory differs" })
     )
@@ -1371,8 +1386,14 @@ const checkCanonicalHosts = Effect.fn(function* (
     readZone: zoneReader(env, client, edge.zoneId),
     zoneId: edge.zoneId,
   });
-  if (transferring) yield* checkCanonicalIncumbents(read);
-  yield* requireStagedHostDomains(accountReader(env, client), edge.zoneId, transferring);
+  if (transferring) {
+    yield* checkCanonicalIncumbents(read).pipe(
+      checkCanonicalPrerequisite("exact incumbent DNS and attachments")
+    );
+  }
+  yield* requireStagedHostDomains(accountReader(env, client), edge.zoneId, transferring).pipe(
+    checkCanonicalPrerequisite("native Worker domain inventory")
+  );
   yield* inspectIncumbentWriters(env, client, edge.zoneId).pipe(
     Effect.mapError(
       () => new ReleaseFailure({ message: "Incumbent writer or email fence remains unverified" })
@@ -1394,6 +1415,13 @@ const planHostStage = Effect.fn(function* (
     port,
     mode: operation === "plan-stage-hosts" ? "plan" : "transfer",
   });
+});
+export const planCanonicalHostPreview = Effect.gen(function* () {
+  const env = releaseEvidence.config();
+  const client = yield* HttpClient.HttpClient;
+  return yield* planHostStage(env, client, releasePort({ env, client })).pipe(
+    Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" })
+  );
 });
 const requireRetainedCanonicalWeb = (
   port: ReleasePort,

@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Clock, Effect, Fiber, Option } from "effect";
+import { Clock, Effect, Fiber, Option, Predicate, type Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { expect } from "vitest";
 import { verifyIndependentErasure } from "./native-erasure";
@@ -41,13 +41,13 @@ it.effect(
       const id = "a".repeat(64);
       const next = "b".repeat(64);
 
-      const page = (cursor: string, id: string): unknown => ({
+      const page = (cursor: string, id: string): Schema.Json => ({
         success: true,
         result: [{ id, hasStoredData: true }],
         result_info: { cursors: { after: cursor } },
       });
 
-      const lookup = (path: string): Effect.Effect<unknown> =>
+      const lookup = (path: string): Effect.Effect<Schema.Json> =>
         Effect.succeed(path.includes("cursor=next") ? page("", next) : page("next", id));
 
       expect(yield* readUserObjects(lookup, "c".repeat(32))).toEqual(
@@ -295,7 +295,7 @@ it.effect(
       }).pipe(Effect.flip, Effect.forkChild);
 
       yield* TestClock.adjust("21 minutes");
-      expect(yield* Fiber.join(result)).toMatchObject({ _tag: "TimeoutError" });
+      expect(Predicate.isTagged(yield* Fiber.join(result), "TimeoutError")).toBe(true);
       expect(signups).toBe(1);
       expect(admissions).toBe(2);
       expect(stages.at(-1)).toBe("waiting-physical-erasure");

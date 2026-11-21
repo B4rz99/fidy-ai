@@ -21,13 +21,15 @@ const services = Layer.mergeAll(
   Layer.provideMerge(CliKit.CliKitInteraction, CliKit.layer())
 ).pipe(Layer.provideMerge(PlatformServices));
 
-class DriftInspectionFailed extends Data.TaggedError("DriftInspectionFailed") {}
+class DriftInspectionFailed extends Data.TaggedError("DriftInspectionFailed")<{
+  readonly cause: unknown;
+}> {}
 
 const inspect = Effect.gen(function* () {
   const snapshot = yield* Drift.inspect({
     entrypoint: "alchemy-drift.run.ts",
     stage: "production",
-  }).pipe(Effect.mapError(() => new DriftInspectionFailed()));
+  }).pipe(Effect.mapError((cause) => new DriftInspectionFailed({ cause })));
 
   return workerDriftReport(snapshot.repairPlan.native).join("\n");
 }).pipe(
@@ -45,7 +47,7 @@ if (import.meta.main) {
       Effect.flatMap((report) =>
         Effect.tryPromise({
           try: () => Bun.write(Bun.stdout, `${report}\n`),
-          catch: () => new DriftInspectionFailed(),
+          catch: (cause) => new DriftInspectionFailed({ cause }),
         })
       ),
       Effect.provide(services),

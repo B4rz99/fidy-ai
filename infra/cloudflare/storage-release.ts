@@ -1,3 +1,4 @@
+import type { WorkerBindings } from "./rollback-compatibility";
 import { Effect, Schema } from "effect";
 import { directoryHistory } from "../../apps/server/cloudflare/directory/schema/operations";
 import { erasureStoreHistory } from "../../apps/server/cloudflare/erasure-store/operations";
@@ -126,7 +127,7 @@ const nativeNamespace = Schema.Struct({
   namespace_id: Schema.NonEmptyString,
 });
 
-type Bindings = Readonly<Record<string, unknown>>;
+type Bindings = WorkerBindings;
 
 type VerifiedStorage = {
   description: typeof StorageRelease.Type;

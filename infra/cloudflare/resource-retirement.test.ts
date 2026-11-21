@@ -9,9 +9,9 @@ import { evalStack } from "alchemy/Stack";
 import { InMemoryService, State, type StateStoreError } from "alchemy/State";
 import { it } from "@effect/vitest";
 import { BunServices } from "@effect/platform-bun";
-import { Data, Effect, Exit, FileSystem, Layer } from "effect";
+import { Data, Effect, Exit, FileSystem, Layer, Predicate } from "effect";
 import { afterAll, beforeAll, expect, vi } from "vitest";
-import { applyScopedNativePlan } from "./native-fixture-plan";
+import { applyScopedNativePlan, isFixturePlanRefused } from "./native-fixture-plan";
 
 let profileDirectory = "";
 
@@ -95,10 +95,10 @@ const fixture = Effect.gen(function* () {
       | { deletions: "defer" | "only"; replacement: "create-first" | "delete-first" }
       | { deletions: "successor"; beforeApply: Effect.Effect<unknown, StateStoreError> }
   ) {
-    const deletions = typeof mode === "string" ? mode : mode.deletions;
+    const deletions = Predicate.isString(mode) ? mode : mode.deletions;
 
     const replacement =
-      typeof mode === "string" || mode.deletions === "successor" ? "update" : mode.replacement;
+      Predicate.isString(mode) || mode.deletions === "successor" ? "update" : mode.replacement;
 
     return yield* evalStack(
       Alchemy.Stack(
@@ -120,7 +120,7 @@ const fixture = Effect.gen(function* () {
         if (deletions === "successor") {
           const plan = yield* Plan.make(stack, { include: ["Core"] });
 
-          if (typeof mode !== "string" && mode.deletions === "successor") {
+          if (!Predicate.isString(mode) && mode.deletions === "successor") {
             yield* mode.beforeApply;
           }
 
@@ -185,10 +185,8 @@ it.effect("refuses a prior generation saved after the scoped plan was captured",
       })
     );
 
-    expect(refusal).toMatchObject({
-      _tag: "FixturePlanRefused",
-      reason: "successor scope has a pending replacement",
-    });
+    expect(isFixturePlanRefused(refusal)).toBe(true);
+    expect(refusal).toMatchObject({ reason: "successor scope has a pending replacement" });
     expect(calls).toEqual(before);
     expect([...cloud.values()]).toEqual(retained);
   }).pipe(Effect.provide(Alchemist.layer()))
@@ -281,17 +279,17 @@ it.effect(
   "keeps a failed deletion tracked and retries without reconciling the verified deployment",
   () =>
     Effect.gen(function* () {
-      const test = yield* fixture;
-      yield* test.deploy(true, "1", "defer");
-      const candidate = yield* test.deploy(false, "2", "defer");
-      const beforeCleanup = [...test.calls];
-      test.refuseDeletion(true);
-      expect(Exit.isFailure(yield* Effect.exit(test.deploy(false, "2", "only")))).toBe(true);
-      expect(test.calls).toEqual(beforeCleanup);
-      expect([...test.cloud.values()]).toHaveLength(2);
-      test.refuseDeletion(false);
-      yield* test.deploy(false, "2", "only");
-      expect([...test.cloud.values()]).toEqual([candidate]);
-      expect(test.calls).toEqual([...beforeCleanup, "delete:OnboardingQueue"]);
+      const retirement = yield* fixture;
+      yield* retirement.deploy(true, "1", "defer");
+      const candidate = yield* retirement.deploy(false, "2", "defer");
+      const beforeCleanup = [...retirement.calls];
+      retirement.refuseDeletion(true);
+      expect(Exit.isFailure(yield* Effect.exit(retirement.deploy(false, "2", "only")))).toBe(true);
+      expect(retirement.calls).toEqual(beforeCleanup);
+      expect([...retirement.cloud.values()]).toHaveLength(2);
+      retirement.refuseDeletion(false);
+      yield* retirement.deploy(false, "2", "only");
+      expect([...retirement.cloud.values()]).toEqual([candidate]);
+      expect(retirement.calls).toEqual([...beforeCleanup, "delete:OnboardingQueue"]);
     }).pipe(Effect.provide(Alchemist.layer()))
 );

@@ -16,7 +16,7 @@ const runDriftCheck = (plan: string, mode?: string): SpawnSyncReturns<string> =>
       }
     );
 
-    return spawnSync("bash", ["scripts/check-topology-drift.sh", ...(mode ? [mode] : [])], {
+    return spawnSync("bash", ["scripts/check-topology-drift.sh"].concat(mode ? [mode] : []), {
       cwd: new URL("..", import.meta.url).pathname,
       encoding: "utf8",
       env: {

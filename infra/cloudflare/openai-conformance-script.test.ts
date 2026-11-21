@@ -1,7 +1,7 @@
 import { describe } from "vitest";
 import { BunServices } from "@effect/platform-bun";
 import { expect, layer } from "@effect/vitest";
-import { Config, Data, Effect, FileSystem, Schema, Stream } from "effect";
+import { Config, Data, Effect, FileSystem, Match, Option, Schema, Stream } from "effect";
 
 import { ChildProcess } from "effect/process";
 
@@ -56,21 +56,37 @@ const failureDiagnostic = (check: string, report: Report): string => {
 const assertDiagnostic = (scenario: Scenario, result: ScriptResult, check?: string): void => {
   const { report, diagnostic, output } = result;
 
-  if (scenario === "readiness-headers") expect(diagnostic).toContain("readiness request timed out");
+  Match.value(scenario).pipe(
+    Match.when("readiness-headers", () =>
+      expect(diagnostic).toContain("readiness request timed out")
+    ),
+    Match.whenOr("post-headers", "post-body", () =>
+      expect(diagnostic).toBe("OpenAI conformance request failed.\n")
+    ),
+    Match.orElse(() => undefined)
+  );
 
-  if (scenario === "post-headers" || scenario === "post-body") {
-    expect(diagnostic).toBe("OpenAI conformance request failed.\n");
-  }
-
-  if (check !== undefined) {
-    expect(diagnostic).toBe(
-      report.deferred
-        ? `::warning::OpenAI live conformance deferred: check=${check} category=ProviderQuotaExceeded. Model behavior remains unverified; deterministic checks passed.\n`
-        : failureDiagnostic(check, report)
-    );
-    expect(output + diagnostic).not.toContain("fixture-private-content");
-  }
+  Option.match(Option.fromUndefinedOr(check), {
+    onNone: () => undefined,
+    onSome: (failed) => {
+      expect(diagnostic).toBe(
+        report.deferred
+          ? `::warning::OpenAI live conformance deferred: check=${failed} category=ProviderQuotaExceeded. Model behavior remains unverified; deterministic checks passed.\n`
+          : failureDiagnostic(failed, report)
+      );
+      expect(output + diagnostic).not.toContain("fixture-private-content");
+    },
+  });
 };
+
+const assertPrerequisiteFailure = Effect.fn(function* (result: ScriptResult) {
+  const fs = yield* FileSystem.FileSystem;
+  expect(result.result).toBe(23);
+  expect(result.gets).toBe(0);
+  expect(result.posts).toBe(0);
+  expect(result.output + result.diagnostic).toBe("");
+  expect(yield* fs.exists(`${result.directory}/worker.settled.ready`)).toBe(false);
+});
 
 const assertOutcome = Effect.fn(function* (
   scenario: Scenario,
@@ -81,15 +97,7 @@ const assertOutcome = Effect.fn(function* (
   const { report, directory } = result;
   expect(yield* fs.readDirectory(`${directory}/tmp`)).toEqual([]);
 
-  if (report.prerequisiteFailure) {
-    expect(result.result).toBe(23);
-    expect(result.gets).toBe(0);
-    expect(result.posts).toBe(0);
-    expect(result.output + result.diagnostic).toBe("");
-    expect(yield* fs.exists(`${directory}/worker.settled.ready`)).toBe(false);
-
-    return;
-  }
+  if (report.prerequisiteFailure) return yield* assertPrerequisiteFailure(result);
 
   const passed = scenario === "healthy" && check === undefined;
   expect(result.result).toBe(passed || report.deferred ? 0 : 1);
@@ -215,11 +223,9 @@ const exercise = Effect.fn(function* (
   const owned = yield* Effect.acquireRelease(
     Effect.sync(() => {
       const child = Bun.spawn(
-        [
-          "bash",
-          `${directory}/infra/cloudflare/scripts/check.sh`,
-          ...(report.allowQuotaDeferral ? ["--allow-quota-deferral"] : []),
-        ],
+        ["bash", `${directory}/infra/cloudflare/scripts/check.sh`].concat(
+          report.allowQuotaDeferral ? ["--allow-quota-deferral"] : []
+        ),
         {
           cwd: directory,
           env: {

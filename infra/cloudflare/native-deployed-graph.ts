@@ -32,6 +32,7 @@ type InventoryPhase =
 
 export class NativeInventoryRefused extends Data.TaggedError("NativeInventoryRefused")<{
   phase: InventoryPhase;
+  cause: unknown;
 }> {}
 
 export const isNativeInventoryRefused = (value: unknown): value is NativeInventoryRefused =>
@@ -40,7 +41,7 @@ export const isNativeInventoryRefused = (value: unknown): value is NativeInvento
 const inventoryPhase =
   (phase: InventoryPhase) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, NativeInventoryRefused, R> =>
-    effect.pipe(Effect.mapError(() => new NativeInventoryRefused({ phase })));
+    effect.pipe(Effect.mapError((cause) => new NativeInventoryRefused({ phase, cause })));
 
 const verifyInventoryNames = (
   phase: InventoryPhase,
@@ -49,7 +50,7 @@ const verifyInventoryNames = (
 ): Effect.Effect<void, NativeInventoryRefused> =>
   rows.length === wanted.length && wanted.every((item) => rows.includes(item))
     ? Effect.void
-    : Effect.fail(new NativeInventoryRefused({ phase }));
+    : Effect.fail(new NativeInventoryRefused({ phase, cause: { rows, wanted } }));
 
 const bucketTargets = {
   STATEMENT_STAGING_BUCKET: "statement-staging",
@@ -58,31 +59,31 @@ const bucketTargets = {
   SMOKE_BUCKET: "release-smoke",
 } as const;
 
-const queueTargets = (revision: string): Readonly<Record<string, string>> => ({
-  ASYNC_DEAD_LETTERS: "async-dead-letters",
-  FORWARDED_EMAIL_QUEUE: "forwarded-email",
-  CONNECTION_SYNCHRONIZATION_QUEUE: "connection-synchronization",
-  STATEMENT_EXTRACTION_QUEUE: "statement-extraction",
-  OPERATIONAL_CANARY_QUEUE: "operational-canary",
-  BILLING_COLLECTION_QUEUE: "billing-collection",
-  HOSTED_WHATSAPP_QUEUE: "hosted-whatsapp",
-  WEEKLY_DELIVERY_QUEUE: "weekly-delivery",
-  BROWSER_PAIRING_EMAIL_QUEUE: "browser-pairing-email",
-  SMOKE_QUEUE: "smoke-" + revision,
-});
+const queueTargets = (revision: string): ReadonlyMap<string, string> =>
+  new Map([
+    ["ASYNC_DEAD_LETTERS", "async-dead-letters"],
+    ["FORWARDED_EMAIL_QUEUE", "forwarded-email"],
+    ["CONNECTION_SYNCHRONIZATION_QUEUE", "connection-synchronization"],
+    ["STATEMENT_EXTRACTION_QUEUE", "statement-extraction"],
+    ["OPERATIONAL_CANARY_QUEUE", "operational-canary"],
+    ["BILLING_COLLECTION_QUEUE", "billing-collection"],
+    ["HOSTED_WHATSAPP_QUEUE", "hosted-whatsapp"],
+    ["WEEKLY_DELIVERY_QUEUE", "weekly-delivery"],
+    ["BROWSER_PAIRING_EMAIL_QUEUE", "browser-pairing-email"],
+    ["SMOKE_QUEUE", "smoke-" + revision],
+  ]);
 
-const workflowTargets = (
-  revision: string
-): Readonly<Record<string, readonly [string, string]>> => ({
-  CONNECTION_SYNCHRONIZATION_WORKFLOW: ["connection", "ConnectionSynchronizationWorkflow"],
-  STATEMENT_EXTRACTION_WORKFLOW: ["statement", "StatementExtractionWorkflowV1"],
-  OPERATIONAL_CANARY_WORKFLOW: ["canary", "OperationalCanaryWorkflowV1"],
-  BILLING_COLLECTION_WORKFLOW: ["billing", "BillingCollectionWorkflowV1"],
-  BILLING_REFUND_WORKFLOW: ["refund", "BillingRefundWorkflowV1"],
-  WEEKLY_DELIVERY_WORKFLOW: ["proactivity", "ProactivityDeliveryWorkflow"],
-  BROWSER_PAIRING_EMAIL_WORKFLOW: ["login-email", "BrowserPairingEmailWorkflowV1"],
-  SMOKE_WORKFLOW: ["smoke-" + revision, "ReleaseSmokeWorkflowV2"],
-});
+const workflowTargets = (revision: string): ReadonlyMap<string, readonly [string, string]> =>
+  new Map<string, readonly [string, string]>([
+    ["CONNECTION_SYNCHRONIZATION_WORKFLOW", ["connection", "ConnectionSynchronizationWorkflow"]],
+    ["STATEMENT_EXTRACTION_WORKFLOW", ["statement", "StatementExtractionWorkflowV1"]],
+    ["OPERATIONAL_CANARY_WORKFLOW", ["canary", "OperationalCanaryWorkflowV1"]],
+    ["BILLING_COLLECTION_WORKFLOW", ["billing", "BillingCollectionWorkflowV1"]],
+    ["BILLING_REFUND_WORKFLOW", ["refund", "BillingRefundWorkflowV1"]],
+    ["WEEKLY_DELIVERY_WORKFLOW", ["proactivity", "ProactivityDeliveryWorkflow"]],
+    ["BROWSER_PAIRING_EMAIL_WORKFLOW", ["login-email", "BrowserPairingEmailWorkflowV1"]],
+    ["SMOKE_WORKFLOW", ["smoke-" + revision, "ReleaseSmokeWorkflowV2"]],
+  ]);
 
 const smokeName = (revision: string): string => prefix + "smoke-" + revision;
 
@@ -95,7 +96,7 @@ const requireWorkflowBinding = (
   role: NativeRole,
   revision: string
 ): void => {
-  const target = workflowTargets(revision)[binding.name],
+  const target = workflowTargets(revision).get(binding.name),
     smoke = smokeName(revision);
 
   const worker = binding.name === "SMOKE_WORKFLOW" ? smoke : installationNames.Core;
@@ -128,7 +129,7 @@ const requireQueueName = (
 ): void => {
   if (binding.type === "plain_text" && binding.name.endsWith("_QUEUE_NAME")) {
     requireTarget(
-      binding.text === prefix + queues[binding.name.slice(0, -"_NAME".length)],
+      binding.text === prefix + queues.get(binding.name.slice(0, -"_NAME".length)),
       binding.name
     );
   }
@@ -175,7 +176,7 @@ const requireDeployedRoleAt = (input: DeployedRole & { successor: boolean }): vo
     }
 
     if (binding.type === "queue") {
-      requireTarget(binding.queue_name === prefix + queues[binding.name], binding.name);
+      requireTarget(binding.queue_name === prefix + queues.get(binding.name), binding.name);
     }
 
     if (binding.type === "workflow") requireWorkflowBinding(binding, role, revision);
@@ -282,34 +283,51 @@ export const verifySuccessorVersion = (input: DeployedVersion): void =>
 
 const limit = 100;
 
-const buckets = Effect.fn(function* (read: Read) {
-  const result: string[] = [],
-    seen = new Set<string>();
-
-  let cursor = "";
-
-  const bucketPage = Schema.Struct({
-    success: Schema.Literal(true),
-    result: Schema.Struct({ buckets: Schema.Array(named) }),
-    result_info: Schema.Struct({ cursor: Schema.optional(Schema.NullOr(Schema.String)) }),
-  });
-
-  for (let page = 0; page < limit; page++) {
-    const query = new URLSearchParams({ name_contains: prefix, per_page: String(limit) });
-
-    if (cursor.length > 0) query.set("cursor", cursor);
-    const body = yield* Schema.decodeUnknownEffect(bucketPage)(yield* read("r2/buckets?" + query));
-    result.push(...body.result.buckets.map((bucket) => bucket.name));
-    cursor = body.result_info.cursor ?? "";
-
-    if (cursor.length === 0) return result;
-
-    if (seen.has(cursor)) return yield* Effect.fail(Error("Repeated R2 inventory page"));
-    seen.add(cursor);
-  }
-
-  return yield* Effect.fail(Error("R2 inventory exceeds release budget"));
+const bucketPage = Schema.Struct({
+  success: Schema.Literal(true),
+  result: Schema.Struct({ buckets: Schema.Array(named) }),
+  result_info: Schema.Struct({ cursor: Schema.optional(Schema.NullOr(Schema.String)) }),
 });
+
+type BucketCursor = Readonly<{
+  page: number;
+  cursor: string;
+  seen: ReadonlySet<string>;
+  previous: ReadonlyArray<string>;
+}>;
+
+const bucketsFrom = (
+  read: Read,
+  { page, cursor, seen, previous }: BucketCursor
+): Effect.Effect<ReadonlyArray<string>, Error | Schema.SchemaError> =>
+  page >= limit
+    ? Effect.fail(Error("R2 inventory exceeds release budget"))
+    : Effect.gen(function* () {
+        const query = new URLSearchParams({ name_contains: prefix, per_page: String(limit) });
+
+        if (cursor.length > 0) query.set("cursor", cursor);
+
+        const body = yield* Schema.decodeUnknownEffect(bucketPage)(
+          yield* read("r2/buckets?" + query)
+        );
+
+        const result = [...previous, ...body.result.buckets.map((bucket) => bucket.name)];
+        const next = body.result_info.cursor ?? "";
+
+        if (next.length === 0) return result;
+
+        if (seen.has(next)) return yield* Effect.fail(Error("Repeated R2 inventory page"));
+
+        return yield* bucketsFrom(read, {
+          page: page + 1,
+          cursor: next,
+          seen: new Set([...seen, next]),
+          previous: result,
+        });
+      });
+
+const buckets = (read: Read): Effect.Effect<ReadonlyArray<string>, Error | Schema.SchemaError> =>
+  bucketsFrom(read, { page: 0, cursor: "", seen: new Set(), previous: [] });
 
 const Queue = Schema.Struct({ queue_name: identifier, queue_id: identifier });
 
@@ -384,7 +402,7 @@ const verifyWorkflowHosts = Effect.fnUntraced(function* (
   items: ReadonlyArray<typeof Workflow.Type>,
   revision: string
 ) {
-  const wanted = Object.values(workflowTargets(revision));
+  const wanted = [...workflowTargets(revision).values()];
 
   yield* Effect.forEach(
     items,
@@ -411,8 +429,8 @@ export const inspectNativeResources = Effect.fn(function* (
   installed: boolean
 ) {
   const wantedBuckets = Object.values(bucketTargets).map((slug) => prefix + slug),
-    wantedQueues = Object.values(queueTargets(revision)).map((slug) => prefix + slug),
-    wantedWorkflows = Object.values(workflowTargets(revision));
+    wantedQueues = [...queueTargets(revision).values()].map((slug) => prefix + slug),
+    wantedWorkflows = [...workflowTargets(revision).values()];
 
   const presentBuckets = (yield* buckets(read).pipe(inventoryPhase("R2 bucket list"))).filter(
       (item) => wantedBuckets.includes(item)

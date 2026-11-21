@@ -205,16 +205,17 @@ const requireAccountingBindings = (
   revision: string,
   bindings: ReadonlyArray<NativeBinding>
 ): void => {
-  const expected = {
-    RELEASE_GIT_SHA: role === "Smoke" ? accountingFixture.revision : revision,
-    CONTRACT_DIGEST: accountingFixture.contractDigest,
-    NATIVE_STORAGE_ADMISSION: "closed",
-    ...(role === "Ingress"
-      ? {}
-      : { SMOKE_QUEUE_NAME: "fidy-native-smoke-" + accountingFixture.revision }),
-  };
+  const expected = new Map([
+    ["RELEASE_GIT_SHA", role === "Smoke" ? accountingFixture.revision : revision],
+    ["CONTRACT_DIGEST", accountingFixture.contractDigest],
+    ["NATIVE_STORAGE_ADMISSION", "closed"],
+  ]);
 
-  for (const [name, text] of Object.entries(expected)) {
+  if (role !== "Ingress") {
+    expected.set("SMOKE_QUEUE_NAME", "fidy-native-smoke-" + accountingFixture.revision);
+  }
+
+  for (const [name, text] of expected) {
     if (
       !bindings.some(
         (binding) => binding.name === name && binding.type === "plain_text" && binding.text === text

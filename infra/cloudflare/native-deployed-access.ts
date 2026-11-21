@@ -58,11 +58,12 @@ const subjects = [
 
 const findUris = (app: typeof App.Type): ReadonlyArray<string> => [
   ...new Set(
-    [
-      app.domain ?? "",
-      ...(app.self_hosted_domains ?? []),
-      ...(app.destinations ?? []).map((item) => item.uri ?? ""),
-    ].filter(Boolean)
+    [app.domain ?? ""]
+      .concat(
+        app.self_hosted_domains ?? [],
+        (app.destinations ?? []).map((item) => item.uri ?? "")
+      )
+      .filter(Boolean)
   ),
 ];
 
@@ -328,16 +329,20 @@ const relevantApplications = Effect.fn(function* (input: Input) {
 
   const active = new Map<string, typeof App.Type>();
 
-  for (const { rows } of appScopes) {
-    for (const app of rows) {
+  const disagreement = appScopes
+    .flatMap(({ rows }) => rows)
+    .some((app) => {
       const previous = active.get(app.id);
 
-      if (previous !== undefined && !isDeepStrictEqual(previous, app)) {
-        return yield* accessRefusal(input, "account and zone application disagreement");
-      }
+      if (previous !== undefined && !isDeepStrictEqual(previous, app)) return true;
 
       active.set(app.id, app);
-    }
+
+      return false;
+    });
+
+  if (disagreement) {
+    return yield* accessRefusal(input, "account and zone application disagreement");
   }
 
   return active;

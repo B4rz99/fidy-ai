@@ -13,9 +13,9 @@ const paths = {
 
 export const stagedAccessApplications = Object.keys(paths);
 
-const existingDependencies: Readonly<Record<string, string>> = {
-  RecoveryOperators: "Cloudflare.Access.Group",
-};
+const existingDependencies: ReadonlyMap<string, string> = new Map([
+  ["RecoveryOperators", "Cloudflare.Access.Group"],
+]);
 
 const properties = Schema.Record(Schema.String, Schema.Unknown);
 
@@ -55,7 +55,7 @@ export const requireStagedDestinations = ({
 
 const requireStageNode = (node: Plan["resources"][string]): void => {
   const { logicalId, resourceType } = describeResource(node);
-  const dependency = existingDependencies[logicalId];
+  const dependency = existingDependencies.get(logicalId);
 
   if (dependency !== undefined) {
     if (dependency !== resourceType || node.action !== "noop") {
@@ -81,7 +81,7 @@ const requireStageNode = (node: Plan["resources"][string]): void => {
 
 export const requireHostPlan = (plan: Plan): void => {
   const rows = describePlan(plan),
-    expected = new Set([...Object.keys(existingDependencies), ...stagedAccessApplications]);
+    expected = new Set([...existingDependencies.keys(), ...stagedAccessApplications]);
 
   if (
     plan.selectedFqns === undefined ||

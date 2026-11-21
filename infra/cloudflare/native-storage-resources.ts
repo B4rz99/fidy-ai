@@ -77,11 +77,12 @@ const releaseChecks = {
   "stage-hosts": "capture-hosts",
 } as const;
 
-const protectedRecoveryPin = Effect.gen(function* () {
+const readProtectedRecoveryPin = (
+  client: HttpClient.HttpClient
+): ReturnType<typeof readRecoveryPin> => {
   const { account, token } = releaseEvidence.config();
-  const client = yield* HttpClient.HttpClient;
 
-  return yield* readRecoveryPin(
+  return readRecoveryPin(
     (path) =>
       releaseEvidence
         .providerJson(
@@ -92,6 +93,10 @@ const protectedRecoveryPin = Effect.gen(function* () {
         .pipe(Effect.provideService(HttpClient.HttpClient, client)),
     "accounts/" + account + "/"
   );
+};
+
+const protectedRecoveryPin = Effect.gen(function* () {
+  return yield* readProtectedRecoveryPin(yield* HttpClient.HttpClient);
 }).pipe(Effect.provide(ReleaseHttpLive));
 
 const verifyResourcePlan = Effect.fn(function* ({

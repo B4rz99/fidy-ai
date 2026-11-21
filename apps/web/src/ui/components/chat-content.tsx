@@ -60,16 +60,34 @@ export const ChatRecovery = ({
 
 export const ChatConfirmation = ({
   disabled,
+  discardDisabled,
   onConfirm,
-}: Readonly<{ disabled: boolean; onConfirm: () => void }>): JSX.Element => (
+  onDiscard,
+}: Readonly<{
+  disabled: boolean;
+  discardDisabled: boolean;
+  onConfirm: () => void;
+  onDiscard: () => void;
+}>): JSX.Element => (
   <>
     <Alert variant="warning" className="chat-confirmation">
       <HugeiconsIcon icon={Alert02Icon} size={24} aria-hidden="true" />
       <AlertTitle>Confirmación pendiente</AlertTitle>
     </Alert>
-    <Button className="chat-confirm" type="button" disabled={disabled} onClick={onConfirm}>
-      Confirmar cambio
-    </Button>
+    <div className="chat-confirmations">
+      <Button className="chat-confirm" type="button" disabled={disabled} onClick={onConfirm}>
+        Confirmar cambio
+      </Button>
+      <Button
+        className="chat-discard"
+        variant="outline"
+        type="button"
+        disabled={discardDisabled}
+        onClick={onDiscard}
+      >
+        Descartar
+      </Button>
+    </div>
   </>
 );
 

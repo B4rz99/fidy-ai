@@ -44,6 +44,7 @@ export const AgentContent = ({
               reply={display.reply.value}
               active={open}
               canSubmit={display.canSubmit}
+              canDiscard={display.canDiscard}
               key={display.reply.value.id}
             />
           )}
@@ -70,16 +71,23 @@ const AgentReply = ({
   reply,
   active,
   canSubmit,
+  canDiscard,
 }: Readonly<{
   reply: VisibleAgentReply;
   active: boolean;
   canSubmit: boolean;
+  canDiscard: boolean;
 }>): JSX.Element => (
   <VisibleReply active={active && reply.awaitingVisibility} onVisible={reply.onVisible}>
     <Message from="assistant" aria-label="Respuesta del agente">
       <MessageContent>{reply.text}</MessageContent>
-      {Option.isSome(reply.confirm) && (
-        <ChatConfirmation disabled={!canSubmit} onConfirm={reply.confirm.value} />
+      {Option.isSome(reply.decision) && (
+        <ChatConfirmation
+          disabled={!canSubmit}
+          discardDisabled={!canDiscard}
+          onConfirm={reply.decision.value.confirm}
+          onDiscard={reply.decision.value.discard}
+        />
       )}
     </Message>
   </VisibleReply>

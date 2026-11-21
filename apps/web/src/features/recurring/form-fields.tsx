@@ -2,15 +2,9 @@ import { Option } from "effect";
 import { type JSX, type ReactNode, use, useState } from "react";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
-import {
-  ChoiceField,
-  CurrencyField,
-  DefaultChoiceField,
-  PlanDateField,
-  RecurringDateField,
-} from "./fields";
+import { ChoiceField, CurrencyField, DefaultChoiceField, RecurringDateField } from "./fields";
 import type { Category, PlanInput } from "./model";
-import { firstDateNote, frequencies, kinds } from "./model";
+import { firstDateNote, frequencies, kinds, noDateNote } from "./model";
 import { PlanningMonthContext } from "./planning-month";
 import { planProblemId, usePlanFieldAria, usePlanFieldProblem } from "./plan-validation";
 
@@ -32,31 +26,6 @@ export const Field = ({
     </div>
   );
 };
-const FirstDateField = ({
-  initial,
-  timeZone,
-}: Readonly<{ initial: string; timeZone: string }>): JSX.Element => {
-  const month = use(PlanningMonthContext);
-  const [value, setValue] = useState(initial);
-  const note = Option.flatMap(month, (planned) =>
-    firstDateNote({ firstDate: value, month: planned })
-  );
-  return (
-    <Field label="Primera fecha" name="firstDate">
-      <PlanDateField
-        name="firstDate"
-        label="Primera fecha"
-        value={value}
-        onChange={setValue}
-        timeZone={timeZone}
-        required
-      />
-      <output htmlFor="recurring-firstDate" className="text-xs text-muted-foreground empty:hidden">
-        {Option.getOrElse(note, () => "")}
-      </output>
-    </Field>
-  );
-};
 export const ScheduleFields = ({
   initial,
   categories,
@@ -65,6 +34,7 @@ export const ScheduleFields = ({
   categories: ReadonlyArray<Category>;
 }>): JSX.Element => {
   const [frequency, setFrequency] = useState<string>(initial.frequency ?? "monthly");
+  const planning = use(PlanningMonthContext);
   return (
     <>
       <Field label="Frecuencia" name="frequency">
@@ -77,7 +47,18 @@ export const ScheduleFields = ({
         />
       </Field>
       <div data-recurring-slot="date-fields" className="grid min-w-0 gap-5">
-        <FirstDateField initial={initial.firstDate ?? ""} timeZone={initial.timeZone} />
+        <Field label="Primera fecha" name="firstDate">
+          <RecurringDateField
+            name="firstDate"
+            label="Primera fecha"
+            initial={initial.firstDate ?? ""}
+            timeZone={initial.timeZone}
+            required
+            note={(firstDate) =>
+              Option.flatMap(planning, (month) => firstDateNote({ firstDate, month }))
+            }
+          />
+        </Field>
         <Field label="Fecha final (opcional)" name="endDate">
           <RecurringDateField
             name="endDate"
@@ -85,6 +66,7 @@ export const ScheduleFields = ({
             initial={initial.endDate ?? ""}
             timeZone={initial.timeZone}
             required={false}
+            note={noDateNote}
           />
         </Field>
       </div>

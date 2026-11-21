@@ -43,21 +43,22 @@ export const DefaultChoiceField = ({
   const [value, setValue] = useState(initial);
   return <ChoiceField {...props} value={value} onChange={setValue} />;
 };
-type DateFieldProps = Readonly<{
-  name: string;
-  label: string;
-  timeZone: string;
-  required: boolean;
-}>;
-export const PlanDateField = ({
+export const RecurringDateField = ({
   name,
   label,
-  value,
-  onChange,
+  initial,
   timeZone,
   required,
-}: DateFieldProps &
-  Readonly<{ value: string; onChange: (value: string) => void }>): JSX.Element => {
+  note,
+}: Readonly<{
+  name: string;
+  label: string;
+  initial: string;
+  timeZone: string;
+  required: boolean;
+  note: (value: string) => Option.Option<string>;
+}>): JSX.Element => {
+  const [value, setValue] = useState(initial);
   const aria = usePlanFieldAria(name);
   const edited = usePlanFieldEdited();
   return (
@@ -74,18 +75,14 @@ export const PlanDateField = ({
         appearance="field"
         onChange={(next) => {
           edited(name);
-          onChange(next);
+          setValue(next);
         }}
       />
+      <output htmlFor={`recurring-${name}`} className="text-xs text-muted-foreground empty:hidden">
+        {Option.getOrElse(note(value), () => "")}
+      </output>
     </>
   );
-};
-export const RecurringDateField = ({
-  initial,
-  ...props
-}: DateFieldProps & Readonly<{ initial: string }>): JSX.Element => {
-  const [value, setValue] = useState(initial);
-  return <PlanDateField {...props} value={value} onChange={setValue} />;
 };
 export const CurrencyField = ({ initial }: Readonly<{ initial: string }>): JSX.Element => {
   const [value, setValue] = useState(initial);

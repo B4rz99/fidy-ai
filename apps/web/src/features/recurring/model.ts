@@ -94,6 +94,7 @@ export const shiftMonth = ({ month, step }: Readonly<{ month: string; step: numb
 
 export const planningStart = ({ month, today }: Pick<Workspace, "month" | "today">): string =>
   today.startsWith(month) ? today : `${month}-01`;
+export const noDateNote = (): Option.Option<string> => Option.none();
 export const firstDateNote = ({
   firstDate,
   month,

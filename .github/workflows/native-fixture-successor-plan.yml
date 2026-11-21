@@ -22,6 +22,10 @@ on:
             rollout-accounting,
           ]
         required: true
+      diagnostics_only:
+        description: Read the exact resume-accounting pair without promotion
+        type: boolean
+        default: false
       plan_artifact:
         description: Successful protected plan artifact ID from the exact current trunk commit
         type: string
@@ -63,10 +67,12 @@ jobs:
     timeout-minutes: 60
     env:
       FIXTURE_RELEASE_OPERATION:
-        ${{ (inputs.operation == 'resume' || inputs.operation == 'reseal') && 'stage-fixture-successor'
+        ${{ inputs.diagnostics_only && 'diagnose-fixture-accounting'
+        || (inputs.operation == 'resume' || inputs.operation == 'reseal') && 'stage-fixture-successor'
         || inputs.operation == 'recover-resumed' && 'recover-fixture-successor'
         || (inputs.operation == 'rollout-resumed' || endsWith(inputs.operation, '-accounting')) && 'rollout-fixture-successor'
         || format('{0}-fixture-successor', inputs.operation) }}
+      FIXTURE_ACCOUNTING_DIAGNOSTICS: ${{ inputs.diagnostics_only }}
       FIXTURE_SUCCESSOR_RESUME: ${{ inputs.operation == 'resume' || inputs.operation == 'reseal' || endsWith(inputs.operation, '-resumed') }}
       FIXTURE_SUCCESSOR_RESEAL: ${{ inputs.operation == 'reseal' }}
       FIXTURE_ACCOUNTING_ROLLOUT: ${{ endsWith(inputs.operation, '-accounting') }}
@@ -105,10 +111,15 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - name: Require closed protected planning
+        env:
+          REQUESTED_OPERATION: ${{ inputs.operation }}
         run: |
           test "$NATIVE_STORAGE_ADMISSION" = closed
           test "$NATIVE_STORAGE_HOSTS" = acceptance
           test "$GITHUB_RUN_ATTEMPT" = 1
+          if [[ "$FIXTURE_ACCOUNTING_DIAGNOSTICS" == true ]]; then
+            test "$REQUESTED_OPERATION" = resume-accounting
+          fi
           if [[ "$FIXTURE_RELEASE_OPERATION" == stage-fixture-successor && "$FIXTURE_SUCCESSOR_RESUME" == false ]]; then
             [[ "$APPROVED_PLAN_ARTIFACT" =~ ^[1-9][0-9]{0,19}$ && "$APPROVED_PLAN_DIGEST" =~ ^[a-f0-9]{64}$ ]]
           else
@@ -119,12 +130,12 @@ jobs:
           else
             [[ -z "$SUCCESSOR_WORKFLOW_ARTIFACT" && -z "$SUCCESSOR_WORKFLOW_DIGEST" ]]
           fi
-          if [[ "$FIXTURE_RELEASE_OPERATION" == recover-fixture-successor || "$FIXTURE_RELEASE_OPERATION" == rollout-fixture-successor ]]; then
+          if [[ "$FIXTURE_RELEASE_OPERATION" == recover-fixture-successor || "$FIXTURE_RELEASE_OPERATION" == rollout-fixture-successor || "$FIXTURE_ACCOUNTING_DIAGNOSTICS" == true ]]; then
             [[ "$SUCCESSOR_SEAL_ARTIFACT" =~ ^[1-9][0-9]{0,19}$ && "$SUCCESSOR_SEAL_DIGEST" =~ ^[a-f0-9]{64}$ ]]
           else
             [[ -z "$SUCCESSOR_SEAL_ARTIFACT" && -z "$SUCCESSOR_SEAL_DIGEST" ]]
           fi
-          if [[ "$FIXTURE_RELEASE_OPERATION" == rollout-fixture-successor ]]; then
+          if [[ "$FIXTURE_RELEASE_OPERATION" == rollout-fixture-successor || "$FIXTURE_ACCOUNTING_DIAGNOSTICS" == true ]]; then
             [[ "$SUCCESSOR_RECOVERY_ARTIFACT" =~ ^[1-9][0-9]{0,19}$ && "$SUCCESSOR_RECOVERY_DIGEST" =~ ^[a-f0-9]{64}$ ]]
           else
             [[ -z "$SUCCESSOR_RECOVERY_ARTIFACT" && -z "$SUCCESSOR_RECOVERY_DIGEST" ]]
@@ -133,6 +144,21 @@ jobs:
       - run: bash scripts/install-workspace.sh --ignore-scripts
       - name: Check the reviewed edge policy
         run: bun infra/cloudflare/verify-edge-policy.ts
+      - name: Diagnose the exact staged and stable Worker versions
+        if: inputs.diagnostics_only
+        timeout-minutes: 10
+        env:
+          FIXTURE_RELEASE_OPERATION: rollout-fixture-successor
+        run: |
+          umask 077
+          python3 scripts/infra-performance/canonical-fixture/pinned_storage.py
+      - name: Retain only aggregate pinned storage observations
+        if: inputs.diagnostics_only
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-fixture-pinned-storage-diagnostics-${{ github.run_id }}
+          path: ${{ runner.temp }}/pinned-storage-diagnostics.json
+          if-no-files-found: error
       - name: Authenticate the original release, receipt, and exact erasure
         if: inputs.operation == 'plan' || inputs.operation == 'stage'
         run: |
@@ -159,16 +185,16 @@ jobs:
             echo "FIXTURE_STAGED_VERIFIER_SHA=$GITHUB_SHA" >> "$GITHUB_ENV"
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        if: inputs.operation == 'rollout-resumed' || env.FIXTURE_ACCOUNTING_ROLLOUT == 'true'
+        if: inputs.diagnostics_only == false && (inputs.operation == 'rollout-resumed' || env.FIXTURE_ACCOUNTING_ROLLOUT == 'true')
         with:
           ref: de04a192c3836be0efb488b170a7b93b9f98f28f
           path: interrupted
           persist-credentials: false
       - run: bash scripts/install-workspace.sh --ignore-scripts
-        if: inputs.operation == 'rollout-resumed' || env.FIXTURE_ACCOUNTING_ROLLOUT == 'true'
+        if: inputs.diagnostics_only == false && (inputs.operation == 'rollout-resumed' || env.FIXTURE_ACCOUNTING_ROLLOUT == 'true')
         working-directory: interrupted
       - name: Match the original app and provider build environment
-        if: inputs.operation == 'rollout-resumed' || env.FIXTURE_ACCOUNTING_ROLLOUT == 'true'
+        if: inputs.diagnostics_only == false && (inputs.operation == 'rollout-resumed' || env.FIXTURE_ACCOUNTING_ROLLOUT == 'true')
         run: |
           set -euo pipefail
           original=de04a192c3836be0efb488b170a7b93b9f98f28f
@@ -181,7 +207,9 @@ jobs:
           done
           git diff --quiet "$original" "$GITHUB_SHA" -- ':(glob)patches/alchemy@*.patch'
       - uses: ./.github/actions/configure-alchemy-cloudflare-profile
+        if: inputs.diagnostics_only == false
       - name: Bind the protected plan to the reviewed revision
+        if: inputs.diagnostics_only == false
         working-directory: ${{ inputs.operation == 'rollout-resumed' && 'interrupted' || '.' }}
         run: |
           echo "HOSTED_AI_MODEL=$(bun infra/cloudflare/scripts/print-approved-openai-model.ts)" >> "$GITHUB_ENV"

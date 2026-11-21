@@ -314,15 +314,19 @@ it("rejects aggregate capacity overflow without dropping Memories or echoing pro
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
 
-      for (let index = 0; index < 7; index += 1) {
-        yield* Effect.sleep("125 millis");
+      yield* Effect.forEach(
+        Array.from({ length: 7 }, (_, index) => index),
+        Effect.fnUntraced(function* (index) {
+          yield* Effect.sleep("125 millis");
 
-        const response = yield* fromTestPromise(() =>
-          remembered(db, `${index}${"x".repeat(1_999)}`, cookie(0))
-        );
+          const response = yield* fromTestPromise(() =>
+            remembered(db, `${index}${"x".repeat(1_999)}`, cookie(0))
+          );
 
-        expect(response.status).toBe(201);
-      }
+          expect(response.status).toBe(201);
+        }),
+        { discard: true }
+      );
 
       const small = yield* decode(
         Single,
@@ -371,12 +375,17 @@ it("bounds concurrent remember calls so one User's aggregate is never oversubscr
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
 
-      for (let index = 0; index < 6; index += 1) {
-        expect(
-          (yield* fromTestPromise(() => remembered(db, `${index}${"x".repeat(1_999)}`, cookie(0))))
-            .status
-        ).toBe(201);
-      }
+      yield* Effect.forEach(
+        Array.from({ length: 6 }, (_, index) => index),
+        Effect.fnUntraced(function* (index) {
+          expect(
+            (yield* fromTestPromise(() =>
+              remembered(db, `${index}${"x".repeat(1_999)}`, cookie(0))
+            )).status
+          ).toBe(201);
+        }),
+        { discard: true }
+      );
 
       const outcomes = yield* Effect.forEach(
         ["a", "b"],

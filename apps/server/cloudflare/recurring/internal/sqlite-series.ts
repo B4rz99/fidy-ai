@@ -1,3 +1,4 @@
+import { ConsentSubject } from "../../../src/shell/consent/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Effect, Option, Schema } from "effect";
 import { UserContext, UserId } from "../../../src/core/identity/contract";
@@ -15,7 +16,7 @@ import { type EvaluationStore, advanceEvaluation } from "./evaluation";
 import { pageSize } from "./models";
 import { Cursor, maximumCursorLength, pageData, readStatus } from "./query";
 
-const unavailable = (): RecurringUnavailable => new RecurringUnavailable();
+const unavailable = (): RecurringUnavailable => new RecurringUnavailable({ cause: Option.none() });
 
 const weekMs = 604800000;
 
@@ -28,7 +29,7 @@ const schedule = Schema.Struct({
 });
 
 const readOwner = protectConsentStatement({
-  subject: { _tag: "Owner", column: "users.id" },
+  subject: ConsentSubject.Owner({ column: "users.id" }),
   requirement: "active",
   statement: {
     sql: "SELECT id,service_market AS serviceMarket,locale,time_zone AS timeZone FROM users WHERE lifetime_registered=1",

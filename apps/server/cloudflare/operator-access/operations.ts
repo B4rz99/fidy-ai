@@ -1,5 +1,6 @@
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
 import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
+import { OutboundHttpRequest } from "../../src/shell/outbound-http/contract";
 import type { OutboundHttpService } from "../../src/shell/outbound-http/operations";
 
 export type OperatorAccessConfiguration = Readonly<{
@@ -34,6 +35,8 @@ const configured = (config: OperatorAccessConfiguration): boolean =>
   config.audience.length > 0 &&
   !config.otherAudiences.includes(config.audience);
 
+const signingKeysRuntime = ManagedRuntime.make(Layer.empty);
+
 const signingKeys = (
   input: Readonly<{
     request: Request;
@@ -43,8 +46,8 @@ const signingKeys = (
 ): ReturnType<typeof createRemoteJWKSet> =>
   createRemoteJWKSet(new URL(`${input.configuration.issuer}/cdn-cgi/access/certs`), {
     [customFetch]: (_url, options): Promise<Response> =>
-      Effect.runPromise(
-        input.http.execute({ _tag: "CloudflareAccessSigningKeys" }).pipe(
+      signingKeysRuntime.runPromise(
+        input.http.execute(OutboundHttpRequest.CloudflareAccessSigningKeys()).pipe(
           Effect.timeout("5 seconds"),
           Effect.map(
             (response) =>

@@ -18,7 +18,7 @@ import {
 } from "../../../src/shell/observability/contract";
 import { ProactivityDeliveryWork } from "../../insights/contract";
 import { receiveProactivityWork } from "../../insights/runtime";
-import { Cause, Clock, Context, Data, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Clock, Context, Data, Effect, Exit, Option, Result, Schema } from "effect";
 import type { CoreQueueEnvironment } from "../contract";
 import { startLoginWorkflow } from "../../email-authentication/runtime";
 import { NativeLoginEmailWork } from "../../email-authentication/contract";
@@ -38,15 +38,26 @@ class ForwardedEmailDeliveryUnavailable extends Data.TaggedError(
   "ForwardedEmailDeliveryUnavailable"
 ) {}
 
+const isQueueDeliveryUnavailable = Schema.is(Schema.instanceOf(QueueDeliveryUnavailable));
+
 const deliveryFailure = (original: unknown): QueueDeliveryUnavailable =>
-  original instanceof QueueDeliveryUnavailable
-    ? original
-    : new QueueDeliveryUnavailable({ original });
+  isQueueDeliveryUnavailable(original) ? original : new QueueDeliveryUnavailable({ original });
 
 type QueueInput = Readonly<{ batch: MessageBatch<unknown>; environment: CoreQueueEnvironment }>;
 
 const nativeDelivery = (work: () => Promise<void>): Effect.Effect<void, QueueDeliveryUnavailable> =>
   Effect.tryPromise({ try: work, catch: deliveryFailure });
+
+const startLoginMessage = Effect.fnUntraced(function* (
+  workflow: Parameters<typeof startLoginWorkflow>[0],
+  message: Message<unknown>
+) {
+  const work = yield* Schema.decodeUnknownEffect(NativeLoginEmailWork)(message.body);
+  yield* startLoginWorkflow(workflow, work);
+  message.ack();
+});
+
+const SpanMetadata = Data.taggedEnum<SpanDescriptor["metadata"]>();
 
 const QueueRelease = Context.Reference<TelemetryRelease>(
   "@fidy/server/cloudflare/queue/QueueRelease",
@@ -60,12 +71,11 @@ const queueAttemptDescriptor = (attempt: number, release: TelemetryRelease): Spa
   trigger: "queue",
   spanOperation: "queue.process",
   workKind: "queue_attempt",
-  metadata: {
-    _tag: "Queue",
+  metadata: SpanMetadata.Queue({
     attempt: TelemetryAttempt.make(Math.min(100, Math.max(1, Math.trunc(attempt)))),
     inputCount: boundedTelemetryCount(1),
     delayMilliseconds: Option.none(),
-  },
+  }),
 });
 
 const observeWorkflowMessage = <E>(
@@ -166,12 +176,8 @@ const receiveEmailQueue = ({
       return yield* receiveWorkflowBatch(
         batch,
         (entry) =>
-          Effect.gen(function* () {
-            for (const message of entry.messages) {
-              const work = yield* Schema.decodeUnknownEffect(NativeLoginEmailWork)(message.body);
-              yield* startLoginWorkflow(workflow, work);
-              message.ack();
-            }
+          Effect.forEach(entry.messages, (message) => startLoginMessage(workflow, message), {
+            discard: true,
           }),
         4
       );
@@ -346,7 +352,7 @@ const selectQueue = (input: QueueInput): Effect.Effect<void, QueueDeliveryUnavai
             workflow.create({ id: work.jobId, params: work })
           ).pipe(Effect.result);
 
-          if (started._tag === "Failure") {
+          if (Result.isFailure(started)) {
             const instance = yield* Effect.tryPromise(() => workflow.get(work.jobId));
             const status = (yield* Effect.tryPromise(() => instance.status())).status;
 

@@ -11,7 +11,7 @@ import {
   pairingMilliseconds,
 } from "../../../src/shell/tokens/operations";
 import { patPairingUnavailableBody } from "../../../src/shell/tokens/contract";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema, Struct } from "effect";
 import { Base64Url } from "effect/encoding";
 import { RequestBodyPolicy } from "../../http/contract";
 import { readBoundedRequestBody } from "../../http/operations";
@@ -141,13 +141,14 @@ export const scopesFrom = (text: string): Option.Option<PATScopes> => {
   }
 };
 
+const PATFields = Schema.toType(PAT.mapFields(Struct.omit(["_tag"])));
+
 export const patFrom = (row: PATRow): Option.Option<PAT> => {
   const scopes = scopesFrom(row.scopes_json);
 
   if (Option.isNone(scopes)) return Option.none();
 
-  return Schema.decodeUnknownOption(Schema.toType(PAT))({
-    _tag: "PAT",
+  return Schema.decodeUnknownOption(PATFields)({
     id: row.id,
     shortId: row.short_id,
     recipientLabel: row.recipient_label,
@@ -157,7 +158,7 @@ export const patFrom = (row: PATRow): Option.Option<PAT> => {
     expiresAt: DateTime.makeUnsafe(row.expires_at_ms),
     lastUsedAt: Option.map(Option.fromNullishOr(row.last_used_at_ms), DateTime.makeUnsafe),
     revokedAt: Option.map(Option.fromNullishOr(row.revoked_at_ms), DateTime.makeUnsafe),
-  });
+  }).pipe(Option.map((fields) => PAT.make(fields)));
 };
 
 export const response = ({ body, status }: Readonly<{ body: unknown; status: number }>): Response =>

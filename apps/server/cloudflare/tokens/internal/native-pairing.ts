@@ -1,7 +1,7 @@
 import { PATUnavailable, localPATClaimUrl } from "../contract";
 import { UserId } from "../../../src/core/identity/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Predicate, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import {
   PATPairingDeviceCode,
@@ -23,6 +23,8 @@ import {
   unavailable,
 } from "./pat-shared";
 import { publicCode, rateLimited } from "./pat-pairing";
+
+const isResponse = Schema.is(Schema.instanceOf(Response));
 
 const sourceLimit = 20;
 
@@ -70,7 +72,7 @@ const start = Effect.fn(function* (request: Request) {
       yield* sql`INSERT INTO pat_bootstrap(id,public_code,proof_digest,recipient_label,scopes_json,lifetime_days,expires_at_ms)
       SELECT ${id},${code},${proofDigest},${grant.recipientLabel},${yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))([...grant.scopes])},${grant.lifetimeDays},${expires} RETURNING id`;
 
-    if (inserted.length !== 1) return yield* new PATUnavailable();
+    if (inserted.length !== 1) return yield* new PATUnavailable({ cause: Option.none() });
 
     return response({
       status: success,
@@ -125,13 +127,13 @@ const pollingDestination = Effect.fn(function* (id: string, proofDigest: string)
       attemptedAt: DateTime.makeUnsafe(current),
     });
 
-    if (decision._tag === "WrongProof") {
+    if (Predicate.isTagged(decision, "WrongProof")) {
       yield* sql`UPDATE pat_bootstrap SET wrong_attempts=${decision.wrongProofAttempts} WHERE id=${id}`;
 
       return invalid();
     }
 
-    if (decision._tag === "SlowDown") {
+    if (Predicate.isTagged(decision, "SlowDown")) {
       yield* sql`UPDATE pat_bootstrap SET minimum_poll_seconds=${Math.min(pollLimit, decision.minimumPollIntervalSeconds)} WHERE id=${id}`;
 
       return response({
@@ -140,7 +142,7 @@ const pollingDestination = Effect.fn(function* (id: string, proofDigest: string)
       });
     }
 
-    if (decision._tag !== "Pending") return invalid();
+    if (!Predicate.isTagged(decision, "Pending")) return invalid();
     yield* sql`UPDATE pat_bootstrap SET last_poll_at_ms=${current} WHERE id=${id}`;
 
     return response({
@@ -169,7 +171,7 @@ const poll = Effect.fn(function* (
 
   const destination = yield* pollingDestination(id, proofDigest);
 
-  if (destination instanceof Response) return destination;
+  if (isResponse(destination)) return destination;
 
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
     id,

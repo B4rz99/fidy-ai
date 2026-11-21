@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, FileSystem, Schema } from "effect";
+import { Context, Effect, FileSystem, Layer, Ref, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { expect } from "vitest";
 import { browserOrigins } from "../runtime/contract";
@@ -22,7 +22,9 @@ const objectTypes = {
   ERASURE: "Erasure",
 };
 
-const text = (value: string): { type: "text"; value: string } => ({ type: "text" as const, value });
+type TextBinding = Readonly<{ type: "text"; value: string }>;
+
+const text = (value: string): TextBinding => ({ type: "text", value });
 
 const objects = Object.fromEntries(
   Object.entries(objectTypes).map(([key, exportName]) => [
@@ -83,228 +85,282 @@ const openStorageProof = Effect.fn(function* (runtime: Miniflare) {
   expect(alias.status).toBe(503);
 });
 
-const rehearse = Effect.gen(function* () {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* fs.makeTempDirectoryScoped({ prefix: "fidy-storage-release-" });
+type Manifest = Effect.Success<ReturnType<typeof workerManifest>>;
 
-  const [ingress, core, advanced] = yield* Effect.all(
-    [
-      workerManifest("./public-worker.ts"),
-      workerManifest("./core-worker.ts"),
-      workerManifest("./storage-forward-repair.test-fixture.ts"),
-    ],
-    { concurrency: 3 }
-  );
+type Setup = Readonly<{ path: string; ingress: Manifest; core: Manifest; advanced: Manifest }>;
 
-  const phase = Effect.fn(function* (
-    ownerModule: typeof core,
-    {
-      advancedState,
-      first,
-      readable,
-      opening,
-    }: { advancedState: boolean; first: boolean; readable: boolean; opening: boolean }
-  ) {
-    const releaseIdentity = opening
-      ? { ...identity, RECOVERY_ISOLATION: text(""), NATIVE_STORAGE_ADMISSION: text("open") }
-      : identity;
+type Stage = Readonly<{
+  owner: "core" | "advanced";
+  advancedState: boolean;
+  first: boolean;
+  readable: boolean;
+  opening: boolean;
+}>;
 
-    const mf = yield* Effect.acquireRelease(
-      Effect.sync(
-        () =>
-          new Miniflare({
-            resourcePersistencePath: path,
-            unsafeInspectDurableObjects: true,
-            workers: [
-              {
-                config: {
-                  ...common,
-                  name: "ingress",
-                  manifest: ingress,
-                  env: { ...releaseIdentity, CORE: { type: "worker", worker: "core" } },
+const phase = Effect.fn(function* (
+  setup: Setup,
+  { owner, advancedState, first, readable, opening }: Stage
+) {
+  const { path, ingress, core } = setup;
+  const ownerModule = setup[owner];
+
+  const releaseIdentity = opening
+    ? { ...identity, RECOVERY_ISOLATION: text(""), NATIVE_STORAGE_ADMISSION: text("open") }
+    : identity;
+
+  const mf = yield* Effect.acquireRelease(
+    Effect.sync(
+      () =>
+        new Miniflare({
+          resourcePersistencePath: path,
+          unsafeInspectDurableObjects: true,
+          workers: [
+            {
+              config: {
+                ...common,
+                name: "ingress",
+                manifest: ingress,
+                env: { ...releaseIdentity, CORE: { type: "worker", worker: "core" } },
+              },
+            },
+            {
+              config: {
+                ...common,
+                name: "core",
+                manifest: core,
+                env: { ...releaseIdentity, ...objects },
+              },
+            },
+            {
+              config: {
+                ...common,
+                name: "owners",
+                manifest: ownerModule,
+                exports: classes,
+                env: {
+                  ...releaseIdentity,
+                  ...objects,
+                  SQLITE_STORE_CAPACITY_BYTES: text("1000000000"),
                 },
               },
-              {
-                config: {
-                  ...common,
-                  name: "core",
-                  manifest: core,
-                  env: { ...releaseIdentity, ...objects },
-                },
-              },
-              {
-                config: {
-                  ...common,
-                  name: "owners",
-                  manifest: ownerModule,
-                  exports: classes,
-                  env: {
-                    ...releaseIdentity,
-                    ...objects,
-                    SQLITE_STORE_CAPACITY_BYTES: text("1000000000"),
-                  },
-                },
-              },
-              {
-                config: {
-                  ...common,
-                  name: "mapping",
-                  manifest: {
-                    mainModule: "index.mjs",
-                    modules: {
-                      "index.mjs": {
-                        type: "esm",
-                        contents: `export default {async fetch(req, env) {if (new URL(req.url).pathname === "/offers") return env.PRICING.getByName("pricing").fetch("https://pricing.invalid/offers"); const id = env.USER_STORE.idFromName("${user}"); await env.USER_STORE.get(id).fetch("https://user.invalid/unused"); return new Response(id.toString())}}`,
-                      },
+            },
+            {
+              config: {
+                ...common,
+                name: "mapping",
+                manifest: {
+                  mainModule: "index.mjs",
+                  modules: {
+                    "index.mjs": {
+                      type: "esm",
+                      contents: `export default {async fetch(req, env) {if (new URL(req.url).pathname === "/offers") return env.PRICING.getByName("pricing").fetch("https://pricing.invalid/offers"); const id = env.USER_STORE.idFromName("${user}"); await env.USER_STORE.get(id).fetch("https://user.invalid/unused"); return new Response(id.toString())}}`,
                     },
                   },
-                  env: objects,
                 },
+                env: objects,
               },
-            ],
-          })
-      ),
-      (mf) => native(() => mf.dispose())
-    );
-
-    if (opening) {
-      yield* openStorageProof(mf);
-
-      return;
-    }
-
-    if (first) {
-      const readiness = yield* native(() =>
-        mf.dispatchFetch(origin + smokePath + "?readiness=1", {
-          headers: { [smokeProofHeader]: proof },
+            },
+          ],
         })
-      );
+    ),
+    (mf) => native(() => mf.dispose())
+  );
 
-      expect(readiness.status).toBe(200);
-      const health = yield* native(() => mf.dispatchFetch(origin + "/health"));
-      expect(health.status).toBe(200);
-    }
+  if (opening) {
+    yield* openStorageProof(mf);
 
-    const ordinary = yield* native(() => mf.dispatchFetch(origin + "/transactions"));
-    expect(ordinary.status).toBe(503);
+    return;
+  }
 
-    const denied = yield* native(() =>
-      mf.dispatchFetch(origin + smokePath + bootstrapQuery, { method: "POST" })
-    );
-
-    expect(denied.status).toBe(503);
-
-    const probe = yield* native(() =>
-      mf.dispatchFetch(origin + smokePath + bootstrapQuery, {
-        method: "POST",
+  const checkReadiness = Effect.gen(function* () {
+    const readiness = yield* native(() =>
+      mf.dispatchFetch(origin + smokePath + "?readiness=1", {
         headers: { [smokeProofHeader]: proof },
       })
     );
 
-    if (!readable) {
-      expect(probe.status).toBe(503);
-
-      return;
-    }
-
-    expect(probe.status).toBe(200);
-
-    const body = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({
-        core: SmokeIdentity,
-        markers: SharedStoreMarkers,
-      })
-    )(yield* native(() => probe.json()));
-
-    expect(probe.headers.get("x-fidy-smoke-worker-version")).not.toBe(body.core.workerVersionId);
-
-    const overlap = yield* native(() =>
-      mf.dispatchFetch(origin + smokePath + compatibilityQuery, {
-        headers: { [smokeProofHeader]: proof },
-      })
-    );
-
-    expect(overlap.status).toBe(200);
-    expect(yield* native(() => overlap.json())).toEqual(body);
-
-    const mapping = yield* native(() =>
-      mf
-        .getWorker("mapping")
-        .then((worker) => worker.fetch("https://mapping.invalid"))
-        .then((response) => response.text())
-    );
-
-    const local = yield* native(() =>
-      mf.unsafeGetDurableObjectStorage("owners", "UserStore", { name: user })
-    );
-
-    const directory = yield* native(() =>
-      mf.unsafeGetDurableObjectStorage("owners", "Directory", { name: "directory-v1" })
-    );
-
-    const offers = yield* native(() =>
-      mf
-        .getWorker("mapping")
-        .then((worker) => worker.fetch("https://mapping.invalid/offers"))
-        .then((response) => response.json())
-    );
-
-    expect(offers).toHaveLength(3);
-
-    if (first) {
-      yield* native(() =>
-        local.exec(
-          "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',1)",
-          user
-        )
-      );
-    }
-
-    expect(yield* native(() => local.exec("SELECT id FROM users"))).toEqual([{ id: user }]);
-    expect(
-      yield* native(() =>
-        directory.exec("SELECT count(*) AS n FROM sqlite_schema WHERE name='release_rehearsal'")
-      )
-    ).toEqual([{ n: advancedState ? 1 : 0 }]);
-    expect(body.markers.directory.workerVersionId).not.toBe(body.core.workerVersionId);
-
-    return { mapping, markers: body.markers.directory.history };
+    expect(readiness.status).toBe(200);
+    const health = yield* native(() => mf.dispatchFetch(origin + "/health"));
+    expect(health.status).toBe(200);
   });
 
-  const initial = yield* Effect.scoped(
-    phase(core, { advancedState: false, first: true, readable: true, opening: false })
+  yield* first ? checkReadiness : Effect.void;
+
+  const ordinary = yield* native(() => mf.dispatchFetch(origin + "/transactions"));
+  expect(ordinary.status).toBe(503);
+
+  const denied = yield* native(() =>
+    mf.dispatchFetch(origin + smokePath + bootstrapQuery, { method: "POST" })
   );
 
-  const compatible = yield* Effect.scoped(
-    phase(core, { advancedState: false, first: false, readable: true, opening: false })
+  expect(denied.status).toBe(503);
+
+  const probe = yield* native(() =>
+    mf.dispatchFetch(origin + smokePath + bootstrapQuery, {
+      method: "POST",
+      headers: { [smokeProofHeader]: proof },
+    })
   );
 
-  expect(compatible).toEqual(initial);
+  expect(probe.status).toBe(readable ? 200 : 503);
 
-  const upgrade = yield* Effect.scoped(
-    phase(advanced, { advancedState: true, first: false, readable: true, opening: false })
+  if (!readable) return;
+
+  const body = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      core: SmokeIdentity,
+      markers: SharedStoreMarkers,
+    })
+  )(yield* native(() => probe.json()));
+
+  expect(probe.headers.get("x-fidy-smoke-worker-version")).not.toBe(body.core.workerVersionId);
+
+  const overlap = yield* native(() =>
+    mf.dispatchFetch(origin + smokePath + compatibilityQuery, {
+      headers: { [smokeProofHeader]: proof },
+    })
   );
 
-  expect(upgrade?.mapping).toBe(initial?.mapping);
-  expect(upgrade?.markers.slice(0, -1)).toEqual(initial?.markers);
-  yield* Effect.scoped(
-    phase(core, { advancedState: true, first: false, readable: false, opening: false })
+  expect(overlap.status).toBe(200);
+  expect(yield* native(() => overlap.json())).toEqual(body);
+
+  const mapping = yield* native(() =>
+    mf
+      .getWorker("mapping")
+      .then((worker) => worker.fetch("https://mapping.invalid"))
+      .then((response) => response.text())
   );
+
+  const local = yield* native(() =>
+    mf.unsafeGetDurableObjectStorage("owners", "UserStore", { name: user })
+  );
+
+  const directory = yield* native(() =>
+    mf.unsafeGetDurableObjectStorage("owners", "Directory", { name: "directory-v1" })
+  );
+
+  const offers = yield* native(() =>
+    mf
+      .getWorker("mapping")
+      .then((worker) => worker.fetch("https://mapping.invalid/offers"))
+      .then((response) => response.json())
+  );
+
+  expect(offers).toHaveLength(3);
+
+  if (first) {
+    yield* native(() =>
+      local.exec(
+        "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',1)",
+        user
+      )
+    );
+  }
+
+  expect(yield* native(() => local.exec("SELECT id FROM users"))).toEqual([{ id: user }]);
   expect(
-    yield* Effect.scoped(
-      phase(advanced, { advancedState: true, first: false, readable: true, opening: false })
+    yield* native(() =>
+      directory.exec("SELECT count(*) AS n FROM sqlite_schema WHERE name='release_rehearsal'")
     )
-  ).toEqual(upgrade);
-  yield* Effect.scoped(
-    phase(advanced, { advancedState: true, first: false, readable: true, opening: true })
-  );
+  ).toEqual([{ n: advancedState ? 1 : 0 }]);
+  expect(body.markers.directory.workerVersionId).not.toBe(body.core.workerVersionId);
+
+  return { mapping, markers: body.markers.directory.history };
 });
 
-it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
-  test.effect(
-    "installs native shared facts under closed admission and keeps named User data through mixed-version rollback and forward repair",
-    () => rehearse,
+type Outcome = Effect.Success<ReturnType<typeof phase>>;
 
-    60_000
+class Rehearsal extends Context.Service<
+  Rehearsal,
+  Readonly<{
+    run: (stage: Stage) => Effect.Effect<Outcome, Effect.Error<ReturnType<typeof phase>>>;
+    initial: Ref.Ref<Outcome>;
+    upgrade: Ref.Ref<Outcome>;
+  }>
+>()("@fidy/server/cloudflare/storage-bootstrap/release.test/Rehearsal") {}
+
+const rehearsalLayer = Layer.effect(
+  Rehearsal,
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* fs.makeTempDirectoryScoped({ prefix: "fidy-storage-release-" });
+
+    const setup = yield* Effect.cached(
+      Effect.all(
+        {
+          ingress: workerManifest("./public-worker.ts"),
+          core: workerManifest("./core-worker.ts"),
+          advanced: workerManifest("./storage-forward-repair.test-fixture.ts"),
+        },
+        { concurrency: 3 }
+      ).pipe(Effect.map((manifests): Setup => ({ path, ...manifests })))
+    );
+
+    return Rehearsal.of({
+      run: (stage) => Effect.flatMap(setup, (ready) => Effect.scoped(phase(ready, stage))),
+      initial: yield* Ref.make<Outcome>(undefined),
+      upgrade: yield* Ref.make<Outcome>(undefined),
+    });
+  })
+).pipe(Layer.provide(NodeFileSystem.layer));
+
+const closed = { advancedState: false, first: false, readable: true, opening: false };
+
+const advancedStage = { ...closed, owner: "advanced" as const, advancedState: true };
+
+it.layer(rehearsalLayer, { excludeTestServices: true })((test) => {
+  test.effect("installs native shared facts under closed admission", () =>
+    Effect.gen(function* () {
+      const rehearsal = yield* Rehearsal;
+      const initial = yield* rehearsal.run({ ...closed, owner: "core", first: true });
+
+      yield* Ref.set(rehearsal.initial, initial);
+    })
+  );
+
+  test.effect("reopens the same release with the same named User data", () =>
+    Effect.gen(function* () {
+      const rehearsal = yield* Rehearsal;
+      const compatible = yield* rehearsal.run({ ...closed, owner: "core" });
+
+      expect(compatible).toEqual(yield* Ref.get(rehearsal.initial));
+    })
+  );
+
+  test.effect("forward repairs shared facts and keeps named User data", () =>
+    Effect.gen(function* () {
+      const rehearsal = yield* Rehearsal;
+      const upgrade = yield* rehearsal.run(advancedStage);
+      const initial = yield* Ref.get(rehearsal.initial);
+
+      expect(upgrade?.mapping).toBe(initial?.mapping);
+      expect(upgrade?.markers.slice(0, -1)).toEqual(initial?.markers);
+      yield* Ref.set(rehearsal.upgrade, upgrade);
+    })
+  );
+
+  test.effect("closes reads during a mixed-version rollback", () =>
+    Effect.gen(function* () {
+      const rehearsal = yield* Rehearsal;
+
+      yield* rehearsal.run({ ...closed, owner: "core", advancedState: true, readable: false });
+    })
+  );
+
+  test.effect("repairs forward again to the same shared facts", () =>
+    Effect.gen(function* () {
+      const rehearsal = yield* Rehearsal;
+      const repaired = yield* rehearsal.run(advancedStage);
+
+      expect(repaired).toEqual(yield* Ref.get(rehearsal.upgrade));
+    })
+  );
+
+  test.effect("opens storage admission after forward repair", () =>
+    Effect.gen(function* () {
+      const rehearsal = yield* Rehearsal;
+
+      yield* rehearsal.run({ ...advancedStage, opening: true });
+    })
   );
 });

@@ -126,7 +126,12 @@ const rolling = Effect.gen(function* () {
     )
   );
 
-  for (let count = 0; count < 5; count++) expect((yield* review(alice)).status).toBe(400);
+  expect(
+    yield* Effect.forEach(
+      Array.from({ length: 5 }, () => alice),
+      (person) => review(person).pipe(Effect.map((response) => response.status))
+    )
+  ).toEqual(Array.from({ length: 5 }, () => 400));
   expect((yield* review(alice)).status).toBe(429);
   expect(
     yield* native(() => db.owner(bob.user).exec("SELECT count(*) n FROM pat_review_events"))
@@ -165,24 +170,28 @@ const cleanup = Effect.gen(function* () {
     )
   );
 
-  for (const [label, deadline] of [
-    ["old", current],
-    ["live", future + 3600000],
-  ] as const) {
-    yield* native(() =>
-      db.exec("INSERT INTO canonical_request_leases VALUES(?,?,?)", label, alice.user, deadline)
-    );
-    yield* native(() =>
-      db.exec("INSERT INTO canonical_request_buckets VALUES(?,?)", label, deadline)
-    );
-    yield* native(() =>
-      db.exec(
-        "INSERT INTO pat_review_events(session_id,expires_at_ms) VALUES(?,?)",
-        alice.session,
-        deadline
-      )
-    );
-  }
+  yield* Effect.forEach(
+    [
+      ["old", current],
+      ["live", future + 3600000],
+    ] as const,
+    Effect.fnUntraced(function* ([label, deadline]) {
+      yield* native(() =>
+        db.exec("INSERT INTO canonical_request_leases VALUES(?,?,?)", label, alice.user, deadline)
+      );
+      yield* native(() =>
+        db.exec("INSERT INTO canonical_request_buckets VALUES(?,?)", label, deadline)
+      );
+      yield* native(() =>
+        db.exec(
+          "INSERT INTO pat_review_events(session_id,expires_at_ms) VALUES(?,?)",
+          alice.session,
+          deadline
+        )
+      );
+    }),
+    { discard: true }
+  );
 
   expect((yield* alarm(future)).status).toBe(204);
   expect(

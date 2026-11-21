@@ -1,5 +1,5 @@
 import { installedOrigins } from "../../../src/shell/browser-transport/contract";
-import { Clock, Effect, Schema } from "effect";
+import { Clock, Effect, Option, Result, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 import { SignJWT, exportJWK, exportPKCS8, generateKeyPair, importPKCS8 } from "jose";
 import type { AcceptanceProviderEnvironment } from "../contract";
@@ -94,7 +94,7 @@ const validExchange = (
 const validSignature = Effect.fn(function* (parts: readonly string[], secret: string) {
   const mac = Base64Url.decode(parts.at(-1) ?? "");
 
-  if (mac._tag === "Failure") return false;
+  if (Result.isFailure(mac)) return false;
 
   const key = yield* Effect.tryPromise(() =>
     crypto.subtle.importKey(
@@ -137,7 +137,7 @@ const codeSubject = Effect.fn(function* (
   const form = new URLSearchParams(yield* Effect.tryPromise(() => request.text()));
   const parsed = readCode(form);
 
-  if (parsed._tag === "None" || !validExchange(form, env, { provider, host: parsed.value[1] })) {
+  if (Option.isNone(parsed) || !validExchange(form, env, { provider, host: parsed.value[1] })) {
     return;
   }
 
@@ -174,14 +174,16 @@ const exchange = Effect.fn(function* (
   const keys = yield* storedKeys(env),
     key = yield* Effect.tryPromise(() => importPKCS8(keys.privateKey, "RS256"));
 
-  const claims = {
+  const subjectClaims = {
     nonce: code.nonce,
     email: code.subject + "@example.test",
     email_verified: true,
-    ...(provider === "microsoft"
-      ? { ver: "2.0", tid: "9188040d-6c67-4c5b-b112-36a304b66dad" }
-      : {}),
   };
+
+  const claims =
+    provider === "microsoft"
+      ? { ...subjectClaims, ver: "2.0", tid: "9188040d-6c67-4c5b-b112-36a304b66dad" }
+      : subjectClaims;
 
   const issued = Math.floor(code.now / secondMs);
 
@@ -204,21 +206,14 @@ const publicKeys = Effect.fn(function* (
   provider: keyof typeof clients
 ) {
   const { n, e } = yield* storedKeys(env);
+  const signingKey = { kty: "RSA", alg: "RS256", use: "sig", kid, n, e };
 
   return Response.json(
     {
       keys: [
-        {
-          kty: "RSA",
-          alg: "RS256",
-          use: "sig",
-          kid,
-          n,
-          e,
-          ...(provider === "microsoft"
-            ? { issuer: "https://login.microsoftonline.com/{tenantid}/v2.0" }
-            : {}),
-        },
+        provider === "microsoft"
+          ? { ...signingKey, issuer: "https://login.microsoftonline.com/{tenantid}/v2.0" }
+          : signingKey,
       ],
     },
     { headers: { "cache-control": "no-store" } }
@@ -231,15 +226,19 @@ export const answerFixtureIdentity = Effect.fn(function* (
 ) {
   if ((env.ACCEPTANCE_CODE_KEY ?? "").length === 0) return new Response(null, { status: 503 });
 
-  for (const provider of ["google", "microsoft"] as const) {
+  const [answer] = (["google", "microsoft"] as const).flatMap((provider) => {
     if (request.url === clients[provider].keys && request.method === "GET") {
-      return yield* publicKeys(env, provider);
+      return [publicKeys(env, provider)];
     }
 
     if (request.url === clients[provider].token && request.method === "POST") {
-      return yield* exchange(request, env, provider);
+      return [exchange(request, env, provider)];
     }
-  }
 
-  return new Response(null, { status: 404 });
+    return [];
+  });
+
+  if (answer === undefined) return new Response(null, { status: 404 });
+
+  return yield* answer;
 });

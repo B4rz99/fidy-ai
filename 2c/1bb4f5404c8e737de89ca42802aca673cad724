@@ -1,0 +1,16 @@
+apps/server/cloudflare/oauth-agents/native-lease-source.test.ts
+  h_c6d49c804e0ad2 3,14-15,22,33-34,36
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2c1bb4f5404c8e737de89ca42802aca673cad724",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

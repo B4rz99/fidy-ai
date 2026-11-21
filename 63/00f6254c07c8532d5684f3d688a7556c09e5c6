@@ -1,0 +1,14 @@
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6300f6254c07c8532d5684f3d688a7556c09e5c6",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

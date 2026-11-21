@@ -200,13 +200,13 @@ const tomlRanges = (source: string): ReadonlyArray<Range> =>
   parseTOML(source).comments.map(({ range: [start, end] }) => ({ start, end }));
 
 const sqlRanges = (source: string): ReadonlyArray<Range> =>
-  [
-    ...source.matchAll(
+  source
+    .matchAll(
       /'(?:''|[^'])*'|"(?:""|[^"])*"|`(?:``|[^`])*`|\[[^\]]*\]|(?<comment>--[^\r\n]*|\/\*[\s\S]*?(?:\*\/|$))/gu
-    ),
-  ]
+    )
     .filter(({ groups }) => groups?.["comment"] !== undefined)
-    .map(({ 0: text, index }) => ({ start: index, end: index + text.length }));
+    .map(({ 0: text, index }) => ({ start: index, end: index + text.length }))
+    .toArray();
 
 type CommentParser = (source: string, file: string) => ReadonlyArray<Range>;
 

@@ -1,4 +1,4 @@
-import { Predicate, Schema } from "effect";
+import { Schema } from "effect";
 
 const extras = Schema.Record(Schema.String, Schema.Unknown);
 
@@ -68,7 +68,7 @@ export const parseRefusal = decoder(
   })
 );
 
-export type CapturedEvent = Record<string, unknown>;
+export type CapturedEvent = Schema.JsonObject;
 
 export type AssetsDelivered = {
   rawBytes: number;
@@ -77,7 +77,7 @@ export type AssetsDelivered = {
   gzip: number;
 };
 
-export type Snapshots = Record<string, unknown>;
+export type Snapshots = Record<string, Schema.Json>;
 
 export type ProfileEvidence = {
   events: CapturedEvent[];
@@ -85,5 +85,6 @@ export type ProfileEvidence = {
   report: () => Promise<number>;
 };
 
-export const fields = (value: unknown): Record<string, unknown> =>
-  Predicate.isObject(value) ? value : {};
+const isJsonObject = Schema.is(Schema.JsonObject);
+
+export const fields = (value: unknown): Schema.JsonObject => (isJsonObject(value) ? value : {});

@@ -1196,30 +1196,18 @@
       }
     },
     {
-      "files": ["scripts/**"],
+      "files": [
+        "scripts/dev-browser.test.ts",
+        "scripts/document-parsing/workerd-inspector.ts",
+        "scripts/infra-performance/canonical-fixture/meter.test-fixture.mjs",
+        "scripts/infra-performance/reference/native.ts",
+        "scripts/pro/runtime.ts"
+      ],
       "rules": {
-        "ai-guard/no-undeclared-import": "off",
-        "anti-slop-effect/no-manual-effect-error-tag": "off",
-        "anti-slop-effect/no-manual-tag-comparison": "off",
-        "anti-slop-effect/no-manual-tagged-construction": "off",
         "anti-slop-effect/no-service-constructor-imports": "off",
-        "anti-slop-effect/require-cause-when-narrowing": "off",
-        "anti-slop-effect/stream-large-files": "off",
-        "anti-slop-effect/throw-in-effect-gen": "off",
-        "anti-slop/no-array-filter-map": "off",
-        "anti-slop/no-conditional-spread": "off",
-        "anti-slop/no-instanceof": "off",
-        "anti-slop/no-known-value-widening": "off",
         "anti-slop/no-reflect-get": "off",
         "anti-slop/no-runtime-typeof": "off",
-        "anti-slop/no-shape-in-symbol-names": "off",
-        "anti-slop/no-unknown-returns": "off",
-        "anti-slop/no-unsafe-dictionary-type": "off",
-        "enfect/avoid-expect-in-if": "off",
-        "enfect/avoid-option-getorthrow": "off",
         "enfect/effect-run-in-body": "off",
-        "enfect/prefer-duration-constructors": "off",
-        "enfect/yield-in-for-loop": "off",
         "landmines/no-flake-masking": "off"
       }
     }

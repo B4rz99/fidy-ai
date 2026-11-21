@@ -45,13 +45,15 @@ const fixture = Effect.gen(function* () {
     ]),
   ]);
 
-  for (const path of paths) {
-    const content = yield* Effect.tryPromise(() =>
-      Bun.file(`${repositoryRoot}/${path}`).text()
-    ).pipe(Effect.orDie);
-
-    yield* write(`${root}/${path}`, content);
-  }
+  yield* Effect.forEach(
+    paths,
+    (path) =>
+      Effect.tryPromise(() => Bun.file(`${repositoryRoot}/${path}`).text()).pipe(
+        Effect.orDie,
+        Effect.flatMap((content) => write(`${root}/${path}`, content))
+      ),
+    { discard: true }
+  );
 
   yield* write(`${root}/.patterns/INDEX.md`, "[HTTP](http.md)\n");
   yield* write(`${root}/.patterns/http.md`, "# HTTP\n");
@@ -59,7 +61,9 @@ const fixture = Effect.gen(function* () {
   return root;
 });
 
-const run = (root: string): Readonly<{ status: number; stderr: string }> => {
+type CheckRun = Readonly<{ status: number; stderr: string }>;
+
+const run = (root: string): CheckRun => {
   const result = Bun.spawnSync([
     process.execPath,
     `${repositoryRoot}/scripts/check-pattern-sources.ts`,

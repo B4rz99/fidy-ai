@@ -1,16 +1,18 @@
 #!/usr/bin/env bun
 import { VerificationHttpLive } from "./verification-http";
-import { BunCrypto, BunFileSystem } from "@effect/platform-bun";
+import { BunCrypto, BunFileSystem, BunRuntime } from "@effect/platform-bun";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
+  Cause,
   Data,
   Effect,
   FileSystem,
   Layer,
   Option,
   type PlatformError,
+  Redacted,
   Schema,
   Stream,
 } from "effect";
@@ -25,7 +27,12 @@ const stringify = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 
 class LocalProofFailure extends Data.TaggedError("LocalProofFailure")<{
   message: string;
+  cause: Option.Option<Redacted.Redacted<unknown>>;
 }> {}
+
+const isLocalProofFailure = Schema.is(Schema.instanceOf(LocalProofFailure));
+
+const isNativeProofError = Schema.is(Schema.instanceOf(NativeProofError));
 
 const privateDirectoryMode = 0o700;
 
@@ -94,7 +101,7 @@ const requireCheck = (
   passed: boolean,
   message: string
 ): Effect.Effect<void, never, never> | Effect.Effect<never, LocalProofFailure, never> =>
-  passed ? Effect.void : Effect.fail(new LocalProofFailure({ message }));
+  passed ? Effect.void : Effect.fail(new LocalProofFailure({ message, cause: Option.none() }));
 
 export const requestLocalConfirmationBridge = <A>({
   path,
@@ -119,7 +126,10 @@ export const requestLocalConfirmationBridge = <A>({
 
       if (size > bridgeResponseLimit) {
         return Effect.fail(
-          new LocalProofFailure({ message: "Local fixture bridge response exceeded limit" })
+          new LocalProofFailure({
+            message: "Local fixture bridge response exceeded limit",
+            cause: Option.none(),
+          })
         );
       }
 
@@ -132,7 +142,13 @@ export const requestLocalConfirmationBridge = <A>({
   }).pipe(
     Effect.scoped,
     Effect.timeout(requestTimeout),
-    Effect.mapError(() => new LocalProofFailure({ message: "Local fixture bridge unavailable" })),
+    Effect.mapError(
+      (cause) =>
+        new LocalProofFailure({
+          message: "Local fixture bridge unavailable",
+          cause: Option.some(Redacted.make(cause)),
+        })
+    ),
     Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
     Effect.provideService(HttpClient.TracerDisabledWhen, () => true)
   );
@@ -200,9 +216,10 @@ const readArguments = Effect.try({
       cases: decodeCases(requested),
     };
   },
-  catch: () =>
+  catch: (cause) =>
     new LocalProofFailure({
       message: "Expected --claude PATH --codex PATH [--output DIR] [--cases CASE ...]",
+      cause: Option.some(Redacted.make(cause)),
     }),
 });
 
@@ -348,15 +365,12 @@ const execute = Effect.gen(function* () {
       }),
     }).pipe(Effect.orDie)
   );
-  const results: CaseResult[] = [];
 
-  for (const name of args.cases) {
-    const result = yield* runCase(args, name).pipe(
+  const results = yield* Effect.forEach(args.cases, (name) =>
+    runCase(args, name).pipe(
       Effect.ensuring(cleanupCase(join(args.output, name)).pipe(Effect.orDie))
-    );
-
-    results.push(result);
-  }
+    )
+  );
 
   yield* writeJson(join(args.output, "evidence.json"), {
     trustBoundary:
@@ -370,7 +384,7 @@ const execute = Effect.gen(function* () {
 });
 
 if (import.meta.main) {
-  Effect.runPromise(
+  BunRuntime.runMain(
     Effect.scoped(execute).pipe(
       Effect.provide(
         Layer.mergeAll(
@@ -379,18 +393,25 @@ if (import.meta.main) {
           BunCrypto.layerDigest,
           VerificationHttpLive
         )
+      ),
+      Effect.catchCause((cause) =>
+        Effect.sync(() => {
+          const error = Cause.squash(cause);
+
+          if (isLocalProofFailure(error)) process.stderr.write(error.message + "\n");
+
+          if (isNativeProofError(error)) {
+            process.stderr.write(
+              `Native ${error.host} failed during ${error.phase}: ${error.reason}\n`
+            );
+          }
+
+          process.stderr.write(
+            "Local native confirmation proof failed; inspect metadata-only result files.\n"
+          );
+          process.exitCode = 1;
+        })
       )
     )
-  ).catch((error: unknown) => {
-    if (error instanceof LocalProofFailure) process.stderr.write(error.message + "\n");
-
-    if (error instanceof NativeProofError) {
-      process.stderr.write(`Native ${error.host} failed during ${error.phase}: ${error.reason}\n`);
-    }
-
-    process.stderr.write(
-      "Local native confirmation proof failed; inspect metadata-only result files.\n"
-    );
-    process.exitCode = 1;
-  });
+  );
 }

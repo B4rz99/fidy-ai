@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Data, Effect, Option, Schema } from "effect";
+import { Data, Effect, Option, Predicate, Schema } from "effect";
 import { afterEach, describe, expect, vi } from "vitest";
 import { heapUsage, profileWorkerRequest } from "./workerd-inspector";
 
@@ -101,16 +101,19 @@ it.each(["heap", "profile"] as const)(
 
           yield* Effect.tryPromise(() => requested.promise);
           yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(30_001));
-          expect(yield* Effect.tryPromise(() => outcome)).toMatchObject({
-            _tag: "InspectorIoError",
-            cause: { _tag: "TimeoutError" },
-          });
+          const settled = yield* Effect.tryPromise(() => outcome);
+
+          expect(
+            Predicate.isTagged(settled, "InspectorIoError") &&
+              Predicate.hasProperty(settled, "cause") &&
+              Predicate.isTagged(settled.cause, "TimeoutError")
+          ).toBe(true);
           yield* Effect.tryPromise(() => disconnected.promise);
 
-          if (operation === "profile") {
-            expect(Option.isSome(requestSignal) && requestSignal.value.aborted).toBe(true);
-            expect(cancelled).toBe(true);
-          }
+          expect(
+            operation !== "profile" || (Option.isSome(requestSignal) && requestSignal.value.aborted)
+          ).toBe(true);
+          expect(operation !== "profile" || cancelled).toBe(true);
         } finally {
           vi.useRealTimers();
         }
@@ -150,7 +153,7 @@ describe("workerd inspector", () => {
           catch: (cause) => new InspectorTestError({ cause }),
         }).pipe(Effect.flip);
 
-        expect(failure.cause).toMatchObject({ _tag: "InspectorIoError" });
+        expect(Predicate.isTagged(failure.cause, "InspectorIoError")).toBe(true);
         expect(Option.isSome(requestSignal) && requestSignal.value.aborted).toBe(true);
         yield* Effect.tryPromise(() => disconnected.promise);
       });
@@ -183,7 +186,7 @@ describe("workerd inspector", () => {
         catch: (cause) => new InspectorTestError({ cause }),
       }).pipe(Effect.flip);
 
-      expect(failure.cause).toMatchObject({ _tag: "InspectorIoError" });
+      expect(Predicate.isTagged(failure.cause, "InspectorIoError")).toBe(true);
       const cancelled = Promise.withResolvers<void>();
       const body = new ReadableStream({ cancel: (): void => cancelled.resolve() });
       pending.resolve(new Response(body));
@@ -260,7 +263,7 @@ describe("workerd inspector", () => {
         catch: (cause) => new InspectorTestError({ cause }),
       }).pipe(Effect.flip);
 
-      expect(failure.cause).toMatchObject({ _tag: "InspectorIoError" });
+      expect(Predicate.isTagged(failure.cause, "InspectorIoError")).toBe(true);
       expect(cancelled).toBe(true);
     })
   );
@@ -274,7 +277,7 @@ describe("workerd inspector", () => {
         catch: (cause) => new InspectorTestError({ cause }),
       }).pipe(Effect.flip);
 
-      expect(failure.cause).toMatchObject({ _tag: "InspectorIoError" });
+      expect(Predicate.isTagged(failure.cause, "InspectorIoError")).toBe(true);
     })
   );
 });

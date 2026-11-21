@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Deferred, Effect, Fiber } from "effect";
+import { Deferred, Effect, Fiber, Predicate } from "effect";
 import { expect } from "vitest";
 import { runProofCommand } from "./proof-command";
 
@@ -23,7 +23,8 @@ it.live("refuses oversized proof output without retaining foreign diagnostic tex
       'process.stdout.write("x".repeat(1048577)); await Bun.sleep(60000)',
     ]).pipe(Effect.flip);
 
-    expect(failure).toMatchObject({ _tag: "ProofCommandFailed", reason: "output" });
+    expect(Predicate.isTagged(failure, "ProofCommandFailed")).toBe(true);
+    expect(failure).toMatchObject({ reason: "output" });
     expect(String(failure)).not.toContain("xxxxx");
   })
 );

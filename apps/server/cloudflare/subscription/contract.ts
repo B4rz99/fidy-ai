@@ -90,8 +90,8 @@ export type BillingWorkflowStarter = Readonly<{
       params: unknown;
       retention: Readonly<{ successRetention: "3 days"; errorRetention: "3 days" }>;
     }>
-  ) => Promise<unknown>;
-  get: (id: string) => Promise<unknown>;
+  ) => Promise<WorkflowInstance | void>;
+  get: (id: string) => Promise<WorkflowInstance>;
 }>;
 
 export type BillingObservationWorkflow = Pick<BillingWorkflowStarter, "create"> &
@@ -188,7 +188,7 @@ export type WompiEventEnvironment = Readonly<{
   Partial<
     Readonly<{
       BILLING_COLLECTION_QUEUE: Readonly<{
-        send: (event: typeof WompiBillingEvent.Type) => Promise<unknown>;
+        send: (event: typeof WompiBillingEvent.Type) => Promise<QueueSendResponse | void>;
       }>;
     }>
   >;

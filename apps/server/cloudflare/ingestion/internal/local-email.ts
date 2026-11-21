@@ -47,6 +47,8 @@ import {
 import { claimIngestionCapacity, settleSharedEmailCapacity } from "./email-capacity";
 import { Receipt, anonymizeStructure, decideEmail } from "./forwarded-email-processing";
 
+const isResponse = Schema.is(Schema.instanceOf(Response));
+
 export const emailStageRetryMs = 60000;
 
 const abandonmentMs = 900000;
@@ -179,16 +181,13 @@ const validMime = Effect.fn(function* (bytes: Uint8Array) {
   );
 });
 
-const existingReceipt = Effect.fn(function* (
-  prior: Readonly<Record<string, unknown>>,
-  now: number
-) {
-  if (prior.state === "expired" || prior.state === "discarding") return refused();
+const existingReceipt = Effect.fn(function* (prior: unknown, state: unknown, now: number) {
+  if (state === "expired" || state === "discarding") return refused();
   const receipt = yield* Schema.decodeUnknownEffect(Receipt)(prior);
 
   if (receipt.expires_at_ms <= now) return refused();
 
-  return prior.state === "queued" ? nothing() : receipt;
+  return state === "queued" ? nothing() : receipt;
 });
 
 const reserveEmail = Effect.fn(function* (
@@ -206,7 +205,7 @@ const reserveEmail = Effect.fn(function* (
     yield* sql`SELECT * FROM forwarded_email_receipts WHERE user_id=${userId} AND delivery_digest=${digest}`;
 
   if (prior !== undefined) {
-    return yield* existingReceipt(prior, now);
+    return yield* existingReceipt(prior, prior.state, now);
   }
 
   const [capacity] =
@@ -329,7 +328,7 @@ export const admitLocalEmail = Effect.fn(
       reserveEmail({ userId, id, part }, { digest, size: bytes.length }, storage)
     );
 
-    if (reserved instanceof Response) return reserved;
+    if (isResponse(reserved)) return reserved;
 
     if (
       !(yield* claimIngestionCapacity(
@@ -497,13 +496,10 @@ export const processLocalEmail = Effect.fn(function* (
   return nothing();
 });
 
-const activeForwardingRoute = Effect.fn(function* (
-  user: UserId,
-  row: Readonly<Record<string, unknown>>
-) {
-  if (typeof row.id !== "string" || typeof row.local_part !== "string") return false;
+const activeForwardingRoute = Effect.fn(function* (user: UserId, id: unknown, localPart: unknown) {
+  if (!Predicate.isString(id) || !Predicate.isString(localPart)) return false;
 
-  return Option.isSome(yield* address(user, row.id, row.local_part));
+  return Option.isSome(yield* address(user, id, localPart));
 });
 
 export const recoverEmailStages = Effect.fn(function* (
@@ -544,7 +540,7 @@ export const recoverEmailStages = Effect.fn(function* (
 
           if (active === undefined) return;
 
-          if (!(yield* activeForwardingRoute(user, active))) {
+          if (!(yield* activeForwardingRoute(user, active.id, active.local_part))) {
             yield* sql`UPDATE forwarded_email_receipts SET state='discarding' WHERE user_id=${user} AND id=${receipt.id}`;
 
             return;

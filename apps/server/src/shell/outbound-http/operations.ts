@@ -128,6 +128,12 @@ export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpServ
   });
 
   static readonly layer = Layer.effect(this, this.make);
+
+  static readonly accessSigningKeys = makeAccessSigningKeysOutboundHttp;
+
+  static readonly kapso = makeKapsoOutboundHttp;
+
+  static readonly wompi = makeWompiOutboundHttp;
 }
 
 export const makeGoogleOutboundHttp = (

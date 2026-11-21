@@ -44,7 +44,10 @@ export const requireDaviplataSandboxPolicy = Effect.fnUntraced(function* (
   const policy = yield* Schema.decodeUnknownEffect(DaviplataOtpPolicy)({
     sendUrl: Option.getOrNull(input.sendUrl),
     confirmUrl: Option.getOrNull(input.confirmUrl),
-  }).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure({ stage: "policy" })));
+  }).pipe(
+    Effect.tapError(Effect.logDebug),
+    Effect.mapError(() => new DaviplataSandboxProofFailure({ stage: "policy" }))
+  );
 
   if (
     [policy.sendUrl, policy.confirmUrl].some(
@@ -124,7 +127,10 @@ const json = Effect.fnUntraced(function* (
 
   return yield* Schema.decodeEffect(UnknownJsonString)(
     new TextDecoder().decode(response.body)
-  ).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure({ stage })));
+  ).pipe(
+    Effect.tapError(Effect.logDebug),
+    Effect.mapError(() => new DaviplataSandboxProofFailure({ stage }))
+  );
 });
 
 const destination = (
@@ -141,9 +147,10 @@ const execute = (
   request: Parameters<OutboundHttpService["execute"]>[0],
   stage: "tokenization-request" | "otp-send-request" | "otp-confirm-request"
 ): Effect.Effect<OutboundHttpResponse, DaviplataSandboxProofFailure> =>
-  outbound
-    .execute(request)
-    .pipe(Effect.mapError(() => new DaviplataSandboxProofFailure({ stage })));
+  outbound.execute(request).pipe(
+    Effect.tapError(Effect.logDebug),
+    Effect.mapError(() => new DaviplataSandboxProofFailure({ stage }))
+  );
 
 const otp = ({
   outbound,
@@ -200,7 +207,7 @@ export const authorizeDaviplataSandbox = Effect.fnUntraced(function* (
     Effect.flatMap((response) => json(response, "tokenization-response")),
     Effect.flatMap(Schema.decodeUnknownEffect(tokenResponse)),
     Effect.mapError((error) =>
-      error instanceof DaviplataSandboxProofFailure
+      Schema.is(Schema.instanceOf(DaviplataSandboxProofFailure))(error)
         ? error
         : new DaviplataSandboxProofFailure({ stage: "tokenization-response" })
     )
@@ -216,7 +223,7 @@ export const authorizeDaviplataSandbox = Effect.fnUntraced(function* (
   }).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(sentResponse)),
     Effect.mapError((error) =>
-      error instanceof DaviplataSandboxProofFailure
+      Schema.is(Schema.instanceOf(DaviplataSandboxProofFailure))(error)
         ? error
         : new DaviplataSandboxProofFailure({ stage: "otp-send-response" })
     )
@@ -234,7 +241,7 @@ export const authorizeDaviplataSandbox = Effect.fnUntraced(function* (
   }).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(confirmedResponse)),
     Effect.mapError((error) =>
-      error instanceof DaviplataSandboxProofFailure
+      Schema.is(Schema.instanceOf(DaviplataSandboxProofFailure))(error)
         ? error
         : new DaviplataSandboxProofFailure({ stage: "otp-confirm-response" })
     )

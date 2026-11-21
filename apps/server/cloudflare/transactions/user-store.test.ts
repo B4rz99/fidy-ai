@@ -1,5 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Predicate, Schema } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import type { Miniflare } from "miniflare";
@@ -51,10 +51,10 @@ const patCapture = (
       headers: {
         "content-type": "application/json",
         authorization: "Bearer " + bearer,
-        "Fidy-Retry-Key": typeof call === "string" ? call : call.key,
+        "Fidy-Retry-Key": Predicate.isString(call) ? call : call.key,
         "CF-Connecting-IP": "192.0.2.1",
       },
-      body: JSON.stringify(typeof call === "string" ? capturePayload : call.payload),
+      body: JSON.stringify(Predicate.isString(call) ? capturePayload : call.payload),
     })
   );
 

@@ -2,7 +2,7 @@ import { Effect, Exit, Option, Schema } from "effect";
 import type { OperationalSignal, QueueKind } from "../contract";
 
 type WorkflowStatusBinding = Readonly<{
-  get: (id: string) => Promise<{ status: () => Promise<unknown> }>;
+  get: (id: string) => Promise<{ status: () => Promise<InstanceStatus> }>;
 }>;
 
 const Status = Schema.Struct({

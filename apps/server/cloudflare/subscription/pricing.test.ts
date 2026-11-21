@@ -238,8 +238,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect((yield* request("fixture/inspect-recovery")).body).toMatchObject({
           rows: [{ outcome: "committed", next_check_ms: null }],
         });
-      }),
-    25000
+      })
   );
   test.effect(
     "keeps exact accepted Price work available when pricing reaches its growth restriction",

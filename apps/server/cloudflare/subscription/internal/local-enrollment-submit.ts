@@ -4,7 +4,7 @@ import {
   WompiSourceResult,
 } from "./wompi-client";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Predicate, Redacted, Result, Schema } from "effect";
 import {
   BillingEmail,
   PaymentSubmission,
@@ -51,6 +51,8 @@ import {
 import { WompiSourceId } from "./wompi-model";
 import { type WompiTransportFactory } from "./wompi-runtime";
 
+const isResponse = Schema.is(Schema.instanceOf(Response));
+
 const verifyDelay = 3000;
 
 const maximumLookups = 8;
@@ -60,6 +62,14 @@ const verifying = (enrollmentId: string): Response =>
 
 const refused = (enrollmentId: string, reason: string): Response =>
   json({ body: { status: "refused", enrollmentId, reason }, status: 200 });
+
+type EnrollmentRow = Readonly<{
+  deadline_ms: unknown;
+  form: unknown;
+  source_id: unknown;
+  state: unknown;
+  reason: unknown;
+}>;
 
 type LocalWork = {
   env: NativeEnrollmentEnv;
@@ -119,7 +129,7 @@ const close = Effect.fn(function* (reg: Registration, reason: string) {
       const [saved] =
         yield* sql`SELECT report FROM billing_admissions WHERE operation_id=${reg.operationId}`;
 
-      return typeof saved?.report === "string" ? textReport(saved.report) : refused(id, reason);
+      return Predicate.isString(saved?.report) ? textReport(saved.report) : refused(id, reason);
     })
   );
 });
@@ -344,7 +354,7 @@ const createSource = Effect.fn(function* (
   const sql = yield* SqliteClient;
   const candidate = yield* submitSource({ work, body, contracts: fresh.success }, client);
 
-  if (candidate instanceof Response) return candidate;
+  if (isResponse(candidate)) return candidate;
   const now = yield* Clock.currentTimeMillis;
   yield* withStoreCapacity("required")(
     Effect.gen(function* () {
@@ -368,7 +378,7 @@ const enrollmentRegistration = Effect.fn(function* ({
   session: EnrollmentSession;
   body: SubmitPaymentEnrollmentPayload;
   form: LocalWork["form"];
-  row: Readonly<Record<string, unknown>>;
+  row: EnrollmentRow;
 }) {
   const operationId = yield* Effect.tryPromise(() =>
     billingAttemptIdFor({ userId: session.user_id, requestId: body.paymentRequestId })
@@ -410,7 +420,7 @@ const enrollmentReceipt = Effect.fn(function* ({
   input: BrowserEnrollment;
   body: SubmitPaymentEnrollmentPayload;
   form: LocalWork["form"];
-  row: Readonly<Record<string, unknown>>;
+  row: EnrollmentRow;
   reg: Registration;
 }) {
   const { session, storage } = input;
@@ -438,7 +448,7 @@ const enrollmentReceipt = Effect.fn(function* ({
 
   if (saved === undefined) return invalid();
 
-  if (typeof saved.report === "string") return textReport(saved.report);
+  if (Predicate.isString(saved.report)) return textReport(saved.report);
 
   if (
     saved.outcome === "cancelled" ||
@@ -465,8 +475,16 @@ export const submitLocalForm = Effect.fn(function* (input: BrowserEnrollment) {
   const [row] =
     yield* sql`SELECT * FROM payment_enrollments WHERE id=${body.enrollmentId} AND user_id=${session.user_id} AND environment=${env.WOMPI_ENVIRONMENT}`;
 
-  if (row === undefined || typeof row.form !== "string") return invalid();
+  if (row === undefined || !Predicate.isString(row.form)) return invalid();
   const form = yield* Schema.decodeEffect(formCodec)(row.form);
+
+  const enrollment: EnrollmentRow = {
+    deadline_ms: row.deadline_ms,
+    form: row.form,
+    source_id: row.source_id,
+    state: row.state,
+    reason: row.reason,
+  };
 
   if (
     form.paymentSourceMode !== body.paymentSourceMode ||
@@ -477,12 +495,12 @@ export const submitLocalForm = Effect.fn(function* (input: BrowserEnrollment) {
     return invalid();
   }
 
-  const reg = yield* enrollmentRegistration({ session, body, form, row });
-  const existing = yield* enrollmentReceipt({ input, body, form, row, reg });
+  const reg = yield* enrollmentRegistration({ session, body, form, row: enrollment });
+  const existing = yield* enrollmentReceipt({ input, body, form, row: enrollment, reg });
 
   if (existing !== undefined) return existing;
 
-  return yield* continueSubmission({ input, body, form, row, reg });
+  return yield* continueSubmission({ input, body, form, row: enrollment, reg });
 });
 
 export const recoverCandidate = Effect.fn(function* (context: EnrollmentContext, id: string) {
@@ -540,7 +558,7 @@ const continueSubmission = Effect.fn(function* ({
   input: BrowserEnrollment;
   body: SubmitPaymentEnrollmentPayload;
   form: LocalWork["form"];
-  row: Readonly<Record<string, unknown>>;
+  row: EnrollmentRow;
   reg: Registration;
 }) {
   const { env, storage, session, transport } = input;

@@ -97,56 +97,29 @@ const receiveMessage = (response, message) => {
   assert.ok("method" in message);
   response.setHeader("mcp-session-id", "disposable-loopback-session");
 
-  (
-    new Map([
-      [
-        "initialize",
-        () => {
-          assert.ok("id" in message);
-          jsonReply(response, message.id, {
-            protocolVersion: "2025-11-25",
-            capabilities: { tools: {} },
-            serverInfo: { name: "disposable-loopback", version: "1" },
-          });
-        },
-      ],
-      [
-        "notifications/initialized",
-        () => {
-          response.writeHead(status.accepted).end();
-        },
-      ],
-      [
-        "tools/call",
-        () => {
-          assert.ok("id" in message);
+  switch (message.method) {
+    case "initialize":
+      assert.ok("id" in message);
 
-          const tool = new Map([
-            ["review", () => review(response, message.id)],
-            [
-              "read",
-              () => {
-                readWhilePending = !cancellationReceived;
-                jsonReply(response, message.id, { content: [] });
-              },
-            ],
-          ]).get(String(message.params?.name));
+      return jsonReply(response, message.id, {
+        protocolVersion: "2025-11-25",
+        capabilities: { tools: {} },
+        serverInfo: { name: "disposable-loopback", version: "1" },
+      });
+    case "notifications/initialized":
+      return response.writeHead(status.accepted).end();
+    case "tools/call":
+      assert.ok("id" in message);
 
-          assert.ok(tool !== undefined);
-          tool();
-        },
-      ],
-    ]).get(message.method) ??
-    (() => {
-      response.writeHead(status.invalid).end();
-    })
-  )();
+      if (message.params?.name === "review") return review(response, message.id);
+      assert.equal(message.params?.name, "read");
+      readWhilePending = !cancellationReceived;
+
+      return jsonReply(response, message.id, { content: [] });
+    default:
+      return response.writeHead(status.invalid).end();
+  }
 };
-
-const sessionReplies = new Map([
-  ["GET", status.unsupported],
-  ["DELETE", status.ok],
-]);
 
 const server = createSecureServer(
   {
@@ -170,9 +143,9 @@ const server = createSecureServer(
 const receiveRequest = async (request, response) => {
   versions.add(request.httpVersion);
 
-  const sessionReply = sessionReplies.get(request.method);
+  if (request.method === "GET") return response.writeHead(status.unsupported).end();
 
-  if (sessionReply !== undefined) return response.writeHead(sessionReply).end();
+  if (request.method === "DELETE") return response.writeHead(status.ok).end();
   assert.equal(request.headers.authorization, "Bearer disposable-loopback-token");
   let body = "";
 

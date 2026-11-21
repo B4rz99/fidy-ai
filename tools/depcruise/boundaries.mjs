@@ -111,15 +111,6 @@ export const ownership = (modules) => {
 /** @typedef {{from: string, to: string, sameOwner: boolean, composition: boolean, published: boolean}} Edge */
 /** @typedef {{name: string, reason: string, rejects: (edge: Edge) => boolean}} Rule */
 
-const contractDependencies = new Set(["cloudflare:workers", "src/shell/api.ts"]);
-
-const contractArtifacts = new Map([
-  [
-    "src/shell/observability/contract.ts",
-    "src/shell/observability/canonical-metadata.generated.json",
-  ],
-]);
-
 /** @type {readonly Rule[]} */
 const directionRules = [
   {
@@ -159,10 +150,14 @@ const directionRules = [
       "Published declarations depend only on declarations, API assembly and the exact pure Shared Kernel, never behavior, storage or construction authority.",
     rejects: ({ from, to }) =>
       from.endsWith("/contract.ts") &&
-      !contractDependencies.has(to) &&
+      to !== "cloudflare:workers" &&
+      to !== "src/shell/api.ts" &&
       !sharedKernel.test(to) &&
       !to.endsWith("/contract.ts") &&
-      contractArtifacts.get(from) !== to,
+      !(
+        from === "src/shell/observability/contract.ts" &&
+        to === "src/shell/observability/canonical-metadata.generated.json"
+      ),
   },
 ];
 

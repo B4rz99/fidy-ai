@@ -43,7 +43,6 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 def multipart_read_session(account, hostname, access, token, bucket):
-    # Cloudflare validates the parent secret hash and the exact action and bucket claims.
     def encode(value):
         return urlsafe_b64encode(value).rstrip(b"=")
 

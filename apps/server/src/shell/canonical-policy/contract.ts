@@ -1,4 +1,4 @@
-import { Context, Option, Schema, SchemaTransformation } from "effect";
+import { Context, Data, Match, Option, Predicate, Schema, SchemaTransformation } from "effect";
 import { OpenApi } from "effect/http-api";
 import { CanonicalCapability } from "~/core/canonical-operations/contract";
 import type { AccessTier } from "~/core/access-tier/contract";
@@ -16,20 +16,38 @@ export const CanonicalOperationKind = Schema.Literals(["query", "mutation"]);
 
 export type CanonicalOperationKind = typeof CanonicalOperationKind.Type;
 
-export const UserOwnedAgentScopeCheck = Schema.Union([
-  Schema.TaggedStruct("Operation", { capability: CanonicalCapability }),
-  Schema.TaggedStruct("Children", {}),
-]);
+const OperationScopeCheck = Schema.TaggedStruct("Operation", { capability: CanonicalCapability });
+
+const ChildrenScopeCheck = Schema.TaggedStruct("Children", {});
+
+export const UserOwnedAgentScopeCheck = Schema.Union([OperationScopeCheck, ChildrenScopeCheck]);
 
 export type UserOwnedAgentScopeCheck = typeof UserOwnedAgentScopeCheck.Type;
 
+const UserOwnedAgentScoped = Schema.TaggedStruct("UserOwnedAgentScoped", {
+  scope: UserOwnedAgentScopeCheck,
+});
+
+const FreshWebSessionOnly = Schema.TaggedStruct("FreshWebSessionOnly", {});
+
+const WebSessionOnly = Schema.TaggedStruct("WebSessionOnly", {});
+
+const WebOrHosted = Schema.TaggedStruct("WebOrHosted", {});
+
+const VerifiedWhatsAppHostedOnly = Schema.TaggedStruct("VerifiedWhatsAppHostedOnly", {});
+
+const FreshWebOrVerifiedWhatsAppHosted = Schema.TaggedStruct(
+  "FreshWebOrVerifiedWhatsAppHosted",
+  {}
+);
+
 const CanonicalOperationAccess = Schema.Union([
-  Schema.TaggedStruct("UserOwnedAgentScoped", { scope: UserOwnedAgentScopeCheck }),
-  Schema.TaggedStruct("FreshWebSessionOnly", {}),
-  Schema.TaggedStruct("WebSessionOnly", {}),
-  Schema.TaggedStruct("WebOrHosted", {}),
-  Schema.TaggedStruct("VerifiedWhatsAppHostedOnly", {}),
-  Schema.TaggedStruct("FreshWebOrVerifiedWhatsAppHosted", {}),
+  UserOwnedAgentScoped,
+  FreshWebSessionOnly,
+  WebSessionOnly,
+  WebOrHosted,
+  VerifiedWhatsAppHostedOnly,
+  FreshWebOrVerifiedWhatsAppHosted,
 ]);
 
 const PublishedOperationAccessWire = Schema.Union([
@@ -54,51 +72,49 @@ type CanonicalOperationAccess = typeof CanonicalOperationAccess.Type;
 
 type PublishedOperationAccessWire = typeof PublishedOperationAccessWire.Type;
 
+const userOwnedAgentScopeCheck = (
+  scope: PublishedOperationAccessWire & { readonly type: "user-owned-agent-scoped" }
+): UserOwnedAgentScopeCheck =>
+  scope.scope.evaluation === "operation"
+    ? OperationScopeCheck.make({ capability: scope.scope.capability })
+    : ChildrenScopeCheck.make({});
+
 const decodePublishedAccess = (access: PublishedOperationAccessWire): CanonicalOperationAccess => {
   switch (access.type) {
     case "user-owned-agent-scoped":
-      return {
-        _tag: "UserOwnedAgentScoped",
-        scope:
-          access.scope.evaluation === "operation"
-            ? { _tag: "Operation", capability: access.scope.capability }
-            : { _tag: "Children" },
-      };
+      return UserOwnedAgentScoped.make({ scope: userOwnedAgentScopeCheck(access) });
     case "fresh-web-session-only":
-      return { _tag: "FreshWebSessionOnly" };
+      return FreshWebSessionOnly.make({});
     case "web-session-only":
-      return { _tag: "WebSessionOnly" };
+      return WebSessionOnly.make({});
     case "web-or-hosted":
-      return { _tag: "WebOrHosted" };
+      return WebOrHosted.make({});
     case "verified-whatsapp-hosted-only":
-      return { _tag: "VerifiedWhatsAppHostedOnly" };
+      return VerifiedWhatsAppHostedOnly.make({});
     case "fresh-web-or-verified-whatsapp-hosted":
-      return { _tag: "FreshWebOrVerifiedWhatsAppHosted" };
+      return FreshWebOrVerifiedWhatsAppHosted.make({});
   }
 };
 
-const encodePublishedAccess = (access: CanonicalOperationAccess): PublishedOperationAccessWire => {
-  switch (access._tag) {
-    case "UserOwnedAgentScoped":
-      return {
-        type: "user-owned-agent-scoped",
-        scope:
-          access.scope._tag === "Operation"
-            ? { evaluation: "operation", capability: access.scope.capability }
-            : { evaluation: "children" },
-      };
-    case "FreshWebSessionOnly":
-      return { type: "fresh-web-session-only" };
-    case "WebSessionOnly":
-      return { type: "web-session-only" };
-    case "WebOrHosted":
-      return { type: "web-or-hosted" };
-    case "VerifiedWhatsAppHostedOnly":
-      return { type: "verified-whatsapp-hosted-only" };
-    case "FreshWebOrVerifiedWhatsAppHosted":
-      return { type: "fresh-web-or-verified-whatsapp-hosted" };
-  }
-};
+const encodePublishedAccess = (access: CanonicalOperationAccess): PublishedOperationAccessWire =>
+  Match.valueTags(access, {
+    UserOwnedAgentScoped: ({ scope }): PublishedOperationAccessWire => ({
+      type: "user-owned-agent-scoped",
+      scope: Match.valueTags(scope, {
+        Operation: ({ capability }) => ({ evaluation: "operation" as const, capability }),
+        Children: () => ({ evaluation: "children" as const }),
+      }),
+    }),
+    FreshWebSessionOnly: (): PublishedOperationAccessWire => ({ type: "fresh-web-session-only" }),
+    WebSessionOnly: (): PublishedOperationAccessWire => ({ type: "web-session-only" }),
+    WebOrHosted: (): PublishedOperationAccessWire => ({ type: "web-or-hosted" }),
+    VerifiedWhatsAppHostedOnly: (): PublishedOperationAccessWire => ({
+      type: "verified-whatsapp-hosted-only",
+    }),
+    FreshWebOrVerifiedWhatsAppHosted: (): PublishedOperationAccessWire => ({
+      type: "fresh-web-or-verified-whatsapp-hosted",
+    }),
+  });
 
 export const OperationAccess = PublishedOperationAccessWire.pipe(
   Schema.decodeTo(
@@ -118,46 +134,44 @@ export type PublishedOperationAccess = typeof PublishedOperationAccess.Type;
 
 export type CanonicalAuthorityRoot = "verified-whatsapp" | "no-verified-whatsapp-authority";
 
-export type OperationAccessCaller =
-  | Readonly<{ _tag: "PAT" | "OAuthAgent"; capabilities: ReadonlyArray<CanonicalCapability> }>
-  | Readonly<{ _tag: "WebSession"; fresh: boolean }>
-  | Readonly<{
-      _tag: "HostedAgentSession";
-      authorityRoot: CanonicalAuthorityRoot;
-    }>;
+export type OperationAccessCaller = Data.TaggedEnum<{
+  PAT: { readonly capabilities: ReadonlyArray<CanonicalCapability> };
+  OAuthAgent: { readonly capabilities: ReadonlyArray<CanonicalCapability> };
+  WebSession: { readonly fresh: boolean };
+  HostedAgentSession: { readonly authorityRoot: CanonicalAuthorityRoot };
+}>;
+
+export const OperationAccessCaller = Data.taggedEnum<OperationAccessCaller>();
 
 export type OperationAccessDenial =
   | "user_owned_agent_scope_missing"
   | "fresh_web_session_required"
   | "caller_ineligible";
 
-export type OperationAccessDecision =
-  | Readonly<{ _tag: "Allowed" }>
-  | Readonly<{ _tag: "Denied"; reason: OperationAccessDenial }>;
+export type OperationAccessDecision = Data.TaggedEnum<{
+  Allowed: {};
+  Denied: { readonly reason: OperationAccessDenial };
+}>;
 
-export const userOwnedAgentScoped = (capability: CanonicalCapability): OperationAccess => ({
-  _tag: "UserOwnedAgentScoped",
-  scope: { _tag: "Operation", capability },
+export const OperationAccessDecision = Data.taggedEnum<OperationAccessDecision>();
+
+export const userOwnedAgentScoped = (capability: CanonicalCapability): OperationAccess =>
+  UserOwnedAgentScoped.make({ scope: OperationScopeCheck.make({ capability }) });
+
+export const userOwnedAgentScopedChildren: OperationAccess = UserOwnedAgentScoped.make({
+  scope: ChildrenScopeCheck.make({}),
 });
 
-export const userOwnedAgentScopedChildren: OperationAccess = {
-  _tag: "UserOwnedAgentScoped",
-  scope: { _tag: "Children" },
-};
+export const freshWebSessionOnly: OperationAccess = FreshWebSessionOnly.make({});
 
-export const freshWebSessionOnly: OperationAccess = { _tag: "FreshWebSessionOnly" };
+export const webSessionOnly: OperationAccess = WebSessionOnly.make({});
 
-export const webSessionOnly: OperationAccess = { _tag: "WebSessionOnly" };
+export const webOrHosted: OperationAccess = WebOrHosted.make({});
 
-export const webOrHosted: OperationAccess = { _tag: "WebOrHosted" };
+export const verifiedWhatsAppHostedOnly: OperationAccess = VerifiedWhatsAppHostedOnly.make({});
 
-export const verifiedWhatsAppHostedOnly: OperationAccess = {
-  _tag: "VerifiedWhatsAppHostedOnly",
-};
-
-export const freshWebOrVerifiedWhatsAppHosted: OperationAccess = {
-  _tag: "FreshWebOrVerifiedWhatsAppHosted",
-};
+export const freshWebOrVerifiedWhatsAppHosted: OperationAccess =
+  FreshWebOrVerifiedWhatsAppHosted.make({});
 
 const encodeOperationAccess = Schema.encodeSync(OperationAccess);
 
@@ -165,18 +179,17 @@ export const publishOperationAccess = (access: OperationAccess): PublishedOperat
   encodeOperationAccess(access);
 
 export const isUserOwnedAgentScoped = (access: OperationAccess): boolean =>
-  access._tag === "UserOwnedAgentScoped";
+  Predicate.isTagged(access, "UserOwnedAgentScoped");
 
 const scopeCapability = (scope: UserOwnedAgentScopeCheck): Option.Option<CanonicalCapability> =>
-  scope._tag === "Operation" ? Option.some(scope.capability) : Option.none();
+  Predicate.isTagged(scope, "Operation") ? Option.some(scope.capability) : Option.none();
 
 export const userOwnedAgentCapability = (
   access: OperationAccess
-): Option.Option<CanonicalCapability> => {
-  if (access._tag !== "UserOwnedAgentScoped") return Option.none();
-
-  return scopeCapability(access.scope);
-};
+): Option.Option<CanonicalCapability> =>
+  Predicate.isTagged(access, "UserOwnedAgentScoped")
+    ? scopeCapability(access.scope)
+    : Option.none();
 
 export type OperationPolicyValue = {
   readonly access: OperationAccess;
@@ -194,7 +207,7 @@ type PolicyAnnotatedOperation = {
 };
 
 export const getOperationPolicy = (endpoint: PolicyAnnotatedOperation): OperationPolicyValue =>
-  Option.getOrThrow(Context.getOption(endpoint.annotations, OperationPolicy));
+  Context.getUnsafe(endpoint.annotations, OperationPolicy);
 
 export const operationPolicy = (
   policy: OperationPolicyValue

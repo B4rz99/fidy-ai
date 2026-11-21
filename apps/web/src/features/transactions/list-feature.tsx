@@ -21,7 +21,7 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { type RefCallback, Suspense, useState } from "react";
 import { toast } from "sonner";
 import { TransactionCorrectionContext } from "./correction-context";
-import { type TransactionCorrections, makeTransactionCorrections } from "./corrections";
+import { type TransactionCorrections, transactionCorrections } from "./corrections";
 import type { JSX, ReactNode } from "react";
 
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
@@ -331,7 +331,7 @@ const useTransactionQueries = (
   const transactions = historyResource.firstPage;
 
   const [correctionOwner] = useState(() =>
-    makeTransactionCorrections({
+    transactionCorrections({
       client,
       firstPage: transactions,
       categories,

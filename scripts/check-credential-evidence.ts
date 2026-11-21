@@ -25,12 +25,12 @@ const credentialEvidence = [
   },
   {
     configuration: "RESEND_API_KEY",
-    testFile: "apps/server/src/shell/outbound-http/operations.test.ts",
+    testFile: "apps/server/test/shell/outbound-http/operations.test.ts",
     testName: "owns the Resend delivery destination, authorization, and idempotency",
   },
   {
     configuration: "KAPSO_API_KEY",
-    testFile: "apps/server/src/shell/outbound-http/operations.test.ts",
+    testFile: "apps/server/test/shell/outbound-http/operations.test.ts",
     testName: "keeps the configured Kapso API key redacted while sending it only as a header",
   },
   {

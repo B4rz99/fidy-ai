@@ -24,7 +24,9 @@ export const buildWeeklyQuestionSender = (
 
   const prepare: WeeklyQuestionSender["prepare"] = (offer) =>
     Effect.gen(function* () {
-      if (Option.isNone(configuration)) return yield* new InsightTemplateUnavailable();
+      if (Option.isNone(configuration)) {
+        return yield* new InsightTemplateUnavailable({ cause: undefined });
+      }
 
       const parameter = yield* Schema.decodeEffect(ProactivityTemplateParameter)(
         `¿Quieres seguir recibiendo tu resumen semanal? ${offer.disclosure.text} Responde a este mensaje con «Sí» para continuar o «No» para dejar de recibirlo.`
@@ -36,11 +38,11 @@ export const buildWeeklyQuestionSender = (
         text.length > maximumQuestionLength ||
         new TextEncoder().encode(text).byteLength > maximumQuestionBytes
       ) {
-        return yield* new InsightTemplateUnavailable();
+        return yield* new InsightTemplateUnavailable({ cause: undefined });
       }
 
       return { parameter, text: TranscriptText.make(text) };
-    }).pipe(Effect.mapError(() => new InsightTemplateUnavailable()));
+    }).pipe(Effect.mapError((cause) => new InsightTemplateUnavailable({ cause })));
 
   return {
     prepare,
@@ -48,7 +50,9 @@ export const buildWeeklyQuestionSender = (
       Effect.gen(function* () {
         const prepared = yield* prepare(request.offer);
 
-        if (Option.isNone(configuration)) return yield* new InsightTemplateUnavailable();
+        if (Option.isNone(configuration)) {
+          return yield* new InsightTemplateUnavailable({ cause: undefined });
+        }
 
         const body = yield* Schema.encodeEffect(UnknownJsonString)({
           messaging_product: "whatsapp",
@@ -63,7 +67,7 @@ export const buildWeeklyQuestionSender = (
               { type: "body", parameters: [{ type: "text", text: prepared.parameter }] },
             ],
           },
-        }).pipe(Effect.mapError(() => new InsightTemplateUnavailable()));
+        }).pipe(Effect.mapError((cause) => new InsightTemplateUnavailable({ cause })));
 
         return yield* sendKapsoMessage({
           outboundHttp: input.outboundHttp,

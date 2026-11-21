@@ -1,0 +1,52 @@
+import { expect, it } from "@effect/vitest";
+import { ConfigProvider, Effect, Exit } from "effect";
+import { externalEndpoints } from "~/shell/public-http/operations";
+
+const configuredNamespace = (webOrigin: string): ConfigProvider.ConfigProvider =>
+  ConfigProvider.fromEnv({
+    env: {
+      PUBLIC_WEB_ORIGIN: webOrigin,
+      PUBLIC_API_ORIGIN: "https://api.fidyapp.com",
+    },
+  });
+
+it.effect("loads exact HTTP origins for the public namespace", () =>
+  Effect.gen(function* () {
+    const endpoints = yield* externalEndpoints.parse(configuredNamespace("https://fidyapp.com"));
+
+    expect(endpoints.webOrigin).toBe("https://fidyapp.com");
+    expect(endpoints.policyUrl).toBe("https://fidyapp.com/politica");
+  })
+);
+
+it.effect("fails closed when the configured web origin is invalid", () =>
+  Effect.forEach(
+    [
+      "not a url",
+      "ftp://fidyapp.com",
+      "https://user@fidyapp.com",
+      "https://fidyapp.com/path",
+      "https://fidyapp.com?preview=true",
+    ],
+    (origin) =>
+      Effect.gen(function* () {
+        const exit = yield* Effect.exit(externalEndpoints.parse(configuredNamespace(origin)));
+        expect(Exit.isFailure(exit)).toBe(true);
+      }),
+    { discard: true }
+  )
+);
+
+it.effect("fails closed when the configured web origin is missing", () =>
+  Effect.gen(function* () {
+    const provider = ConfigProvider.fromEnv({
+      env: {
+        PUBLIC_API_ORIGIN: "https://api.fidyapp.com",
+      },
+    });
+
+    const exit = yield* Effect.exit(externalEndpoints.parse(provider));
+
+    expect(Exit.isFailure(exit)).toBe(true);
+  })
+);

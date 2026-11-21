@@ -2,7 +2,7 @@ import { PendingRead } from "@/ui/components/pending-read";
 
 import { useAtomValue } from "@effect/atom-react";
 import { Link, useRouter, useSearch } from "@tanstack/react-router";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Predicate, Schema } from "effect";
 import { type JSX, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { PATPairingPublicCode, type PATPairingReview } from "@/transport/client";
@@ -54,9 +54,9 @@ const PreselectedApproval = ({
 
   const result = useAtomValue(request).pipe(presentCanonicalQuery);
 
-  if (result._tag === "Initial") return <PendingRead label="Cargando solicitud" />;
+  if (Predicate.isTagged(result, "Initial")) return <PendingRead label="Cargando solicitud" />;
 
-  if (result._tag === "Failure") {
+  if (Predicate.isTagged(result, "Failure")) {
     return (
       <div className="flex flex-col gap-4">
         <p role="alert">

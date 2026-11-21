@@ -5,8 +5,13 @@ import { AccountHints, type NotificationCurrencyBasis } from "~/core/transaction
 import type { EmailDocument } from "./document";
 import type { FormatInterpretation } from "./format-definition";
 
-const rowCell = (row: ReadonlyArray<string>, index: number): string =>
-  Option.getOrThrow(Option.fromNullishOr(row[index]));
+const rowCell = (row: ReadonlyArray<string>, index: number): string => {
+  const cell = row[index];
+
+  if (cell === undefined) throw new Error(`Missing email table cell ${index}`);
+
+  return cell;
+};
 
 export const findField: {
   (labels: ReadonlyArray<string>): (document: EmailDocument) => Option.Option<string>;

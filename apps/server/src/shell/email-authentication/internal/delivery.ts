@@ -1,10 +1,14 @@
-import { Effect, Option, Result, Schema } from "effect";
+import { type Cause, Effect, Option, Predicate, Result, Schema } from "effect";
 import type {
   EmailProofPurpose,
   EmailVerificationCode,
 } from "~/core/email-authentication/contract";
 import { UnknownJsonString, jsonStringSchema } from "~/shell/schema-codecs/contract";
-import type { OutboundHttpFailure, OutboundHttpResponse } from "~/shell/outbound-http/contract";
+import {
+  type OutboundHttpFailure,
+  OutboundHttpRequest,
+  type OutboundHttpResponse,
+} from "~/shell/outbound-http/contract";
 import type { OutboundHttpService } from "~/shell/outbound-http/operations";
 import {
   type EmailDeliveryPortService,
@@ -113,19 +117,18 @@ const classifyResendResponse = (
 };
 
 const mapResendRequestFailure = (
-  failure: OutboundHttpFailure | { readonly _tag: "TimeoutError" }
+  failure: OutboundHttpFailure | Cause.TimeoutError
 ): EmailSendFailed => {
-  const certainty =
-    failure._tag === "OutboundHttpFailure"
-      ? Option.match(failure.responseStatus, {
-          onNone: () => "ambiguous" as const,
-          onSome: (status) =>
-            (status >= successfulStatusMinimum && status < successfulStatusMaximumExclusive) ||
-            status >= serverErrorStatusMinimum
-              ? ("ambiguous" as const)
-              : ("rejected" as const),
-        })
-      : "ambiguous";
+  const certainty = Predicate.isTagged(failure, "OutboundHttpFailure")
+    ? Option.match(failure.responseStatus, {
+        onNone: () => "ambiguous" as const,
+        onSome: (status) =>
+          (status >= successfulStatusMinimum && status < successfulStatusMaximumExclusive) ||
+          status >= serverErrorStatusMinimum
+            ? ("ambiguous" as const)
+            : ("rejected" as const),
+      })
+    : "ambiguous";
 
   return new EmailSendFailed({ certainty, retryable: false });
 };
@@ -138,17 +141,18 @@ export const deliverySender = ({
     const projection = verificationEmailFor(input.purpose, input.combinedCode);
 
     return outboundHttp
-      .execute({
-        _tag: "ResendEmailDelivery",
-        idempotencyKey: input.idempotencyKey,
-        body: encodeResendRequest({
-          from,
-          to: [input.to],
-          subject: projection.subject,
-          text: projection.text,
-          html: projection.html,
-        }),
-      })
+      .execute(
+        OutboundHttpRequest.ResendEmailDelivery({
+          idempotencyKey: input.idempotencyKey,
+          body: encodeResendRequest({
+            from,
+            to: [input.to],
+            subject: projection.subject,
+            text: projection.text,
+            html: projection.html,
+          }),
+        })
+      )
       .pipe(
         Effect.timeout("14 seconds"),
         Effect.mapError(mapResendRequestFailure),

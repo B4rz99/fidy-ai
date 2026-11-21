@@ -1,4 +1,4 @@
-import { DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Predicate, Schema } from "effect";
 import { type CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
 import type { ReceivedEmailContent } from "~/shell/ingestion/internal/material";
 import { TransactionExtraction } from "~/core/transactions/contract";
@@ -6,8 +6,8 @@ import { generatedFormats } from "./catalog.generated";
 import { type EmailDocument, normalizeDocumentText, parseEmailDocument } from "./document";
 import type { NotificationEmailFormat } from "./format-definition";
 import { containsCompleteFinancialNumber } from "./format-support";
-import type {
-  EmailInterpretationReviewReason,
+import {
+  type EmailInterpretationReviewReason,
   NotificationEmailInterpretation,
 } from "~/shell/ingestion/contract";
 
@@ -78,9 +78,9 @@ const candidatesFor = (text: string): ReadonlyArray<NotificationEmailFormat> => 
   for (const match of text.matchAll(validatedCatalog.matcher)) {
     const anchor = match[0];
 
-    const formats = Option.getOrThrow(
-      Option.fromNullishOr(validatedCatalog.anchorFormats.get(anchor))
-    );
+    const formats = validatedCatalog.anchorFormats.get(anchor);
+
+    if (formats === undefined) throw new Error(`Unknown email format anchor: ${anchor}`);
 
     for (const format of formats) candidates.add(format);
 
@@ -95,10 +95,8 @@ type InterpretationInput = Readonly<{
   context: CapturedInterpretationContext;
 }>;
 
-const needsReview = (reason: EmailInterpretationReviewReason): NotificationEmailInterpretation => ({
-  _tag: "NeedsReview",
-  reason,
-});
+const needsReview = (reason: EmailInterpretationReviewReason): NotificationEmailInterpretation =>
+  NotificationEmailInterpretation.NeedsReview({ reason });
 
 const selectCandidate = (
   document: EmailDocument
@@ -137,8 +135,7 @@ const finalizeInterpretation = (
     return needsReview("invalid-format");
   }
 
-  return {
-    _tag: "Interpreted",
+  return NotificationEmailInterpretation.Interpreted({
     extraction: extraction.value,
     evidence: {
       formatId: format.id,
@@ -146,7 +143,7 @@ const finalizeInterpretation = (
       currencyBasis: interpreted.value.currencyBasis,
       accountHints: interpreted.value.accountHints,
     },
-  };
+  });
 };
 
 const interpret = (input: InterpretationInput): NotificationEmailInterpretation => {
@@ -176,7 +173,7 @@ const interpret = (input: InterpretationInput): NotificationEmailInterpretation 
 
   const candidate = selectCandidate(document.value);
 
-  return typeof candidate === "string"
+  return Predicate.isString(candidate)
     ? needsReview(candidate)
     : finalizeInterpretation(candidate, document.value, input.context);
 };

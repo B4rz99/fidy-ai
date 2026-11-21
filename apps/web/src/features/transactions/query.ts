@@ -1,11 +1,11 @@
-import { type Context, Data, type DateTime, Effect, Option, Schema, pipe } from "effect";
+import { Data, type DateTime, Effect, Option, Schema, pipe } from "effect";
 import { HttpClientError } from "effect/http";
-import { forwardFreshQuery, makeFreshQuery } from "@/transport/fresh-query";
+import { forwardFreshQuery, freshQuery } from "@/transport/fresh-query";
 import { AsyncResult, Atom } from "effect/reactivity";
 import type { CanonicalSuccess, FidyClient, InitialTransactionPage } from "@/transport/client";
 import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
 
-type Client = Context.Service.Shape<FidyClient>;
+type Client = FidyClient["Service"];
 
 type Failure = Effect.Error<ReturnType<Client["transactions"]["listTransactions"]>>;
 
@@ -34,7 +34,7 @@ const initialPages = Atom.family((_period: Period): InitialPage =>
 const makeSource = (period: Period): Atom.Atom<Result> => {
   const initial = initialPages(period);
 
-  const remote = makeFreshQuery({
+  const remote = freshQuery({
     runtime: period.client.runtime,
     load: period.client
       .use((client) =>

@@ -9,6 +9,7 @@ import {
   Option,
   Predicate,
   Schema,
+  type Scope,
 } from "effect";
 import { dual } from "effect/Function";
 import {
@@ -163,15 +164,16 @@ export const DisabledTelemetryResource: TelemetryResource = {
 export class Telemetry extends Context.Service<Telemetry, TelemetryService>()(
   "@fidy/server/shell/observability/operations/Telemetry"
 ) {
+  static readonly make = <E, R>(
+    resource: Effect.Effect<TelemetryResource, E, R>
+  ): Effect.Effect<TelemetryService, E, R | Scope.Scope> =>
+    Effect.acquireRelease(resource, (telemetryResource) => telemetryResource.close).pipe(
+      Effect.map((telemetryResource) => makeTelemetryService(telemetryResource.adapter))
+    );
+
   static readonly layer = <E, R>(
     resource: Effect.Effect<TelemetryResource, E, R>
-  ): Layer.Layer<Telemetry, E, R> =>
-    Layer.effect(
-      Telemetry,
-      Effect.acquireRelease(resource, (telemetryResource) => telemetryResource.close).pipe(
-        Effect.map((telemetryResource) => makeTelemetryService(telemetryResource.adapter))
-      )
-    );
+  ): Layer.Layer<Telemetry, E, R> => Layer.effect(this, this.make(resource));
 }
 
 const CurrentTelemetrySpan = Context.Reference<Option.Option<TelemetrySpan>>(

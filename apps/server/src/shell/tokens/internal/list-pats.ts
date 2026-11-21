@@ -1,3 +1,4 @@
+import { ConsentSubject } from "~/shell/consent/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import {
@@ -49,7 +50,7 @@ export const patMetadataQuery = (
         FROM pats WHERE user_id = (SELECT userId FROM (${users.sql})) AND revoked_at_ms IS NULL AND expires_at_ms > ?`,
       params: [...users.params, current],
     },
-    subject: { _tag: "Owner", column: "pats.user_id" },
+    subject: ConsentSubject.Owner({ column: "pats.user_id" }),
     requirement: "unrevoked",
   });
 
@@ -63,7 +64,7 @@ export const patMetadataQuery = (
       ORDER BY created_at_ms DESC LIMIT ${activeLimit + 1}`,
     params: [
       ...protectedQuery.params,
-      ...(Option.isSome(sessionGuard) ? sessionGuard.value.params : []),
+      ...Option.match(sessionGuard, { onNone: () => [], onSome: (guard) => guard.params }),
     ],
   };
 };
@@ -116,7 +117,7 @@ export const listPATsResponse = (
     const current = yield* Clock.currentTimeMillis;
     const sql = yield* SqlClient.SqlClient;
     const query = patMetadataQuery({ userId, current, session: Option.none() });
-    const rows = yield* sql.unsafe<Record<string, unknown>>(query.sql, query.params);
+    const rows = yield* sql.unsafe(query.sql, query.params);
 
     return yield* patMetadataResponseFromRows(rows);
   }).pipe(Effect.mapError(queryUnavailable));

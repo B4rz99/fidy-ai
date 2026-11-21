@@ -1,5 +1,5 @@
 import type { OwnedStatement } from "~/shell/owner-write/contract";
-import type { ConsentSubject } from "~/shell/consent/contract";
+import { ConsentSubject } from "~/shell/consent/contract";
 
 export const erasureAdmissionCondition = (
   input: Readonly<{
@@ -7,7 +7,7 @@ export const erasureAdmissionCondition = (
     admitted: boolean;
   }>
 ): OwnedStatement => ({
-  sql: `NOT EXISTS(SELECT 1 FROM erasure_requests erasure_fence WHERE erasure_fence.user_id=${input.subject._tag === "User" ? "?" : input.subject.column}
+  sql: `NOT EXISTS(SELECT 1 FROM erasure_requests erasure_fence WHERE erasure_fence.user_id=${ConsentSubject.$is("User")(input.subject) ? "?" : input.subject.column}
     ${input.admitted ? "AND erasure_fence.state<>'Draining'" : ""})`,
-  params: input.subject._tag === "User" ? [input.subject.userId] : [],
+  params: ConsentSubject.$is("User")(input.subject) ? [input.subject.userId] : [],
 });

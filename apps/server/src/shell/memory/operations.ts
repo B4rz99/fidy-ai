@@ -2,7 +2,7 @@ import { liveWebSessionAuthority } from "~/shell/identity/operations";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { recordAuthorizedCall } from "~/shell/audit/operations";
 import { jsonStringSchema } from "~/shell/schema-codecs/contract";
-import { DateTime, Effect, Schema, Struct } from "effect";
+import { DateTime, Effect, Match, Schema, Struct } from "effect";
 import { Memory, type MemoryCapacityExceeded, type MemoryNotFound } from "~/core/memory/contract";
 import {
   type BrowserMemorySubject,
@@ -65,24 +65,24 @@ export function mapMemoryFailure(failure: MemoryNotFound): NotFound;
 export function mapMemoryFailure(
   failure: MemoryCapacityExceeded | MemoryNotFound
 ): MemoryCapacityExceededApi | NotFound {
-  switch (failure._tag) {
-    case "MemoryCapacityExceeded":
-      return MemoryCapacityExceededApi.make({
+  return Match.valueTags(failure, {
+    MemoryCapacityExceeded: () =>
+      MemoryCapacityExceededApi.make({
         error: {
           code: "quota_exhausted",
           message: "Saving this text would exceed the User's current Memory capacity.",
         },
         next: [],
-      });
-    case "MemoryNotFound":
-      return NotFound.make({
+      }),
+    MemoryNotFound: () =>
+      NotFound.make({
         error: {
           code: "not_found",
           message: "No current Memory with that identifier belongs to you.",
         },
         next: [],
-      });
-  }
+      }),
+  });
 }
 
 export const recordBrowserMemoryWork = ({

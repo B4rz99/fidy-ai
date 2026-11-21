@@ -1,3 +1,4 @@
+import { ConsentSubject } from "~/shell/consent/contract";
 import { Effect, Schema } from "effect";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { User, UserId } from "~/core/identity/contract";
@@ -22,7 +23,7 @@ export const selectedCurrentUserQuery = (users: OwnedStatement): OwnedStatement 
               WHERE u.id IN (SELECT userId FROM (${users.sql}))`,
       params: users.params,
     },
-    subject: { _tag: "Owner", column: "u.id" },
+    subject: ConsentSubject.Owner({ column: "u.id" }),
     requirement: "granted",
   });
 

@@ -20,36 +20,43 @@ import {
 
 export type HostedConversationChannel = "web" | "whatsapp";
 
-export type HostedContextSection =
-  | Readonly<{
-      _tag: "AssistantPolicy";
-      channel: HostedConversationChannel;
-      user: Pick<User, "serviceMarket" | "locale" | "timeZone">;
-    }>
-  | Readonly<{ _tag: "TurnStarted"; startedAt: DateTime.Utc; timeZone: string }>
-  | Readonly<{ _tag: "ContinuityBoundary"; boundary: "open" | "close" }>
-  | Readonly<{ _tag: "Memory"; text: string }>
-  | Readonly<{ _tag: "CompactedConversation"; text: string }>
-  | Readonly<{ _tag: "Transcript"; entry: TranscriptEntry }>
-  | Readonly<{ _tag: "ProactiveReply"; entry: ProactiveTranscriptEntry }>
-  | Readonly<{
-      _tag: "ToolResult";
-      toolCallId: Extract<
-        TranscriptEntry,
-        { readonly _tag: "CanonicalToolResultEntry" }
-      >["toolCallId"];
-      operation: CanonicalOperationId;
-      outcome: Extract<TranscriptEntry, { readonly _tag: "CanonicalToolResultEntry" }>["outcome"];
-    }>
-  | Readonly<{ _tag: "InvalidOutputFeedback"; description: string }>;
+type CanonicalToolResultEntry = Data.TaggedEnum.Value<TranscriptEntry, "CanonicalToolResultEntry">;
+
+export type HostedContextSection = Data.TaggedEnum<{
+  AssistantPolicy: {
+    readonly channel: HostedConversationChannel;
+    readonly user: Pick<User, "serviceMarket" | "locale" | "timeZone">;
+  };
+  TurnStarted: { readonly startedAt: DateTime.Utc; readonly timeZone: string };
+  ContinuityBoundary: { readonly boundary: "open" | "close" };
+  Memory: { readonly text: string };
+  CompactedConversation: { readonly text: string };
+  Transcript: { readonly entry: TranscriptEntry };
+  ProactiveReply: { readonly entry: ProactiveTranscriptEntry };
+  ToolResult: {
+    readonly toolCallId: CanonicalToolResultEntry["toolCallId"];
+    readonly operation: CanonicalOperationId;
+    readonly outcome: CanonicalToolResultEntry["outcome"];
+  };
+  InvalidOutputFeedback: { readonly description: string };
+}>;
+
+export const HostedContextSection = Data.taggedEnum<HostedContextSection>();
+
+export type HostedActiveRequest = Data.TaggedEnum<{
+  Absent: {};
+  Present: { readonly text: string };
+}>;
+
+export const HostedActiveRequest = Data.taggedEnum<HostedActiveRequest>();
 
 export type HostedTextContext = Readonly<{
   sections: ReadonlyArray<HostedContextSection>;
-  activeRequest: Readonly<{ _tag: "Absent" }> | Readonly<{ _tag: "Present"; text: string }>;
+  activeRequest: HostedActiveRequest;
 }>;
 
 export type HostedInitialTextContext = HostedTextContext &
-  Readonly<{ activeRequest: Readonly<{ _tag: "Present"; text: string }> }> &
+  Readonly<{ activeRequest: Data.TaggedEnum.Value<HostedActiveRequest, "Present"> }> &
   Brand.Brand<"HostedInitialTextContext">;
 
 export type HostedStructuredContext = Readonly<{
@@ -70,9 +77,9 @@ export type PreparedHostedStructured<Output> = Readonly<{
 }> &
   Brand.Brand<"PreparedHostedStructured">;
 
-export type HostedContinuationEvent = Extract<
+export type HostedContinuationEvent = Data.TaggedEnum.Value<
   HostedContextSection,
-  { readonly _tag: "ToolResult" | "InvalidOutputFeedback" }
+  "ToolResult" | "InvalidOutputFeedback"
 >;
 
 export type HostedTextContinuation = Readonly<{
@@ -103,21 +110,20 @@ export type HostedInvalidOutputDescription =
   | "Hosted structured provider response was invalid"
   | "Hosted structured output was malformed";
 
-export type HostedInferenceFailureReason =
-  | Readonly<{ _tag: "InvalidAuthority" }>
-  | Readonly<{ _tag: "CapacityExceeded"; inputTokens: number }>
-  | Readonly<{
-      _tag: "ActiveRequestCapacityExceeded";
-      inputTokens: number;
-      maximumTokens: number;
-    }>
-  | Readonly<{ _tag: "InvalidOutput"; description: HostedInvalidOutputDescription }>
-  | Readonly<{ _tag: "ProviderUnavailable" }>
-  | Readonly<{ _tag: "ProviderQuotaExceeded" }>
-  | Readonly<{ _tag: "ResourceLimit" }>
-  | Readonly<{ _tag: "AdmissionUnavailable" }>
-  | Readonly<{ _tag: "StructuredOutputExceeded" }>
-  | Readonly<{ _tag: "StructuredOutputTimedOut" }>;
+export type HostedInferenceFailureReason = Data.TaggedEnum<{
+  InvalidAuthority: {};
+  CapacityExceeded: { readonly inputTokens: number };
+  ActiveRequestCapacityExceeded: { readonly inputTokens: number; readonly maximumTokens: number };
+  InvalidOutput: { readonly description: HostedInvalidOutputDescription };
+  ProviderUnavailable: {};
+  ProviderQuotaExceeded: {};
+  ResourceLimit: {};
+  AdmissionUnavailable: {};
+  StructuredOutputExceeded: {};
+  StructuredOutputTimedOut: {};
+}>;
+
+export const HostedInferenceFailureReason = Data.taggedEnum<HostedInferenceFailureReason>();
 
 const hostedInferenceErrorMessages: Readonly<Record<HostedInferenceFailureReason["_tag"], string>> =
   {

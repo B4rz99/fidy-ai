@@ -1,4 +1,4 @@
-import { Array, Cause, type Context, Deferred, Effect, Option, Predicate } from "effect";
+import { Array, Cause, Deferred, Effect, Option, Predicate } from "effect";
 import { type AsyncResult, Atom, Reactivity } from "effect/reactivity";
 import { type CanonicalInput, type CanonicalSuccess, type FidyClient } from "@/transport/client";
 import { isCanonicalInput } from "@/transport/canonical-input";
@@ -7,7 +7,7 @@ import { presentCanonicalQuery } from "@/transport/canonical-query";
 import type { HistoryCommand, HistoryState } from "./history";
 import type { Transaction } from "./presentation";
 
-type Client = Context.Service.Shape<FidyClient>;
+type Client = FidyClient["Service"];
 
 type Revision = Pick<Transaction, "id" | "revision">;
 
@@ -88,7 +88,7 @@ type Write =
       input: CanonicalInput<"transactions.updateTransactions">;
     }>;
 
-export const makeTransactionCorrections = (input: Input): Atom.Atom<TransactionCorrections> =>
+export const transactionCorrections = (input: Input): Atom.Atom<TransactionCorrections> =>
   Atom.make((get) => {
     const owner: Owner = {
       ...input,
@@ -178,7 +178,7 @@ const fresh = <A, E>(
   {
     _tag: "Ready";
   }
-> => query._tag === "Ready" && !query.waiting && Option.isNone(query.refreshFailure);
+> => Predicate.isTagged(query, "Ready") && !query.waiting && Option.isNone(query.refreshFailure);
 
 const currentRevisions = (owner: Owner, correction: Correction): boolean => {
   const history = owner.get.once(owner.history).query;
@@ -303,7 +303,7 @@ const submit = (owner: Owner, correction: Correction): void => {
 
       if (!live(owner, generation)) return;
 
-      if (result._tag === "Failure") {
+      if (Predicate.isTagged(result, "Failure")) {
         if (rejected(result.cause)) {
           yield* reread(owner, generation, "rejected");
         } else {
@@ -329,7 +329,7 @@ const submit = (owner: Owner, correction: Correction): void => {
 const refreshedHistory = (owner: Owner): Effect.Effect<boolean> =>
   Effect.callback((resume) => {
     const observe = (state: HistoryState): void => {
-      if (state.query._tag !== "Ready") return resume(Effect.succeed(false));
+      if (!Predicate.isTagged(state.query, "Ready")) return resume(Effect.succeed(false));
 
       if (state.query.waiting || state.continuation === "loading") return;
       resume(
@@ -353,7 +353,7 @@ const readSavedSelection = (
     if (!(yield* refreshedHistory(owner))) return [];
     const { query } = owner.get.once(owner.history);
 
-    if (query._tag !== "Ready") return [];
+    if (!Predicate.isTagged(query, "Ready")) return [];
     const revisions = new Map(selected.map(({ id, expectedRevision }) => [id, expectedRevision]));
 
     return query.value.data.filter(({ id, revision }) => {
@@ -466,7 +466,7 @@ const confirmDeletion = (owner: Owner, id: Transaction["id"], onDeleted: () => v
 
       if (!live(owner, generation)) return;
 
-      if (result._tag === "Failure") {
+      if (Predicate.isTagged(result, "Failure")) {
         yield* Reactivity.invalidate(["transaction-detail"]);
         owner.status = rejected(result.cause) ? "rejected" : "uncertain";
         notify(owner);
@@ -501,7 +501,7 @@ const readAffectedIdentities = (owner: Owner): Effect.Effect<boolean> =>
 const readIdentity = Effect.fnUntraced(function* (client: Client, id: Transaction["id"]) {
   const result = yield* Effect.exit(client.transactions.getTransaction({ params: { id } }));
 
-  if (result._tag === "Success") return result.value.data.id === id;
+  if (Predicate.isTagged(result, "Success")) return result.value.data.id === id;
 
   if (Cause.hasDies(result.cause) || Cause.hasInterrupts(result.cause)) return false;
   const error = Cause.findErrorOption(result.cause);

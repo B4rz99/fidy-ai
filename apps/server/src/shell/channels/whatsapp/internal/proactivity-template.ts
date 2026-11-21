@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Predicate, Schema } from "effect";
 import { TranscriptText } from "~/core/agent/contract";
 import { type OutboundHttpService } from "~/shell/outbound-http/operations";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
@@ -21,7 +21,10 @@ export const buildProactivityTemplateSender = (
   return {
     prepare: (parameter) =>
       Effect.gen(function* () {
-        if (Option.isNone(configuration)) return yield* new InsightTemplateUnavailable();
+        if (Option.isNone(configuration)) {
+          return yield* new InsightTemplateUnavailable({ cause: undefined });
+        }
+
         const content = yield* Schema.decodeUnknownEffect(TranscriptText)(parameter);
 
         return yield* Schema.decodeEffect(PreparedProactivityTemplate)({
@@ -30,13 +33,13 @@ export const buildProactivityTemplateSender = (
           parameter: content,
           text: proactivityTemplateBody.replace("{{1}}", () => content),
         });
-      }).pipe(Effect.mapError(() => new InsightTemplateUnavailable())),
+      }).pipe(Effect.mapError((cause) => new InsightTemplateUnavailable({ cause }))),
     send: (request) =>
       Effect.gen(function* () {
         const template = yield* Schema.decodeEffect(PreparedProactivityTemplate)(request.template);
 
         if (Option.isNone(configuration) || template.name !== configuration.value.name) {
-          return yield* new InsightTemplateUnavailable();
+          return yield* new InsightTemplateUnavailable({ cause: undefined });
         }
 
         const body = yield* Schema.encodeEffect(UnknownJsonString)({
@@ -61,7 +64,9 @@ export const buildProactivityTemplateSender = (
         });
       }).pipe(
         Effect.mapError((failure) =>
-          failure._tag === "WhatsAppSendFailed" ? failure : new InsightTemplateUnavailable()
+          Predicate.isTagged(failure, "WhatsAppSendFailed")
+            ? failure
+            : new InsightTemplateUnavailable({ cause: failure })
         )
       ),
   };

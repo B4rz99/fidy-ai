@@ -1,7 +1,7 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Effect, Option, Schema } from "effect";
 import type { CanonicalAuthorityRoot } from "../../../src/shell/canonical-policy/contract";
-import { decideOperationAccess } from "../../../src/shell/canonical-policy/operations";
+import { isHostedVisible } from "../../../src/shell/canonical-policy/operations";
 import { grantsRequiredTier } from "../../../src/shell/canonical-operations/operations";
 import { AtomicBatchAdmission } from "../../../src/shell/operations/contract";
 import {
@@ -56,25 +56,29 @@ const reviewPlans = Effect.fn(function* (
   const effects: string[] = [];
   const revisions: string[] = [];
 
-  for (const { child, plan } of plans) {
-    const facts = Option.isSome(plan.review)
-      ? Option.some(yield* plan.review.value)
-      : Option.none();
+  yield* Effect.forEach(
+    plans,
+    Effect.fnUntraced(function* ({ child, plan }) {
+      const facts = Option.isSome(plan.review)
+        ? Option.some(yield* plan.review.value)
+        : Option.none();
 
-    const description = Option.isSome(facts)
-      ? Option.some(facts.value.effect)
-      : yield* describe(child.operation.id, child.input);
+      const description = Option.isSome(facts)
+        ? Option.some(facts.value.effect)
+        : yield* describe(child.operation.id, child.input);
 
-    if (
-      Option.isNone(description) ||
-      (child.operation.policy.agentConfirmation === "required" && Option.isNone(facts))
-    ) {
-      return yield* new CanonicalAdmissionUnavailable({ cause: "unreviewed_hosted_child" });
-    }
+      if (
+        Option.isNone(description) ||
+        (child.operation.policy.agentConfirmation === "required" && Option.isNone(facts))
+      ) {
+        return yield* new CanonicalAdmissionUnavailable({ cause: "unreviewed_hosted_child" });
+      }
 
-    effects.push(String(child.index + 1) + ". " + description.value);
-    revisions.push(Option.isSome(facts) ? facts.value.revision : "");
-  }
+      effects.push(String(child.index + 1) + ". " + description.value);
+      revisions.push(Option.isSome(facts) ? facts.value.revision : "");
+    }),
+    { discard: true }
+  );
 
   return {
     effect: "Revisa estos cambios. Se aplicarán juntos.\n" + effects.join("\n"),
@@ -96,11 +100,7 @@ export const prepareHostedBatch = Effect.fn(
     const selected = selectChildren({
       calls: wire.value,
       owners,
-      allowed: (op) =>
-        decideOperationAccess(op.policy.access, {
-          _tag: "HostedAgentSession",
-          authorityRoot: context.authorityRoot,
-        })._tag === "Allowed",
+      allowed: (op) => isHostedVisible(op.policy.access, context.authorityRoot),
     });
 
     if ("invalid" in selected) return invalidBatch();
@@ -109,22 +109,25 @@ export const prepareHostedBatch = Effect.fn(
     if ("refusal" in selected) return yield* refuseChild(selected.refusal, audit);
     const status = yield* localStanding(context.user, context.current);
 
-    for (const child of selected.children) {
-      if (
-        !grantsRequiredTier({
-          requiredTier: child.operation.policy.requiredTier,
-          callerTier: status.accessTier,
-        })
-      ) {
-        return yield* refuseChild(
-          {
-            ...child,
-            code: "paywall_required",
-            message: "Your Subscription tier does not grant this operation.",
-          },
-          audit
-        );
-      }
+    const unentitled = Option.fromUndefinedOr(
+      selected.children.find(
+        (child) =>
+          !grantsRequiredTier({
+            requiredTier: child.operation.policy.requiredTier,
+            callerTier: status.accessTier,
+          })
+      )
+    );
+
+    if (Option.isSome(unentitled)) {
+      return yield* refuseChild(
+        {
+          ...unentitled.value,
+          code: "paywall_required",
+          message: "Your Subscription tier does not grant this operation.",
+        },
+        audit
+      );
     }
 
     return yield* prepareChildren(selected.children, context).pipe(

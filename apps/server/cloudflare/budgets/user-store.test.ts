@@ -37,7 +37,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
                   "Fidy-Session-Binding": subject.session,
                   "content-type": "application/json",
                 },
-                ...(args[1] === undefined ? {} : { body: JSON.stringify(args[1]) }),
+                body: args[1] === undefined ? null : JSON.stringify(args[1]),
               })
             )
           );
@@ -88,19 +88,22 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           method: string,
           ...args: [key?: string, payload?: unknown]
         ): Effect.Effect<Response> =>
-          native(() =>
-            db.send(
+          native(() => {
+            const headers = new Headers({
+              authorization: "Bearer " + token,
+              "content-type": "application/json",
+            });
+
+            if (args[0] !== undefined) headers.set("Fidy-Retry-Key", args[0]);
+
+            return db.send(
               new Request("https://api.fidyapp.com" + path, {
                 method,
-                headers: {
-                  authorization: "Bearer " + token,
-                  "content-type": "application/json",
-                  ...(args[0] === undefined ? {} : { "Fidy-Retry-Key": args[0] }),
-                },
-                ...(args[1] === undefined ? {} : { body: JSON.stringify(args[1]) }),
+                headers,
+                body: args[1] === undefined ? null : JSON.stringify(args[1]),
               })
-            )
-          );
+            );
+          });
 
         const original = {
           categoryId: category,
@@ -189,7 +192,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
                   "Fidy-Session-Binding": alice.session,
                   "content-type": "application/json",
                 },
-                ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+                body: payload === undefined ? null : JSON.stringify(payload),
               })
             )
           );

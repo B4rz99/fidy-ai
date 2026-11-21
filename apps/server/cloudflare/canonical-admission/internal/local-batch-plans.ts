@@ -105,34 +105,38 @@ export const prepareChildren = Effect.fn(function* (
     targets = new Set<string>(),
     premises = new Set<string>();
 
-  for (const child of children) {
-    const plan = yield* child.prepare(child.input, context);
+  yield* Effect.forEach(
+    children,
+    Effect.fnUntraced(function* (child) {
+      const plan = yield* child.prepare(child.input, context);
 
-    if (!("commit" in plan)) return yield* childFailure(child, plan);
+      if (!("commit" in plan)) return yield* childFailure(child, plan);
 
-    if (
-      plans.some(
-        ({ plan: prior }) =>
-          Option.isSome(prior.removedTarget) && plan.targets.includes(prior.removedTarget.value)
-      )
-    ) {
-      return yield* new ChildRefused({
-        ...child,
-        code: "not_found",
-        message: "The requested record is unavailable.",
-      });
-    }
+      if (
+        plans.some(
+          ({ plan: prior }) =>
+            Option.isSome(prior.removedTarget) && plan.targets.includes(prior.removedTarget.value)
+        )
+      ) {
+        return yield* new ChildRefused({
+          ...child,
+          code: "not_found",
+          message: "The requested record is unavailable.",
+        });
+      }
 
-    if (!reserveTargets(plan, targets, premises)) {
-      return yield* new ChildRefused({
-        ...child,
-        code: "validation_failed",
-        message: "Two children address the same retained target.",
-      });
-    }
+      if (!reserveTargets(plan, targets, premises)) {
+        return yield* new ChildRefused({
+          ...child,
+          code: "validation_failed",
+          message: "Two children address the same retained target.",
+        });
+      }
 
-    plans.push({ child, plan });
-  }
+      plans.push({ child, plan });
+    }),
+    { discard: true }
+  );
 
   return plans;
 });
@@ -151,22 +155,24 @@ export const commitChildren = Effect.fn(function* (
   return yield* sql
     .withTransaction(
       Effect.gen(function* () {
-        const results = [];
+        const results = yield* Effect.forEach(
+          plans,
+          Effect.fnUntraced(function* ({ child, plan }) {
+            const result = yield* plan.commit;
 
-        for (const { child, plan } of plans) {
-          const result = yield* plan.commit;
+            if (result.status >= firstFailureStatus) return yield* childFailure(child, result);
+            yield* Schema.decodeEffect(child.operation.success, { onExcessProperty: "error" })(
+              result.body
+            );
+            yield* audit(child, result.outcome);
 
-          if (result.status >= firstFailureStatus) return yield* childFailure(child, result);
-          yield* Schema.decodeEffect(child.operation.success, { onExcessProperty: "error" })(
-            result.body
-          );
-          yield* audit(child, result.outcome);
-          results.push({
-            callId: child.callId,
-            operation: child.operation.id,
-            output: result.body,
-          });
-        }
+            return {
+              callId: child.callId,
+              operation: child.operation.id,
+              output: result.body,
+            };
+          })
+        );
 
         if (plans.some(({ child }) => child.operation.id.startsWith("transactions."))) {
           yield* preserveStoreAlarm(

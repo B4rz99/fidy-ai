@@ -1,16 +1,16 @@
 import { Redacted } from "effect";
-import { makeOpenAiHostedInference } from "../../src/shell/hosted-inference/runtime";
-import { makeOpenAiRun } from "./runtime";
-import { makeEvaluationHandler } from "./internal/adversarial-evaluation";
-import { makeEvaluationBudget } from "./internal/evaluation-budget";
+import { openAiHostedInference } from "../../src/shell/hosted-inference/runtime";
+import { openAiRun } from "./runtime";
+import { evaluationHandler } from "./internal/adversarial-evaluation";
+import { evaluationBudget } from "./internal/evaluation-budget";
 
-export const makeHostedEvaluationHandler = (): ReturnType<typeof makeEvaluationHandler> =>
-  makeEvaluationHandler({
-    makeInference: makeOpenAiHostedInference,
+export const makeHostedEvaluationHandler = (): ReturnType<typeof evaluationHandler> =>
+  evaluationHandler({
+    makeInference: openAiHostedInference,
     makeBudget: (environment) =>
-      makeEvaluationBudget({
+      evaluationBudget({
         environment,
-        execute: makeOpenAiRun(Redacted.make(environment.OPENAI_API_KEY)),
+        execute: openAiRun(Redacted.make(environment.OPENAI_API_KEY)),
       }),
   });
 

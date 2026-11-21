@@ -29,7 +29,7 @@ import {
   approvedOpenAiModel,
 } from "~/shell/hosted-inference/contract";
 import { hostedInitialTextContext } from "./context";
-import { makeOpenAiHostedInference } from "~/shell/hosted-inference/runtime";
+import { openAiHostedInference } from "~/shell/hosted-inference/runtime";
 import { openAiProviderSchema } from "~/shell/hosted-inference/internal/provider-schema";
 
 const hostedFailure = (
@@ -95,7 +95,7 @@ const captureRun = (
 const makeConfiguredInference = (
   run: OpenAiTransportRun
 ): Effect.Effect<HostedInferenceService, HostedInferenceError> =>
-  makeOpenAiHostedInference({
+  openAiHostedInference({
     model: Option.some(approvedOpenAiModel),
     run: Option.some(fromBinding(run)),
   });
@@ -233,7 +233,7 @@ it.effect("fails closed when the configured OpenAI model is absent or unsupporte
       configurations,
       (configuration) =>
         Effect.gen(function* () {
-          const exit = yield* Effect.exit(makeOpenAiHostedInference(configuration));
+          const exit = yield* Effect.exit(openAiHostedInference(configuration));
           assertHostedFailure(
             exit,
             hostedFailure(HostedInferenceFailureReason.ProviderUnavailable())

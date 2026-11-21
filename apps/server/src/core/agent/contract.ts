@@ -178,12 +178,16 @@ export const ToolOutputRejected = Schema.TaggedStruct("ToolOutputRejected", {
 
 export const ToolSucceeded = Schema.TaggedStruct("Succeeded", { output: CanonicalToolEvidence });
 
+export const CanonicalOperationFailed = Schema.TaggedStruct("CanonicalOperationFailed", {
+  failure: CanonicalToolEvidence,
+});
+
 export const CanonicalToolOutcome = Schema.Union([
   ToolSucceeded,
   Schema.TaggedStruct("CommittedOutputUnavailable", {}),
   Schema.TaggedStruct("ToolInputRejected", { failure: CanonicalToolEvidence }),
   ToolOutputRejected,
-  Schema.TaggedStruct("CanonicalOperationFailed", { failure: CanonicalToolEvidence }),
+  CanonicalOperationFailed,
 ]);
 
 export type CanonicalToolOutcome = typeof CanonicalToolOutcome.Type;

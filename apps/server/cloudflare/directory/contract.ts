@@ -279,17 +279,21 @@ export const EmailCapacitySlot = Schema.Struct({
   generation: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 
-const emailCapacityTarget = {
+export const EmailCapacityTarget = Schema.Struct({
   ...EmailCapacitySlot.fields,
   receipt: Schema.String.check(Schema.isUUID()),
   expires: Schema.Int,
-};
+});
+
+export const EmailCapacityTargetCommand = Schema.Union([
+  Schema.TaggedStruct("Claim", EmailCapacityTarget.fields),
+  Schema.TaggedStruct("Settle", EmailCapacityTarget.fields),
+  Schema.TaggedStruct("Release", EmailCapacityTarget.fields),
+]);
 
 export const EmailCapacityCommand = Schema.Union([
   Schema.TaggedStruct("Offer", {}),
-  Schema.TaggedStruct("Claim", emailCapacityTarget),
-  Schema.TaggedStruct("Settle", emailCapacityTarget),
-  Schema.TaggedStruct("Release", emailCapacityTarget),
+  ...EmailCapacityTargetCommand.members,
 ]);
 
 const routeReservationTransportMs = 60_000;

@@ -27,11 +27,11 @@ export const decodeGrantKey = (
       bytes.success.length !== keyLength ||
       Base64Url.encode(bytes.success) !== encoded
     ) {
-      return yield* new ConnectionAuthorizationUnavailable();
+      return yield* new ConnectionAuthorizationUnavailable({ cause: undefined });
     }
 
     return bytes.success;
-  }).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable()));
+  }).pipe(Effect.mapError((cause) => new ConnectionAuthorizationUnavailable({ cause })));
 
 export const sealGrant = (
   input: Readonly<{ key: Redacted.Redacted<string>; purpose: string; grant: ConnectionBankGrant }>
@@ -66,9 +66,9 @@ export const sealGrant = (
                   `v1.${Base64Url.encode(iv)}.${Base64Url.encode(new Uint8Array(ciphertext))}`
               );
           }),
-      catch: () => new ConnectionAuthorizationUnavailable(),
+      catch: (cause) => new ConnectionAuthorizationUnavailable({ cause }),
     });
-  }).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable()));
+  }).pipe(Effect.mapError((cause) => new ConnectionAuthorizationUnavailable({ cause })));
 
 export const openGrant = (
   input: Readonly<{ key: Redacted.Redacted<string>; purpose: string; envelope: string }>
@@ -78,7 +78,7 @@ export const openGrant = (
     const parts = input.envelope.split(".");
 
     if (parts.length !== 3 || parts[0] !== "v1") {
-      return yield* new ConnectionAuthorizationUnavailable();
+      return yield* new ConnectionAuthorizationUnavailable({ cause: undefined });
     }
 
     const nonce = Base64Url.decode(parts[1] ?? "");
@@ -89,7 +89,7 @@ export const openGrant = (
       nonce.success.length !== nonceLength ||
       Result.isFailure(ciphertext)
     ) {
-      return yield* new ConnectionAuthorizationUnavailable();
+      return yield* new ConnectionAuthorizationUnavailable({ cause: undefined });
     }
 
     const plaintext = yield* Effect.tryPromise({
@@ -108,7 +108,7 @@ export const openGrant = (
             )
           )
           .then((decrypted) => new TextDecoder().decode(decrypted)),
-      catch: () => new ConnectionAuthorizationUnavailable(),
+      catch: (cause) => new ConnectionAuthorizationUnavailable({ cause }),
     });
 
     const grant = yield* Schema.decodeEffect(Schema.fromJsonString(Grant))(plaintext);
@@ -118,7 +118,7 @@ export const openGrant = (
       accessToken: Option.map(grant.accessToken, Redacted.make),
       refreshToken: Option.map(grant.refreshToken, Redacted.make),
     };
-  }).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable()));
+  }).pipe(Effect.mapError((cause) => new ConnectionAuthorizationUnavailable({ cause })));
 
 export const grantPurpose = (
   input: Readonly<{

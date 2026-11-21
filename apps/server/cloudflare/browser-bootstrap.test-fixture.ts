@@ -32,7 +32,7 @@ type Begun = Readonly<{
 type Browser = Readonly<{
   api: string;
   headers: Record<string, string>;
-  post: (path: string, data: object) => ResponseEffect;
+  post: (path: string, data: unknown) => ResponseEffect;
   pair: Effect.Effect<typeof ProviderBrowserProof.Type, Schema.SchemaError>;
   verified: (
     subject: string,
@@ -59,7 +59,7 @@ const transport = (runtime: Miniflare): Pick<Browser, "api" | "headers" | "post"
     connection: "close",
   };
 
-  const post = (path: string, data: object): ResponseEffect =>
+  const post = (path: string, data: unknown): ResponseEffect =>
     native(() =>
       runtime.dispatchFetch(api + path, {
         method: "POST",
@@ -86,12 +86,12 @@ const browserWithIntent = (runtime: Miniflare, intent: "signup" | "login"): Brow
   const begin = Effect.fn(function* (provider: AuthenticationProvider, handoffReference?: string) {
     const proof = yield* pair;
 
-    const started = yield* post(`/web/providers/${provider}/start`, {
-      ...proof,
-      intent,
-      ...(handoffReference === undefined ? {} : { handoffReference }),
-      consentRevision: webSignupDisclosure().revision,
-    });
+    const start = { ...proof, intent, consentRevision: webSignupDisclosure().revision };
+
+    const started = yield* post(
+      `/web/providers/${provider}/start`,
+      handoffReference === undefined ? start : { ...start, handoffReference }
+    );
 
     const cookie = started.headers.get("set-cookie")?.split(";")[0] ?? "";
 
@@ -137,7 +137,9 @@ const browserWithIntent = (runtime: Miniflare, intent: "signup" | "login"): Brow
       handoffReference
     );
 
-    if (handoffReference === undefined) expect(value.review).toEqual({ status: "verified" });
+    expect(handoffReference === undefined ? value.review : { status: "verified" }).toEqual({
+      status: "verified",
+    });
 
     return value;
   });

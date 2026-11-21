@@ -286,7 +286,9 @@ it.effect(
           (node) => node.textContent === text
         );
 
-        if (found === undefined) throw new Error("Missing cancellation action");
+        if (found === undefined) {
+          throw new Error("Missing cancellation action");
+        }
 
         return found;
       };

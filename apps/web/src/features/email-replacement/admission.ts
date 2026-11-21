@@ -15,7 +15,9 @@ const maximumCharacters = 128;
 export const retainReplacementAdmission = (binding: string): boolean => {
   const admission = Schema.decodeOption(StoredAdmission)({ version: 1, binding });
 
-  if (Option.isNone(admission)) return false;
+  if (Option.isNone(admission)) {
+    return false;
+  }
 
   try {
     const encoded = Schema.encodeSync(storedAdmission)(admission.value);
@@ -37,7 +39,9 @@ export const restoreReplacementAdmission = (
   try {
     const raw = window.sessionStorage.getItem(key);
 
-    if (raw === null) return "clear";
+    if (raw === null) {
+      return "clear";
+    }
 
     const decoded =
       raw.length <= maximumCharacters
@@ -48,7 +52,9 @@ export const restoreReplacementAdmission = (
       return "unavailable";
     }
 
-    if (decoded.value.binding === binding) return "uncertain";
+    if (decoded.value.binding === binding) {
+      return "uncertain";
+    }
 
     return "clear";
   } catch {
@@ -60,7 +66,10 @@ export const clearReplacementAdmission = (binding: string): void => {
   try {
     const raw = window.sessionStorage.getItem(key);
 
-    if (raw === null || raw.length > maximumCharacters) return;
+    if (raw === null || raw.length > maximumCharacters) {
+      return;
+    }
+
     const decoded = Schema.decodeOption(storedAdmission, { onExcessProperty: "error" })(raw);
 
     if (Option.isSome(decoded) && decoded.value.binding === binding) {

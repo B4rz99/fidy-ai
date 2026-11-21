@@ -8,7 +8,7 @@ import { emptyCaptureDraft } from "./capture-draft";
 import {
   type CaptureRetention,
   type TransactionCaptureTask,
-  makeCaptureRetention,
+  captureRetention,
 } from "./capture-task";
 import { type CaptureHistoryVersion, ManualCaptureContext } from "./manual-capture-context";
 
@@ -16,7 +16,7 @@ export const ManualCaptureProvider = ({
   timeZone,
   children,
 }: Readonly<{ timeZone: string; children: ReactNode }>): JSX.Element => {
-  const [retentionResource] = useState(() => makeCaptureRetention());
+  const [retentionResource] = useState(() => captureRetention());
   const retention = useAtomValue(retentionResource);
 
   return Option.match(retention.resource, {

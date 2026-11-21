@@ -1,6 +1,8 @@
 import { Option } from "effect";
 import { type RefCallback, useCallback } from "react";
 
+type AmountMeasurement = Readonly<{ top: number; bottom: number; height: number }>;
+
 const clearance = 8;
 
 export const useReviewAmountVisibility = (
@@ -31,7 +33,7 @@ const observeAmount = (node: HTMLDivElement): ReturnType<RefCallback<HTMLDivElem
 
   if (amount === null || help === null) return;
 
-  const measure = (): Readonly<{ top: number; bottom: number; height: number }> => {
+  const measure = (): AmountMeasurement => {
     const top = amount.getBoundingClientRect().top;
     const bottom = help.getBoundingClientRect().bottom;
 

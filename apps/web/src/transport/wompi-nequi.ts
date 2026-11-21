@@ -64,7 +64,10 @@ const requestToken = (
           cache: "no-store",
           referrerPolicy: "no-referrer",
           signal,
-          ...(Option.isNone(input.body) ? {} : { body: input.body.value }),
+          ...Option.match(input.body, {
+            onNone: () => ({}),
+            onSome: (body) => ({ body }),
+          }),
         }),
       catch: failure,
     });

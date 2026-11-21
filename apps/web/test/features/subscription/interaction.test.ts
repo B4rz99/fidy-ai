@@ -400,8 +400,9 @@ const recoveryHttp = (fixture: RecoveryFixture): HttpClient.HttpClient =>
       const path = new URL(request.url).pathname;
       let response: Response;
 
-      if (path.endsWith("/availability")) response = Response.json({ enabledMethods: ["card"] });
-      else if (path.endsWith("/prepare")) {
+      if (path.endsWith("/availability")) {
+        response = Response.json({ enabledMethods: ["card"] });
+      } else if (path.endsWith("/prepare")) {
         response = Response.json(yield* Schema.encodeEffect(PaymentEnrollment)(fixture.enrollment));
       } else if (path.endsWith("/submit")) {
         const text = Predicate.isTagged(request.body, "Uint8Array")
@@ -788,15 +789,21 @@ it.effect.each(["invalid-email", "expired", "busy", "disposed", "unprepared"] as
     Effect.gen(function* () {
       const input = fixture();
 
-      if (rejection !== "unprepared") yield* prepareFixture(input);
+      if (rejection !== "unprepared") {
+        yield* prepareFixture(input);
+      }
 
-      if (rejection === "expired") yield* advance(60_001);
+      if (rejection === "expired") {
+        yield* advance(60_001);
+      }
 
       if (rejection === "busy") {
         input.view().submit("synthetic@example.invalid");
       }
 
-      if (rejection === "disposed") input.dispose();
+      if (rejection === "disposed") {
+        input.dispose();
+      }
 
       const fields = {
         method: "nequi" as const,

@@ -16,7 +16,7 @@ export const deriveAnonymousSource = ({
       (browserOrigin === browserOrigins.local ? "local-development" : "");
 
     if (visitor.length === 0 || admissionKey.length < minimumAdmissionKeyLength) {
-      throw new Error("PAT admission unavailable");
+      return yield* Effect.die(new Error("PAT admission unavailable"));
     }
 
     const key = yield* Effect.tryPromise({

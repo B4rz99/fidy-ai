@@ -1,6 +1,7 @@
-import { Clock, Config, Effect, Schema } from "effect";
+import { it } from "@effect/vitest";
+import { Clock, Config, Data, Effect, Schedule, Schema } from "effect";
 import { Miniflare } from "miniflare";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 
 const userId = "10000000-0000-4000-8000-000000000001";
 
@@ -12,17 +13,16 @@ type Store = Awaited<ReturnType<Miniflare["unsafeGetDurableObjectStorage"]>>;
 const count = (db: Store, table: string): Promise<number> =>
   db.exec(`SELECT count(*) AS n FROM ${table}`).then((rows) => Number(rows[0]?.n));
 
+class QueueUnsettled extends Data.TaggedError("QueueUnsettled")<{ readonly table: string }> {}
+
 const waitForCount = Effect.fn(function* (db: Store, table: string, expected: number) {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    if ((yield* Effect.tryPromise(() => count(db, table))) >= expected) return;
-    yield* Effect.sleep(100);
-  }
-
-  throw new Error(`Native Queue did not settle ${table}`);
+  yield* Effect.tryPromise(() => count(db, table)).pipe(
+    Effect.flatMap((current) =>
+      current >= expected ? Effect.void : Effect.fail(new QueueUnsettled({ table }))
+    ),
+    Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 199 })
+  );
 });
-
-const measureQueueGrowth =
-  Effect.runSync(Config.String("INFRA_PERFORMANCE_MEASURE").pipe(Config.withDefault("0"))) === "1";
 
 const queueMeasurement = Schema.fromJsonString(
   Schema.Struct({
@@ -37,156 +37,164 @@ const queueMeasurement = Schema.fromJsonString(
   })
 );
 
-it(
+const recoverBacklog = Effect.fn(function* (
+  contents: string,
+  backlog: number,
+  measureQueueGrowth: boolean
+) {
+  const runtime = yield* Effect.acquireRelease(
+    Effect.sync(
+      () =>
+        new Miniflare({
+          unsafeInspectDurableObjects: true,
+          workers: [
+            {
+              config: {
+                name: "native-recovery-proof",
+                type: "worker",
+                compatibilityDate: "2026-09-08",
+                exports: { QueueRecorder: { type: "durable-object", storage: "sqlite" } },
+                env: {
+                  OWNER: {
+                    type: "durable-object",
+                    worker: "native-recovery-proof",
+                    exportName: "QueueRecorder",
+                  },
+                  WORK: { type: "queue", name: "recovery-work" },
+                },
+                triggers: [
+                  {
+                    type: "queue",
+                    name: "recovery-work",
+                    deadLetterQueue: "recovery-dead",
+                    maxBatchSize: 10,
+                    maxBatchTimeout: 0,
+                    maxConcurrency: 1,
+                    maxRetries: 3,
+                    retryDelay: 0,
+                  },
+                  {
+                    type: "queue",
+                    name: "recovery-dead",
+                    maxBatchSize: 10,
+                    maxBatchTimeout: 0,
+                  },
+                ],
+                manifest: {
+                  mainModule: "index.mjs",
+                  modules: { "index.mjs": { contents, type: "esm" } },
+                },
+              },
+            },
+          ],
+        })
+    ),
+    (value) => Effect.tryPromise(() => value.dispose()).pipe(Effect.orDie)
+  );
+
+  const db = yield* Effect.tryPromise(() =>
+    runtime.unsafeGetDurableObjectStorage("native-recovery-proof", "QueueRecorder", {
+      name: userId,
+    })
+  );
+
+  const now = yield* Clock.currentTimeMillis;
+  yield* Effect.tryPromise(() =>
+    db.exec(
+      "CREATE TABLE statement_submissions(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,status TEXT NOT NULL,retention_expires_at_ms INTEGER NOT NULL,queued_at_ms INTEGER); CREATE TABLE blocked(id TEXT PRIMARY KEY); CREATE TABLE handoffs(id TEXT PRIMARY KEY,completed_at_ms INTEGER NOT NULL); CREATE TABLE deliveries(id TEXT,attempt INTEGER); CREATE TABLE dead_letters(id TEXT PRIMARY KEY,attempt INTEGER)"
+    )
+  );
+  yield* Effect.tryPromise(() =>
+    db.exec(
+      "WITH RECURSIVE entries(n) AS(VALUES(1) UNION ALL SELECT n+1 FROM entries WHERE n<?) INSERT INTO statement_submissions(id,user_id,status,retention_expires_at_ms) SELECT printf('20000000-0000-4000-8000-%012d',n),?,'queued',? FROM entries",
+      backlog,
+      userId,
+      now + 600000
+    )
+  );
+  yield* Effect.tryPromise(() => db.exec("INSERT INTO blocked VALUES(?)", identity(4)));
+  const started = performance.now();
+  expect(
+    (yield* Effect.tryPromise(() =>
+      runtime.dispatchFetch("http://proof/replay", { method: "POST" })
+    )).status
+  ).toBe(202);
+  yield* waitForCount(db, "handoffs", backlog - 1);
+  yield* waitForCount(db, "dead_letters", 10);
+  expect(yield* Effect.tryPromise(() => count(db, "dead_letters"))).toBe(10);
+  expect(yield* Effect.tryPromise(() => count(db, "deliveries"))).toBe(backlog + 30);
+  expect(
+    yield* Effect.tryPromise(() =>
+      db.exec("SELECT MAX(attempt) AS attempt FROM deliveries WHERE id = ?", identity(4))
+    )
+  ).toEqual([{ attempt: 4 }]);
+  expect(
+    yield* Effect.tryPromise(() => db.exec("SELECT id FROM dead_letters WHERE id = ?", identity(4)))
+  ).toEqual([{ id: identity(4) }]);
+  yield* Effect.tryPromise(() => db.exec("DELETE FROM blocked"));
+  expect(
+    (yield* Effect.tryPromise(() =>
+      runtime.dispatchFetch("http://proof/replay", { method: "POST" })
+    )).status
+  ).toBe(202);
+  yield* waitForCount(db, "handoffs", backlog);
+  yield* waitForCount(db, "deliveries", 2 * backlog + 30);
+  expect(yield* Effect.tryPromise(() => count(db, "handoffs"))).toBe(backlog);
+  expect(performance.now() - started).toBeLessThan(40_000);
+
+  if (measureQueueGrowth) {
+    const rows = yield* Effect.tryPromise(() =>
+      db.exec(
+        "SELECT h.completed_at_ms-s.queued_at_ms AS delay FROM handoffs h JOIN statement_submissions s ON h.id=s.id ORDER BY delay"
+      )
+    );
+
+    const delays = yield* Schema.decodeUnknownEffect(
+      Schema.Array(Schema.Struct({ delay: Schema.Finite }))
+    )(rows);
+
+    const quantile = (fraction: number): number =>
+      delays[Math.ceil(delays.length * fraction) - 1]?.delay ?? 0;
+
+    const encoded = yield* Schema.encodeEffect(queueMeasurement)({
+      scenario: "native-queue-recovery",
+      backlog,
+      deliveries: yield* Effect.tryPromise(() => count(db, "deliveries")),
+      deadLetters: yield* Effect.tryPromise(() => count(db, "dead_letters")),
+      elapsedMs: performance.now() - started,
+      handoffP50Ms: quantile(0.5),
+      handoffP95Ms: quantile(0.95),
+      handoffP99Ms: quantile(0.99),
+    });
+
+    yield* Effect.sync(() => process.stdout.write(`INFRA_QUEUE ${encoded}\n`));
+  }
+});
+
+it.live(
   "recovers a native Queue backlog despite local batch retries without duplicate handoffs",
   () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const built = yield* Effect.tryPromise(() =>
-          Bun.build({
-            entrypoints: [new URL("./recovery-worker.fixture.ts", import.meta.url).pathname],
-            target: "browser",
-            external: ["cloudflare:workers"],
-          })
-        );
+    Effect.gen(function* () {
+      const measureQueueGrowth =
+        (yield* Config.String("INFRA_PERFORMANCE_MEASURE").pipe(Config.withDefault("0"))) === "1";
 
-        const output = built.outputs[0];
+      const built = yield* Effect.tryPromise(() =>
+        Bun.build({
+          entrypoints: [new URL("./recovery-worker.fixture.ts", import.meta.url).pathname],
+          target: "browser",
+          external: ["cloudflare:workers"],
+        })
+      );
 
-        if (!built.success || output === undefined) throw new Error("Queue proof bundle failed");
-        const contents = yield* Effect.tryPromise(() => output.text());
+      const output = built.outputs[0];
 
-        for (const backlog of measureQueueGrowth ? [10, 100, 1000] : [100]) {
-          const runtime = yield* Effect.acquireRelease(
-            Effect.sync(
-              () =>
-                new Miniflare({
-                  unsafeInspectDurableObjects: true,
-                  workers: [
-                    {
-                      config: {
-                        name: "native-recovery-proof",
-                        type: "worker",
-                        compatibilityDate: "2026-09-08",
-                        exports: { QueueRecorder: { type: "durable-object", storage: "sqlite" } },
-                        env: {
-                          OWNER: {
-                            type: "durable-object",
-                            worker: "native-recovery-proof",
-                            exportName: "QueueRecorder",
-                          },
-                          WORK: { type: "queue", name: "recovery-work" },
-                        },
-                        triggers: [
-                          {
-                            type: "queue",
-                            name: "recovery-work",
-                            deadLetterQueue: "recovery-dead",
-                            maxBatchSize: 10,
-                            maxBatchTimeout: 0,
-                            maxConcurrency: 1,
-                            maxRetries: 3,
-                            retryDelay: 0,
-                          },
-                          {
-                            type: "queue",
-                            name: "recovery-dead",
-                            maxBatchSize: 10,
-                            maxBatchTimeout: 0,
-                          },
-                        ],
-                        manifest: {
-                          mainModule: "index.mjs",
-                          modules: { "index.mjs": { contents, type: "esm" } },
-                        },
-                      },
-                    },
-                  ],
-                })
-            ),
-            (value) => Effect.tryPromise(() => value.dispose()).pipe(Effect.orDie)
-          );
+      if (!built.success || output === undefined) throw new Error("Queue proof bundle failed");
+      const contents = yield* Effect.tryPromise(() => output.text());
 
-          const db = yield* Effect.tryPromise(() =>
-            runtime.unsafeGetDurableObjectStorage("native-recovery-proof", "QueueRecorder", {
-              name: userId,
-            })
-          );
-
-          const now = yield* Clock.currentTimeMillis;
-          yield* Effect.tryPromise(() =>
-            db.exec(
-              "CREATE TABLE statement_submissions(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,status TEXT NOT NULL,retention_expires_at_ms INTEGER NOT NULL,queued_at_ms INTEGER); CREATE TABLE blocked(id TEXT PRIMARY KEY); CREATE TABLE handoffs(id TEXT PRIMARY KEY,completed_at_ms INTEGER NOT NULL); CREATE TABLE deliveries(id TEXT,attempt INTEGER); CREATE TABLE dead_letters(id TEXT PRIMARY KEY,attempt INTEGER)"
-            )
-          );
-          yield* Effect.tryPromise(() =>
-            db.exec(
-              "WITH RECURSIVE entries(n) AS(VALUES(1) UNION ALL SELECT n+1 FROM entries WHERE n<?) INSERT INTO statement_submissions(id,user_id,status,retention_expires_at_ms) SELECT printf('20000000-0000-4000-8000-%012d',n),?,'queued',? FROM entries",
-              backlog,
-              userId,
-              now + 600000
-            )
-          );
-          yield* Effect.tryPromise(() => db.exec("INSERT INTO blocked VALUES(?)", identity(4)));
-          const started = performance.now();
-          expect(
-            (yield* Effect.tryPromise(() =>
-              runtime.dispatchFetch("http://proof/replay", { method: "POST" })
-            )).status
-          ).toBe(202);
-          yield* waitForCount(db, "handoffs", backlog - 1);
-          yield* waitForCount(db, "dead_letters", 10);
-          expect(yield* Effect.tryPromise(() => count(db, "dead_letters"))).toBe(10);
-          expect(yield* Effect.tryPromise(() => count(db, "deliveries"))).toBe(backlog + 30);
-          expect(
-            yield* Effect.tryPromise(() =>
-              db.exec("SELECT MAX(attempt) AS attempt FROM deliveries WHERE id = ?", identity(4))
-            )
-          ).toEqual([{ attempt: 4 }]);
-          expect(
-            yield* Effect.tryPromise(() =>
-              db.exec("SELECT id FROM dead_letters WHERE id = ?", identity(4))
-            )
-          ).toEqual([{ id: identity(4) }]);
-          yield* Effect.tryPromise(() => db.exec("DELETE FROM blocked"));
-          expect(
-            (yield* Effect.tryPromise(() =>
-              runtime.dispatchFetch("http://proof/replay", { method: "POST" })
-            )).status
-          ).toBe(202);
-          yield* waitForCount(db, "handoffs", backlog);
-          yield* waitForCount(db, "deliveries", 2 * backlog + 30);
-          expect(yield* Effect.tryPromise(() => count(db, "handoffs"))).toBe(backlog);
-          expect(performance.now() - started).toBeLessThan(40_000);
-
-          if (measureQueueGrowth) {
-            const rows = yield* Effect.tryPromise(() =>
-              db.exec(
-                "SELECT h.completed_at_ms-s.queued_at_ms AS delay FROM handoffs h JOIN statement_submissions s ON h.id=s.id ORDER BY delay"
-              )
-            );
-
-            const delays = yield* Schema.decodeUnknownEffect(
-              Schema.Array(Schema.Struct({ delay: Schema.Finite }))
-            )(rows);
-
-            const quantile = (fraction: number): number =>
-              delays[Math.ceil(delays.length * fraction) - 1]?.delay ?? 0;
-
-            const encoded = yield* Schema.encodeEffect(queueMeasurement)({
-              scenario: "native-queue-recovery",
-              backlog,
-              deliveries: yield* Effect.tryPromise(() => count(db, "deliveries")),
-              deadLetters: yield* Effect.tryPromise(() => count(db, "dead_letters")),
-              elapsedMs: performance.now() - started,
-              handoffP50Ms: quantile(0.5),
-              handoffP95Ms: quantile(0.95),
-              handoffP99Ms: quantile(0.99),
-            });
-
-            yield* Effect.sync(() => process.stdout.write(`INFRA_QUEUE ${encoded}\n`));
-          }
-        }
-      }).pipe(Effect.scoped)
-    ),
-  180_000
+      yield* Effect.forEach(
+        measureQueueGrowth ? [10, 100, 1000] : [100],
+        (backlog) => recoverBacklog(contents, backlog, measureQueueGrowth),
+        { discard: true }
+      );
+    }).pipe(Effect.scoped)
 );

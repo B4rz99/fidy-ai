@@ -3,7 +3,7 @@ import {
   CanonicalOperationId,
 } from "../../src/core/canonical-operations/contract";
 import { maximumAtomicBatchCalls } from "../../src/shell/operations/contract";
-import { Schema } from "effect";
+import { Predicate, Schema } from "effect";
 
 export const BatchCalls = Schema.NonEmptyArray(Schema.Unknown).check(
   Schema.isMaxLength(maximumAtomicBatchCalls)
@@ -46,13 +46,20 @@ const PAT = {
   requiredScope: Schema.NullOr(CanonicalCapability),
 } as const;
 
+const WebSessionWork = Schema.TaggedStruct("WebSessionWork", {
+  ...WebSession,
+  work: CanonicalWork,
+});
+
+const PATWork = Schema.TaggedStruct("PATWork", { ...PAT, work: CanonicalWork });
+
 export const CanonicalWorkAdmission = Schema.Union([
   Schema.TaggedStruct("WebSessionQueryWork", {
     ...WebSession,
     work: CanonicalWork.check(
       Schema.makeFilter(
         (work) =>
-          work._tag === "Query" &&
+          Predicate.isTagged(work, "Query") &&
           ["dashboard.getDashboardView", "recurringPlans.getRecurringWorkspace"].includes(
             work.operation
           )
@@ -60,17 +67,14 @@ export const CanonicalWorkAdmission = Schema.Union([
     ),
     leaseId: Schema.String.check(Schema.isUUID()),
   }),
-  Schema.TaggedStruct("WebSessionWork", { ...WebSession, work: CanonicalWork }),
-  Schema.TaggedStruct("PATWork", { ...PAT, work: CanonicalWork }),
+  WebSessionWork,
+  PATWork,
 ]);
 
 export type CanonicalWorkAdmission = typeof CanonicalWorkAdmission.Type;
 
-type WebSessionAuthority = Omit<
-  Extract<CanonicalWorkAdmission, { _tag: "WebSessionWork" }>,
-  "_tag" | "work"
->;
+type WebSessionAuthority = Omit<typeof WebSessionWork.Type, "_tag" | "work">;
 
-type PATAuthority = Omit<Extract<CanonicalWorkAdmission, { _tag: "PATWork" }>, "_tag" | "work">;
+type PATAuthority = Omit<typeof PATWork.Type, "_tag" | "work">;
 
 export type { PATAuthority, WebSessionAuthority };

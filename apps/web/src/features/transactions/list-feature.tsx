@@ -17,11 +17,12 @@ import type { FidyClient } from "@/transport/client";
 import { workspaceCategoriesQuery, workspaceProfileQuery } from "@/transport/workspace-query";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { type RegisteredRouter, useNavigate, useRouter, useSearch } from "@tanstack/react-router";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Data, DateTime, Effect, Match, Option, Predicate, Schema } from "effect";
+import { browserRuntime } from "@/transport/browser-runtime";
 import { type RefCallback, Suspense, useState } from "react";
 import { toast } from "sonner";
 import { TransactionCorrectionContext } from "./correction-context";
-import { type TransactionCorrections, makeTransactionCorrections } from "./corrections";
+import { type TransactionCorrections, transactionCorrections } from "./corrections";
 import type { JSX, ReactNode } from "react";
 
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
@@ -43,32 +44,34 @@ type FailurePeriod = Readonly<{
   onChange: (month: string) => void;
 }>;
 
-type QueryActivity =
-  | Readonly<{
-      _tag: "Current";
-    }>
-  | Readonly<{
-      _tag: "Refreshing";
-    }>
-  | Readonly<{
-      _tag: "RefreshFailure";
-      onRetry: () => void;
-      waiting: boolean;
-    }>;
+type QueryActivity = Data.TaggedEnum<{
+  Current: {};
+  Refreshing: {};
+  RefreshFailure: { readonly onRetry: () => void; readonly waiting: boolean };
+}>;
 
-export type TransactionPageState =
-  | Readonly<{
-      _tag: "Initial";
-    }>
-  | Readonly<{
-      _tag: "Loading";
-    }>
-  | Readonly<{
-      _tag: "CanonicalError" | "BoundaryError";
-      period: Option.Option<FailurePeriod>;
-      onRetry: () => void;
-      waiting: boolean;
-    }>;
+const QueryActivity = Data.taggedEnum<QueryActivity>();
+
+type FailedPage = {
+  readonly period: Option.Option<FailurePeriod>;
+  readonly onRetry: () => void;
+  readonly waiting: boolean;
+};
+
+export type TransactionPageState = Data.TaggedEnum<{
+  Initial: {};
+  Loading: {};
+  CanonicalError: FailedPage;
+  BoundaryError: FailedPage;
+}>;
+
+const TransactionPageState = Data.taggedEnum<TransactionPageState>();
+
+const pendingPage = (waiting: boolean): TransactionPageState =>
+  waiting ? TransactionPageState.Loading() : TransactionPageState.Initial();
+
+const failedPage = (boundary: boolean, page: FailedPage): TransactionPageState =>
+  boundary ? TransactionPageState.BoundaryError(page) : TransactionPageState.CanonicalError(page);
 
 const QueryError = ({
   boundary,
@@ -101,77 +104,70 @@ const QueryActivityNotice = ({
 }: Readonly<{
   query: QueryActivity;
   monthLabel: string;
-}>): JSX.Element => {
-  switch (query._tag) {
-    case "Current":
-    case "Refreshing":
-      return <></>;
-    case "RefreshFailure":
-      return (
-        <CanonicalQueryRetry
-          description={`Mostramos las últimas transacciones disponibles de ${monthLabel}.`}
-          onRetry={query.onRetry}
-          retryLabel="Reintentar actualización"
-          variant="default"
-          retryingLabel="Reintentando…"
-          title="No pudimos actualizar las transacciones"
-          waiting={query.waiting}
-        />
-      );
-  }
-};
+}>): JSX.Element =>
+  Match.valueTags(query, {
+    Current: () => <></>,
+    Refreshing: () => <></>,
+    RefreshFailure: (failure) => (
+      <CanonicalQueryRetry
+        description={`Mostramos las últimas transacciones disponibles de ${monthLabel}.`}
+        onRetry={failure.onRetry}
+        retryLabel="Reintentar actualización"
+        variant="default"
+        retryingLabel="Reintentando…"
+        title="No pudimos actualizar las transacciones"
+        waiting={failure.waiting}
+      />
+    ),
+  });
 
-const TransactionPageContent = ({
+const PendingTransactionList = (): JSX.Element => (
+  <main>
+    <PendingRead label="Cargando transacciones" />
+  </main>
+);
+
+const FailedTransactionList = ({
   state,
 }: Readonly<{
-  state: TransactionPageState;
-}>): JSX.Element => {
-  switch (state._tag) {
-    case "Initial":
-    case "Loading":
-      return <PendingRead label="Cargando transacciones" />;
-    case "CanonicalError":
-    case "BoundaryError":
-      return (
-        <QueryError
-          boundary={state._tag === "BoundaryError"}
-          onRetry={state.onRetry}
-          period={state.period}
-          waiting={state.waiting}
-        />
-      );
-  }
-};
+  state: Data.TaggedEnum.Value<TransactionPageState, "CanonicalError" | "BoundaryError">;
+}>): JSX.Element => (
+  <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
+    <header className="flex flex-col gap-2">
+      <h1 className="font-heading text-3xl font-semibold tracking-tight">Transacciones</h1>
+      <p className="text-muted-foreground">
+        {Option.match(state.period, {
+          onNone: () => "Consulta tus movimientos.",
+          onSome: ({ label }) => `Movimientos de ${label}.`,
+        })}
+      </p>
+    </header>
+    {Option.match(state.period, {
+      onNone: () => null,
+      onSome: (period) => (
+        <TransactionPeriodControls {...period} disabled={false} className="p-0" />
+      ),
+    })}
+    <QueryError
+      boundary={Predicate.isTagged(state, "BoundaryError")}
+      onRetry={state.onRetry}
+      period={state.period}
+      waiting={state.waiting}
+    />
+  </main>
+);
 
 export const TransactionListView = ({
   state,
 }: Readonly<{
   state: TransactionPageState;
 }>): JSX.Element =>
-  state._tag === "Initial" || state._tag === "Loading" ? (
-    <main>
-      <PendingRead label="Cargando transacciones" />
-    </main>
-  ) : (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-      <header className="flex flex-col gap-2">
-        <h1 className="font-heading text-3xl font-semibold tracking-tight">Transacciones</h1>
-        <p className="text-muted-foreground">
-          {Option.match(state.period, {
-            onNone: () => "Consulta tus movimientos.",
-            onSome: ({ label }) => `Movimientos de ${label}.`,
-          })}
-        </p>
-      </header>
-      {Option.match(state.period, {
-        onNone: () => null,
-        onSome: (period) => (
-          <TransactionPeriodControls {...period} disabled={false} className="p-0" />
-        ),
-      })}
-      <TransactionPageContent state={state} />
-    </main>
-  );
+  Match.valueTags(state, {
+    Initial: () => <PendingTransactionList />,
+    Loading: () => <PendingTransactionList />,
+    CanonicalError: (failure) => <FailedTransactionList state={failure} />,
+    BoundaryError: (failure) => <FailedTransactionList state={failure} />,
+  });
 
 const FailedTransactionQuery = ({
   boundary,
@@ -185,12 +181,7 @@ const FailedTransactionQuery = ({
   waiting: boolean;
 }>): JSX.Element => (
   <TransactionListView
-    state={{
-      _tag: boundary ? "BoundaryError" : "CanonicalError",
-      onRetry,
-      period: Option.some(period),
-      waiting,
-    }}
+    state={failedPage(boundary, { onRetry, period: Option.some(period), waiting })}
   />
 );
 
@@ -208,16 +199,15 @@ const queryActivity = ({
   transactionWaiting: boolean;
 }>): QueryActivity => {
   if (categoryFailed || transactionFailed) {
-    return {
-      _tag: "RefreshFailure",
+    return QueryActivity.RefreshFailure({
       onRetry,
       waiting: categoryWaiting || transactionWaiting,
-    };
+    });
   }
 
-  if (categoryWaiting || transactionWaiting) return { _tag: "Refreshing" };
+  if (categoryWaiting || transactionWaiting) return QueryActivity.Refreshing();
 
-  return { _tag: "Current" };
+  return QueryActivity.Current();
 };
 
 type TransactionQueries = Readonly<{
@@ -331,7 +321,7 @@ const useTransactionQueries = (
   const transactions = historyResource.firstPage;
 
   const [correctionOwner] = useState(() =>
-    makeTransactionCorrections({
+    transactionCorrections({
       client,
       firstPage: transactions,
       categories,
@@ -385,18 +375,8 @@ const useTransactionQueries = (
 };
 
 const readyQueryActivity = (
-  categoryState: Extract<
-    TransactionQueries["categoryState"],
-    {
-      readonly _tag: "Ready";
-    }
-  >,
-  transactionState: Extract<
-    TransactionQueries["transactionState"],
-    {
-      readonly _tag: "Ready";
-    }
-  >,
+  categoryState: Data.TaggedEnum.Value<TransactionQueries["categoryState"], "Ready">,
+  transactionState: Data.TaggedEnum.Value<TransactionQueries["transactionState"], "Ready">,
   retry: () => void
 ): QueryActivity =>
   queryActivity({
@@ -426,8 +406,8 @@ const TransactionResources = (props: TransactionResourceProps): JSX.Element => {
   const queries = useTransactionQueries(props.period, props.historyResource);
   useTransactionScrollRestoration(
     Option.isNone(props.locate) &&
-      queries.categoryState._tag === "Ready" &&
-      queries.transactionState._tag === "Ready" &&
+      Predicate.isTagged(queries.categoryState, "Ready") &&
+      Predicate.isTagged(queries.transactionState, "Ready") &&
       !queries.transactionState.waiting &&
       (queries.history.continuation === "complete" || queries.history.continuation === "available")
   );
@@ -447,7 +427,8 @@ const TransactionResources = (props: TransactionResourceProps): JSX.Element => {
 };
 
 const failedDestination = (queries: TransactionQueries): Option.Option<JSX.Element> =>
-  queries.history.location === "LookupFailed" && queries.transactionState._tag === "Failure"
+  queries.history.location === "LookupFailed" &&
+  Predicate.isTagged(queries.transactionState, "Failure")
     ? Option.some(
         <TransactionDestinationFailure
           state={queries.transactionState}
@@ -471,10 +452,10 @@ const TransactionResourceContent = (
     onChange: props.dateFilter.onMonth,
   };
 
-  if (categoryState._tag === "Failure") {
+  if (Predicate.isTagged(categoryState, "Failure")) {
     return (
       <FailedTransactionQuery
-        boundary={categoryState.failure._tag !== "DeclaredFailure"}
+        boundary={!Predicate.isTagged(categoryState.failure, "DeclaredFailure")}
         period={failurePeriod}
         onRetry={retry}
         waiting={categoryState.waiting}
@@ -486,10 +467,10 @@ const TransactionResourceContent = (
 
   if (Option.isSome(destinationFailure)) return destinationFailure.value;
 
-  if (transactionState._tag === "Failure") {
+  if (Predicate.isTagged(transactionState, "Failure")) {
     return (
       <FailedTransactionQuery
-        boundary={transactionState.failure._tag !== "DeclaredFailure"}
+        boundary={!Predicate.isTagged(transactionState.failure, "DeclaredFailure")}
         period={failurePeriod}
         onRetry={retry}
         waiting={transactionState.waiting}
@@ -497,14 +478,12 @@ const TransactionResourceContent = (
     );
   }
 
-  if (categoryState._tag !== "Ready") {
-    return <TransactionListView state={{ _tag: categoryState.waiting ? "Loading" : "Initial" }} />;
+  if (!Predicate.isTagged(categoryState, "Ready")) {
+    return <TransactionListView state={pendingPage(categoryState.waiting)} />;
   }
 
-  if (transactionState._tag !== "Ready") {
-    return (
-      <TransactionListView state={{ _tag: transactionState.waiting ? "Loading" : "Initial" }} />
-    );
+  if (!Predicate.isTagged(transactionState, "Ready")) {
+    return <TransactionListView state={pendingPage(transactionState.waiting)} />;
   }
 
   return (
@@ -517,18 +496,8 @@ const TransactionResourceContent = (
 
 type ReadyQueries = Omit<TransactionQueries, "categoryState" | "transactionState"> &
   Readonly<{
-    categoryState: Extract<
-      TransactionQueries["categoryState"],
-      {
-        _tag: "Ready";
-      }
-    >;
-    transactionState: Extract<
-      TransactionQueries["transactionState"],
-      {
-        _tag: "Ready";
-      }
-    >;
+    categoryState: Data.TaggedEnum.Value<TransactionQueries["categoryState"], "Ready">;
+    transactionState: Data.TaggedEnum.Value<TransactionQueries["transactionState"], "Ready">;
   }>;
 
 const ReadyTransactionResources = ({
@@ -552,7 +521,7 @@ const ReadyTransactionResources = ({
   const presentation = presentPeriod({ locale: currentUser.locale, period });
 
   return (
-    <Suspense fallback={<TransactionListView state={{ _tag: "Loading" }} />}>
+    <Suspense fallback={<TransactionListView state={TransactionPageState.Loading()} />}>
       <TransactionWorkspace
         key={Option.getOrElse(locate, () => "browse")}
         generation={corrections.workspaceGeneration}
@@ -569,7 +538,7 @@ const ReadyTransactionResources = ({
         location={history.location}
         onMore={onMore}
         onRetryMore={onRetryMore}
-        editable={profileCurrent && !corrections.locked && activity._tag === "Current"}
+        editable={profileCurrent && !corrections.locked && Predicate.isTagged(activity, "Current")}
         apiClient={router.options.context.apiClient}
         currentUser={currentUser}
         categories={categoryState.value.data}
@@ -583,7 +552,7 @@ const ReadyTransactionResources = ({
         }
         onRefresh={queries.onRefresh}
       />
-      {profileCurrent && activity._tag === "Current" ? children : null}
+      {profileCurrent && Predicate.isTagged(activity, "Current") ? children : null}
     </Suspense>
   );
 };
@@ -600,7 +569,7 @@ const TransactionPeriodView = ({
   search: TransactionSearch;
 }>): JSX.Element => {
   const navigate = useNavigate();
-  const [now] = useState(() => Effect.runSync(DateTime.now));
+  const [now] = useState(() => DateTime.nowUnsafe());
   const router = useRouter();
 
   const [historyResource] = useState(() => {
@@ -694,50 +663,46 @@ const CurrentUserQuery = ({
   const refresh = useAtomRefresh(currentUser);
   const state = presentCanonicalQuery(result);
 
-  switch (state._tag) {
-    case "Initial":
-      return <TransactionListView state={{ _tag: state.waiting ? "Loading" : "Initial" }} />;
-    case "Failure":
-      return (
-        <TransactionListView
-          state={{
-            _tag: state.failure._tag === "DeclaredFailure" ? "CanonicalError" : "BoundaryError",
-            onRetry: refresh,
-            period: Option.none(),
-            waiting: state.waiting,
-          }}
-        />
-      );
-    case "Ready":
-      return (
-        <>
-          {state.waiting ? (
-            <p aria-live="polite" className="sr-only">
-              Actualizando perfil de transacciones…
-            </p>
-          ) : null}
-          {Option.isSome(state.refreshFailure) ? (
-            <CanonicalQueryRetry
-              description="Mostramos tus transacciones con el último perfil disponible."
-              onRetry={refresh}
-              retryLabel="Reintentar actualización del perfil"
-              retryingLabel="Reintentando…"
-              title="No pudimos actualizar tu perfil"
-              waiting={state.waiting}
-            />
-          ) : null}
-          <ManualCaptureProvider timeZone={state.value.data.timeZone}>
-            <TransactionPeriod
-              key={state.value.data.timeZone}
-              currentUser={state.value.data}
-              profileCurrent={profileCurrent(state)}
-            >
-              {children}
-            </TransactionPeriod>
-          </ManualCaptureProvider>
-        </>
-      );
-  }
+  return Match.valueTags(state, {
+    Initial: (initial) => <TransactionListView state={pendingPage(initial.waiting)} />,
+    Failure: (failed) => (
+      <TransactionListView
+        state={failedPage(!Predicate.isTagged(failed.failure, "DeclaredFailure"), {
+          onRetry: refresh,
+          period: Option.none(),
+          waiting: failed.waiting,
+        })}
+      />
+    ),
+    Ready: (ready) => (
+      <>
+        {ready.waiting ? (
+          <p aria-live="polite" className="sr-only">
+            Actualizando perfil de transacciones…
+          </p>
+        ) : null}
+        {Option.isSome(ready.refreshFailure) ? (
+          <CanonicalQueryRetry
+            description="Mostramos tus transacciones con el último perfil disponible."
+            onRetry={refresh}
+            retryLabel="Reintentar actualización del perfil"
+            retryingLabel="Reintentando…"
+            title="No pudimos actualizar tu perfil"
+            waiting={ready.waiting}
+          />
+        ) : null}
+        <ManualCaptureProvider timeZone={ready.value.data.timeZone}>
+          <TransactionPeriod
+            key={ready.value.data.timeZone}
+            currentUser={ready.value.data}
+            profileCurrent={profileCurrent(ready)}
+          >
+            {children}
+          </TransactionPeriod>
+        </ManualCaptureProvider>
+      </>
+    ),
+  });
 };
 
 export const TransactionListFeature = ({
@@ -761,7 +726,7 @@ TransactionListFeature.preloadData = ({
   signal,
   search,
 }: TransactionPreparation): Promise<void> =>
-  Effect.runPromise(
+  browserRuntime.runPromise(
     Effect.gen(function* () {
       const profile = workspaceProfileQuery(apiClient);
       yield* Effect.tryPromise(() =>
@@ -773,7 +738,11 @@ TransactionListFeature.preloadData = ({
       );
       const current = presentCanonicalQuery(registry.get(profile));
 
-      if (current._tag !== "Ready" || current.waiting || Option.isSome(current.refreshFailure)) {
+      if (
+        !Predicate.isTagged(current, "Ready") ||
+        current.waiting ||
+        Option.isSome(current.refreshFailure)
+      ) {
         return;
       }
 

@@ -12,7 +12,15 @@ export type BudgetWriteContext = Readonly<{
   refreshQueries: () => void;
 }>;
 
-const makeWriteOwner = (): Readonly<{ version: () => number; advance: () => void }> => {
+type WriteOwner = Readonly<{ version: () => number; advance: () => void }>;
+
+type BudgetWriteLifetime = Readonly<{
+  current: () => Option.Option<BudgetWriteContext>;
+  isCurrent: () => boolean;
+  reset: () => void;
+}>;
+
+const makeWriteOwner = (): WriteOwner => {
   let generation = 0;
 
   return {
@@ -25,13 +33,7 @@ const makeWriteOwner = (): Readonly<{ version: () => number; advance: () => void
 
 const initialContext = Option.none<BudgetWriteContext>();
 
-export const useBudgetWriteLifetime = (
-  context: BudgetWriteContext
-): Readonly<{
-  current: () => Option.Option<BudgetWriteContext>;
-  isCurrent: () => boolean;
-  reset: () => void;
-}> => {
+export const useBudgetWriteLifetime = (context: BudgetWriteContext): BudgetWriteLifetime => {
   const latest = useRef(initialContext);
   const [owner] = useState(makeWriteOwner);
   useLayoutEffect(() => {

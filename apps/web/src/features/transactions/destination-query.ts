@@ -1,10 +1,10 @@
-import { type Context, type Effect } from "effect";
+import type { Effect } from "effect";
 import { type AsyncResult, type Atom } from "effect/reactivity";
 import type { CanonicalInput, CanonicalSuccess, FidyClient } from "@/transport/client";
 import { type Transaction, deriveCurrentMonthPeriod } from "./presentation";
 import { transactionMonth } from "./period";
 
-type Client = Context.Service.Shape<FidyClient>;
+type Client = FidyClient["Service"];
 
 type Failure = Effect.Error<ReturnType<Client["transactions"]["getTransaction"]>>;
 

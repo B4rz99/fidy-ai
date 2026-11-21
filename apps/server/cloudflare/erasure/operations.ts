@@ -70,9 +70,15 @@ const viewCase = Effect.fn(function* (request: Request, storage: DurableObjectSt
   );
 });
 
-const completedClasses = (
-  record: Readonly<Record<string, unknown>>
-): ReadonlyArray<ErasureClass> => {
+const ReceiptCase = Schema.Struct({
+  last_erased_at_ms: Schema.Unknown,
+  connection_blocked: Schema.Unknown,
+  directory_clean: Schema.Unknown,
+  pricing_clean: Schema.Unknown,
+  identity_released: Schema.Unknown,
+});
+
+const completedClasses = (record: typeof ReceiptCase.Type): ReadonlyArray<ErasureClass> => {
   if (record.last_erased_at_ms === null) return [];
 
   if (record.directory_clean !== 1) return localClasses;
@@ -89,9 +95,10 @@ const completedClasses = (
 const caseReceipt = Effect.fn(function* (
   reference: string,
   phase: typeof ErasureReceipt.Type.state,
-  record: Readonly<Record<string, unknown>>
+  raw: unknown
 ) {
   const sql = yield* SqliteClient;
+  const record = yield* Schema.decodeUnknownEffect(ReceiptCase)(raw);
   const owners = ErasureCustodian.literals;
 
   const custody =

@@ -29,7 +29,7 @@ through `--group mutation`.
 ```sh
 bun run --cwd apps/server test:core src/core/_shared/money.test.ts --coverage.enabled=false
 bun run --cwd apps/server test test/shell/canonical-catalog/contract.test.ts --coverage.enabled=false
-bun run --cwd apps/web test src/transport/client.test.ts
+bun run --cwd apps/web test test/transport/client.node.test.ts
 ```
 
 `test:core` only includes core tests. Server `test:contracts` covers artifact-checker tests in
@@ -81,7 +81,7 @@ restore environment/configuration in teardown.
 
 Register cleanup before assertions or interruptible work. Acquire an explicit test Scope with
 `Effect.acquireRelease` when an early close is itself under test, so failure still closes it;
-see [the clipboard tests](../apps/web/src/browser/clipboard.test.ts). Coordinate races with
+see [the clipboard tests](../apps/web/test/browser/clipboard.test.ts). Coordinate races with
 Deferreds or controlled transport settlement, then assert both the result and owner disposal.
 An abort test must abort the real request while the competing operation is blocked.
 

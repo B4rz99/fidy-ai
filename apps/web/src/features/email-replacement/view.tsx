@@ -7,19 +7,8 @@ import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
 import type { EmailAddress } from "@/transport/client";
 import { Spinner } from "@/ui/components/spinner";
-
-export type EmailReplacementViewState =
-  | Readonly<{ _tag: "Editing"; feedback: "none" | "invalid-candidate" }>
-  | Readonly<{ _tag: "Editing"; feedback: "request-unavailable"; draftEmail: string }>
-  | Readonly<{ _tag: "Requesting"; candidateEmail: EmailAddress }>
-  | Readonly<{ _tag: "AwaitingCode"; candidateEmail: EmailAddress }>
-  | Readonly<{ _tag: "Completing"; candidateEmail: EmailAddress }>
-  | Readonly<{ _tag: "InvalidCode"; candidateEmail: EmailAddress }>
-  | Readonly<{ _tag: "FreshPairingRequired" }>
-  | Readonly<{ _tag: "Replaced" }>
-  | Readonly<{ _tag: "Uncertain" }>
-  | Readonly<{ _tag: "PreparationUnavailable" }>
-  | Readonly<{ _tag: "Disposed" }>;
+import type { Data } from "effect";
+import { EmailReplacementViewState } from "./view-state";
 
 type EmailReplacementViewProps = Readonly<{
   state: EmailReplacementViewState;
@@ -141,7 +130,9 @@ const EditingForm = ({
   request,
   state,
 }: Pick<EmailReplacementViewProps, "request"> &
-  Readonly<{ state: Extract<EmailReplacementViewState, { _tag: "Editing" }> }>): JSX.Element => (
+  Readonly<{
+    state: Data.TaggedEnum.Value<EmailReplacementViewState, "Editing">;
+  }>): JSX.Element => (
   <>
     {state.feedback !== "none" ? (
       <Alert variant="destructive">
@@ -152,10 +143,7 @@ const EditingForm = ({
         </AlertDescription>
       </Alert>
     ) : null}
-    <ReplacementForm
-      request={request}
-      draftEmail={state.feedback === "request-unavailable" ? state.draftEmail : ""}
-    />
+    <ReplacementForm request={request} draftEmail={state.draftEmail} />
   </>
 );
 
@@ -179,42 +167,23 @@ const replacementContent = ({
   restart,
   state,
 }: Omit<EmailReplacementViewProps, "lifecycleRef">): JSX.Element => {
-  if (state._tag === "Editing") return <EditingForm request={request} state={state} />;
+  const proofForm = (candidateEmail: EmailAddress, invalid: boolean): JSX.Element => (
+    <ProofForm
+      candidateEmail={candidateEmail}
+      complete={complete}
+      invalid={invalid}
+      repeat={repeat}
+      restart={restart}
+    />
+  );
 
-  if (state._tag === "Requesting" || state._tag === "Completing") {
-    return <ReplacementWaiting restart={restart} />;
-  }
-
-  if (state._tag === "AwaitingCode" || state._tag === "InvalidCode") {
-    return (
-      <ProofForm
-        candidateEmail={state.candidateEmail}
-        complete={complete}
-        invalid={state._tag === "InvalidCode"}
-        repeat={repeat}
-        restart={restart}
-      />
-    );
-  }
-
-  return replacementOutcome(state);
-};
-
-const replacementOutcome = (
-  state: Extract<
-    EmailReplacementViewState,
-    {
-      _tag:
-        | "FreshPairingRequired"
-        | "Uncertain"
-        | "Disposed"
-        | "Replaced"
-        | "PreparationUnavailable";
-    }
-  >
-): JSX.Element => {
-  if (state._tag === "PreparationUnavailable") {
-    return (
+  return EmailReplacementViewState.$match(state, {
+    Editing: (editing) => <EditingForm request={request} state={editing} />,
+    Requesting: () => <ReplacementWaiting restart={restart} />,
+    Completing: () => <ReplacementWaiting restart={restart} />,
+    AwaitingCode: ({ candidateEmail }) => proofForm(candidateEmail, false),
+    InvalidCode: ({ candidateEmail }) => proofForm(candidateEmail, true),
+    PreparationUnavailable: () => (
       <Alert variant="destructive">
         <AlertTitle>No pudimos iniciar el cambio de correo</AlertTitle>
         <AlertDescription>
@@ -225,11 +194,8 @@ const replacementOutcome = (
           .
         </AlertDescription>
       </Alert>
-    );
-  }
-
-  if (state._tag === "FreshPairingRequired") {
-    return (
+    ),
+    FreshPairingRequired: () => (
       <Alert variant="destructive">
         <AlertTitle>Vincula el navegador de nuevo</AlertTitle>
         <AlertDescription>
@@ -240,21 +206,16 @@ const replacementOutcome = (
           .
         </AlertDescription>
       </Alert>
-    );
-  }
-
-  if (state._tag === "Uncertain" || state._tag === "Disposed") {
-    return <ReplacementUnavailable />;
-  }
-
-  state satisfies Extract<EmailReplacementViewState, { _tag: "Replaced" }>;
-
-  return (
-    <Alert>
-      <AlertTitle>Correo actualizado</AlertTitle>
-      <AlertDescription>Tu nuevo correo verificado ya está activo.</AlertDescription>
-    </Alert>
-  );
+    ),
+    Uncertain: () => <ReplacementUnavailable />,
+    Disposed: () => <ReplacementUnavailable />,
+    Replaced: () => (
+      <Alert>
+        <AlertTitle>Correo actualizado</AlertTitle>
+        <AlertDescription>Tu nuevo correo verificado ya está activo.</AlertDescription>
+      </Alert>
+    ),
+  });
 };
 
 export const EmailReplacementView = ({

@@ -9,7 +9,7 @@ export type RotateBackupRecoveryCommand = Readonly<{
   onFreshSessionRequired: () => void;
 }>;
 
-export const makeRotateCommand = ({
+export const createRotateCommand = ({
   apiClient,
 }: Readonly<{ apiClient: FidyClient }>): Atom.AtomResultFn<
   RotateBackupRecoveryCommand,

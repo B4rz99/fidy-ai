@@ -1,4 +1,4 @@
-import { Clock, Duration, Effect, Option, Schema } from "effect";
+import { DateTime, Duration, Option, Schema } from "effect";
 import { ManualPATGrantInput, User } from "@/transport/client";
 
 export const PATDraft = Schema.Struct({
@@ -35,7 +35,7 @@ export const preservePATDraft = ({
         version: 1,
         userId,
         draft,
-        expiresAt: Effect.runSync(Clock.currentTimeMillis) + lifetimeMilliseconds,
+        expiresAt: DateTime.nowUnsafe().epochMilliseconds + lifetimeMilliseconds,
       })
     );
 
@@ -53,10 +53,12 @@ export const resumePATDraft = (userId: string): Option.Option<PATDraft> => {
     if (raw === null || raw.length > maximumBytes) return Option.none();
     const decoded = Schema.decodeOption(Schema.fromJsonString(StoredDraft))(raw);
 
+    const now = DateTime.nowUnsafe().epochMilliseconds;
+
     return Option.flatMap(decoded, (saved) =>
       saved.userId === userId &&
-      saved.expiresAt > Effect.runSync(Clock.currentTimeMillis) &&
-      saved.expiresAt <= Effect.runSync(Clock.currentTimeMillis) + lifetimeMilliseconds
+      saved.expiresAt > now &&
+      saved.expiresAt <= now + lifetimeMilliseconds
         ? Option.some(saved.draft)
         : Option.none()
     );

@@ -1,10 +1,10 @@
 import { Array as Arr, Effect, Logger } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { makeCoreRejectionObserver } from "./runtime";
+import { coreRejectionObserver } from "./runtime";
 
 const burst = (
-  observe: ReturnType<typeof makeCoreRejectionObserver>,
+  observe: ReturnType<typeof coreRejectionObserver>,
   { now, count }: Readonly<{ now: number; count: number }>
 ): Effect.Effect<void> =>
   Effect.forEach(
@@ -27,7 +27,7 @@ it.effect("reports only concentrated Core refusal bursts", () =>
   Effect.gen(function* () {
     const logs: unknown[] = [];
     const loggers = new Set([Logger.make<unknown, void>(({ message }) => logs.push(message))]);
-    const observe = makeCoreRejectionObserver();
+    const observe = coreRejectionObserver();
     const now = 1_800_000;
     yield* burst(observe, { now, count: 99 }).pipe(
       Effect.provideService(Logger.CurrentLoggers, loggers)
@@ -58,7 +58,7 @@ it.effect(
         ),
       ]);
 
-      const observe = makeCoreRejectionObserver();
+      const observe = coreRejectionObserver();
 
       yield* Effect.forEach(
         [
@@ -76,14 +76,14 @@ it.effect(
 
       const expected = { message: warning, reasons: [], logLevel: "Warn" };
       expect(logs).toEqual([expected, expected]);
-      yield* burst(makeCoreRejectionObserver(), { now: 1_920_000, count: 99 }).pipe(
+      yield* burst(coreRejectionObserver(), { now: 1_920_000, count: 99 }).pipe(
         Effect.provideService(Logger.CurrentLoggers, loggers)
       );
-      yield* burst(makeCoreRejectionObserver(), { now: 1_920_000, count: 99 }).pipe(
+      yield* burst(coreRejectionObserver(), { now: 1_920_000, count: 99 }).pipe(
         Effect.provideService(Logger.CurrentLoggers, loggers)
       );
       expect(logs).toEqual([expected, expected]);
-      const independent = makeCoreRejectionObserver();
+      const independent = coreRejectionObserver();
 
       const brokenLogger = Logger.make(() => {
         throw new Error("private logging diagnostic");
@@ -104,8 +104,8 @@ it.effect("counts only admitted boundary statuses", () =>
     const logs: unknown[] = [];
     const loggers = new Set([Logger.make<unknown, void>(({ message }) => logs.push(message))]);
     const now = 1_800_000;
-    const callback = makeCoreRejectionObserver();
-    const mcp = makeCoreRejectionObserver();
+    const callback = coreRejectionObserver();
+    const mcp = coreRejectionObserver();
 
     const work = Effect.gen(function* () {
       yield* Effect.forEach(

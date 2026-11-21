@@ -1,5 +1,5 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Effect, Option, type Redacted, Schema } from "effect";
+import { Clock, Effect, Exit, Option, type Redacted, Schema } from "effect";
 import { UserId } from "../../../src/core/identity/contract";
 import { InstitutionId } from "../../../src/core/connections/contract";
 import { CreateTransactionInput } from "../../../src/core/transactions/contract";
@@ -78,11 +78,15 @@ export const admitSynchronization = Effect.fn(function* (
     yield* sql`SELECT a.id,a.grant_attempt_id,NULL AS cursor,g.expires_at_ms FROM connection_accounts a JOIN connection_grants g ON g.attempt_id=a.grant_attempt_id WHERE g.state='active' AND g.attempt_id=${grant}`
   );
 
-  for (const account of accounts) {
-    yield* sql`UPDATE connection_synchronizations SET state='cancelled',claim_token=NULL,claim_until_ms=NULL WHERE account_id=${account.id} AND grant_attempt_id<>${grant} AND state IN ('pending','running')`;
-    yield* sql`INSERT INTO connection_refresh(account_id,grant_attempt_id) VALUES(${account.id},${grant}) ON CONFLICT(account_id) DO UPDATE SET grant_attempt_id=excluded.grant_attempt_id,cursor=NULL,next_refresh_ms=NULL`;
-    yield* insertJob(account, now, storage);
-  }
+  yield* Effect.forEach(
+    accounts,
+    Effect.fnUntraced(function* (account) {
+      yield* sql`UPDATE connection_synchronizations SET state='cancelled',claim_token=NULL,claim_until_ms=NULL WHERE account_id=${account.id} AND grant_attempt_id<>${grant} AND state IN ('pending','running')`;
+      yield* sql`INSERT INTO connection_refresh(account_id,grant_attempt_id) VALUES(${account.id},${grant}) ON CONFLICT(account_id) DO UPDATE SET grant_attempt_id=excluded.grant_attempt_id,cursor=NULL,next_refresh_ms=NULL`;
+      yield* insertJob(account, now, storage);
+    }),
+    { discard: true }
+  );
 });
 
 const workRow = Schema.Struct({
@@ -169,22 +173,26 @@ const commitPage = Effect.fn(function* (
         return;
       }
 
-      for (const movement of page.movements) {
-        const existing =
-          yield* sql`SELECT transaction_id FROM connection_movements WHERE account_id=${job.accountId} AND reference=${movement.reference}`;
+      yield* Effect.forEach(
+        page.movements,
+        Effect.fnUntraced(function* (movement) {
+          const existing =
+            yield* sql`SELECT transaction_id FROM connection_movements WHERE account_id=${job.accountId} AND reference=${movement.reference}`;
 
-        if (existing.length > 0) continue;
-        const id = newId();
+          if (existing.length > 0) return;
+          const id = newId();
 
-        const result = yield* prepareConnectionMovement(movement.transaction, {
-          userId: work.userId,
-          current: now,
-          movementId: id,
-        }).pipe(Effect.flatMap(commitLocalWrite));
+          const result = yield* prepareConnectionMovement(movement.transaction, {
+            userId: work.userId,
+            current: now,
+            movementId: id,
+          }).pipe(Effect.flatMap(commitLocalWrite));
 
-        if (result.status !== createdStatus) return yield* failed();
-        yield* sql`INSERT INTO connection_movements VALUES(${job.accountId},${movement.reference},${id})`;
-      }
+          if (result.status !== createdStatus) return yield* failed();
+          yield* sql`INSERT INTO connection_movements VALUES(${job.accountId},${movement.reference},${id})`;
+        }),
+        { discard: true }
+      );
 
       yield* one(
         yield* sql`UPDATE connection_synchronizations SET state='complete',claim_token=NULL,claim_until_ms=NULL,completed_at_ms=${now} WHERE id=${work.jobId} AND state='running' AND claim_token=${token} AND claim_until_ms>${now} RETURNING id`
@@ -254,6 +262,18 @@ export const repairSynchronizationAlarm = Effect.fn(function* (storage: DurableO
   return value.due === null ? false : yield* preserveStoreAlarm(storage, value.due);
 });
 
+const DueAccount = Schema.Struct({ ...Account.fields, userId: UserId });
+
+const offerDueAccount = Effect.fnUntraced(function* (
+  account: typeof DueAccount.Type,
+  now: number,
+  storage: DurableObjectStorage
+) {
+  if ((yield* institutionsForUser(account.userId)).includes(InstitutionId.make("bancolombia"))) {
+    yield* insertJob(account, now, storage);
+  }
+});
+
 export const offerSynchronizations = Effect.fn(function* ({
   now,
   storage,
@@ -278,21 +298,16 @@ export const offerSynchronizations = Effect.fn(function* ({
       yield* sql`UPDATE connection_refresh SET next_refresh_ms=${now + offerRetryMs} WHERE next_refresh_ms IS NULL AND account_id IN (SELECT account_id FROM connection_synchronizations WHERE state IN ('pending','running') AND expires_at_ms<=${now})`;
       yield* sql`UPDATE connection_synchronizations SET state='cancelled',claim_token=NULL,claim_until_ms=NULL WHERE state IN ('pending','running') AND expires_at_ms<=${now}`;
 
-      const due = yield* Schema.decodeUnknownEffect(
-        Schema.Array(Schema.Struct({ ...Account.fields, userId: UserId }))
-      )(
+      const due = yield* Schema.decodeUnknownEffect(Schema.Array(DueAccount))(
         yield* sql`SELECT a.id,a.grant_attempt_id,r.cursor,g.expires_at_ms,c.user_id AS userId FROM connection_refresh r JOIN connection_accounts a ON a.id=r.account_id AND a.grant_attempt_id=r.grant_attempt_id JOIN connections c ON c.id=a.connection_id JOIN connection_grants g ON g.attempt_id=a.grant_attempt_id WHERE r.next_refresh_ms<=${now} AND c.state='Active' AND g.state='active' AND g.expires_at_ms>${now}
       AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=c.user_id) AND NOT EXISTS(SELECT 1 FROM consent_history h WHERE h.user_id=c.user_id AND h.record_type='processing_withdrawal' AND NOT EXISTS(SELECT 1 FROM consent_history renewal WHERE renewal.user_id=h.user_id AND renewal.record_type='processing_renewal' AND renewal.withdrawal_id=h.id)) LIMIT ${offerLimit}`
       );
 
-      for (const account of due) {
-        if (
-          owns(account.userId) &&
-          (yield* institutionsForUser(account.userId)).includes(InstitutionId.make("bancolombia"))
-        ) {
-          yield* insertJob(account, now, storage);
-        }
-      }
+      yield* Effect.forEach(
+        due.filter((account) => owns(account.userId)),
+        (account) => offerDueAccount(account, now, storage),
+        { discard: true }
+      );
 
       yield* sql`UPDATE connection_refresh SET next_refresh_ms=NULL WHERE next_refresh_ms<=${now} AND account_id IN (SELECT account_id FROM connection_synchronizations WHERE state IN ('pending','running'))`;
       yield* sql`UPDATE connection_refresh SET next_refresh_ms=${now + offerRetryMs} WHERE next_refresh_ms<=${now}`;
@@ -301,9 +316,12 @@ export const offerSynchronizations = Effect.fn(function* ({
         yield* sql`SELECT 'connection-synchronization' AS kind,c.user_id AS userId,s.id AS jobId FROM connection_synchronizations s JOIN connection_accounts a ON a.id=s.account_id JOIN connections c ON c.id=a.connection_id WHERE s.state IN ('pending','running') AND s.offer_at_ms<=${now} ORDER BY s.offer_at_ms,s.id LIMIT ${offerLimit}`
       );
 
-      for (const row of rows) {
-        yield* sql`UPDATE connection_synchronizations SET offer_at_ms=min(expires_at_ms,${now + offerRetryMs}) WHERE id=${row.jobId}`;
-      }
+      yield* Effect.forEach(
+        rows,
+        (row) =>
+          sql`UPDATE connection_synchronizations SET offer_at_ms=min(expires_at_ms,${now + offerRetryMs}) WHERE id=${row.jobId}`,
+        { discard: true }
+      );
 
       yield* repairSynchronizationAlarm(storage);
 
@@ -317,6 +335,6 @@ export const offerSynchronizations = Effect.fn(function* ({
 
   return {
     attempted: pending.length,
-    failed: offers.filter((result) => result._tag === "Failure").length,
+    failed: offers.filter(Exit.isFailure).length,
   };
 });

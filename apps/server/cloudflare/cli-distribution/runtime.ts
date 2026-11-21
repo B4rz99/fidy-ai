@@ -1,9 +1,11 @@
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { Context, Data, Effect, Layer, type Option, Schema } from "effect";
-import { makeCliReleaseOutboundHttp } from "../../src/shell/outbound-http/operations";
+import { CliReleaseHttp } from "../../src/shell/outbound-http/operations";
 import { FetchHttpClient, HttpClient } from "effect/http";
 
-class ReleaseUnavailable extends Data.TaggedError("ReleaseUnavailable") {}
+class ReleaseUnavailable extends Data.TaggedError("ReleaseUnavailable")<{
+  readonly cause: unknown;
+}> {}
 
 const ReleaseVersion = Schema.String.check(Schema.isPattern(/^[0-9]+\.[0-9]+\.[0-9]+\n?$/u));
 
@@ -12,20 +14,20 @@ const maximumBytes = 64;
 const successStatus = 200;
 
 const latestVersion = Effect.gen(function* () {
-  const client = yield* HttpClient.HttpClient;
+  const release = yield* CliReleaseHttp;
 
-  const response = yield* makeCliReleaseOutboundHttp(client)
-    .readLatest()
-    .pipe(Effect.mapError(() => new ReleaseUnavailable()));
+  const response = yield* release.readLatest.pipe(
+    Effect.mapError((cause) => new ReleaseUnavailable({ cause }))
+  );
 
   if (response.status !== successStatus || response.body.byteLength > maximumBytes) {
-    return yield* new ReleaseUnavailable();
+    return yield* new ReleaseUnavailable({ cause: undefined });
   }
 
   const text = new TextDecoder().decode(response.body);
 
   const version = yield* Schema.decodeEffect(ReleaseVersion)(text).pipe(
-    Effect.mapError(() => new ReleaseUnavailable())
+    Effect.mapError((cause) => new ReleaseUnavailable({ cause }))
   );
 
   return new Response(`${version.trim()}\n`, {
@@ -58,6 +60,7 @@ export const cliDistributionResponse = (
 
     return yield* latestVersion.pipe(
       Effect.asSome,
+      Effect.provideServiceEffect(CliReleaseHttp, CliReleaseHttp.make),
       Effect.provideService(HttpClient.HttpClient, Context.get(clients, HttpClient.HttpClient))
     );
   }).pipe(Effect.scoped);

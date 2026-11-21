@@ -203,7 +203,7 @@ const submit = (owner: Owner, submission: Submission): void => {
 
     if (!owner.active || owner.generation !== generation) return;
 
-    if (outcome._tag === "Failure") {
+    if (Predicate.isTagged(outcome, "Failure")) {
       if (Cause.hasInterruptsOnly(outcome.cause)) return;
       owner.status = refused(outcome.cause) ? "rejected" : "unknown";
 
@@ -216,16 +216,18 @@ const submit = (owner: Owner, submission: Submission): void => {
     yield* complete(owner, { generation, submission, created: outcome.value.data });
   }).pipe(Effect.raceFirst(Deferred.await(owner.stopped)));
 
-  if (Option.isNone(owner.command)) {
-    const command = owner.client.runtime.fn<Effect.Effect<void>>()((effect) => effect, {
+  const command = Option.getOrElse(owner.command, () => {
+    const created = owner.client.runtime.fn<Effect.Effect<void>>()((effect) => effect, {
       concurrent: false,
     });
 
-    owner.command = Option.some(command);
-    owner.get.mount(command);
-  }
+    owner.command = Option.some(created);
+    owner.get.mount(created);
 
-  owner.get.set(Option.getOrThrow(owner.command), work);
+    return created;
+  });
+
+  owner.get.set(command, work);
 };
 
 const complete = (
@@ -262,23 +264,29 @@ type RetainedCapture = Readonly<{
   release: () => void;
 }>;
 
-export const makeCaptureRetention = (): Atom.Atom<CaptureRetention> =>
+export const captureRetention = (): Atom.Atom<CaptureRetention> =>
   Atom.make((get) => {
     let current: Option.Option<RetainedCapture> = Option.none();
     get.addFinalizer(() => Option.map(current, (retained) => retained.release()));
 
     const mount = (input: Input, identity: string): (() => void) => {
-      if (
-        Option.isNone(current) ||
-        (!get.once(current.value.resource).locked && current.value.identity !== identity)
-      ) {
+      const replace = (): RetainedCapture => {
         Option.map(current, (retained) => retained.release());
         const resource = makeTransactionCapture(input);
-        current = Option.some({ identity, resource, release: get.registry.mount(resource) });
+        const retained = { identity, resource, release: get.registry.mount(resource) };
+        current = Option.some(retained);
         get.setSelf({ resource: Option.some(resource), identity: Option.some(identity), mount });
-      }
 
-      return get.once(Option.getOrThrow(current).resource).mount();
+        return retained;
+      };
+
+      const retained =
+        Option.isNone(current) ||
+        (!get.once(current.value.resource).locked && current.value.identity !== identity)
+          ? replace()
+          : current.value;
+
+      return get.once(retained.resource).mount();
     };
 
     return { resource: Option.none(), identity: Option.none(), mount };

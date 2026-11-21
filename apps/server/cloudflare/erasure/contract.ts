@@ -64,8 +64,8 @@ export const CustodyScopeAdmission = Schema.Struct({
 
 export const scopeDirectoryUrl = "https://directory.invalid/erasure/custody-scope";
 
-export const custodyScopePage = (
-  rows: ReadonlyArray<Readonly<Record<string, unknown>>>
+export const custodyScopePage = <Entry extends Readonly<{ cursor: unknown }>>(
+  rows: ReadonlyArray<Entry>
 ): Response => {
   const pageSize = 16;
 

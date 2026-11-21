@@ -1,23 +1,16 @@
 import { reviewContextKey, reviewCountKey, reviewItemKey, reviewWorkspaceKey } from "./query-keys";
-import {
-  Cause,
-  type Context,
-  DateTime,
-  Deferred,
-  Effect,
-  Option,
-  Predicate,
-  Schema,
-  Semaphore,
-} from "effect";
+import { Cause, DateTime, Deferred, Effect, Option, Predicate, Schema, Semaphore } from "effect";
 import { AsyncResult, Atom, Reactivity } from "effect/reactivity";
+import { type CanonicalSuccess, type FidyClient, ReviewDraft } from "@/transport/client";
 import {
-  type CanonicalSuccess,
-  type FidyClient,
-  ReviewCommand,
-  ReviewDraft,
-} from "@/transport/client";
-import { type Command, type Detail, type Draft, type Item, creation, emptyDraft } from "./model";
+  type Command,
+  type Detail,
+  type Draft,
+  type Item,
+  ReviewCommands,
+  creation,
+  emptyDraft,
+} from "./model";
 
 type Feedback = "saved" | "saving" | "unsaved" | "failed" | "uncertain";
 
@@ -28,11 +21,11 @@ const invalidateItems = ({
   ids: ReadonlyArray<Item["id"]>;
   countsChanged: boolean;
 }>): Effect.Effect<void, never, Reactivity.Reactivity> =>
-  Reactivity.invalidate([
-    reviewWorkspaceKey,
-    ...ids.map(reviewItemKey),
-    ...(countsChanged ? [reviewCountKey, reviewContextKey] : []),
-  ]);
+  Reactivity.invalidate(
+    [reviewWorkspaceKey, ...ids.map(reviewItemKey)].concat(
+      countsChanged ? [reviewCountKey, reviewContextKey] : []
+    )
+  );
 
 type Completion = Readonly<{ ids: ReadonlyArray<Item["id"]> }>;
 
@@ -61,7 +54,7 @@ export type ReviewDecisions = Readonly<{
 }>;
 
 type WorkspaceFailure = Effect.Error<
-  ReturnType<Context.Service.Shape<FidyClient>["ingestion"]["getReviewWorkspace"]>
+  ReturnType<FidyClient["Service"]["ingestion"]["getReviewWorkspace"]>
 >;
 
 export type ReviewWorkspaceQuery = Atom.Atom<
@@ -161,7 +154,7 @@ const dispose = (owner: Owner): void => {
   owner.get.set(owner.command, Atom.Interrupt);
 };
 
-export const makeReviewDecisions = ({
+export const createReviewDecisions = ({
   client,
   query,
   created,
@@ -390,16 +383,7 @@ const reject = (entry: Entry, cause: Cause.Cause<unknown>): void => {
 const write = Effect.fnUntraced(function* (owner: Owner, command: Command) {
   const client = yield* owner.client;
 
-  switch (command._tag) {
-    case "Create":
-      return (yield* client.ingestion.applyReviewEdit({ payload: command })).data;
-    case "SaveDraft":
-      return (yield* client.ingestion.applyReviewEdit({ payload: command })).data;
-    case "Skip":
-      return (yield* client.ingestion.applyReviewEdit({ payload: command })).data;
-    case "Restore":
-      return (yield* client.ingestion.applyReviewEdit({ payload: command })).data;
-  }
+  return (yield* client.ingestion.applyReviewEdit({ payload: command })).data;
 });
 
 const automaticReady = (entry: Entry, version: number): boolean =>
@@ -419,17 +403,19 @@ const flush = (owner: Owner, entry: Entry, automatic = Option.none<number>()): W
               notify(owner);
 
               const result = yield* Effect.exit(
-                write(owner, {
-                  _tag: "SaveDraft",
-                  id: entry.detail.item.id,
-                  revision: entry.detail.revision,
-                  draft,
-                })
+                write(
+                  owner,
+                  ReviewCommands.cases.SaveDraft.make({
+                    id: entry.detail.item.id,
+                    revision: entry.detail.revision,
+                    draft,
+                  })
+                )
               );
 
               if (!current(owner, entry)) return;
 
-              if (result._tag === "Failure") reject(entry, result.cause);
+              if (Predicate.isTagged(result, "Failure")) reject(entry, result.cause);
               else acceptDraft(entry, result.value, draft);
               notify(owner);
 
@@ -506,17 +492,18 @@ const decide = (owner: Owner, detail: Detail, kind: "Create" | "Skip"): void => 
       const command =
         kind === "Create"
           ? creation({ detail: entry.detail, draft: entry.draft })
-          : Option.some<Command>({
-              _tag: "Skip",
-              items: [{ id: detail.item.id, revision: entry.detail.revision }],
-            });
+          : Option.some<Command>(
+              ReviewCommands.cases.Skip.make({
+                items: [{ id: detail.item.id, revision: entry.detail.revision }],
+              })
+            );
 
       if (Option.isNone(command)) return finishActing(owner, entry);
       const result = yield* Effect.exit(write(owner, command.value));
 
       if (!decisionRetained(owner, entry, selected)) return;
 
-      if (result._tag === "Failure") {
+      if (Predicate.isTagged(result, "Failure")) {
         reject(entry, result.cause);
         finishActing(owner, entry);
       } else if (!decisionAccepted(owner, { results: result.value, acknowledged, kind })) {
@@ -582,10 +569,9 @@ const bulk = (owner: Owner, items: ReadonlyArray<Item>, intention: BulkIntention
 
 const validSelection = (selected: ReadonlyArray<Selected>, intention: BulkIntention): boolean =>
   Option.isSome(
-    Schema.decodeUnknownOption(ReviewCommand)({
-      _tag: intention === "Skip" ? "Skip" : "Restore",
-      items: selected.map(({ item }) => ({ id: item.id, revision: item.revision })),
-    })
+    Schema.decodeUnknownOption(
+      ReviewCommands.cases[intention === "Skip" ? "Skip" : "Restore"].fields.items
+    )(selected.map(({ item }) => ({ id: item.id, revision: item.revision })))
   ) &&
   new Set(selected.map(({ item }) => item.id)).size === selected.length &&
   selected.every(({ item }) => item.status === (intention === "Skip" ? "pending" : "skipped"));
@@ -620,16 +606,13 @@ const commitBulk = (
     }
 
     const result = yield* Effect.exit(
-      write(owner, {
-        _tag: kind,
-        items: [first, ...acknowledged.slice(1)],
-      })
+      write(owner, ReviewCommands.cases[kind].make({ items: [first, ...acknowledged.slice(1)] }))
     );
 
     if (!liveGeneration(owner, generation)) return;
 
     if (
-      result._tag === "Failure" ||
+      Predicate.isTagged(result, "Failure") ||
       !bulkAccepted(owner, ready.value, { results: result.value, status })
     ) {
       return failBulk(owner);
@@ -780,7 +763,7 @@ const recoverItem = (owner: Owner, detail: Detail): void => {
         if (!current(owner, entry)) return;
 
         if (
-          result._tag === "Failure" ||
+          Predicate.isTagged(result, "Failure") ||
           result.value.data.item.id !== detail.item.id ||
           result.value.data.revision < entry.detail.revision ||
           result.value.data.item.revision !== result.value.data.revision ||

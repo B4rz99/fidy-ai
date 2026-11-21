@@ -1,8 +1,8 @@
-import { forwardFreshQuery, makeFreshQuery } from "@/transport/fresh-query";
-import { Data, DateTime, Effect, Option } from "effect";
+import { forwardFreshQuery, freshQuery } from "@/transport/fresh-query";
+import { Data, DateTime, Effect, Option, Predicate } from "effect";
 import { AsyncResult, Atom } from "effect/reactivity";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
-import { presentCanonicalQuery } from "@/transport/canonical-query";
+import { type CanonicalQueryFailure, presentCanonicalQuery } from "@/transport/canonical-query";
 import { destinationMonth, transactionDestinationQuery } from "./destination-query";
 import { type HistoryCommand, type HistoryState, transactionHistory } from "./history";
 import { type TransactionSearch, selectedTransactionPeriod } from "./period";
@@ -84,7 +84,7 @@ const generationSources = (
   Atom.family((selected: CurrentMonthPeriod) =>
     generation === 0
       ? transactionFirstPage({ client, period: selected })
-      : makeFreshQuery({
+      : freshQuery({
           runtime: client.runtime,
           load: Effect.gen(function* () {
             const api = yield* client;
@@ -116,9 +116,9 @@ const generationFirstPage = ({
     if (Option.isSome(destination)) {
       const result = get(destination.value);
 
-      if (result._tag === "Initial") return AsyncResult.initial(result.waiting);
+      if (Predicate.isTagged(result, "Initial")) return AsyncResult.initial(result.waiting);
 
-      if (result._tag === "Failure") {
+      if (Predicate.isTagged(result, "Failure")) {
         return AsyncResult.failure(result.cause, { waiting: result.waiting });
       }
 
@@ -158,7 +158,9 @@ const makeGeneration = (
     if (Option.isNone(destination)) return Option.none<string>();
     const result = get(destination.value);
 
-    return result._tag === "Success" ? Option.some(result.value.data.id) : generation.locate;
+    return Predicate.isTagged(result, "Success")
+      ? Option.some(result.value.data.id)
+      : generation.locate;
   });
 
   const sources = generationSources(client, generation.number);
@@ -226,7 +228,7 @@ export const transactionRouteHistory = (input: RouteHistoryInput): TransactionRo
       location:
         Option.isSome(get(owner.locate)) &&
         Option.isSome(owner.destination) &&
-        get(owner.destination.value)._tag === "Failure"
+        Predicate.isTagged(get(owner.destination.value), "Failure")
           ? "LookupFailed"
           : history.location,
     };
@@ -281,7 +283,7 @@ const routeActions = ({
       return;
     }
 
-    if (typeof command === "string") {
+    if (Predicate.isString(command)) {
       const previous = get(state);
       get.set(
         navigation,
@@ -323,8 +325,10 @@ const routeActions = ({
     } else get.set(resource.action, command);
   });
 
+const queryFailure = Data.taggedEnum<CanonicalQueryFailure<unknown>>();
+
 const shouldRetryLookup = (result: AsyncResult.AsyncResult<Page, unknown>): boolean =>
-  presentCanonicalQuery(result)._tag === "Failure";
+  Predicate.isTagged(presentCanonicalQuery(result), "Failure");
 
 const retainHistoryDisplay = (
   current: RouteHistoryState,
@@ -333,7 +337,9 @@ const retainHistoryDisplay = (
   if (Option.isNone(previous)) return current;
   const prior = previous.value;
 
-  if (prior.query._tag !== "Ready" || !samePeriod(prior.period, current.period)) return current;
+  if (!Predicate.isTagged(prior.query, "Ready") || !samePeriod(prior.period, current.period)) {
+    return current;
+  }
 
   if (!needsRetainedDisplay(current, prior.loadedPages)) return current;
 
@@ -346,7 +352,7 @@ const samePeriod = (left: CurrentMonthPeriod, right: CurrentMonthPeriod): boolea
   DateTime.toEpochMillis(left.to) === DateTime.toEpochMillis(right.to);
 
 const needsRetainedDisplay = (current: RouteHistoryState, loadedPages: number): boolean => {
-  if (current.query._tag !== "Ready") return true;
+  if (!Predicate.isTagged(current.query, "Ready")) return true;
 
   if (current.loadedPages >= loadedPages) return false;
 
@@ -359,14 +365,15 @@ const needsRetainedDisplay = (current: RouteHistoryState, loadedPages: number): 
 
 const retainPendingDisplay = (
   current: RouteHistoryState,
-  previous: RouteHistoryState & { query: Extract<RouteHistoryState["query"], { _tag: "Ready" }> }
+  previous: RouteHistoryState & {
+    query: Data.TaggedEnum.Value<RouteHistoryState["query"], "Ready">;
+  }
 ): RouteHistoryState => {
-  const failed = current.query._tag === "Failure" || current.continuation === "failure";
+  const failed = Predicate.isTagged(current.query, "Failure") || current.continuation === "failure";
 
-  const refreshFailure =
-    current.query._tag === "Failure"
-      ? Option.some(current.query.failure)
-      : Option.some({ _tag: "BoundaryFailure" as const });
+  const refreshFailure = Predicate.isTagged(current.query, "Failure")
+    ? Option.some(current.query.failure)
+    : Option.some(queryFailure.BoundaryFailure());
 
   const continuation = failed ? "failure" : "loading";
 
@@ -378,6 +385,6 @@ const retainPendingDisplay = (
       waiting: !failed,
       refreshFailure: failed ? refreshFailure : Option.none(),
     },
-    continuation: current.query._tag === "Failure" ? "available" : continuation,
+    continuation: Predicate.isTagged(current.query, "Failure") ? "available" : continuation,
   };
 };

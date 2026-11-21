@@ -1,5 +1,5 @@
 import { useRouter, useRouterState } from "@tanstack/react-router";
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import { type JSX, type ReactNode } from "react";
 import { SensitiveClipboardBoundary } from "@/browser/use-sensitive-clipboard";
 import { type BrowserAuthentication, useSession } from "@/session/session-context";
@@ -8,7 +8,8 @@ import { sensitiveClipboardLifetime } from "@/browser/sensitive-clipboard";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { ManualPATCreation } from "./creation";
 import { usePATManagement } from "./management";
-import { type ActivePATManagementState, ActivePATManagementView } from "./management-view";
+import { ActivePATManagementState } from "./management-state";
+import { ActivePATManagementView } from "./management-view";
 
 type PATManagementContentProps = Readonly<{
   children: (
@@ -73,27 +74,26 @@ export const PATManagementFeature = ({
   const queryState = management.query;
   const refreshActivePATs = management.actions.refresh;
 
-  let activePATState: ActivePATManagementState = {
-    _tag: queryState._tag === "Initial" && !queryState.waiting ? "Initial" : "Loading",
-  };
+  let activePATState: ActivePATManagementState =
+    Predicate.isTagged(queryState, "Initial") && !queryState.waiting
+      ? ActivePATManagementState.Initial()
+      : ActivePATManagementState.Loading();
 
-  if (queryState._tag === "Failure") {
-    activePATState = {
-      _tag: "LoadFailure",
-      boundaryFailure: queryState.failure._tag !== "DeclaredFailure",
+  if (Predicate.isTagged(queryState, "Failure")) {
+    activePATState = ActivePATManagementState.LoadFailure({
+      boundaryFailure: !Predicate.isTagged(queryState.failure, "DeclaredFailure"),
       onRetry: refreshActivePATs,
       waiting: queryState.waiting,
-    };
+    });
   }
 
-  if (queryState._tag === "Ready") {
-    activePATState = {
-      _tag: "Ready",
+  if (Predicate.isTagged(queryState, "Ready")) {
+    activePATState = ActivePATManagementState.Ready({
       result: queryState.value.data,
       onRetry: refreshActivePATs,
       refreshing: queryState.waiting,
       refreshFailed: Option.isSome(queryState.refreshFailure),
-    };
+    });
   }
 
   const resuming = useRouterState({ select: (state) => state.location.search.resume === "pat" });
@@ -103,9 +103,9 @@ export const PATManagementFeature = ({
       activePATState={activePATState}
       refreshPATs={refreshActivePATs}
       refreshing={
-        (management.task._tag !== "Uncertain" && queryState.waiting) ||
-        management.task._tag === "Revoking" ||
-        management.task._tag === "Refreshing"
+        (!Predicate.isTagged(management.task, "Uncertain") && queryState.waiting) ||
+        Predicate.isTagged(management.task, "Revoking") ||
+        Predicate.isTagged(management.task, "Refreshing")
       }
       authentication={authentication}
       apiClient={router.options.context.apiClient}

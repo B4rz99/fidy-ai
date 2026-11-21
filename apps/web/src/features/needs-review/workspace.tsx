@@ -1,7 +1,11 @@
 import { PendingRead } from "@/ui/components/pending-read";
 
 import type { FidyClient } from "@/transport/client";
-import { type ReviewDecisions, type ReviewWorkspaceQuery, makeReviewDecisions } from "./decisions";
+import {
+  type ReviewDecisions,
+  type ReviewWorkspaceQuery,
+  createReviewDecisions,
+} from "./decisions";
 import { ReviewFullState, ReviewWorkspaceLayout } from "@/ui/components/review-workspace";
 import { SelectionScopeDialog } from "@/ui/components/selection-scope-dialog";
 import { Button } from "@/ui/components/button";
@@ -16,7 +20,7 @@ import { reviewAmount, reviewTitle } from "./presentation";
 import { ReviewToolbar } from "./toolbar";
 import { useAtomValue } from "@effect/atom-react";
 import { Navigate, useRouter, useSearch } from "@tanstack/react-router";
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import { type JSX, type ReactNode, type RefCallback, useId, useState } from "react";
 import { Toaster, toast } from "sonner";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
@@ -27,6 +31,20 @@ import { Inbox, ReviewPagination } from "./inbox";
 import { type Workspace, sources } from "./model";
 import { type Filter, ReviewNavigation } from "./view-navigation";
 import { reviewWorkspaceQueries } from "./query";
+
+type SelectionScope = Readonly<{
+  select: ReadyInboxProps["select"];
+  move: ReadyInboxProps["move"];
+  confirmation: JSX.Element;
+  sourceId: string;
+}>;
+
+type ReviewFilters = Readonly<{
+  source: string;
+  search: string;
+  setSource: (value: string) => void;
+  setSearch: (value: string) => void;
+}>;
 
 export const NeedsReviewRoute = (): JSX.Element => {
   const search = useSearch({ from: "/authenticated/app/needs-review" });
@@ -61,7 +79,7 @@ const ReviewPageRepair = ({
 
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
 
-  return state._tag === "Ready" &&
+  return Predicate.isTagged(state, "Ready") &&
     state.value.data.items.length === 0 &&
     page > 0 &&
     state.value.data.total > 0 ? (
@@ -151,7 +169,7 @@ const useReviewDecisions = ({
   query,
 }: Readonly<{ client: FidyClient; query: ReviewWorkspaceQuery }>): ReviewDecisions => {
   const [decisionAtom] = useState(() =>
-    makeReviewDecisions({ client, query, created: () => toast.success("Transacción creada") })
+    createReviewDecisions({ client, query, created: () => toast.success("Transacción creada") })
   );
 
   return useAtomValue(decisionAtom);
@@ -190,12 +208,12 @@ const ReviewResources = ({
 
   return (
     <div ref={lifetime} hidden={!active} data-review="panel">
-      {state._tag !== "Ready" ? (
+      {!Predicate.isTagged(state, "Ready") ? (
         <ReviewUnavailable
           filter={filter}
           select={select}
           refresh={decisions.recover}
-          loading={state._tag !== "Failure"}
+          loading={!Predicate.isTagged(state, "Failure")}
         />
       ) : (
         <ReadyInbox
@@ -302,12 +320,7 @@ type ReviewScope = Readonly<{ filter: Filter; page: number }>;
 const useSelectionScope = (
   props: Pick<ReadyInboxProps, "filter" | "page" | "select">,
   control: InboxControl
-): Readonly<{
-  select: ReadyInboxProps["select"];
-  move: ReadyInboxProps["move"];
-  confirmation: JSX.Element;
-  sourceId: string;
-}> => {
+): SelectionScope => {
   const sourceId = useId();
   const [pending, setPending] = useState<Option.Option<ReviewScope>>(Option.none);
 
@@ -368,12 +381,7 @@ const inboxCaughtUp = (
   filters.search === "" &&
   view.pendingCount === 0;
 
-const useReviewFilters = (): Readonly<{
-  source: string;
-  search: string;
-  setSource: (value: string) => void;
-  setSearch: (value: string) => void;
-}> => {
+const useReviewFilters = (): ReviewFilters => {
   const [source, setSource] = useState("all");
   const [search, setSearch] = useState("");
 

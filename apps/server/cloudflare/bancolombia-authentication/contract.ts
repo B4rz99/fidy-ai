@@ -19,7 +19,7 @@ export class BancolombiaAuthenticationFailed extends Data.TaggedError(
 
 export class BancolombiaAuthorizationFailed extends Data.TaggedError(
   "BancolombiaAuthorizationFailed"
-) {}
+)<{ readonly cause: unknown }> {}
 
 export type BancolombiaSandboxEnvironment = Partial<
   Readonly<{
@@ -86,7 +86,9 @@ export type BancolombiaActivationInput = Readonly<{
   state: string;
   intent: ConnectionConsentIntent;
   expiresAtMilliseconds: number;
-  retainGrant: (grant: BancolombiaBankGrant) => Effect.Effect<void, BancolombiaAuthorizationFailed>;
+  retainGrant: (
+    grant: BancolombiaBankGrant
+  ) => Effect.Effect<void, BancolombiaAuthorizationFailed, SecureRandom.SecureRandom>;
 }>;
 
 export type SandboxAuthenticationInput = Readonly<{

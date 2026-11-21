@@ -1,3 +1,4 @@
+import { browserRuntime } from "@/transport/browser-runtime";
 import { PendingRead } from "@/ui/components/pending-read";
 
 import {
@@ -6,7 +7,7 @@ import {
 } from "@/session/transaction-entry";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link, type LoaderFnContext, useRouter } from "@tanstack/react-router";
-import { Effect, Option } from "effect";
+import { Effect, Option, Predicate } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type JSX, useState } from "react";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
@@ -27,7 +28,7 @@ TransactionListFeature.preload().catch(() => undefined);
 const currentConsent = <E,>(
   state: CanonicalQueryState<ProcessingConsentStatus, E>
 ): Option.Option<ProcessingConsentStatus> =>
-  state._tag === "Ready" && !state.waiting && Option.isNone(state.refreshFailure)
+  Predicate.isTagged(state, "Ready") && !state.waiting && Option.isNone(state.refreshFailure)
     ? Option.some(state.value)
     : Option.none();
 
@@ -37,7 +38,7 @@ export const TransactionsPage = (): JSX.Element => {
   const status = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
 
-  if (status._tag === "Failure" && sessionBinding === "none") {
+  if (Predicate.isTagged(status, "Failure") && sessionBinding === "none") {
     return <AccessRefused withdrawn={false} />;
   }
 
@@ -56,7 +57,7 @@ export const TransactionsPage = (): JSX.Element => {
     if (consent.value.status === "Revoked") return <PrivacyTransactionFeature />;
   }
 
-  if (status._tag === "Initial") {
+  if (Predicate.isTagged(status, "Initial")) {
     return <PendingRead label="Cargando transacciones" />;
   }
 
@@ -90,7 +91,7 @@ TransactionsPage.prepareEntry = ({
 }>): Promise<Readonly<{ preparation: Promise<void> }> | void> => {
   if (preload || !preparationActive(signal)) return Promise.resolve();
 
-  return Effect.runPromise(
+  return browserRuntime.runPromise(
     Effect.gen(function* () {
       const consent = transactionEntryConsent(context.webAuthClient);
       const initial = consumeInitialTransactionConsent(context.registry);

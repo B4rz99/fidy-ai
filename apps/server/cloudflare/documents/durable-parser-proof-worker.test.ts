@@ -15,6 +15,15 @@ const buildProof = (): Promise<string> =>
     return output.text();
   });
 
+const parsedReply = Effect.fn(function* (
+  reply: Awaited<ReturnType<Miniflare["dispatchFetch"]>>,
+  index: number
+) {
+  expect(reply.status).toBe(200);
+  const value = yield* Effect.tryPromise(() => reply.json());
+  expect(value).toMatchObject({ outcome: "parsed", format: "csv", rowCount: index + 1 });
+});
+
 it.live(
   "authenticates synthetic parser work before forwarding to a real SQLite Durable Object",
   () =>
@@ -77,10 +86,6 @@ it.live(
         ])
       );
 
-      for (const [index, reply] of replies.entries()) {
-        expect(reply.status).toBe(200);
-        const value = yield* Effect.tryPromise(() => reply.json());
-        expect(value).toMatchObject({ outcome: "parsed", format: "csv", rowCount: index + 1 });
-      }
+      yield* Effect.forEach(replies, parsedReply, { discard: true });
     })
 );

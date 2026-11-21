@@ -1,4 +1,4 @@
-import { Data, Effect, Option } from "effect";
+import { Data, Effect, Option, Predicate } from "effect";
 import { type AsyncResult, Atom } from "effect/reactivity";
 import type { PrivacyTransactionPage, WebAuthClient } from "@/transport/client";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
@@ -20,13 +20,14 @@ type PrivacyHistory = Readonly<{
 
 class PageKey extends Data.Class<{ generation: number; cursor: PrivacyTransactionPage["next"] }> {}
 
-type ReadyPage = Extract<PrivacyHistoryState["query"], { _tag: "Ready" }>;
+type ReadyPage = Data.TaggedEnum.Value<PrivacyHistoryState["query"], "Ready">;
 
 const pagePending = (query: PrivacyHistoryState["query"]): boolean =>
-  query._tag !== "Ready" || query.waiting || Option.isSome(query.refreshFailure);
+  !Predicate.isTagged(query, "Ready") || query.waiting || Option.isSome(query.refreshFailure);
 
 const pageFailed = (query: PrivacyHistoryState["query"]): boolean =>
-  query._tag === "Failure" || (query._tag === "Ready" && Option.isSome(query.refreshFailure));
+  Predicate.isTagged(query, "Failure") ||
+  (Predicate.isTagged(query, "Ready") && Option.isSome(query.refreshFailure));
 
 const pendingStatus = (query: PrivacyHistoryState["query"]): PrivacyHistoryState["continuation"] =>
   pageFailed(query) ? "failure" : "loading";
@@ -84,7 +85,7 @@ const browse = ({
       };
     }
 
-    if (next.query._tag !== "Ready") return result("failure");
+    if (!Predicate.isTagged(next.query, "Ready")) return result("failure");
     page = next.query.value;
     appendPage(data, ids, page);
   }
@@ -112,7 +113,7 @@ export const privacyTransactionHistory = (client: WebAuthClient): PrivacyHistory
       get(pages(new PageKey({ generation: current.generation, cursor: null })))
     );
 
-    if (query._tag !== "Ready") {
+    if (!Predicate.isTagged(query, "Ready")) {
       return {
         generation: current.generation,
         continuation: "loading",

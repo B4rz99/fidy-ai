@@ -121,22 +121,23 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect((yield* privateCall(claimDeliveryUrl, claim)).status).toBe(201);
         expect((yield* privateCall(claimDeliveryUrl, claim)).status).toBe(409);
 
-        if (erase) {
-          const accepted = yield* native(() =>
-            runtime.dispatchFetch(
-              `https://${productionTopology.ingress.hostname}/web/privacy/erasure`,
-              {
-                method: "POST",
-                headers: {
-                  origin: browserOrigins.production,
-                  "content-type": "application/json",
-                  "Fidy-Session-Binding": alice.session,
-                  cookie: "__Host-fidy_session=" + alice.bearer,
-                },
-                body: JSON.stringify({ confirm: true }),
-              }
-            )
+        const requestErasure = (): ReturnType<typeof runtime.dispatchFetch> =>
+          runtime.dispatchFetch(
+            `https://${productionTopology.ingress.hostname}/web/privacy/erasure`,
+            {
+              method: "POST",
+              headers: {
+                origin: browserOrigins.production,
+                "content-type": "application/json",
+                "Fidy-Session-Binding": alice.session,
+                cookie: "__Host-fidy_session=" + alice.bearer,
+              },
+              body: JSON.stringify({ confirm: true }),
+            }
           );
+
+        const eraseAndConfirm = Effect.gen(function* () {
+          const accepted = yield* native(requestErasure);
 
           expect(accepted.status).toBe(202);
           expect(
@@ -147,7 +148,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             { state: "ambiguous" },
           ]);
           expect((yield* privateCall(claimDeliveryUrl, claim)).status).toBe(409);
-        }
+        });
+
+        yield* erase ? eraseAndConfirm : Effect.void;
 
         const deliveredAt = yield* Clock.currentTimeMillis;
 
@@ -213,7 +216,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             correlation: "22430000-0000-4000-8000-000000000009",
           })).status
         ).toBe(409);
-      }),
-    30000
+      })
   );
 });

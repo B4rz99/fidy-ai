@@ -1,9 +1,11 @@
+import type { SecureRandom } from "effect/crypto";
 import { revokeGrant, verifyTokenLifecycle } from "./internal/token-lifecycle";
 import { activate } from "./internal/activation";
 import { UtcTimestamp } from "../../src/core/_shared/time";
 import { Clock, DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { SignJWT, importJWK, importPKCS8, jwtVerify } from "jose";
-import { makeBancolombiaSandboxOutboundHttp } from "../../src/shell/outbound-http/operations";
+import { BancolombiaSandboxHttpRequest } from "../../src/shell/outbound-http/contract";
+import { sandboxHttp } from "./internal/sandbox-http";
 import {
   type BancolombiaActivationInput,
   BancolombiaAuthenticationFailed,
@@ -138,10 +140,10 @@ const applicationToken = (
 > =>
   Effect.gen(function* () {
     const assertion = yield* prepareAssertion(input);
-    const http = makeBancolombiaSandboxOutboundHttp(input.httpClient);
+    const http = yield* sandboxHttp(input.httpClient);
 
     const discovery = yield* http
-      .execute({ _tag: "Discovery" })
+      .execute(BancolombiaSandboxHttpRequest.Discovery())
       .pipe(Effect.mapError(() => failure("bancolombia_discovery")));
 
     if (discovery.status !== successStatus) return yield* failure("bancolombia_discovery");
@@ -151,7 +153,7 @@ const applicationToken = (
     const issuedAt = yield* Clock.currentTimeMillis;
 
     const response = yield* http
-      .execute({ _tag: "Authenticate", assertion })
+      .execute(BancolombiaSandboxHttpRequest.Authenticate({ assertion }))
       .pipe(Effect.mapError(() => failure("bancolombia_authentication")));
 
     if (response.status !== successStatus) return yield* failure("bancolombia_authentication");
@@ -210,32 +212,38 @@ export const pushBancolombiaSandboxAuthorization = (
     const startedAt = yield* Clock.currentTimeMillis;
 
     if (parameters.expiresAtMilliseconds <= startedAt) {
-      return yield* new BancolombiaAuthorizationFailed();
+      return yield* new BancolombiaAuthorizationFailed({ cause: undefined });
     }
 
     const assertion = yield* prepareAssertion(input);
-    const http = makeBancolombiaSandboxOutboundHttp(input.httpClient);
-    const discovery = yield* http.execute({ _tag: "Discovery" });
+    const http = yield* sandboxHttp(input.httpClient);
+    const discovery = yield* http.execute(BancolombiaSandboxHttpRequest.Discovery());
 
-    if (discovery.status !== successStatus) return yield* new BancolombiaAuthorizationFailed();
+    if (discovery.status !== successStatus) {
+      return yield* new BancolombiaAuthorizationFailed({ cause: undefined });
+    }
+
     yield* Schema.decodeEffect(Schema.fromJsonString(AuthorizationDiscovery))(
       new TextDecoder().decode(discovery.body)
     );
 
     if (parameters.expiresAtMilliseconds <= (yield* Clock.currentTimeMillis)) {
-      return yield* new BancolombiaAuthorizationFailed();
+      return yield* new BancolombiaAuthorizationFailed({ cause: undefined });
     }
 
     const pushedAt = yield* Clock.currentTimeMillis;
 
-    const response = yield* http.execute({
-      _tag: "PushAuthorization",
-      assertion,
-      clientId: input.clientId,
-      ...parameters,
-    });
+    const response = yield* http.execute(
+      BancolombiaSandboxHttpRequest.PushAuthorization({
+        assertion,
+        clientId: input.clientId,
+        ...parameters,
+      })
+    );
 
-    if (response.status !== parCreatedStatus) return yield* new BancolombiaAuthorizationFailed();
+    if (response.status !== parCreatedStatus) {
+      return yield* new BancolombiaAuthorizationFailed({ cause: undefined });
+    }
 
     const pushed = yield* Schema.decodeEffect(Schema.fromJsonString(PushedAuthorization))(
       new TextDecoder().decode(response.body)
@@ -247,7 +255,7 @@ export const pushBancolombiaSandboxAuthorization = (
     );
 
     if (expiresAtMilliseconds <= (yield* Clock.currentTimeMillis)) {
-      return yield* new BancolombiaAuthorizationFailed();
+      return yield* new BancolombiaAuthorizationFailed({ cause: undefined });
     }
 
     const url = new URL(authorizationEndpoint);
@@ -259,7 +267,7 @@ export const pushBancolombiaSandboxAuthorization = (
     }).toString();
 
     return { url: url.href, expiresAtMilliseconds };
-  }).pipe(Effect.mapError(() => new BancolombiaAuthorizationFailed()));
+  }).pipe(Effect.mapError((cause) => new BancolombiaAuthorizationFailed({ cause })));
 
 const ConsentRequest = Schema.Struct({
   Data: Schema.Struct({
@@ -310,7 +318,7 @@ const createConsent = (
     const { bearer } = yield* applicationToken(input, AuthorizationDiscovery);
 
     if (input.expiresAtMilliseconds <= (yield* Clock.currentTimeMillis)) {
-      return yield* new BancolombiaAuthorizationFailed();
+      return yield* new BancolombiaAuthorizationFailed({ cause: undefined });
     }
 
     const interactionId = yield* input.secureRandom.uuidV4();
@@ -322,17 +330,20 @@ const createConsent = (
       },
     });
 
-    const response = yield* makeBancolombiaSandboxOutboundHttp(input.httpClient).execute({
-      _tag: "CreateConsent",
-      bearer,
-      financialId: profile.financialId,
-      interactionId,
-      customerIpAddress: Option.fromUndefinedOr(profile.customerIpAddress),
-      payload: Redacted.make(payload),
-    });
+    const http = yield* sandboxHttp(input.httpClient);
+
+    const response = yield* http.execute(
+      BancolombiaSandboxHttpRequest.CreateConsent({
+        bearer,
+        financialId: profile.financialId,
+        interactionId,
+        customerIpAddress: Option.fromUndefinedOr(profile.customerIpAddress),
+        payload: Redacted.make(payload),
+      })
+    );
 
     if (![successStatus, parCreatedStatus].includes(response.status)) {
-      return yield* new BancolombiaAuthorizationFailed();
+      return yield* new BancolombiaAuthorizationFailed({ cause: undefined });
     }
 
     const created = (yield* Schema.decodeEffect(Schema.fromJsonString(CreatedConsent))(
@@ -340,7 +351,7 @@ const createConsent = (
     )).Data;
 
     if (!matchesPermissions(created, profile.intent.permissions)) {
-      return yield* new BancolombiaAuthorizationFailed();
+      return yield* new BancolombiaAuthorizationFailed({ cause: undefined });
     }
 
     yield* input.recordConsent(created.ConsentId);
@@ -352,7 +363,7 @@ const createConsent = (
         created.ExpirationDateTime?.epochMilliseconds ?? input.expiresAtMilliseconds
       ),
     };
-  }).pipe(Effect.mapError(() => new BancolombiaAuthorizationFailed()));
+  }).pipe(Effect.mapError((cause) => new BancolombiaAuthorizationFailed({ cause })));
 
 export const authorizeBancolombiaSandbox = (
   input: ConsentCreationInput
@@ -368,17 +379,21 @@ export const authorizeBancolombiaSandbox = (
     const now = yield* Clock.currentTimeMillis;
 
     if (input.expiresAtMilliseconds <= now) {
-      return yield* new BancolombiaAuthorizationFailed();
+      return yield* new BancolombiaAuthorizationFailed({ cause: undefined });
     }
 
     const created = yield* createConsent(input);
 
     return yield* pushBancolombiaSandboxAuthorization({ ...input, ...created });
-  }).pipe(Effect.mapError(() => new BancolombiaAuthorizationFailed()));
+  }).pipe(Effect.mapError((cause) => new BancolombiaAuthorizationFailed({ cause })));
 
 export const activateBancolombiaSandbox = (
   input: SandboxAuthenticationInput & BancolombiaActivationInput
-): Effect.Effect<ReadonlyArray<string>, BancolombiaAuthorizationFailed> =>
+): Effect.Effect<
+  ReadonlyArray<string>,
+  BancolombiaAuthorizationFailed,
+  SecureRandom.SecureRandom
+> =>
   activate({
     ...input,
     assertion: prepareAssertion(input),
@@ -415,9 +430,8 @@ export const revokeBancolombiaSandboxGrant = (
     Readonly<{ grant: BancolombiaBankGrant; proof: Option.Option<BancolombiaCleanupProof> }>
 ): Effect.Effect<void, BancolombiaAuthorizationFailed> =>
   Effect.gen(function* () {
-    const response = yield* makeBancolombiaSandboxOutboundHttp(input.httpClient).execute({
-      _tag: "Discovery",
-    });
+    const http = yield* sandboxHttp(input.httpClient);
+    const response = yield* http.execute(BancolombiaSandboxHttpRequest.Discovery());
 
     if (response.status !== successStatus) return yield* failure("bancolombia_discovery");
     yield* Schema.decodeEffect(Schema.fromJsonString(TokenLifecycleDiscovery))(
@@ -433,5 +447,5 @@ export const revokeBancolombiaSandboxGrant = (
     });
   }).pipe(
     Effect.timeout("60 seconds"),
-    Effect.mapError(() => new BancolombiaAuthorizationFailed())
+    Effect.mapError((cause) => new BancolombiaAuthorizationFailed({ cause }))
   );

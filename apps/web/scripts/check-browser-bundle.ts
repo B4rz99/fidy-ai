@@ -161,7 +161,10 @@ const outputImportPath = (
   importPath: string,
   outputs: BuildOutputs
 ): Option.Option<string> => {
-  if (outputs[importPath] !== undefined) return Option.some(importPath);
+  if (outputs[importPath] !== undefined) {
+    return Option.some(importPath);
+  }
+
   const directory = importer.slice(0, importer.lastIndexOf("/") + 1);
   const relative = importPath.startsWith("./") ? importPath.slice(2) : importPath;
   const candidate = `${directory}${relative}`;
@@ -181,7 +184,10 @@ const collectStaticOutputs = (entry: string, outputs: BuildOutputs): ReadonlySet
   while (pending.length > 0) {
     const outputPath = pending.pop();
 
-    if (outputPath === undefined || visited.has(outputPath)) continue;
+    if (outputPath === undefined || visited.has(outputPath)) {
+      continue;
+    }
+
     visited.add(outputPath);
     pending.push(...staticOutputImports(outputPath, outputs));
   }
@@ -295,9 +301,13 @@ const findForbiddenServerImport = (
         );
       }
 
-      if (importPath.startsWith("~/")) return true;
+      if (importPath.startsWith("~/")) {
+        return true;
+      }
 
-      if (!importPath.startsWith(".")) return false;
+      if (!importPath.startsWith(".")) {
+        return false;
+      }
 
       const resolved = Bun.fileURLToPath(
         new URL(importPath, `file://${webRoot}/${sourceFile.replace(/[^/]+$/u, "")}`)

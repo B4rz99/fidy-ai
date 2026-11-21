@@ -1,7 +1,14 @@
 import { DurableObject } from "cloudflare:workers";
 import { Clock, Effect, Schema } from "effect";
-import { makeCoreQueue } from "./runtime";
-import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
+import { coreQueue } from "./runtime";
+import { cloudflareWorkerTelemetry } from "../runtime/telemetry/operations";
+
+const runCoreQueue =
+  (
+    telemetry: Parameters<typeof coreQueue>[0]
+  ): ((...args: Parameters<ReturnType<typeof coreQueue>>) => Promise<void>) =>
+  (...args) =>
+    Effect.runPromise(coreQueue(telemetry)(...args));
 
 const user = "10000000-0000-4000-8000-000000000001";
 
@@ -113,7 +120,7 @@ const workflow = (owner: DurableObjectStub<QueueRecorder>): Workflow => ({
   deleteBatch: unavailable,
 });
 
-const consume = makeCoreQueue(makeWorkerTelemetry(() => undefined));
+const consume = runCoreQueue(cloudflareWorkerTelemetry);
 
 export default {
   fetch: (_req: Request, env: Environment): Promise<Response> =>
@@ -123,13 +130,21 @@ export default {
         const work = yield* Effect.tryPromise(() => env.OWNER.getByName(user).offerable(now));
         const maximumOfferBatch = 100;
 
-        for (let offset = 0; offset < work.length; offset += maximumOfferBatch) {
-          yield* Effect.tryPromise(() =>
-            env.WORK.sendBatch(
-              work.slice(offset, offset + maximumOfferBatch).map((body) => ({ body }))
-            )
-          );
-        }
+        const batches = Array.from(
+          { length: Math.ceil(work.length / maximumOfferBatch) },
+          (_, index) =>
+            work
+              .slice(index * maximumOfferBatch, (index + 1) * maximumOfferBatch)
+              .map((body) => ({ body }))
+        );
+
+        yield* Effect.forEach(
+          batches,
+          (messages) => Effect.tryPromise(() => env.WORK.sendBatch(messages)),
+          {
+            discard: true,
+          }
+        );
 
         return new Response(null, { status: 202 });
       })
@@ -140,10 +155,14 @@ export default {
         const dead = batch.queue === "recovery-dead",
           owner = env.OWNER.getByName(user);
 
-        for (const message of batch.messages) {
-          const work = yield* Schema.decodeUnknownEffect(Work)(message.body);
-          yield* Effect.tryPromise(() => owner.record(work.submissionId, message.attempts, dead));
-        }
+        yield* Effect.forEach(
+          batch.messages,
+          Effect.fnUntraced(function* (message) {
+            const work = yield* Schema.decodeUnknownEffect(Work)(message.body);
+            yield* Effect.tryPromise(() => owner.record(work.submissionId, message.attempts, dead));
+          }),
+          { discard: true }
+        );
 
         if (dead) {
           batch.ackAll();

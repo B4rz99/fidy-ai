@@ -1,6 +1,14 @@
 #!/usr/bin/env bun
 
-import { type Cause, Effect, Option, type SchemaAST, type SchemaRepresentation } from "effect";
+import {
+  type Cause,
+  Data,
+  Effect,
+  Option,
+  Predicate,
+  SchemaAST,
+  type SchemaRepresentation,
+} from "effect";
 import { OpenApi } from "effect/http-api";
 import { FidyApi, operationCatalog } from "../../src/shell/api";
 import { PATPairingApi } from "../../src/shell/tokens/contract";
@@ -25,25 +33,25 @@ const isWorthReferencing = (bodyCost: number, occurrences: number): boolean =>
 
 const hasShareableStructure = (ast: SchemaAST.AST): boolean => {
   if (
-    ast._tag === "Arrays" ||
-    ast._tag === "Objects" ||
-    ast._tag === "Suspend" ||
-    ast._tag === "Declaration"
+    SchemaAST.isArrays(ast) ||
+    SchemaAST.isObjects(ast) ||
+    SchemaAST.isSuspend(ast) ||
+    SchemaAST.isDeclaration(ast)
   ) {
     return true;
   }
 
-  return ast._tag === "Union" && ast.types.some(hasShareableStructure);
+  return SchemaAST.isUnion(ast) && ast.types.some(hasShareableStructure);
 };
 
 const inlineReferenceCost = (ast: SchemaAST.AST): Option.Option<number> => {
-  if (ast._tag === "Union") return Option.some(ast.types.length + 1);
+  if (SchemaAST.isUnion(ast)) return Option.some(ast.types.length + 1);
 
-  if (ast._tag === "Enum") return Option.some(ast.enums.length + 1);
+  if (SchemaAST.isEnum(ast)) return Option.some(ast.enums.length + 1);
 
-  if (ast._tag === "TemplateLiteral") return Option.some(ast.parts.length + 1);
+  if (SchemaAST.isTemplateLiteral(ast)) return Option.some(ast.parts.length + 1);
 
-  if (ast._tag === "Literal" && typeof ast.literal === "string") {
+  if (SchemaAST.isLiteral(ast) && Predicate.isString(ast.literal)) {
     return Option.some(ast.literal.length / literalReferenceCostScale + 1);
   }
 
@@ -123,9 +131,12 @@ const artifactFiles = (artifacts: ContractArtifacts): ReadonlyArray<ContractArti
   { name: "operation-policy.json", contents: artifactText(artifacts.operationPolicy) },
 ];
 
-const parseArguments = (
-  arguments_: ReadonlyArray<string>
-): { readonly check: boolean; readonly outputDirectory: string } => {
+type ContractGenerationArguments = {
+  readonly check: boolean;
+  readonly outputDirectory: string;
+};
+
+const parseArguments = (arguments_: ReadonlyArray<string>): ContractGenerationArguments => {
   let check = false;
   let outputDirectory = defaultOutputDirectory;
 
@@ -170,6 +181,10 @@ const checkArtifact = (
   });
 };
 
+class StaleContractArtifacts extends Data.TaggedError("StaleContractArtifacts")<{
+  readonly message: string;
+}> {}
+
 const main = Effect.gen(function* () {
   const { check, outputDirectory } = parseArguments(Bun.argv.slice(2));
   const artifacts = makeContractArtifacts();
@@ -178,7 +193,7 @@ const main = Effect.gen(function* () {
   const stale = yield* Effect.forEach(
     files,
     (file) => checkArtifact(file, outputDirectory, check),
-    { concurrency: "unbounded" }
+    { concurrency: files.length }
   );
 
   const stalePaths = files
@@ -186,9 +201,9 @@ const main = Effect.gen(function* () {
     .map(({ name }) => `${outputDirectory}/${name}`);
 
   if (stalePaths.length > 0) {
-    throw new Error(
-      `Generated server contracts are stale:\n${stalePaths.map((path) => `  - ${path}`).join("\n")}\nRun \`bun run contracts:generate\`.`
-    );
+    return yield* new StaleContractArtifacts({
+      message: `Generated server contracts are stale:\n${stalePaths.map((path) => `  - ${path}`).join("\n")}\nRun \`bun run contracts:generate\`.`,
+    });
   }
 
   process.stdout.write(

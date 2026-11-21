@@ -415,7 +415,10 @@ it.each(["completed", "cancelled"] as const)(
         expect(input.payloads).toHaveLength(1);
         expect(input.provider).toHaveBeenCalledTimes(3);
 
-        if (outcome === "cancelled") input.controller.abort();
+        if (outcome === "cancelled") {
+          input.controller.abort();
+        }
+
         yield* Deferred.succeed(
           pending,
           Response.json({
@@ -984,7 +987,9 @@ it("cancels an approved mounted authorization and fences its late submission and
         publish: (stage) => {
           stages.push(stage);
 
-          if (stage === "otp") awaiting.resolve();
+          if (stage === "otp") {
+            awaiting.resolve();
+          }
         },
         lock,
         onSubmitted: submitted,
@@ -1052,7 +1057,9 @@ effectIt.effect.each(["idle", "submitting"] as const)(
       const awaiting = Promise.withResolvers<void>();
 
       const publish = vi.fn((stage: string) => {
-        if (stage === "otp") awaiting.resolve();
+        if (stage === "otp") {
+          awaiting.resolve();
+        }
       });
 
       const submitted = vi.fn();
@@ -1131,9 +1138,13 @@ it.each(["approved", "declined", "unknown"] as const)(
         const uncertain = vi.fn();
 
         const publish = vi.fn((stage: string) => {
-          if (stage === "otp") awaiting.resolve();
+          if (stage === "otp") {
+            awaiting.resolve();
+          }
 
-          if (stage === "refused" || stage === "uncertain") settled.resolve();
+          if (stage === "refused" || stage === "uncertain") {
+            settled.resolve();
+          }
         });
 
         const task = mountDaviplata({
@@ -1189,7 +1200,9 @@ effectIt.effect.each(["tokenization", "first-send"] as const)(
         return pending.promise;
       });
 
-      if (step === "first-send") input.provider.mockResolvedValueOnce(initial());
+      if (step === "first-send") {
+        input.provider.mockResolvedValueOnce(initial());
+      }
 
       const client = {
         ...input.client,

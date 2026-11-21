@@ -22,13 +22,15 @@ import { withStoreCapacity } from "../../runtime/sqlite/operations";
 import { absentSessionResponse, sessionCookie, sessionDigest } from "../../web-session/operations";
 import { WebSessionId } from "../../../src/core/web-session/contract";
 
+const isResponse = Schema.is(Schema.instanceOf(Response));
+
 const maximumInitialResponseBytes = 65536;
 
 class SessionWriteUnavailable extends Data.TaggedError("SessionWriteUnavailable") {}
 
 class IdentityAuditUnavailable extends Data.TaggedError("IdentityAuditUnavailable") {}
 
-const json = (body: object, status = 200): Response =>
+const json = <Body>(body: Body, status = 200): Response =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
 
 const initialPage = Effect.fn(function* (user: UserId, zone: string, now: number) {
@@ -133,7 +135,7 @@ const observe = Effect.fn(function* (input: Observation) {
 
   const profile = yield* profileRead(input);
 
-  if (profile instanceof Response) return profile;
+  if (isResponse(profile)) return profile;
 
   if (!binding) return json(yield* Schema.encodeEffect(CurrentUserMetadata)(profile));
   const transactions = yield* contextPage(input, profile);

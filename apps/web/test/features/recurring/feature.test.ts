@@ -375,7 +375,10 @@ it("explains an out-of-range twice-monthly day at its field without the card-pay
 
   const firstDay = container.querySelector<HTMLInputElement>("#recurring-day1");
 
-  if (firstDay === null) throw new Error("Missing first day");
+  if (firstDay === null) {
+    throw new Error("Missing first day");
+  }
+
   typeInto(firstDay, "32");
   save(container);
   expect(onSubmit).not.toHaveBeenCalled();
@@ -442,7 +445,9 @@ it("submits a valid twice-monthly plan with its last-day choice", () => {
 const panelElement = (): HTMLElement => {
   const panel = document.querySelector('[role="dialog"]');
 
-  if (!Schema.is(Schema.instanceOf(HTMLElement))(panel)) throw new Error("Missing recurring panel");
+  if (!Schema.is(Schema.instanceOf(HTMLElement))(panel)) {
+    throw new Error("Missing recurring panel");
+  }
 
   return panel;
 };
@@ -450,7 +455,9 @@ const panelElement = (): HTMLElement => {
 const panelInput = (id: string): HTMLInputElement => {
   const input = panelElement().querySelector(`#${id}`);
 
-  if (!Schema.is(Schema.instanceOf(HTMLInputElement))(input)) throw new Error(`Missing ${id}`);
+  if (!Schema.is(Schema.instanceOf(HTMLInputElement))(input)) {
+    throw new Error(`Missing ${id}`);
+  }
 
   return input;
 };

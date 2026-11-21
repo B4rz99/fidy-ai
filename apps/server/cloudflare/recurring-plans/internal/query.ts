@@ -38,13 +38,18 @@ export const previousMonth = (month: string): string =>
     DateTime.subtract(DateTime.makeUnsafe(`${month}-01`), { months: 1 })
   ).slice(0, monthLength);
 
+type CheckedSchedule = Readonly<{
+  document: RecurringSchedule;
+  invalid: ReadonlyArray<string>;
+}>;
+
 const checkedDocument = ({
   document,
   transactions,
-}: Readonly<{ document: RecurringSchedule; transactions: ReadonlyArray<Transaction> }>): Readonly<{
+}: Readonly<{
   document: RecurringSchedule;
-  invalid: ReadonlyArray<string>;
-}> => {
+  transactions: ReadonlyArray<Transaction>;
+}>): CheckedSchedule => {
   const invalid = document.fulfillments
     .filter((mark) => {
       if (mark.transactionId === undefined) return false;
@@ -165,6 +170,14 @@ export const automaticMatches = (
   input: Parameters<typeof matchCandidates>[0]
 ): ReturnType<typeof uniqueRecurringMatches> => uniqueRecurringMatches(matchCandidates(input));
 
+type ObservedProjection = Readonly<{
+  preferences: UserPreferences;
+  transactions: ReadonlyArray<Transaction>;
+  invalid: ReadonlyArray<string>;
+  earlier: AutomaticProjection;
+  matched: AutomaticProjection;
+}>;
+
 const projectWorkspaceSnapshot = ({
   document,
   query,
@@ -175,13 +188,7 @@ const projectWorkspaceSnapshot = ({
   query: Query;
   now: DateTime.Utc;
   observed: PlanningTransactionSnapshot<UserPreferences>;
-}>): Readonly<{
-  preferences: UserPreferences;
-  transactions: ReadonlyArray<Transaction>;
-  invalid: ReadonlyArray<string>;
-  earlier: AutomaticProjection;
-  matched: AutomaticProjection;
-}> => {
+}>): ObservedProjection => {
   const checked = checkedDocument({ document, transactions: observed.selected });
 
   const projection = (selected: string, index: number): AutomaticProjection =>
@@ -219,7 +226,7 @@ export const workspaceFromReadProjection = ({
 > =>
   workspaceMonths(input.query).every((month) => projection.months.includes(month))
     ? workspaceFromFacts({ ...input, document: projection.schedule, editing: projection.editing })
-    : Effect.fail(new RecurringPlanningUnavailable());
+    : Effect.fail(new RecurringPlanningUnavailable({ cause: Option.none() }));
 
 const workspaceFromFacts = ({
   document,
@@ -256,7 +263,7 @@ const workspaceFromFacts = ({
       filters: query,
     });
 
-    return yield* Schema.decodeEffect(Schema.toType(RecurringWorkspace))({
+    const workspace = {
       document: editing,
       month: query.month,
       today: DateTime.formatIsoDate(
@@ -264,7 +271,6 @@ const workspaceFromFacts = ({
       ),
       occurrences: items,
       previous,
-      ...(prior > earliest ? { previousMonth: previousMonth(prior) } : {}),
       summary: summarizeRecurring(items),
       linkedTransactions: transactionSummaries({
         transactions,
@@ -275,7 +281,11 @@ const workspaceFromFacts = ({
       matches: matched.matches.filter(({ item }) => item.expectedDate.startsWith(query.month)),
       matchesComplete:
         matched.complete && earlier.complete && matched.unambiguous && earlier.unambiguous,
-    });
+    };
+
+    return yield* Schema.decodeEffect(Schema.toType(RecurringWorkspace))(
+      prior > earliest ? { ...workspace, previousMonth: previousMonth(prior) } : workspace
+    );
   });
 
 const matchedProjection = (
@@ -331,15 +341,9 @@ const transactionSummaries = ({
 }>): (typeof RecurringWorkspace.Type)["linkedTransactions"] => {
   const ids = new Set([...marks, ...invalid].map((mark) => mark.transactionId));
 
-  return [...new Map(transactions.map((transaction) => [transaction.id, transaction])).values()]
-    .filter((transaction) => ids.has(transaction.id))
-    .map(({ id, money, counterparty, direction, categoryId, notes, occurredAt }) => ({
-      id,
-      money,
-      counterparty,
-      direction,
-      categoryId,
-      notes,
-      occurredAt,
-    }));
+  return [
+    ...new Map(transactions.map((transaction) => [transaction.id, transaction])).values(),
+  ].flatMap(({ id, money, counterparty, direction, categoryId, notes, occurredAt }) =>
+    ids.has(id) ? [{ id, money, counterparty, direction, categoryId, notes, occurredAt }] : []
+  );
 };

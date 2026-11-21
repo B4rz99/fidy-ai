@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
-import { type Cause, Effect, Schema } from "effect";
+import { type Cause, Effect, Predicate, Schema } from "effect";
 import { afterEach, describe, expect, it } from "@effect/vitest";
 import { validateProductionArtifact } from "../cloudflare/production-policy/artifact";
 import { releaseMetadata } from "./release-metadata";
@@ -65,7 +65,7 @@ it.effect("preloads shared entry code without eagerly loading a dynamic workspac
       (asset) => asset.type === "asset" && asset.fileName === "index.html"
     );
 
-    if (html?.type !== "asset" || typeof html.source !== "string") {
+    if (html?.type !== "asset" || !Predicate.isString(html.source)) {
       return yield* Effect.die("Expected built HTML");
     }
 
@@ -121,6 +121,11 @@ const validate = (directory: string): Promise<void> =>
     expectedSha: gitRevision,
   });
 
+const writePublicDiscovery = (directory: string): Promise<void> =>
+  Promise.all(
+    ["robots.txt", "_redirects"].map((file) => Bun.write(join(directory, file), "public discovery"))
+  ).then(() => undefined);
+
 describe("production static release identity", () => {
   it("binds one static artifact to a full Git revision and canonical contract digest", () => {
     expect(releaseMetadata({ gitRevision, contractDigest })).toEqual({
@@ -151,9 +156,7 @@ describe("production static release identity", () => {
       Effect.gen(function* () {
         const directory = yield* productionOutput();
 
-        for (const file of ["robots.txt", "_redirects"]) {
-          yield* Effect.tryPromise(() => Bun.write(join(directory, file), "public discovery"));
-        }
+        yield* Effect.tryPromise(() => writePublicDiscovery(directory));
 
         yield* Effect.tryPromise(() => expect(validate(directory)).resolves.toBeUndefined());
         yield* Effect.tryPromise(() =>

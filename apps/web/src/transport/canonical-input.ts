@@ -6,11 +6,9 @@ export const isCanonicalInput: {
   <Id extends OperationId>(operationId: Id, input: CanonicalInput<Id>): boolean;
 } = Function.dual(
   2,
-  <Id extends OperationId>(operationId: Id, input: CanonicalInput<Id>): boolean => {
-    const operation = Option.getOrThrow(
-      Option.fromNullishOr(operationCatalog.byId.get(operationId))
-    );
-
-    return Option.isSome(Schema.encodeUnknownOption(operation.input)(input));
-  }
+  <Id extends OperationId>(operationId: Id, input: CanonicalInput<Id>): boolean =>
+    Option.match(Option.fromNullishOr(operationCatalog.byId.get(operationId)), {
+      onNone: () => false,
+      onSome: (operation) => Option.isSome(Schema.encodeUnknownOption(operation.input)(input)),
+    })
 );

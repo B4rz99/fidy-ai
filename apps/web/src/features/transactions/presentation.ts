@@ -1,5 +1,5 @@
 import type { CanonicalSuccess } from "@/transport/client";
-import { BigDecimal, DateTime, Option } from "effect";
+import { Array, BigDecimal, DateTime, Option } from "effect";
 import { formatMoneyWithCode } from "@/transport/money";
 
 export type CurrentUser = CanonicalSuccess<"identity.getCurrentUser">["data"];
@@ -70,7 +70,7 @@ const occurrenceText = (
   const valueOf = (type: "day" | "month" | "year"): string =>
     Option.fromNullishOr(parts.find((part) => part.type === type)).pipe(
       Option.map((part) => part.value),
-      Option.getOrThrow
+      Option.getOrElse(() => "")
     );
 
   return `${valueOf("day")}-${valueOf("month")}-${valueOf("year")}`;
@@ -100,7 +100,9 @@ export type TransactionPresentationRecord = Readonly<{
   occurredAt: Transaction["occurredAt"];
 }>;
 
-export const presentTransactionRows = ({
+export const presentTransactionRows = <
+  Records extends ReadonlyArray<TransactionPresentationRecord>,
+>({
   categories,
   counterpartyFallback,
   locale,
@@ -111,8 +113,8 @@ export const presentTransactionRows = ({
   counterpartyFallback: string;
   locale: string;
   timeZone: string;
-  transactions: ReadonlyArray<TransactionPresentationRecord>;
-}>): ReadonlyArray<TransactionListRow> => {
+  transactions: Records;
+}>): Array.ReadonlyArray.With<Records, TransactionListRow> => {
   const categoryLabels = new Map(categories.map(({ id, label }) => [id, label]));
 
   const dateFormatter = new Intl.DateTimeFormat(locale, {
@@ -124,7 +126,7 @@ export const presentTransactionRows = ({
 
   const occurredOnFormatter = occurrenceFormatter(locale, timeZone);
 
-  return transactions.map((transaction) => ({
+  return Array.map(transactions, (transaction) => ({
     id: transaction.id,
     categoryId: transaction.categoryId,
     categoryLabel: categoryLabels.get(transaction.categoryId) ?? "Categoría no disponible",
@@ -151,16 +153,18 @@ export const presentTransactionRows = ({
   }));
 };
 
+type PeriodPresentation = Readonly<{
+  monthLabel: string;
+  timeZone: string;
+}>;
+
 export const presentPeriod = ({
   locale,
   period: { from, timeZone },
 }: Readonly<{
   locale: string;
   period: CurrentMonthPeriod;
-}>): Readonly<{
-  monthLabel: string;
-  timeZone: string;
-}> => ({
+}>): PeriodPresentation => ({
   monthLabel: new Intl.DateTimeFormat(locale, {
     month: "long",
     timeZone,

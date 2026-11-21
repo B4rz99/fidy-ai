@@ -1,13 +1,16 @@
-import { makeCoreRejectionObserver } from "../runtime/operational-health/runtime";
+import { coreRejectionObserver } from "../runtime/operational-health/runtime";
 import {
   type Cause,
   Clock,
   Context,
+  Data,
   DateTime,
   Deferred,
   Effect,
+  Exit,
   Layer,
   Option,
+  Predicate,
   Schema,
   type Scope,
 } from "effect";
@@ -23,7 +26,16 @@ import {
   mcpCanonicalMetadata,
   projectMcpSchemas,
 } from "../../src/shell/mcp/contract";
-import { readNativeConfirmation, requestNativeConfirmation } from "./native-confirmation";
+import {
+  NativeConfirmation,
+  NativeConfirmationRead,
+  readNativeConfirmation,
+  requestNativeConfirmation,
+} from "./native-confirmation";
+import {
+  OperationAccessCaller,
+  OperationAccessDecision,
+} from "../../src/shell/canonical-policy/contract";
 import { leaseNativeReader } from "./internal/native-reader";
 import { OAuthMcpAdmission, maximumMcpRequestBytes } from "./contract";
 import { type OAuthCaller } from "../../src/shell/oauth-agents/contract";
@@ -64,7 +76,7 @@ type CanonicalQueue = (
 ) => Effect.Effect<Response>;
 
 type ToolAdmission = Readonly<{
-  observeRejections: ReturnType<typeof makeCoreRejectionObserver>;
+  observeRejections: ReturnType<typeof coreRejectionObserver>;
   subject: OAuthCaller;
   scopes: PATScopes;
   enqueueCanonicalWork: CanonicalQueue;
@@ -116,6 +128,7 @@ const toolFailure = (
 
     return yield* canonicalToolResult({ codec: operation.failure, raw, isError: true });
   }).pipe(
+    Effect.tapCause(Effect.logDebug),
     Effect.catchCause(() =>
       Effect.fail(McpSchema.InternalError.make({ message: "Canonical operation unavailable." }))
     )
@@ -139,6 +152,20 @@ const dispatchCanonicalTool = (
       });
     })
   );
+
+const isAllowed = OperationAccessDecision.$is("Allowed");
+
+const isInvalidConfirmation = NativeConfirmationRead.$is("Invalid");
+
+const availableTo =
+  (scopes: PATScopes) =>
+  (operation: CatalogOperation): boolean =>
+    isAllowed(
+      decideOperationAccess(
+        operation.policy.access,
+        OperationAccessCaller.OAuthAgent({ capabilities: scopes })
+      )
+    );
 
 const operationLifetime = (operation: CatalogOperation): number =>
   operation.policy.kind === "mutation" ? mutationLifetimeMilliseconds : queryLifetimeMilliseconds;
@@ -180,11 +207,7 @@ const decodeToolResponse = (
       new TextDecoder().decode(bytes)
     );
 
-    const available = (target: CatalogOperation): boolean =>
-      decideOperationAccess(target.policy.access, {
-        _tag: "OAuthAgent",
-        capabilities: input.scopes,
-      })._tag === "Allowed";
+    const available = availableTo(input.scopes);
 
     const result = yield* canonicalToolResult({
       codec: response.ok ? operation.success : operation.failure,
@@ -239,18 +262,16 @@ const executeAdmittedTool = (
   McpSchema.McpRequestContext
 > =>
   Effect.gen(function* () {
-    const { operation, payload } = work;
     const context = yield* McpSchema.McpRequestContext;
     const confirmation = readNativeConfirmation({ context, supplied: work.confirmation });
 
-    if (confirmation._tag === "Invalid") return yield* toolFailure(operation);
-    const encodedInput = yield* Schema.decodeUnknownEffect(Schema.Json)(payload);
+    if (isInvalidConfirmation(confirmation)) return yield* toolFailure(work.operation);
 
     const retryKey = yield* Schema.decodeUnknownEffect(Schema.UndefinedOr(Schema.Json))(
       context.requestMetadata?.[mcpCanonicalMetadata.retryKey]
     );
 
-    const admission = yield* Schema.encodeEffect(Schema.fromJsonString(OAuthCanonicalAdmission))({
+    const required = {
       userId: input.subject.userId,
       connectionId: input.subject.oauthConnectionId,
       credentialId: input.subject.credentialId,
@@ -261,35 +282,37 @@ const executeAdmittedTool = (
         admission: input,
         current: yield* Clock.currentTimeMillis,
         continuation: Option.isSome(work.confirmation),
-        operation,
+        operation: work.operation,
       }),
-      operation: operation.id,
-      input: encodedInput,
-      ...(retryKey === undefined ? {} : { retryKey }),
-      ...Option.match(confirmation.attempt, {
-        onNone: () => ({}),
-        onSome: (confirmation) => ({ confirmation }),
-      }),
-    });
+      operation: work.operation.id,
+      input: yield* Schema.decodeUnknownEffect(Schema.Json)(work.payload),
+    };
+
+    const retried = retryKey === undefined ? required : { ...required, retryKey };
+
+    const admission = yield* Schema.encodeEffect(Schema.fromJsonString(OAuthCanonicalAdmission))(
+      Option.match(confirmation.attempt, {
+        onNone: () => retried,
+        onSome: (attempt) => ({ ...retried, confirmation: attempt }),
+      })
+    );
 
     const response = yield* dispatchCanonicalTool(input, admission).pipe(
-      Effect.timeout(operationLifetime(operation))
+      Effect.timeout(operationLifetime(work.operation))
     );
 
     if (response.headers.get("fidy-oauth-review") === "1") {
       const requested = yield* requestNativeConfirmation({ response, context, responsePolicy });
 
-      if (requested._tag === "InputRequired") return requested.result;
-
-      if (requested._tag === "Unavailable") return yield* toolFailure(operation);
-
-      return yield* executeAdmittedTool(input, {
-        ...work,
-        confirmation: Option.some(requested.attempt),
+      return yield* NativeConfirmation.$match(requested, {
+        InputRequired: ({ result }) => Effect.succeed(result),
+        Unavailable: () => toolFailure(work.operation),
+        Decision: ({ attempt }) =>
+          executeAdmittedTool(input, { ...work, confirmation: Option.some(attempt) }),
       });
     }
 
-    return yield* decodeToolResponse(input, operation, response);
+    return yield* decodeToolResponse(input, work.operation, response);
   }).pipe(
     Effect.scoped,
     Effect.catchCause(() => toolFailure(work.operation))
@@ -307,39 +330,43 @@ type CatalogProjection = Readonly<{ tools: ReadonlyArray<RegisteredTool>; finger
 
 const catalogProjections = new Map<string, CatalogProjection>();
 
+const registeredTool = Effect.fn(function* (
+  operation: CatalogOperation,
+  allowedIds: ReadonlySet<string>
+) {
+  const projected = projectMcpSchemas({ operation, catalog: operationCatalog, allowedIds });
+
+  const tool = yield* Schema.decodeUnknownEffect(McpSchema.Tool)({
+    name: operation.id,
+    description: operation.description,
+    inputSchema: schemaDocument(projected.input),
+    outputSchema: schemaDocument(projected.output),
+    annotations: {
+      readOnlyHint: operation.policy.kind === "query",
+      destructiveHint: operation.policy.agentConfirmation === "required",
+    },
+  });
+
+  return { operation, tool };
+});
+
 const catalogTools = (scopes: PATScopes): Effect.Effect<CatalogProjection, Schema.SchemaError> =>
   Effect.gen(function* () {
-    const available = (operation: CatalogOperation): boolean =>
-      decideOperationAccess(operation.policy.access, {
-        _tag: "OAuthAgent",
-        capabilities: scopes,
-      })._tag === "Allowed";
+    const available = availableTo(scopes);
 
     const allowedIds = new Set(operationCatalog.operations.filter(available).map(({ id }) => id));
     const projectionKey = scopes.toSorted().join(" ");
     const cached = catalogProjections.get(projectionKey);
 
     if (cached !== undefined) return cached;
-    const tools: Array<RegisteredTool> = [];
 
-    for (const operation of nativeMcpCatalog()
+    const operations = nativeMcpCatalog()
       .filter(available)
-      .toSorted((left, right) => left.id.localeCompare(right.id))) {
-      const projected = projectMcpSchemas({ operation, catalog: operationCatalog, allowedIds });
+      .toSorted((left, right) => left.id.localeCompare(right.id));
 
-      const tool = yield* Schema.decodeUnknownEffect(McpSchema.Tool)({
-        name: operation.id,
-        description: operation.description,
-        inputSchema: schemaDocument(projected.input),
-        outputSchema: schemaDocument(projected.output),
-        annotations: {
-          readOnlyHint: operation.policy.kind === "query",
-          destructiveHint: operation.policy.agentConfirmation === "required",
-        },
-      });
-
-      tools.push({ operation, tool });
-    }
+    const tools = yield* Effect.forEach(operations, (operation) =>
+      registeredTool(operation, allowedIds)
+    );
 
     const projection = {
       tools,
@@ -406,10 +433,9 @@ class NativeToolAdmissionContext extends Context.Service<
   NativeToolAdmission
 >()("@fidy/server/cloudflare/mcp/runtime/NativeToolAdmissionContext") {}
 
-type NativeHttpHandler = Readonly<{
-  handler: (request: Request, context?: Context.Context<never>) => Promise<Response>;
-  dispose: () => Promise<void>;
-}>;
+type NativeHttpHandler = ReturnType<
+  typeof HttpRouter.toWebHandler<never, never, never, never, never, never>
+>;
 
 type ResidentOwner = {
   readonly handler: NativeHttpHandler;
@@ -452,11 +478,17 @@ const leaseOwner = (owner: ResidentOwner): (() => void) => {
   };
 };
 
+type LeasedReader = Readonly<{
+  finish: () => void;
+  cancel: () => Promise<void>;
+  isReleased: () => boolean;
+}>;
+
 const leaseResponseReader = (
   owner: ResidentOwner,
   ticket: ResidentTicket,
   reader: Pick<ReadableStreamDefaultReader<unknown>, "cancel" | "releaseLock">
-): Readonly<{ finish: () => void; cancel: () => Promise<void>; isReleased: () => boolean }> => {
+): LeasedReader => {
   const { release } = ticket;
   let released = false;
 
@@ -510,7 +542,7 @@ const leasedResponse = (
             } else {
               const value: unknown = chunk.value;
 
-              if (!(value instanceof Uint8Array)) {
+              if (!Predicate.isUint8Array(value)) {
                 throw new Error("Invalid native MCP response bytes.");
               }
 
@@ -550,7 +582,7 @@ type ResidencyConfig = Readonly<{
 }>;
 
 type ResidentRegistry = {
-  readonly observeRejections: ReturnType<typeof makeCoreRejectionObserver>;
+  readonly observeRejections: ReturnType<typeof coreRejectionObserver>;
   readonly config: ResidencyConfig;
   readonly owners: Set<ResidentOwner>;
   closed: boolean;
@@ -614,21 +646,26 @@ type ResidentTool = Readonly<{
   operation: CatalogOperation;
 }>;
 
-type OwnerDisposalSettlement =
-  | Readonly<{ _tag: "Success" }>
-  | Readonly<{ _tag: "Failure"; error: unknown }>;
+type OwnerDisposalSettlement = Data.TaggedEnum<{
+  Success: {};
+  Failure: { readonly error: unknown };
+}>;
+
+const OwnerDisposalSettlement = Data.taggedEnum<OwnerDisposalSettlement>();
+
+const isDisposalFailure = OwnerDisposalSettlement.$is("Failure");
 
 const settledDisposal = (promise: Promise<unknown>): Promise<OwnerDisposalSettlement> =>
   promise.then(
-    () => ({ _tag: "Success" }),
-    (error: unknown) => ({ _tag: "Failure", error })
+    () => OwnerDisposalSettlement.Success(),
+    (error: unknown) => OwnerDisposalSettlement.Failure({ error })
   );
 
 const settleNativeDisposal = (owner: ResidentOwner): Promise<OwnerDisposalSettlement> => {
   try {
     return settledDisposal(owner.handler.dispose());
   } catch (error) {
-    return Promise.resolve({ _tag: "Failure", error });
+    return Promise.resolve(OwnerDisposalSettlement.Failure({ error }));
   }
 };
 
@@ -644,13 +681,13 @@ const completeOwnerDisposal = (registry: ResidentRegistry, owner: ResidentOwner)
 
   return settleOwnerResponses(owner).then((responses) =>
     native.then((sdk) => {
-      if (sdk._tag === "Failure" && responses._tag === "Failure") {
+      if (isDisposalFailure(sdk) && isDisposalFailure(responses)) {
         throw new AggregateError([sdk.error, responses.error], "Native MCP disposal failed.");
       }
 
-      if (sdk._tag === "Failure") throw sdk.error;
+      if (isDisposalFailure(sdk)) throw sdk.error;
 
-      if (responses._tag === "Failure") throw responses.error;
+      if (isDisposalFailure(responses)) throw responses.error;
       registry.owners.delete(owner);
     })
   );
@@ -738,14 +775,17 @@ const residentRegistration = (
   Effect.gen(function* () {
     const service = yield* McpServer.McpServer;
 
-    for (const { operation, tool } of tools) {
-      yield* service.addTool({
-        tool,
-        annotations: Context.empty(),
-        handle: (payload: unknown) =>
-          residentToolCallback({ registry, owner: owner(), operation }, payload),
-      });
-    }
+    yield* Effect.forEach(
+      tools,
+      ({ operation, tool }) =>
+        service.addTool({
+          tool,
+          annotations: Context.empty(),
+          handle: (payload: unknown) =>
+            residentToolCallback({ registry, owner: owner(), operation }, payload),
+        }),
+      { discard: true }
+    );
   });
 
 const residentLifetime = (
@@ -879,13 +919,14 @@ const selectResidentTicket = (
 };
 
 const sweepRetiring = (registry: ResidentRegistry): Effect.Effect<void, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    for (const owner of registry.owners) {
-      if (owner.retiring && owner.leases === 0) {
-        yield* Effect.tryPromise(() => disposeOwner(registry, owner));
-      }
-    }
-  });
+  Effect.forEach(
+    registry.owners,
+    (owner) =>
+      owner.retiring && owner.leases === 0
+        ? Effect.tryPromise(() => disposeOwner(registry, owner))
+        : Effect.void,
+    { discard: true }
+  );
 
 const reserveResidentOwner = (
   registry: ResidentRegistry,
@@ -966,12 +1007,19 @@ const invokeResidentHandler = (
       })
     );
 
-    const request = new Request("https://coordinator.internal/mcp", {
-      method: admission.method,
-      headers: admission.headers,
-      ...(admission.method === "POST" ? { body: new Uint8Array(admission.body) } : {}),
-      signal,
-    });
+    const request =
+      admission.method === "POST"
+        ? new Request("https://coordinator.internal/mcp", {
+            method: admission.method,
+            headers: admission.headers,
+            body: new Uint8Array(admission.body),
+            signal,
+          })
+        : new Request("https://coordinator.internal/mcp", {
+            method: admission.method,
+            headers: admission.headers,
+            signal,
+          });
 
     return yield* Effect.tryPromise(() => {
       if (registry.closed || owner.retiring || Option.isSome(owner.disposal)) {
@@ -1086,7 +1134,7 @@ const handleResidentRequest = (
     return yield* Effect.acquireUseRelease(
       Effect.sync(() => selectResidentTicket(registry, request, { catalog, current: selectedAt })),
       (ticket) => useResidentTicket(registry, { request, catalog, ticket }),
-      (ticket, exit) => releaseResidentTicket(ticket, exit._tag === "Failure")
+      (ticket, exit) => releaseResidentTicket(ticket, Exit.isFailure(exit))
     );
   }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())));
 
@@ -1106,17 +1154,19 @@ const disposeRegistry = (registry: ResidentRegistry): Effect.Effect<void, Cause.
   Effect.gen(function* () {
     registry.closed = true;
 
-    for (const owner of registry.owners) {
-      yield* Effect.tryPromise(() => disposeOwner(registry, owner));
-    }
+    yield* Effect.forEach(
+      registry.owners,
+      (owner) => Effect.tryPromise(() => disposeOwner(registry, owner)),
+      { discard: true }
+    );
   });
 
-export const makeMcpResidency = (config: ResidencyConfig): McpResidency => {
+export const mcpResidency = (config: ResidencyConfig): McpResidency => {
   const registry: ResidentRegistry = {
     config,
     owners: new Set(),
     closed: false,
-    observeRejections: makeCoreRejectionObserver(),
+    observeRejections: coreRejectionObserver(),
   };
 
   return {

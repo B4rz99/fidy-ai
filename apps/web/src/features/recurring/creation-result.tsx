@@ -1,6 +1,6 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import type { JSX } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
@@ -26,7 +26,7 @@ export const CreationResult = (props: Props): JSX.Element => {
   const state = useAtomValue(resource.view).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(resource.source);
 
-  if (state._tag !== "Ready") {
+  if (!Predicate.isTagged(state, "Ready")) {
     return <VerificationPending waiting={state.waiting} refresh={refresh} focus />;
   }
 

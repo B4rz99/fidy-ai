@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import {
   RouterProvider,
   createMemoryHistory,
@@ -11,9 +10,9 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { RecurringPlanId, TransactionId } from "@/transport/client";
-import { emptyTransactionFilters } from "./transaction-filters";
-import { useRecurringNavigation } from "./navigation";
-import { useRecurringWorkspaceView } from "./workspace-view";
+import { emptyTransactionFilters } from "@/features/recurring/transaction-filters";
+import { useRecurringNavigation } from "@/features/recurring/navigation";
+import { useRecurringWorkspaceView } from "@/features/recurring/workspace-view";
 
 const item = {
   planId: RecurringPlanId.make("23200000-0000-4000-8000-000000000001"),

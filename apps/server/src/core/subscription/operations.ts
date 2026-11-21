@@ -1,4 +1,4 @@
-import { BigDecimal, DateTime, Effect, Function, Option } from "effect";
+import { BigDecimal, Data, DateTime, Effect, Function, Option } from "effect";
 import { type ReadonlyMoney, encodeMoneyAmount } from "~/core/_shared/money";
 import type { IanaTimeZone } from "~/core/_shared/context";
 import { type BillingPeriod, type PriceId } from "./contract";
@@ -91,60 +91,63 @@ export type EnrollmentCheckpoint =
       priceId: PriceId;
     }>;
 
+export type EnrollmentSubmissionDecision = Data.TaggedEnum<{
+  BeginSubmission: {};
+  RecordExpiration: {};
+  ReturnCurrentStatus: {};
+}>;
+
+export const EnrollmentSubmissionDecision = Data.taggedEnum<EnrollmentSubmissionDecision>();
+
+export type EnrollmentPreparationDecision = Data.TaggedEnum<{
+  Observe: {};
+  ReplaceIntent: {};
+  ReauthorizeSource: {};
+  RestartRequired: {};
+}>;
+
+export const EnrollmentPreparationDecision = Data.taggedEnum<EnrollmentPreparationDecision>();
+
 export const decideEnrollmentSubmission: {
-  (
-    now: DateTime.Utc
-  ): (
-    checkpoint: EnrollmentCheckpoint
-  ) => Readonly<{ _tag: "BeginSubmission" | "RecordExpiration" | "ReturnCurrentStatus" }>;
-  (
-    checkpoint: EnrollmentCheckpoint,
-    now: DateTime.Utc
-  ): Readonly<{ _tag: "BeginSubmission" | "RecordExpiration" | "ReturnCurrentStatus" }>;
+  (now: DateTime.Utc): (checkpoint: EnrollmentCheckpoint) => EnrollmentSubmissionDecision;
+  (checkpoint: EnrollmentCheckpoint, now: DateTime.Utc): EnrollmentSubmissionDecision;
 } = Function.dual(
   2,
-  (
-    checkpoint: EnrollmentCheckpoint,
-    now: DateTime.Utc
-  ): Readonly<{ _tag: "BeginSubmission" | "RecordExpiration" | "ReturnCurrentStatus" }> => {
-    if (checkpoint.status !== "prepared") return { _tag: "ReturnCurrentStatus" };
+  (checkpoint: EnrollmentCheckpoint, now: DateTime.Utc): EnrollmentSubmissionDecision => {
+    if (checkpoint.status !== "prepared") return EnrollmentSubmissionDecision.ReturnCurrentStatus();
 
     return DateTime.Order(now, checkpoint.expiresAt) < 0
-      ? { _tag: "BeginSubmission" }
-      : { _tag: "RecordExpiration" };
+      ? EnrollmentSubmissionDecision.BeginSubmission()
+      : EnrollmentSubmissionDecision.RecordExpiration();
   }
 );
 
 export const decideEnrollmentPreparation: {
-  (requestedPriceId: PriceId): (
+  (
+    requestedPriceId: PriceId
+  ): (
     checkpoint: Readonly<Pick<EnrollmentCheckpoint, "status" | "priceId">>
-  ) => Readonly<{
-    _tag: "Observe" | "ReplaceIntent" | "ReauthorizeSource" | "RestartRequired";
-  }>;
+  ) => EnrollmentPreparationDecision;
   (
     checkpoint: Readonly<Pick<EnrollmentCheckpoint, "status" | "priceId">>,
     requestedPriceId: PriceId
-  ): Readonly<{
-    _tag: "Observe" | "ReplaceIntent" | "ReauthorizeSource" | "RestartRequired";
-  }>;
+  ): EnrollmentPreparationDecision;
 } = Function.dual(
   2,
   (
     checkpoint: Readonly<Pick<EnrollmentCheckpoint, "status" | "priceId">>,
     requestedPriceId: PriceId
-  ): Readonly<{
-    _tag: "Observe" | "ReplaceIntent" | "ReauthorizeSource" | "RestartRequired";
-  }> => {
+  ): EnrollmentPreparationDecision => {
     if (checkpoint.status === "refused" || checkpoint.status === "expired") {
-      return { _tag: "RestartRequired" };
+      return EnrollmentPreparationDecision.RestartRequired();
     }
 
-    if (checkpoint.priceId === requestedPriceId) return { _tag: "Observe" };
+    if (checkpoint.priceId === requestedPriceId) return EnrollmentPreparationDecision.Observe();
 
-    if (checkpoint.status === "prepared") return { _tag: "ReplaceIntent" };
+    if (checkpoint.status === "prepared") return EnrollmentPreparationDecision.ReplaceIntent();
 
-    if (checkpoint.status === "available") return { _tag: "ReauthorizeSource" };
+    if (checkpoint.status === "available") return EnrollmentPreparationDecision.ReauthorizeSource();
 
-    return { _tag: "Observe" };
+    return EnrollmentPreparationDecision.Observe();
   }
 );

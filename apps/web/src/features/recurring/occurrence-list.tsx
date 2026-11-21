@@ -1,5 +1,5 @@
 import { RecurringOccurrenceColumns } from "@/ui/components/recurring-occurrence-columns";
-import { BigDecimal, DateTime } from "effect";
+import { BigDecimal, DateTime, Schema } from "effect";
 import { type JSX, useState } from "react";
 import { ArrowDown01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -54,7 +54,7 @@ const DesktopItem = ({ item, open, categories, today, save, disabled }: ItemProp
     interaction="clickable"
     onClick={(event) => {
       if (
-        event.target instanceof Element &&
+        Schema.is(Schema.instanceOf(Element))(event.target) &&
         event.target.closest("button, a, [role=menuitemradio]") !== null
       ) {
         return;

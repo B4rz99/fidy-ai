@@ -11,7 +11,7 @@ import type { TransactionPeriod } from "~/core/transactions/contract";
 import { WeeklyPeriods } from "~/core/insights/contract";
 import {
   type WeeklyComparison,
-  type WeeklySummaryOutcome,
+  WeeklySummaryOutcome,
   WeeklySummaryPayload,
   type WeeklySummaryPresentation,
 } from "./contract";
@@ -31,9 +31,9 @@ const total = (
 ): Money => ({
   currency,
   amount: BigDecimal.sumAll(
-    facts
-      .filter((fact) => fact.sum.currency === currency && fact.direction === direction)
-      .map((fact) => fact.sum.amount)
+    facts.flatMap((fact) =>
+      fact.sum.currency === currency && fact.direction === direction ? [fact.sum.amount] : []
+    )
   ),
 });
 
@@ -99,7 +99,7 @@ export const summarizeWeek = (
   WeeklyPeriods.make(input.periods);
 
   if (input.current.every((fact) => BigDecimal.isZero(fact.sum.amount))) {
-    return { _tag: "NoActivity" };
+    return WeeklySummaryOutcome.NoActivity();
   }
 
   const currencies = [
@@ -119,16 +119,15 @@ export const summarizeWeek = (
     topOutflowCategories: leaders(input.current, currency),
   }));
 
-  if (!Array.isReadonlyArrayNonEmpty(groups)) return { _tag: "NoActivity" };
+  if (!Array.isReadonlyArrayNonEmpty(groups)) return WeeklySummaryOutcome.NoActivity();
 
-  return {
-    _tag: "Summary",
+  return WeeklySummaryOutcome.Summary({
     payload: WeeklySummaryPayload.make({
       periods: input.periods,
       financialRevision: input.financialRevision,
       groups,
     }),
-  };
+  });
 };
 
 const localCutoff = (at: DateTime.Utc, timeZone: IanaTimeZone): string => {

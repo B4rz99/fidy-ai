@@ -37,6 +37,7 @@ export const UnbudgetedSpending = ({ props }: Readonly<{ props: WorkspaceProps }
               <Button
                 variant="outline"
                 disabled={props.editing.disabled}
+                aria-label={`Asignar presupuesto a ${category.label}`}
                 onClick={() => props.editing.assignCategory(category)}
               >
                 Asignar presupuesto

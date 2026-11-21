@@ -2,7 +2,7 @@ import { PendingRead } from "@/ui/components/pending-read";
 
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import { type JSX, type ReactNode, useState } from "react";
 import { useSession } from "@/session/session-context";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
@@ -35,11 +35,11 @@ const ConsentResult = ({
   refresh: () => void;
   children: ReactNode;
 }>): JSX.Element => {
-  if (status._tag === "Initial" || status.waiting) {
+  if (Predicate.isTagged(status, "Initial") || status.waiting) {
     return <PendingRead label="Cargando ofertas" />;
   }
 
-  if (status._tag === "Failure" || Option.isSome(status.refreshFailure)) {
+  if (Predicate.isTagged(status, "Failure") || Option.isSome(status.refreshFailure)) {
     return (
       <Alert>
         <AlertTitle>No pudimos verificar tu autorización</AlertTitle>
@@ -73,7 +73,10 @@ export const SubscriptionConsentBoundary = ({
   const refresh = useAtomRefresh(query);
   const { authentication } = useSession();
 
-  if (authentication === "expired" || (status._tag === "Failure" && sessionBinding === "none")) {
+  if (
+    authentication === "expired" ||
+    (Predicate.isTagged(status, "Failure") && sessionBinding === "none")
+  ) {
     return (
       <Alert>
         <AlertTitle>Inicia sesión para activar Pro</AlertTitle>

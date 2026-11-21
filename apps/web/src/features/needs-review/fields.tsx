@@ -18,6 +18,7 @@ import {
   editDraft,
   localOccurrence,
 } from "./model";
+import { currencyChoices } from "@/ui/currency-choices";
 
 type Props = Readonly<{
   draft: Draft;
@@ -98,7 +99,7 @@ const ReviewMoney = ({ draft, change, locked }: Props): JSX.Element => {
             id="review-currency"
             label="Moneda"
             value={Option.getOrElse(draft.currency, () => "")}
-            options={Currency.literals.map((value) => ({ value, label: value }))}
+            options={currencyChoices(Currency.literals)}
             disabled={locked}
             width="full"
             onChange={(currency) =>

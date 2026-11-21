@@ -1,7 +1,7 @@
 import { DateTime, Effect, Option } from "effect";
 import {
   type EmailReplacementRequestDecision,
-  type ProofAttemptDecision,
+  ProofAttemptDecision,
   type ProofAttemptInput,
   maximumEmailDeliveryGenerations,
 } from "./contract";
@@ -95,14 +95,16 @@ const hasProofAttemptExpired = (input: ProofAttemptInput): boolean =>
 
 const wrongProofDecision = (wrongAttempts: number): ProofAttemptDecision =>
   wrongAttempts >= maximumWrongProofAttempts
-    ? { _tag: "Delete" }
-    : { _tag: "Wrong", wrongAttempts };
+    ? ProofAttemptDecision.Delete()
+    : ProofAttemptDecision.Wrong({ wrongAttempts });
 
 const liveProofDecision = (input: ProofAttemptInput): ProofAttemptDecision =>
-  input.digestMatches ? { _tag: "Accept" } : wrongProofDecision(input.wrongAttempts + 1);
+  input.digestMatches ? ProofAttemptDecision.Accept() : wrongProofDecision(input.wrongAttempts + 1);
 
 export const decideProofAttempt = (input: ProofAttemptInput): Effect.Effect<ProofAttemptDecision> =>
-  Effect.succeed(hasProofAttemptExpired(input) ? { _tag: "Expired" } : liveProofDecision(input));
+  Effect.succeed(
+    hasProofAttemptExpired(input) ? ProofAttemptDecision.Expired() : liveProofDecision(input)
+  );
 
 export const maximumOnboardingProofFailures = 4;
 

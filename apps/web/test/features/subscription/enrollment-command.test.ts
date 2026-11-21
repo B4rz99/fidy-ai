@@ -2,7 +2,7 @@ import { it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit } from "effect";
 import { Atom, AtomRegistry } from "effect/reactivity";
 import { expect } from "vitest";
-import { makeEnrollmentCommand } from "./enrollment-command";
+import { createEnrollmentCommand } from "@/features/subscription/enrollment-command";
 
 const registryResource = Effect.acquireRelease(
   Effect.sync(() => AtomRegistry.make()),
@@ -12,7 +12,7 @@ const registryResource = Effect.acquireRelease(
 it.effect("consumes transient enrollment work once without replaying it on an empty command", () =>
   Effect.gen(function* () {
     const registry = yield* registryResource;
-    const command = makeEnrollmentCommand<string, never>();
+    const command = createEnrollmentCommand<string, never>();
     yield* AtomRegistry.mount(registry, command.atom);
     let calls = 0;
     command.offer(
@@ -42,7 +42,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const registry = yield* registryResource;
-      const command = makeEnrollmentCommand<string, never>();
+      const command = createEnrollmentCommand<string, never>();
       yield* AtomRegistry.mount(registry, command.atom);
       const started = yield* Deferred.make<void>();
       const closed = yield* Deferred.make<void>();

@@ -160,11 +160,10 @@ export const observeRecurringPlan = ({
   InvalidRecurringEdit
 > =>
   Effect.gen(function* () {
-    yield* Schema.decodeEffect(RecurringDate)(date).pipe(
-      Effect.mapError(() =>
-        InvalidRecurringEdit.make({ message: "Expected a valid local calendar date" })
-      )
-    );
+    if (!Schema.is(RecurringDate)(date)) {
+      return yield* InvalidRecurringEdit.make({ message: "Expected a valid local calendar date" });
+    }
+
     const plan = document.plans.find((entry) => entry.id === planId);
 
     if (plan === undefined) return Option.none();
@@ -220,14 +219,13 @@ const occurrenceAt = ({
   const remaining = remainingMoney({ plan: input, settled, completed });
   const expectedDate = exception?.replacement?.firstDate ?? date;
 
-  return {
+  const occurrence = {
     planId: plan.id,
     date,
     expectedDate,
     plan: input,
     completed,
     fulfillments,
-    ...remaining,
     status: occurrenceStatus({
       skipped: exception?.skipped === true,
       settled,
@@ -236,6 +234,11 @@ const occurrenceAt = ({
       today: today(input),
     }),
   };
+
+  return Option.match(remaining, {
+    onNone: () => occurrence,
+    onSome: (money) => ({ ...occurrence, remaining: money }),
+  });
 };
 
 const isSettled = ({
@@ -260,20 +263,20 @@ const remainingMoney = ({
   plan,
   settled,
   completed,
-}: Readonly<{ plan: RecurringPlanInput; settled: boolean; completed: ReadonlyMoney }>): Partial<
-  Readonly<{ remaining: ReadonlyMoney }>
-> => {
-  if (plan.money === undefined) return {};
+}: Readonly<{
+  plan: RecurringPlanInput;
+  settled: boolean;
+  completed: ReadonlyMoney;
+}>): Option.Option<ReadonlyMoney> => {
+  if (plan.money === undefined) return Option.none();
   const zero = BigDecimal.make(0n, 0);
 
-  return {
-    remaining: {
-      currency: plan.currency,
-      amount: settled
-        ? zero
-        : BigDecimal.max(zero, BigDecimal.subtract(plan.money.amount, completed.amount)),
-    },
-  };
+  return Option.some({
+    currency: plan.currency,
+    amount: settled
+      ? zero
+      : BigDecimal.max(zero, BigDecimal.subtract(plan.money.amount, completed.amount)),
+  });
 };
 
 const occurrenceStatus = ({
@@ -341,6 +344,31 @@ export const projectRecurringMonth = ({
     (entry) => entry.planId
   );
 
+  type SchedulePlan = RecurringSchedule["plans"][number];
+
+  const expectedInMonth = (plan: SchedulePlan, date: string): boolean => {
+    const exception = exceptions.get(occurrenceKey({ planId: plan.id, date }))?.[0];
+    const expectedDate = exception?.replacement?.firstDate ?? date;
+
+    return expectedDate >= from && expectedDate <= through;
+  };
+
+  const occurrenceOn = (plan: SchedulePlan, date: string): RecurringOccurrence =>
+    occurrenceAt({
+      document: {
+        ...document,
+        exceptions: exceptions.get(occurrenceKey({ planId: plan.id, date })) ?? [],
+        fulfillments: fulfillments.get(occurrenceKey({ planId: plan.id, date })) ?? [],
+      },
+      plan,
+      date,
+      today: (input) =>
+        DateTime.formatIsoDate(DateTime.makeZonedUnsafe(now, { timeZone: input.timeZone })),
+    });
+
+  const isShown = (plan: SchedulePlan, item: RecurringOccurrence): boolean =>
+    item.fulfillments.length > 0 || trackedOn({ plan, date: item.expectedDate });
+
   return document.plans
     .flatMap((plan) => {
       const dates = new Set([
@@ -348,29 +376,13 @@ export const projectRecurringMonth = ({
         ...(retained.get(plan.id) ?? []).map((entry) => entry.date),
       ]);
 
-      return [...dates]
-        .filter((date) => {
-          const exception = exceptions.get(occurrenceKey({ planId: plan.id, date }))?.[0];
-          const expectedDate = exception?.replacement?.firstDate ?? date;
+      return [...dates].flatMap((date) => {
+        if (!expectedInMonth(plan, date)) return [];
 
-          return expectedDate >= from && expectedDate <= through;
-        })
-        .map((date) =>
-          occurrenceAt({
-            document: {
-              ...document,
-              exceptions: exceptions.get(occurrenceKey({ planId: plan.id, date })) ?? [],
-              fulfillments: fulfillments.get(occurrenceKey({ planId: plan.id, date })) ?? [],
-            },
-            plan,
-            date,
-            today: (input) =>
-              DateTime.formatIsoDate(DateTime.makeZonedUnsafe(now, { timeZone: input.timeZone })),
-          })
-        )
-        .filter(
-          (item) => item.fulfillments.length > 0 || trackedOn({ plan, date: item.expectedDate })
-        );
+        const item = occurrenceOn(plan, date);
+
+        return isShown(plan, item) ? [item] : [];
+      });
     })
     .sort(
       (left, right) =>

@@ -34,7 +34,9 @@ export type CreationResultProps = Readonly<{
   close: () => void;
 }>;
 
-const observeCurrentPlan = (plan: Plan): Readonly<{ date: string; settings: PlanInput }> => {
+type CurrentPlanObservation = Readonly<{ date: string; settings: PlanInput }>;
+
+const observeCurrentPlan = (plan: Plan): CurrentPlanObservation => {
   const now = DateTime.nowUnsafe();
 
   const revision =

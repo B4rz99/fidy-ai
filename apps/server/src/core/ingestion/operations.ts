@@ -1,4 +1,14 @@
-import { BigDecimal, DateTime, Effect, Option, Result, Schema } from "effect";
+import {
+  BigDecimal,
+  Data,
+  DateTime,
+  Effect,
+  Match,
+  Option,
+  Result,
+  Schema,
+  type Types,
+} from "effect";
 import { allowancePeriod } from "~/core/quotas/operations";
 import type { AccessTier } from "~/core/access-tier/contract";
 import { Currency, Money, type ReadonlyMoney, encodeMoneyAmount } from "~/core/_shared/money";
@@ -25,7 +35,7 @@ import {
 } from "./contract";
 
 const captureDateParts = (
-  source: Extract<CaptureOccurrence, { readonly _tag: "LocalDate" }>
+  source: Types.ExtractTag<CaptureOccurrence, "LocalDate">
 ): Readonly<DateTime.DateTime.Parts> => {
   const [year = 0, month = 0, day = 0] = source.date.split("-").map(Number);
 
@@ -54,27 +64,37 @@ const captureOccurrence = (
 ): Option.Option<DateTime.Utc> =>
   Option.match(occurrence, {
     onNone: () => Option.some(submittedAt),
-    onSome: (source) => {
-      if (source._tag === "Instant") return Option.some(source.value);
-      const parts = captureDateParts(source);
-
-      if (parts.year < 1) return Option.none();
-
-      const date = DateTime.makeZoned(parts, {
-        timeZone: context.timeZone,
-        adjustForTimeZone: true,
-        disambiguation: "reject",
-      });
-
-      if (Option.isNone(date)) return Option.none();
-
-      return sameCalendarParts(DateTime.toParts(date.value), parts)
-        ? Option.some(DateTime.toUtc(date.value))
-        : Option.none();
-    },
+    onSome: Match.type<CaptureOccurrence>().pipe(
+      Match.tag("Instant", (source) => Option.some(source.value)),
+      Match.tag("LocalDate", (source) => localCaptureOccurrence(source, context)),
+      Match.exhaustive
+    ),
   });
 
-type SingleCaptureProposal = Extract<CaptureProposal, { readonly _tag: "SingleMovement" }>;
+const localCaptureOccurrence = (
+  source: Types.ExtractTag<CaptureOccurrence, "LocalDate">,
+  context: CapturedInterpretationContext
+): Option.Option<DateTime.Utc> => {
+  const parts = captureDateParts(source);
+
+  if (parts.year < 1) return Option.none();
+
+  const date = DateTime.makeZoned(parts, {
+    timeZone: context.timeZone,
+    adjustForTimeZone: true,
+    disambiguation: "reject",
+  });
+
+  if (Option.isNone(date)) return Option.none();
+
+  return sameCalendarParts(DateTime.toParts(date.value), parts)
+    ? Option.some(DateTime.toUtc(date.value))
+    : Option.none();
+};
+
+type SingleCaptureProposal = Types.ExtractTag<CaptureProposal, "SingleMovement">;
+
+const Interpretation = Data.taggedEnum<CaptureInterpretation>();
 
 const captureEvidence = (
   currency: Option.Option<Currency>,
@@ -90,11 +110,11 @@ const interpretSingleCapture = (
   input: CaptureInterpretationInput
 ): CaptureInterpretation => {
   if (proposal.completion !== "completed") {
-    return { _tag: "NeedsReview", reason: "movement-not-completed" };
+    return Interpretation.NeedsReview({ reason: "movement-not-completed" });
   }
 
   if (Option.isNone(proposal.money) || Option.isNone(proposal.direction)) {
-    return { _tag: "NeedsReview", reason: "missing-required-fact" };
+    return Interpretation.NeedsReview({ reason: "missing-required-fact" });
   }
 
   const money = Money.makeOption({
@@ -103,13 +123,13 @@ const interpretSingleCapture = (
   });
 
   if (Option.isNone(money)) {
-    return { _tag: "NeedsReview", reason: "canonical-validation-failed" };
+    return Interpretation.NeedsReview({ reason: "canonical-validation-failed" });
   }
 
   const occurrence = captureOccurrence(proposal.occurrence, input.context, input.submittedAt);
 
   if (Option.isNone(occurrence) || DateTime.isGreaterThan(occurrence.value, input.now)) {
-    return { _tag: "NeedsReview", reason: "invalid-occurrence" };
+    return Interpretation.NeedsReview({ reason: "invalid-occurrence" });
   }
 
   const occurredAt = occurrence.value;
@@ -122,38 +142,41 @@ const interpretSingleCapture = (
   });
 
   if (Option.isNone(extraction)) {
-    return { _tag: "NeedsReview", reason: "canonical-validation-failed" };
+    return Interpretation.NeedsReview({ reason: "canonical-validation-failed" });
   }
 
-  return {
-    _tag: "Extracted",
+  return Interpretation.Extracted({
     extraction: extraction.value,
     evidence: captureEvidence(proposal.money.value.currency, proposal.occurrence),
-  };
+  });
 };
 
-export const interpretCapture = (input: CaptureInterpretationInput): CaptureInterpretation => {
-  switch (input.proposal._tag) {
-    case "Unparseable":
-      return { _tag: "NeedsReview", reason: "unparseable-material" };
-    case "MultipleMovements":
-      return { _tag: "NeedsReview", reason: "multiple-movements" };
-    case "SingleMovement":
-      return interpretSingleCapture(input.proposal, input);
-  }
-};
+export const interpretCapture = (input: CaptureInterpretationInput): CaptureInterpretation =>
+  Match.value(input.proposal).pipe(
+    Match.tagsExhaustive({
+      Unparseable: () => Interpretation.NeedsReview({ reason: "unparseable-material" }),
+      MultipleMovements: () => Interpretation.NeedsReview({ reason: "multiple-movements" }),
+      SingleMovement: (proposal) => interpretSingleCapture(proposal, input),
+    })
+  );
 
-const bogotaAllowancePeriod = (
-  now: DateTime.Utc
-): Readonly<{ from: DateTime.Utc; toExclusive: DateTime.Utc }> => {
+type AllowanceWindow = Readonly<{ from: DateTime.Utc; toExclusive: DateTime.Utc }>;
+
+const bogotaAllowancePeriod = (now: DateTime.Utc): AllowanceWindow => {
   const period = allowancePeriod(now);
 
   return { from: period.startsAt, toExclusive: period.resetsAt };
 };
 
-export const emailAllowancePeriod = (
-  now: DateTime.Utc
-): Readonly<{ from: DateTime.Utc; toExclusive: DateTime.Utc }> => bogotaAllowancePeriod(now);
+export const emailAllowancePeriod = (now: DateTime.Utc): AllowanceWindow =>
+  bogotaAllowancePeriod(now);
+
+export type MediaAdmissionDecision = Data.TaggedEnum<{
+  Admit: { readonly consumesFreeAllowance: boolean; readonly remaining: Option.Option<number> };
+  QuotaExhausted: { readonly resetsAt: DateTime.Utc };
+}>;
+
+export const MediaAdmissionDecision = Data.taggedEnum<MediaAdmissionDecision>();
 
 export const decideMediaAdmission = (
   input: Readonly<{
@@ -161,22 +184,21 @@ export const decideMediaAdmission = (
     consumed: number;
     now: DateTime.Utc;
   }>
-):
-  | Readonly<{ _tag: "Admit"; consumesFreeAllowance: boolean; remaining: Option.Option<number> }>
-  | Readonly<{ _tag: "QuotaExhausted"; resetsAt: DateTime.Utc }> => {
+): MediaAdmissionDecision => {
   if (input.access === "pro") {
-    return { _tag: "Admit", consumesFreeAllowance: false, remaining: Option.none() };
+    return MediaAdmissionDecision.Admit({ consumesFreeAllowance: false, remaining: Option.none() });
   }
 
   if (input.consumed >= freeMediaSubmissionCap) {
-    return { _tag: "QuotaExhausted", resetsAt: bogotaAllowancePeriod(input.now).toExclusive };
+    return MediaAdmissionDecision.QuotaExhausted({
+      resetsAt: bogotaAllowancePeriod(input.now).toExclusive,
+    });
   }
 
-  return {
-    _tag: "Admit",
+  return MediaAdmissionDecision.Admit({
     consumesFreeAllowance: true,
     remaining: Option.some(freeMediaSubmissionCap - input.consumed - 1),
-  };
+  });
 };
 
 export type ForwardedEmailProviderFailureReason =
@@ -184,12 +206,21 @@ export type ForwardedEmailProviderFailureReason =
   | "invalid-provider-response"
   | "resource-limit";
 
+type ForwardedEmailProviderFailureIssue = Readonly<{ path: ""; message: string }>;
+
 export const describeForwardedEmailProviderFailure = (
   reason: ForwardedEmailProviderFailureReason
-): Readonly<{ path: ""; message: string }> => ({
+): ForwardedEmailProviderFailureIssue => ({
   path: "",
   message: `Email retrieval stopped safely: ${reason}.`,
 });
+
+export type DeferredForwardedEmailActivation = Data.TaggedEnum<{
+  Activate: { readonly consumesFreeAllowance: boolean };
+  RemainDeferred: { readonly resumeAt: DateTime.Utc };
+}>;
+
+export const DeferredForwardedEmailActivation = Data.taggedEnum<DeferredForwardedEmailActivation>();
 
 type DecideDeferredForwardedEmailActivation = (input: {
   readonly access: AccessTier;
@@ -197,23 +228,22 @@ type DecideDeferredForwardedEmailActivation = (input: {
   readonly now: DateTime.Utc;
   readonly resumeAt: DateTime.Utc;
   readonly nextResumeAt: DateTime.Utc;
-}) =>
-  | Readonly<{ _tag: "Activate"; consumesFreeAllowance: boolean }>
-  | Readonly<{ _tag: "RemainDeferred"; resumeAt: DateTime.Utc }>;
+}) => DeferredForwardedEmailActivation;
 
 export const decideDeferredForwardedEmailActivation: DecideDeferredForwardedEmailActivation = (
   input
 ) => {
-  if (input.access === "pro") return { _tag: "Activate", consumesFreeAllowance: false };
-
-  if (DateTime.Order(input.resumeAt, input.now) <= 0 && input.consumed < freeForwardedEmailCap) {
-    return { _tag: "Activate", consumesFreeAllowance: true };
+  if (input.access === "pro") {
+    return DeferredForwardedEmailActivation.Activate({ consumesFreeAllowance: false });
   }
 
-  return {
-    _tag: "RemainDeferred",
+  if (DateTime.Order(input.resumeAt, input.now) <= 0 && input.consumed < freeForwardedEmailCap) {
+    return DeferredForwardedEmailActivation.Activate({ consumesFreeAllowance: true });
+  }
+
+  return DeferredForwardedEmailActivation.RemainDeferred({
     resumeAt: DateTime.Order(input.resumeAt, input.now) <= 0 ? input.nextResumeAt : input.resumeAt,
-  };
+  });
 };
 
 export const forwardedEmailAllowanceRemaining = (input: {
@@ -506,15 +536,19 @@ const decodeExtraction: DecodeExtraction = (decodeCandidate) => (row, mapping, f
       Option.liftPredicate((value: string) => value.length > 0)((row.fields[index] ?? "").trim())
     );
 
-    const encoded = {
+    const required = {
       money: {
         amount: encodeMoneyAmount(money.amount),
         currency: money.currency,
       },
       direction: direction.value,
       occurredAt: facts.occurredAt,
-      ...(Option.isSome(counterparty) ? { counterparty: counterparty.value } : {}),
     };
+
+    const encoded = Option.match(counterparty, {
+      onNone: () => required,
+      onSome: (value) => ({ ...required, counterparty: value }),
+    });
 
     const result = yield* Effect.result(decodeCandidate(encoded));
 

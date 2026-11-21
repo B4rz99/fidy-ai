@@ -1,7 +1,7 @@
 import { OnboardingConsentBasis } from "~/core/consent/contract";
 import { InsightEventId } from "~/core/insights/contract";
 import { UserId } from "~/core/identity/contract";
-import { type Option, Schema, Struct } from "effect";
+import { Data, type Option, Predicate, Schema, Struct } from "effect";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 
@@ -29,9 +29,9 @@ const isCanonicalUuid = Schema.makeFilter<string>((value) =>
 );
 
 const canonicalJsonValueIsValid = (value: Schema.Json): boolean => {
-  if (typeof value === "string") return canonicalJsonStringIsValid(value);
+  if (Predicate.isString(value)) return canonicalJsonStringIsValid(value);
 
-  if (typeof value === "number") return !Object.is(value, -0);
+  if (Predicate.isNumber(value)) return !Object.is(value, -0);
 
   if (value === null) return true;
 
@@ -364,11 +364,14 @@ export type HostedAdmissionRequest = Readonly<{
   state: HostedAdmissionState;
 }>;
 
-export type HostedAdmissionDecision =
-  | Readonly<{ _tag: "Refused"; reason: "ConsentRequired" | "InvalidState" }>
-  | Readonly<{ _tag: "RecoverPending" }>
-  | Readonly<{ _tag: "ContinueSession"; sessionId: HostedAgentSessionId }>
-  | Readonly<{ _tag: "BeginSession"; consentBasis: HostedAgentSessionConsentBasis }>;
+export type HostedAdmissionDecision = Data.TaggedEnum<{
+  Refused: { readonly reason: "ConsentRequired" | "InvalidState" };
+  RecoverPending: {};
+  ContinueSession: { readonly sessionId: HostedAgentSessionId };
+  BeginSession: { readonly consentBasis: HostedAgentSessionConsentBasis };
+}>;
+
+export const HostedAdmissionDecision = Data.taggedEnum<HostedAdmissionDecision>();
 
 export const ConversationCompactionTokenCount = Schema.Int.check(Schema.isGreaterThan(0)).pipe(
   Schema.brand("ConversationCompactionTokenCount")

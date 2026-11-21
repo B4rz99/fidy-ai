@@ -60,10 +60,13 @@ const existingFiles = Effect.gen(function* () {
   const files = yield* Effect.forEach(
     sourceFiles(),
     (file) =>
-      fs.lstat(cwd + file).pipe(
-        Effect.map((info) => (info.type === "File" ? Option.some(file) : Option.none())),
-        Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone)
-      ),
+      Effect.gen(function* () {
+        if (!(yield* fs.exists(cwd + file))) return Option.none<string>();
+
+        const info = yield* fs.lstat(cwd + file);
+
+        return info.type === "File" ? Option.some(file) : Option.none<string>();
+      }),
     { concurrency: scanConcurrency }
   );
 

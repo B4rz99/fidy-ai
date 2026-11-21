@@ -141,6 +141,19 @@ const probeFiles = probes.map((probe) => ({
   }/.lint-${probe.name}-probe-${process.pid}.ts`,
 }));
 
+const jevVariables = new Set([
+  "CI",
+  "TYPESAFE_API_KEY",
+  "TYPESAFE_AI_API_KEY",
+  "FACTORY_API_KEY",
+  "AI_GATEWAY_API_KEY",
+  "VERCEL_OIDC_TOKEN",
+]);
+
+const lintEnvironment = Object.fromEntries(
+  Object.entries(process.env).filter(([name]) => !jevVariables.has(name))
+);
+
 try {
   await Promise.all(
     probeFiles.map(({ path, source }) => Bun.write(`${serverRoot}${path}`, source))
@@ -157,7 +170,7 @@ try {
       "--format=json",
       ...probeFiles.map((probe) => `apps/server/${probe.path}`),
     ],
-    { cwd: workspaceRoot, stdout: "pipe", stderr: "pipe" }
+    { cwd: workspaceRoot, env: lintEnvironment, stdout: "pipe", stderr: "pipe" }
   );
 
   const report = Schema.decodeSync(

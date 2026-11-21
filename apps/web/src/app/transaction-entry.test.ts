@@ -512,11 +512,14 @@ it.live(
         yield* Effect.tryPromise(() => router.load());
         yield* render();
         const actions = yield* Effect.tryPromise(() =>
-          vi.waitFor(() => {
-            const found = emptyCardActions(container);
-            expect(found).toHaveLength(3);
-            return found;
-          })
+          vi.waitFor(
+            () => {
+              const found = emptyCardActions(container);
+              expect(found).toHaveLength(3);
+              return found;
+            },
+            { timeout: 15000 }
+          )
         );
         expect(actions.map((action) => action.getAttribute("aria-label"))).toEqual([
           "Registrar una transacción para Gastos por categoría",

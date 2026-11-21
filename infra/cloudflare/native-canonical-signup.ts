@@ -137,29 +137,35 @@ const authorizationEndpoints = {
   microsoft: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
 } as const;
 type Provider = keyof typeof authorizationEndpoints;
-export const validProviderRedirect = ({
+const invalidProviderRedirectFields = ({
   authorization,
   provider,
 }: {
   authorization: string;
   provider: Provider;
-}): boolean => {
+}): readonly string[] => {
   const url = new URL(authorization);
-  const target = url.origin + url.pathname;
+  const endpoint = new URL(authorizationEndpoints[provider]);
   const query = url.searchParams;
-  return (
-    target === authorizationEndpoints[provider] &&
-    query.get("redirect_uri") === production.api + "/providers/" + provider + "/callback" &&
-    query.get("response_type") === "code" &&
-    query.get("code_challenge_method") === "S256" &&
-    Boolean(
-      query.get("client_id") &&
-      query.get("state") &&
-      query.get("nonce") &&
-      query.get("code_challenge")
-    )
-  );
+  const valid = {
+    authorizationOrigin: url.origin === endpoint.origin,
+    authorizationPath: url.pathname === endpoint.pathname,
+    callback: query.get("redirect_uri") === production.api + "/providers/" + provider + "/callback",
+    responseType: query.get("response_type") === "code",
+    challengeMethod: query.get("code_challenge_method") === "S256",
+    challenge: Boolean(query.get("code_challenge")),
+    client: Boolean(query.get("client_id")),
+    state: Boolean(query.get("state")),
+    nonce: Boolean(query.get("nonce")),
+  };
+  return Object.entries(valid)
+    .filter(([, passed]) => !passed)
+    .map(([field]) => field);
 };
+export const validProviderRedirect = (request: {
+  authorization: string;
+  provider: Provider;
+}): boolean => invalidProviderRedirectFields(request).length === 0;
 
 export const hostOnlyProviderCookie =
   (provider: Provider) =>
@@ -212,17 +218,18 @@ export const verifyCanonicalSignupRedirects = Effect.fn(function* (client: HttpC
         redirect,
         "Canonical " + provider + " start"
       );
-      const redirectValid = yield* Effect.try(() =>
-        validProviderRedirect({ authorization: location.authorizationUrl, provider })
+      const redirectFailures = yield* Effect.try(() =>
+        invalidProviderRedirectFields({ authorization: location.authorizationUrl, provider })
       );
       const cookieValid = hostOnlyProviderCookie(provider)(response.cookies);
       const originValid = response.headers["access-control-allow-origin"] === production.browser;
-      if (!redirectValid || !cookieValid || !originValid) {
+      if (redirectFailures.length > 0 || !cookieValid || !originValid) {
         return yield* signupRefusal(
           "Canonical " +
             provider +
-            " signup verification failed. Redirect " +
-            redirectValid +
+            " signup verification failed. Unexpected redirect fields [" +
+            redirectFailures.join(", ") +
+            "]" +
             ", host-only cookie " +
             cookieValid +
             ", browser origin " +

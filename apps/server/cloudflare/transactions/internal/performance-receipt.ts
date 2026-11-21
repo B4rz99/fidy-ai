@@ -448,26 +448,32 @@ const offerCapture = Effect.fn(function* (input: {
   return yield* issueOnce({ bucket, receipt: box });
 });
 
-export const ownPerformanceEvidence = Effect.fn(function* (
-  request: Request,
-  environment: FixtureEnvironment,
-  owns: (id: string) => boolean
-) {
-  const now = yield* Clock.currentTimeMillis;
-  const binding = request.headers.get("fidy-session-binding") ?? "";
-  const signer = credentials(environment, request);
+export const ownPerformanceEvidence = Effect.fn(
+  function* (request: Request, environment: FixtureEnvironment, owns: (id: string) => boolean) {
+    const now = yield* Clock.currentTimeMillis;
+    const binding = request.headers.get("fidy-session-binding") ?? "";
+    const signer = credentials(environment, request);
 
-  if (
-    binding === "" ||
-    Option.isNone(signer) ||
-    !(yield* performanceEvidenceAdmitted({ request, environment, boundary: "core", now }))
-  ) {
-    return denied();
-  }
+    if (
+      binding === "" ||
+      Option.isNone(signer) ||
+      !(yield* performanceEvidenceAdmitted({ request, environment, boundary: "core", now }))
+    ) {
+      return denied();
+    }
 
-  if (Option.isSome(performanceAccountingMember(request))) {
-    return yield* witnessAccounting({ request, environment, owns, binding, signer: signer.value });
-  }
+    if (Option.isSome(performanceAccountingMember(request))) {
+      return yield* witnessAccounting({
+        request,
+        environment,
+        owns,
+        binding,
+        signer: signer.value,
+      });
+    }
 
-  return yield* offerCapture({ request, environment, owns, binding, signer: signer.value });
-}, Effect.orElseSucceed(denied));
+    return yield* offerCapture({ request, environment, owns, binding, signer: signer.value });
+  },
+  Effect.tapError(Effect.logDebug),
+  Effect.orElseSucceed(denied)
+);

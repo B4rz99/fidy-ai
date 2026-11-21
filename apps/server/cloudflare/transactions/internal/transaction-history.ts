@@ -596,4 +596,4 @@ export const presentPrivacyPage = ({
     });
 
     return Response.json(page, { headers: noStore });
-  }).pipe(Effect.orElseSucceed(unavailable));
+  }).pipe(Effect.tapError(Effect.logDebug), Effect.orElseSucceed(unavailable));

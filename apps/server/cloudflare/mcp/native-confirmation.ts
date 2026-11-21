@@ -58,6 +58,8 @@ export type NativeConfirmation = Data.TaggedEnum<{
 
 export const NativeConfirmation = Data.taggedEnum<NativeConfirmation>();
 
+const reviewStatus = 409;
+
 type NativeConfirmationFailure =
   | Effect.Error<ReturnType<typeof readBoundedRequestBody>>
   | Schema.SchemaError
@@ -72,6 +74,8 @@ export const requestNativeConfirmation = (
   }>
 ): Effect.Effect<NativeConfirmation, NativeConfirmationFailure, Scope.Scope> =>
   Effect.gen(function* () {
+    if (input.response.status !== reviewStatus) return NativeConfirmation.Unavailable();
+
     const bytes = yield* readBoundedRequestBody(
       new Request("https://coordinator.internal/review", {
         method: "POST",

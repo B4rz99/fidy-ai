@@ -108,7 +108,10 @@ export const authenticateOperator = (
       operatorRef: claims.sub,
       expiresAtMs: claims.exp * millisecondsPerSecond,
     });
-  }).pipe(Effect.orElseSucceed(() => Option.none()));
+  }).pipe(
+    Effect.tapError(Effect.logDebug),
+    Effect.orElseSucceed(() => Option.none())
+  );
 
 const currentClaims = (claims: typeof Claims.Type, current: number): boolean =>
   claims.iat <= current &&

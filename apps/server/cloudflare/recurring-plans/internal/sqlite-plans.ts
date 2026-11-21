@@ -227,5 +227,6 @@ export const dispatchLocalRecurringPlans = Effect.fn(
 
     return yield* runLocalMutation({ ...unit, input: Effect.succeed(query), work: workspace });
   },
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );

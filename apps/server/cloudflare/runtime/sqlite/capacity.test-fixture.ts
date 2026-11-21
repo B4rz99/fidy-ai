@@ -95,7 +95,10 @@ export class CapacityProbe extends DurableObject<unknown> {
         max(CASE WHEN id=1 THEN deadline END) AS originalDeadline FROM retained`;
 
         return Response.json({ ...evidence, ...record });
-      }).pipe(Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 }))))
+      }).pipe(
+        Effect.tapCause(Effect.logDebug),
+        Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+      )
     );
   }
 }

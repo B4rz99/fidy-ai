@@ -13,5 +13,6 @@ export const acceptanceProviderResponse = Effect.fn(
 
     return yield* answerFixtureIdentity(request, env);
   },
+  Effect.tapError(Effect.logDebug),
   Effect.orElseSucceed(() => new Response(null, { status: 503 }))
 );

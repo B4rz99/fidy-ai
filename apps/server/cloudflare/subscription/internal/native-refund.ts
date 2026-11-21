@@ -145,5 +145,6 @@ export const handleLocalRefund = Effect.fn(
 
     return yield* refundResultResponse({ result, status: read ? observed : accepted });
   },
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() => Effect.succeed(refundFailureResponse("unavailable")))
 );

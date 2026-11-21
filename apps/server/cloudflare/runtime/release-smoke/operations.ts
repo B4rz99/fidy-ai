@@ -260,7 +260,7 @@ const getProbe = Effect.fn(function* (request: Request, environment: SmokeEnviro
           coreVersionId: environment.CF_VERSION_METADATA.id,
         })
       ).then((instance) => instance.status()),
-  }).pipe(Effect.result);
+  }).pipe(Effect.tapError(Effect.logDebug), Effect.result);
 
   if (Result.isFailure(lookup)) return responseFor(environment, "pending", completedStatus);
   const state = lookup.success;
@@ -311,6 +311,7 @@ export const handleSmoke = ({
 
       return refused();
     }).pipe(
+      Effect.tapCause(Effect.logDebug),
       Effect.catch((error) => Effect.succeed(fail(error.stage))),
       Effect.catchCause(() => Effect.succeed(fail("platform")))
     ),
@@ -343,6 +344,7 @@ const receiveMessage = Effect.fn(function* (
         retention: { successRetention: "1 day", errorRetention: "1 day" },
       }),
   }).pipe(
+    Effect.tapError(Effect.logDebug),
     Effect.catch(() =>
       platform({ stage: "platform", tryWork: () => environment.SMOKE_WORKFLOW.get(id) })
     )

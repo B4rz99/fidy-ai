@@ -99,6 +99,7 @@ export const forwardToken = Effect.fn(
         .fetch(oauthTokenDestinationUrl, { method: "POST", body, signal })
     );
   },
+  Effect.tapError(Effect.logDebug),
   Effect.catchTag("BootstrapInvalid", () => Effect.succeed(invalidGrant()))
 );
 
@@ -360,6 +361,7 @@ export const exchangeLocalToken = Effect.fn(
 
     return result === "family-revoked" ? yield* retired : result;
   },
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() =>
     Effect.succeed(oauthResponse({ body: { error: "temporarily_unavailable" }, status: 503 }))
   )

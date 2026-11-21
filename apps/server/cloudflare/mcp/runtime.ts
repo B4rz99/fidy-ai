@@ -315,6 +315,7 @@ const executeAdmittedTool = (
     return yield* decodeToolResponse(input, work.operation, response);
   }).pipe(
     Effect.scoped,
+    Effect.tapCause(Effect.logDebug),
     Effect.catchCause(() => toolFailure(work.operation))
   );
 
@@ -743,7 +744,10 @@ const executeResidentTool = (
         confirmation: Option.none(),
       }
     );
-  }).pipe(Effect.catch(() => toolFailure(target.operation)));
+  }).pipe(
+    Effect.tapError(Effect.logDebug),
+    Effect.catch(() => toolFailure(target.operation))
+  );
 
 const residentToolCallback = (
   target: ResidentTool,
@@ -1136,7 +1140,10 @@ const handleResidentRequest = (
       (ticket) => useResidentTicket(registry, { request, catalog, ticket }),
       (ticket, exit) => releaseResidentTicket(ticket, Exit.isFailure(exit))
     );
-  }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())));
+  }).pipe(
+    Effect.tapCause(Effect.logDebug),
+    Effect.catchCause(() => Effect.succeed(unavailable()))
+  );
 
 const retireConnections = (
   registry: ResidentRegistry,

@@ -234,5 +234,8 @@ export const handleSupportProof = ({
     };
 
     return yield* waitFor(() => approve(decision));
-  }).pipe(Effect.catchTag("SupportBoundaryFailure", () => Effect.succeed(unavailable())));
+  }).pipe(
+    Effect.tapError(Effect.logDebug),
+    Effect.catchTag("SupportBoundaryFailure", () => Effect.succeed(unavailable()))
+  );
 };

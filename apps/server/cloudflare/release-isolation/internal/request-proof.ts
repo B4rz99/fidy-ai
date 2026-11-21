@@ -164,6 +164,7 @@ const verifiedBody = Effect.fn(
       ? Option.some(bytes)
       : Option.none();
   },
+  Effect.tapError(Effect.logDebug),
   Effect.orElseSucceed(() => Option.none<Uint8Array<ArrayBuffer>>())
 );
 

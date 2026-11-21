@@ -1,7 +1,7 @@
 import { it } from "@effect/vitest";
 import { Cause, Effect, Exit } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
-import { expect } from "vitest";
+import { assert, expect } from "vitest";
 import { verifyStableWorkerIdentity } from "./stable-worker-identity";
 
 const publicIdentity = {
@@ -92,12 +92,10 @@ for (const refusal of [
         Effect.exit
       );
 
-      expect(Exit.isFailure(outcome)).toBe(true);
+      assert(Exit.isFailure(outcome));
 
-      if (Exit.isFailure(outcome)) {
-        expect(Cause.pretty(outcome.cause)).not.toContain("private-provider-detail");
-        expect(Cause.pretty(outcome.cause)).not.toContain(proof);
-      }
+      expect(Cause.pretty(outcome.cause)).not.toContain("private-provider-detail");
+      expect(Cause.pretty(outcome.cause)).not.toContain(proof);
     })
   );
 }

@@ -43,6 +43,15 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
+def deletion_error_code(failure):
+    try:
+        errors = json.loads(failure.read(4096)).get("errors", [])
+        code = errors[0].get("code") if errors else None
+        return f" (code {code})" if type(code) is int and 1000 <= code <= 999999 else ""
+    except (AttributeError, KeyError, TypeError, ValueError, OSError):
+        return ""
+
+
 def multipart_read_session(account, hostname, access, token, bucket):
     def encode(value):
         return urlsafe_b64encode(value).rstrip(b"=")
@@ -104,7 +113,8 @@ class Provider:
                 payload = json.loads(failure.read(4097))
                 if [item.get("code") for item in payload.get("errors", [])] == [11015]:
                     return None
-            raise Refused(f"Cloudflare {method} refused with HTTP {failure.status}") from None
+            code = deletion_error_code(failure) if method == "DELETE" else ""
+            raise Refused(f"Cloudflare {method} refused with HTTP {failure.status}{code}") from None
         require(len(raw) <= MAX_REPLY, "Provider reply exceeded the private inventory bound")
         if method == "DELETE" and not raw:
             return None
@@ -303,3 +313,7 @@ class Provider:
         pattern = {"databases": UUID, "queues": HEX_ID, "workflows": WORKFLOW}.get(kind, WORKER)
         require(kind in paths and pattern.fullmatch(key), "Invalid exact retirement address")
         return self.request(paths[kind] + quote(key, safe=""), method="DELETE", absent=True)
+
+    def delete_queue_consumer(self, queue, consumer):
+        require(HEX_ID.fullmatch(queue) and HEX_ID.fullmatch(consumer), "Invalid exact queue consumer address")
+        self.request(f"queues/{queue}/consumers/{consumer}", method="DELETE", absent=True)

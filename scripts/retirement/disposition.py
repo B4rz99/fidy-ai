@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from provider import HEX_ID, UUID, WORKER, Refused, require
 
 SCOPE = json.loads(Path(__file__).with_name("incumbent.json").read_text())
-KINDS = ("workflows", "queues", "workers", "buckets", "databases")
+KINDS = ("workflows", "workers", "queues", "buckets", "databases")
 NATIVE_WORKERS = {"fidy-native-storage-core", "fidy-native-storage-ingress", "fidy-native-web"}
 HOSTS = {"api.fidyapp.com": "fidy-native-storage-ingress", "app.fidyapp.com": "fidy-native-web"}
 BLOCKING_WRITERS = {"issued_r2_writers", "upload_admission_events"}
@@ -109,7 +109,7 @@ def queue_graph(provider, queues, workers, *, require_paused=True):
     observed = {}
     obsolete_names = set(SCOPE["queues"].values())
     for ident, row in queues.items():
-        consumers = provider.pages(f"queues/{ident}/consumers", "consumer_id")
+        consumers = queue_consumers(provider, ident)
         owner = ident in SCOPE["queues"]
         for consumer in consumers:
             script = consumer.get("script")
@@ -310,6 +310,56 @@ def require_deleted(provider, opening, approved, kind, key):
     raise Refused("Provider did not confirm removal of the exact target")
 
 
+def queue_consumers(provider, queue):
+    return provider.pages(f"queues/{queue}/consumers", "consumer_id")
+
+
+def retire_queue_consumers(provider, queues, record):
+    from time import sleep
+    for queue, links in sorted(queues.items()):
+        require(queue in SCOPE["queues"], "Unreviewed incumbent queue")
+        detail = provider.result(f"queues/{queue}")
+        require(detail["queue_id"] == queue and detail["queue_name"] == SCOPE["queues"][queue]
+                and detail["settings"]["delivery_paused"] is True,
+                "Exact incumbent queue or delivery fence changed")
+        current = queue_consumers(provider, queue)
+        coordinates = [[row["consumer_id"], row.get("script"), row.get("dead_letter_queue") or ""]
+                       for row in current]
+        require(all(row.get("type") == "worker" for row in current)
+                and all(item in links["consumers"] for item in coordinates),
+                "Unexpected consumer appeared before retirement")
+        for consumer, _, _ in coordinates:
+            record({"status": "queue-consumer-offered", "kind": "queues", "id": queue, "consumer": consumer})
+            provider.delete_queue_consumer(queue, consumer)
+            for attempt in range(8):
+                if all(row["consumer_id"] != consumer for row in queue_consumers(provider, queue)):
+                    break
+                if attempt < 7:
+                    sleep(2)
+            else:
+                raise Refused("Provider did not confirm incumbent queue consumer removal")
+            record({"status": "queue-consumer-absent", "kind": "queues", "id": queue, "consumer": consumer})
+
+
+def require_detached_queue(provider, queue):
+    from time import sleep
+    for attempt in range(8):
+        detail = provider.result(f"queues/{queue}")
+        require(detail["queue_id"] == queue and detail["queue_name"] == SCOPE["queues"][queue]
+                and detail["settings"]["delivery_paused"] is True,
+                "Exact incumbent queue or delivery fence changed")
+        require(not queue_consumers(provider, queue), "An incumbent queue gained a consumer")
+        require(detail["producers_total_count"] == len(detail["producers"]),
+                "Incomplete incumbent queue producer list")
+        if not detail["producers"]:
+            return
+        require(all(row.get("script") in SCOPE["workers"] for row in detail["producers"]),
+                "An incumbent queue gained an unrelated producer")
+        if attempt < 7:
+            sleep(2)
+    raise Refused("Incumbent queue producer removal did not propagate")
+
+
 def dispose(provider, opening, approved, record, *, observe=inventory, deleted=require_deleted):
     observed = observe(provider, opening, continuing=True)
     unchanged_remaining(approved, observed)
@@ -318,6 +368,7 @@ def dispose(provider, opening, approved, record, *, observe=inventory, deleted=r
         record({"status": "held", "holds": holds})
         raise Refused("Incumbent custody or outstanding provider work is unresolved")
     provider.verify_public_health(opening)
+    retire_queue_consumers(provider, observed["queues"], record)
     for kind in KINDS:
         ordered = (worker_deletion_order(observed["workerDependencies"]) if kind == "workers"
                    else observed["targets"][kind])
@@ -329,6 +380,8 @@ def dispose(provider, opening, approved, record, *, observe=inventory, deleted=r
             if kind == "workers":
                 require(active_worker(provider, key) == observed["workers"][key],
                         "Incumbent Worker changed before removal")
+            if kind == "queues":
+                require_detached_queue(provider, key)
             if kind == "buckets":
                 before = provider.objects(key)
                 require(sorted(digest(row) for row in before) == observed["objects"][key]["fingerprints"] and

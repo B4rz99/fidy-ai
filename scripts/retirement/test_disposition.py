@@ -7,7 +7,8 @@ from subprocess import CalledProcessError
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 
-from disposition import KINDS, SCOPE, dispose, hold_reasons, require_isolation, unchanged_remaining, validate_scope, worker_deletion_order
+from disposition import (KINDS, SCOPE, dispose, hold_reasons, require_isolation, retire_queue_consumers,
+                         unchanged_remaining, validate_scope, worker_deletion_order)
 from provider import Provider, Refused, multipart_read_session
 
 
@@ -75,7 +76,8 @@ class InventorySafety(unittest.TestCase):
     @patch("disposition.releases_match")
     @patch("disposition.validate_scope")
     @patch("disposition.provider_inventory")
-    def test_only_exact_observed_targets_are_offered_and_read_back(self, graph, _scope, release):
+    @patch("disposition.require_detached_queue")
+    def test_only_exact_observed_targets_are_offered_and_read_back(self, detached, graph, _scope, release):
         worker = SCOPE["workers"][0]
         version = {"deployment": "00000001-1111-4111-8111-000000000000",
                    "version": "00000001-1111-4111-8111-000000000001"}
@@ -96,13 +98,32 @@ class InventorySafety(unittest.TestCase):
         deleted.side_effect = lambda _, opening, scope, kind, key: entries.append(("readback", kind, key))
         dispose(provider, {}, approved, record, observe=Mock(side_effect=[approved, final]), deleted=deleted)
         self.assertEqual(entries, [
-            ("offered", "queues", queue), ("delete", "queues", queue),
-            ("readback", "queues", queue), ("absent", "queues", queue),
             ("offered", "workers", worker), ("delete", "workers", worker),
             ("readback", "workers", worker), ("absent", "workers", worker),
+            ("offered", "queues", queue), ("delete", "queues", queue),
+            ("readback", "queues", queue), ("absent", "queues", queue),
             ("verified", None, None),
         ])
+        detached.assert_called_once_with(provider, queue)
         self.assertEqual(release.call_count, 2)
+
+    def test_retires_only_the_observed_paused_consumer_and_checks_absence(self):
+        queue, name = next(iter(SCOPE["queues"].items()))
+        worker = SCOPE["workers"][0]
+        consumer = "2" * 32
+        approved = {queue: {"consumers": [[consumer, worker, ""]]}}
+        resource = {"consumer_id": consumer, "script": worker, "type": "worker"}
+        provider, record = Mock(), Mock()
+        provider.result.return_value = {"queue_id": queue, "queue_name": name, "settings": {"delivery_paused": True}}
+        provider.pages.side_effect = [[resource], []]
+        retire_queue_consumers(provider, approved, record)
+        provider.delete_queue_consumer.assert_called_once_with(queue, consumer)
+        self.assertEqual(record.call_args.args[0]["status"], "queue-consumer-absent")
+        provider.delete_queue_consumer.reset_mock()
+        provider.pages.side_effect = [[{**resource, "script": "not-approved"}]]
+        with self.assertRaisesRegex(Refused, "Unexpected consumer"):
+            retire_queue_consumers(provider, approved, record)
+        provider.delete_queue_consumer.assert_not_called()
 
 
 

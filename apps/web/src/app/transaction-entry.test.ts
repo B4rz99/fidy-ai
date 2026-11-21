@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
+import { RegistryContext } from "@effect/atom-react";
 import { it } from "@effect/vitest";
-import { createMemoryHistory } from "@tanstack/react-router";
-import { BigDecimal, type Cause, Deferred, Effect, Layer, Option, Schema } from "effect";
+import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
+import { type Cause, Deferred, Effect, Layer, Option, Schema } from "effect";
 import { AsyncResult, AtomRegistry } from "effect/reactivity";
 import { HttpClient, HttpClientResponse, UrlParams } from "effect/http";
 import { act, createElement } from "react";
@@ -10,8 +11,7 @@ import { afterEach, beforeAll, expect, vi } from "vitest";
 import { BrowserSessionBindingSchema, makeFidyClient, makeWebAuthClient } from "@/transport/client";
 import { makeHostedTurnClient } from "@/transport/hosted-turn-client";
 import { PrivacyTransactionFeature, TransactionListFeature } from "@/features/transactions/feature";
-import { TransactionLedger } from "@/features/transactions/ledger";
-import type { TransactionListRow } from "@/features/transactions/presentation";
+import { SessionContext } from "@/session/session-context";
 import { transactionEntryConsent } from "@/session/transaction-entry";
 import { initialApplicationValues } from "./initial-values";
 import { createWebRouter } from "./routes";
@@ -51,6 +51,7 @@ afterEach(() => vi.useRealTimers());
 type EntryControl = {
   consent: "Granted" | "Revoked" | "Unavailable";
   transactions: Option.Option<Deferred.Deferred<void>>;
+  history: ReadonlyArray<Record<string, unknown>>;
 };
 type EntryFixture = Readonly<{
   router: ReturnType<typeof createWebRouter>;
@@ -67,6 +68,7 @@ const entryFixture = (age: Option.Option<number>): EntryFixture => {
   const control: EntryControl = {
     consent: "Granted",
     transactions: Option.none(),
+    history: [],
   };
   const http = HttpClient.make((request) => {
     const url = new URL(request.url);
@@ -91,7 +93,9 @@ const entryFixture = (age: Option.Option<number>): EntryFixture => {
       }
       return HttpClientResponse.fromWeb(
         request,
-        Response.json(url.pathname === "/transactions" ? { data: [], next: [] } : profile)
+        Response.json(
+          url.pathname === "/transactions" ? { data: control.history, next: [] } : profile
+        )
       );
     });
   });
@@ -276,32 +280,28 @@ it.live(
     })
 );
 
-const ledgerRow = (counterpartyLabel: string, day: string, amount: number): TransactionListRow => ({
-  id: counterpartyLabel,
-  categoryId: "compras",
-  categoryLabel: "Compras",
-  counterpartyLabel,
+const historyEntry = (
+  counterparty: string,
+  occurredAt: string,
+  amount: string
+): Record<string, unknown> => ({
+  id: `24000000-0000-4000-8000-${occurredAt.slice(8, 13).replace("T", "0")}0000000`,
+  categoryId: "24000000-0000-4000-8000-000000000242",
+  counterparty,
+  money: { amount, currency: "COP" },
   direction: "outflow",
-  transactionTypeLabel: "Gasto",
-  moneyText: `-$ ${amount}`,
-  money: { amount: BigDecimal.fromNumberUnsafe(amount), currency: "COP" },
-  dateLabel: `${day} de noviembre de 2026`,
-  occurredOnText: `2026-11-0${day}`,
+  occurredAt,
+  createdAt: occurredAt,
+  revision: 0,
 });
-
-const ledgerRows = [
-  ledgerRow("Mercado Zeta", "2", 84_000),
-  ledgerRow("Café Alba", "2", 12_500),
-  ledgerRow("Banco Bogotá", "1", 9000),
-  ledgerRow("Uber", "1", 23_900),
-];
 
 const ledgerOrder = (container: HTMLElement): ReadonlyArray<string> =>
   Array.from(container.querySelectorAll("tbody tr"), (item) =>
     item.getAttribute("data-date-group") === "true"
       ? (item.querySelector("span")?.textContent ?? "")
-      : (ledgerRows.find(({ counterpartyLabel }) => item.textContent.includes(counterpartyLabel))
-          ?.counterpartyLabel ?? "")
+      : (["Mercado Zeta", "Café Alba", "Uber", "Banco Bogotá"].find((name) =>
+          item.textContent.includes(name)
+        ) ?? "")
   );
 
 const sortChoices = (): ReadonlyArray<HTMLElement> =>
@@ -311,43 +311,56 @@ it.live(
   "states that a counterparty sort applies inside each day while days stay newest first",
   () =>
     Effect.gen(function* () {
+      const { router, registry, control, finishPreparation } = entryFixture(Option.some(0));
+      control.history = [
+        historyEntry("Mercado Zeta", "2026-11-02T20:00:00Z", "84000"),
+        historyEntry("Café Alba", "2026-11-02T15:00:00Z", "12500"),
+        historyEntry("Banco Bogotá", "2026-11-01T20:00:00Z", "9000"),
+        historyEntry("Uber", "2026-11-01T15:00:00Z", "23900"),
+      ];
       vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+      vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+      vi.stubGlobal("matchMedia", (query: string) => ({
+        matches: query === "(min-width: 901px)",
+        addEventListener: (): void => undefined,
+        removeEventListener: (): void => undefined,
+      }));
       const container = document.createElement("div");
       document.body.append(container);
       const root = createRoot(container);
       const work = (task: () => void): Effect.Effect<void, Cause.UnknownError> =>
         Effect.tryPromise(() => Promise.resolve(act(task)));
       try {
+        yield* Effect.tryPromise(() => router.load());
+        yield* finishPreparation();
         yield* work(() =>
           root.render(
-            createElement(TransactionLedger, {
-              rows: ledgerRows,
-              locate: Option.none(),
-              emptyTitle: "Sin transacciones",
-              continuation: "complete",
-              readOnly: false,
-              selected: Option.none(),
-              onSelect: () => undefined,
-              renderCategory: (item) => createElement("span", null, item.categoryLabel),
-              disabled: false,
-              locale: "es-CO",
-              toolbar: createElement("div"),
-              onEdit: () => undefined,
-              canEdit: true,
-              selection: {
-                summary: createElement("div"),
-                active: false,
-                ids: [],
-                onToggle: () => undefined,
-                onContinue: () => undefined,
-                allSelected: false,
-                onSelectAll: () => undefined,
-                onClear: () => undefined,
+            createElement(
+              SessionContext.Provider,
+              {
+                value: Option.some({
+                  authentication: "signed-in" as const,
+                  completeLogin: (): void => undefined,
+                  completeLogout: (): void => undefined,
+                  expireAuthentication: (): void => undefined,
+                  replaceAuthenticationLifetime: (): void => undefined,
+                }),
               },
-            })
+              createElement(
+                RegistryContext.Provider,
+                { value: registry },
+                createElement(RouterProvider, { router })
+              )
+            )
           )
         );
-        const trigger = container.querySelector<HTMLElement>("#transaction-sort");
+        const trigger = yield* Effect.tryPromise(() =>
+          vi.waitFor(() => {
+            const sort = container.querySelector<HTMLElement>("#transaction-sort");
+            expect(ledgerOrder(container)).toHaveLength(6);
+            return sort;
+          })
+        );
         expect(trigger?.textContent).toBe("Más recientes primero");
         yield* work(() => trigger?.click());
         expect(sortChoices().map((item) => item.textContent.trim())).toEqual([
@@ -374,6 +387,7 @@ it.live(
         ).toEqual(["COP -96.500,00", "COP -32.900,00"]);
       } finally {
         yield* work(() => root.unmount());
+        registry.dispose();
         container.remove();
         vi.unstubAllGlobals();
       }

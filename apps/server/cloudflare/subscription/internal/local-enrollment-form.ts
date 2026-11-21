@@ -1,6 +1,6 @@
 import { textReport } from "./local-billing-admission";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Result, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import {
   PaymentEnrollmentId,
@@ -313,7 +313,7 @@ const presentPrepared = Effect.fn(function* ({
   const client = yield* enrollmentWompi(env, transport);
   const contracts = yield* Effect.result(client.contracts(DateTime.makeUnsafe(now)));
 
-  if (contracts._tag === "Failure") {
+  if (Result.isFailure(contracts)) {
     yield* sql`UPDATE payment_enrollments SET state='refused',reason='provider-error' WHERE id=${enrollmentId} AND state='preparing'`;
 
     return unavailableEnrollment();
@@ -340,7 +340,10 @@ const presentPrepared = Effect.fn(function* ({
     recurringDisclosure,
     wompiPublicKey: env.WOMPI_PUBLIC_KEY,
     expiresAt: DateTime.makeUnsafe(deadline),
-    ...(method === "daviplata" ? { daviplataOtpPolicy: Option.getOrThrow(wallet) } : {}),
+    ...Option.match(
+      Option.filter(wallet, () => method === "daviplata"),
+      { onNone: () => ({}), onSome: (daviplataOtpPolicy) => ({ daviplataOtpPolicy }) }
+    ),
   });
 
   return form;

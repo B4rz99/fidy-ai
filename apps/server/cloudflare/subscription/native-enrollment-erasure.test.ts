@@ -86,7 +86,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
         expect(issued).toEqual([{ issued: 1 }]);
 
-        if (eraseFirst) expect((yield* admitPurge(runtime)).status).toBe(202);
+        yield* Effect.gen(function* () {
+          expect((yield* admitPurge(runtime)).status).toBe(202);
+        }).pipe(Effect.when(Effect.succeed(eraseFirst)));
 
         const [registration] = yield* owner.exec(
           "SELECT request FROM billing_admissions WHERE subject_id=?",
@@ -104,7 +106,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
         expect(yield* native(() => reply.json())).toMatchObject({ outcome: "cancelled" });
 
-        if (!eraseFirst) expect((yield* admitPurge(runtime)).status).toBe(202);
+        yield* Effect.gen(function* () {
+          expect((yield* admitPurge(runtime)).status).toBe(202);
+        }).pipe(Effect.when(Effect.succeed(!eraseFirst)));
         const driver = yield* caseDriver(runtime);
         expect(yield* driver.step().pipe(Effect.repeat({ times: 5 }))).toBe("Draining");
         yield* native(() => provider.exec("UPDATE held_source SET released=1"));

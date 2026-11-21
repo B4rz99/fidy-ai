@@ -145,12 +145,10 @@ const refreshCorrectedProjection = Effect.fn(function* (
 });
 
 const correctionTargets = (id: string, member: OwnedMember): ReadonlyArray<string> =>
-  [
-    id,
-    ...(member.reconciliation_first_id === null
-      ? []
-      : [member.reconciliation_first_id, member.reconciliation_second_id ?? id]),
-  ].map((member) => "transaction:" + member);
+  Option.match(Option.fromNullOr(member.reconciliation_first_id), {
+    onNone: () => [id],
+    onSome: (first) => [id, first, member.reconciliation_second_id ?? id],
+  }).map((member) => "transaction:" + member);
 
 export const prepareLocalCorrection = Effect.fn(function* (
   { id, input }: { id: string; input: UpdateTransactionInput },

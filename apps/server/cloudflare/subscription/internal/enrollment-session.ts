@@ -8,6 +8,7 @@ import { Clock, Effect, Schema } from "effect";
 import { UserId } from "../../../src/core/identity/contract";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
+import { ConsentSubject } from "../../../src/shell/consent/contract";
 import type { sessionDigest } from "../../web-session/operations";
 import type { WompiTransportFactory } from "./wompi-runtime";
 import type { WompiBindings } from "../contract";
@@ -33,7 +34,7 @@ export const authorized = Effect.fn(function* (
   const sql = yield* SqliteClient;
 
   const guard = protectConsentStatement({
-    subject: { _tag: "Owner", column: "s.user_id" },
+    subject: ConsentSubject.Owner({ column: "s.user_id" }),
     requirement: "active",
     statement: {
       sql: `SELECT s.id,s.user_id,u.time_zone,e.normalized_address AS email FROM web_sessions s JOIN users u ON u.id=s.user_id LEFT JOIN verified_email_credentials e ON e.user_id=s.user_id
@@ -59,7 +60,7 @@ export const liveSession = Effect.fn(function* (session: EnrollmentSession) {
   const now = yield* Clock.currentTimeMillis;
 
   const guard = protectConsentStatement({
-    subject: { _tag: "User", userId: session.user_id },
+    subject: ConsentSubject.User({ userId: session.user_id }),
     requirement: "active",
     statement: {
       sql: "SELECT 1 FROM web_sessions WHERE id=? AND user_id=? AND fresh_until_ms>? AND idle_expires_at_ms>? AND hard_expires_at_ms>? AND revoked_at_ms IS NULL AND NOT EXISTS(SELECT 1 FROM erasure_requests)",

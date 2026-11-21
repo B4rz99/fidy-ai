@@ -2,6 +2,7 @@ import { Digest } from "effect/crypto";
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
 import { UnknownJsonString, jsonStringSchema } from "../../../src/shell/schema-codecs/contract";
 import {
+  type Cause,
   Config,
   Context,
   Data,
@@ -9,6 +10,7 @@ import {
   Effect,
   Layer,
   Option,
+  Predicate,
   Redacted,
   Result,
   Schema,
@@ -24,6 +26,7 @@ import {
 import { WompiSourceId } from "./wompi-model";
 import {
   type OutboundHttpFailure,
+  OutboundHttpRequest,
   type OutboundHttpResponse,
 } from "../../../src/shell/outbound-http/contract";
 import {
@@ -110,10 +113,13 @@ export type WompiVerifiedSource = Readonly<{
   billingEmail: BillingEmail;
 }>;
 
-export type WompiSourceResult =
-  | Readonly<{ _tag: "Available"; sourceId: WompiSourceId }>
-  | Readonly<{ _tag: "Verifying"; sourceId: WompiSourceId }>
-  | Readonly<{ _tag: "Refused" }>;
+export type WompiSourceResult = Data.TaggedEnum<{
+  Available: { readonly sourceId: WompiSourceId };
+  Verifying: { readonly sourceId: WompiSourceId };
+  Refused: {};
+}>;
+
+export const WompiSourceResult = Data.taggedEnum<WompiSourceResult>();
 
 export type WompiEnrollmentClientService = Readonly<{
   publicKey: string;
@@ -220,18 +226,12 @@ const parseSourceResult = (
 
   switch (decoded.success.data.status) {
     case "AVAILABLE":
-      return Effect.succeed<WompiSourceResult>({
-        _tag: "Available",
-        sourceId: decoded.success.data.id,
-      });
+      return Effect.succeed(WompiSourceResult.Available({ sourceId: decoded.success.data.id }));
     case "DECLINED":
     case "ERROR":
-      return Effect.succeed<WompiSourceResult>({ _tag: "Refused" });
+      return Effect.succeed(WompiSourceResult.Refused());
     case "PENDING":
-      return Effect.succeed<WompiSourceResult>({
-        _tag: "Verifying",
-        sourceId: decoded.success.data.id,
-      });
+      return Effect.succeed(WompiSourceResult.Verifying({ sourceId: decoded.success.data.id }));
   }
 };
 
@@ -281,7 +281,7 @@ const makeContracts =
     publicKey: string;
   }>): WompiEnrollmentClientService["contracts"] =>
   (observedAt) =>
-    outboundHttp.execute({ _tag: "WompiMerchant" }).pipe(
+    outboundHttp.execute(OutboundHttpRequest.WompiMerchant()).pipe(
       Effect.timeout("10 seconds"),
       Effect.filterOrFail(
         (response) =>
@@ -319,10 +319,11 @@ const makeVerifyWalletApproval =
   ): WompiEnrollmentClientService["verifyNequiApproval"] =>
   (token) =>
     outboundHttp
-      .execute({
-        _tag: method === "nequi" ? "WompiNequiApproval" : "WompiDaviplataApproval",
-        token,
-      })
+      .execute(
+        method === "nequi"
+          ? OutboundHttpRequest.WompiNequiApproval({ token })
+          : OutboundHttpRequest.WompiDaviplataApproval({ token })
+      )
       .pipe(
         Effect.timeout("10 seconds"),
         Effect.filterOrFail(
@@ -345,7 +346,7 @@ const makeVerifyWalletApproval =
 const makeVerifyPaymentSource =
   (outboundHttp: OutboundHttpService): WompiEnrollmentClientService["verifyPaymentSource"] =>
   (sourceId, method) =>
-    outboundHttp.execute({ _tag: "WompiVerifyPaymentSource", sourceId }).pipe(
+    outboundHttp.execute(OutboundHttpRequest.WompiVerifyPaymentSource({ sourceId })).pipe(
       Effect.timeout("10 seconds"),
       Effect.filterOrFail(
         (response) =>
@@ -368,11 +369,11 @@ const makeVerifyPaymentSource =
     );
 
 const sourceCreationTransportFailure = (
-  failure: OutboundHttpFailure | { readonly _tag: "TimeoutError" }
+  failure: OutboundHttpFailure | Cause.TimeoutError
 ): WompiSourceCreationFailed =>
   new WompiSourceCreationFailed({
     certainty:
-      failure._tag === "OutboundHttpFailure" &&
+      Predicate.isTagged(failure, "OutboundHttpFailure") &&
       Option.exists(
         failure.responseStatus,
         (status) =>
@@ -387,16 +388,17 @@ const makeCreatePaymentSource =
   (outboundHttp: OutboundHttpService): WompiEnrollmentClientService["createPaymentSource"] =>
   (input) =>
     outboundHttp
-      .execute({
-        _tag: "WompiCreatePaymentSource",
-        body: encodeSourceRequest({
-          type: providerSourceTypes[input.method],
-          token: Redacted.value(input.token),
-          customer_email: input.billingEmail,
-          acceptance_token: Redacted.value(input.contracts.endUserAcceptance),
-          accept_personal_auth: Redacted.value(input.contracts.personalDataAcceptance),
-        }),
-      })
+      .execute(
+        OutboundHttpRequest.WompiCreatePaymentSource({
+          body: encodeSourceRequest({
+            type: providerSourceTypes[input.method],
+            token: Redacted.value(input.token),
+            customer_email: input.billingEmail,
+            acceptance_token: Redacted.value(input.contracts.endUserAcceptance),
+            accept_personal_auth: Redacted.value(input.contracts.personalDataAcceptance),
+          }),
+        })
+      )
       .pipe(
         Effect.timeout("14 seconds"),
         Effect.mapError(sourceCreationTransportFailure),

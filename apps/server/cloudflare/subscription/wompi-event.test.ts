@@ -4,6 +4,7 @@ import { receiveWompiBillingEvent } from "./internal/billing-workflow";
 import { expect, it, vi } from "vitest";
 import { Effect, Option } from "effect";
 import { verifiedWompiEventHint } from "./internal/wompi-event";
+import { WompiBillingEvent } from "./contract";
 
 const secret = "prod_events_OcHnIzeBl5socpwByQ4hA52Em3USQ93Z";
 
@@ -106,13 +107,12 @@ it("acknowledges the signed Wompi event only after the billing Queue accepts its
         })).status
       ).toBe(200);
       expect(messages).toEqual([
-        {
-          _tag: "WompiBillingEvent",
+        WompiBillingEvent.make({
           environment: "production",
           transactionId: "1234-1610641025-49201",
           signedAt: 1530291411,
           signedStatus: "APPROVED",
-        },
+        }),
       ]);
     })
   ));
@@ -128,23 +128,33 @@ it("acknowledges duplicate billing work only when its Workflow is active, comple
         get: () => Promise.resolve({ status: () => Promise.resolve({ status }), restart }),
       };
 
-      const offer = offerNativeBillingWork(workflow, {
-        _tag: "WompiBillingEvent",
-        environment: "production",
-        signedStatus: "APPROVED",
-        signedAt: event.timestamp,
-        transactionId: event.data.transaction.id,
-      });
+      const offer = offerNativeBillingWork(
+        workflow,
+        WompiBillingEvent.make({
+          environment: "production",
+          signedStatus: "APPROVED",
+          signedAt: event.timestamp,
+          transactionId: event.data.transaction.id,
+        })
+      );
 
-      for (const unavailable of ["unknown", "paused", "terminated"] as const) {
-        status = unavailable;
-        expect(yield* Effect.isFailure(offer)).toBe(true);
-      }
+      yield* Effect.forEach(
+        ["unknown", "paused", "terminated"] as const,
+        Effect.fnUntraced(function* (unavailable) {
+          status = unavailable;
+          expect(yield* Effect.isFailure(offer)).toBe(true);
+        }),
+        { discard: true }
+      );
 
-      for (const confirmed of ["queued", "running", "waiting", "complete"] as const) {
-        status = confirmed;
-        expect(yield* Effect.isSuccess(offer)).toBe(true);
-      }
+      yield* Effect.forEach(
+        ["queued", "running", "waiting", "complete"] as const,
+        Effect.fnUntraced(function* (confirmed) {
+          status = confirmed;
+          expect(yield* Effect.isSuccess(offer)).toBe(true);
+        }),
+        { discard: true }
+      );
 
       expect(restart).not.toHaveBeenCalled();
       status = "errored";

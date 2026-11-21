@@ -135,14 +135,14 @@ const hosted = Effect.fn(function* (
         body: { turnId },
       });
 
-      if (fails) {
-        if (reply.status !== 503) return yield* Effect.fail("awaiting terminal refusal");
-        expect(yield* native(() => reply.json())).toEqual({ status: "interrupted" });
+      if (!fails) {
+        yield* Schema.decodeUnknownEffect(HostedTurnProposal)(yield* native(() => reply.json()));
 
         return;
       }
 
-      yield* Schema.decodeUnknownEffect(HostedTurnProposal)(yield* native(() => reply.json()));
+      if (reply.status !== 503) return yield* Effect.fail("awaiting terminal refusal");
+      expect(yield* native(() => reply.json())).toEqual({ status: "interrupted" });
     }),
     { times: 50, schedule: Schedule.spaced("50 millis") }
   );
@@ -158,22 +158,23 @@ const hosted = Effect.fn(function* (
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "returns matching exact filtered history through PAT and hosted tools, isolating foreign rows and attributing each call to its actor",
-    () =>
-      Effect.gen(function* () {
-        const { db, patRead } = yield* setup();
-        const rows = yield* hosted(db, cases);
-        expect(rows).toHaveLength(cases.length);
+    Effect.fnUntraced(function* () {
+      const { db, patRead } = yield* setup();
+      const rows = yield* hosted(db, cases);
+      expect(rows).toHaveLength(cases.length);
 
-        for (const [index, entry] of cases.entries()) {
+      yield* Effect.forEach(
+        cases.entries(),
+        Effect.fnUntraced(function* ([index, entry]) {
           const response = yield* patRead(entry.path);
 
-          if (entry.op === "getTransaction") {
-            expect(response.status).toBe(404);
+          const missing = entry.op === "getTransaction";
+          expect(response.status).toBe(missing ? 404 : 200);
+          yield* Effect.sync(() => {
             expect(rows[index]?.outcome).toBe("CanonicalOperationFailed");
-            continue;
-          }
+          }).pipe(Effect.when(Effect.succeed(missing)));
 
-          expect(response.status).toBe(200);
+          if (missing) return;
           const body = yield* native(() => response.json());
           expect(body).toMatchObject({
             data: [{ id: own, money: { amount: "12.34", currency: "USD" } }],
@@ -184,33 +185,35 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           );
 
           expect(output).toEqual(body);
-        }
+        }),
+        { discard: true }
+      );
 
-        expect(
-          yield* native(() =>
-            db.exec(
-              "SELECT count(*) AS n FROM audit_entries WHERE pat_id IS NOT NULL AND record_type='credential_call'"
-            )
+      expect(
+        yield* native(() =>
+          db.exec(
+            "SELECT count(*) AS n FROM audit_entries WHERE pat_id IS NOT NULL AND record_type='credential_call'"
           )
-        ).toEqual([{ n: 4 }]);
-        expect(
-          yield* native(() =>
-            db.exec("SELECT count(*) AS n FROM pats WHERE last_used_at_ms IS NOT NULL")
+        )
+      ).toEqual([{ n: 4 }]);
+      expect(
+        yield* native(() =>
+          db.exec("SELECT count(*) AS n FROM pats WHERE last_used_at_ms IS NOT NULL")
+        )
+      ).toEqual([{ n: 1 }]);
+      expect((yield* patRead("/transactions/not-an-id")).status).toBe(404);
+      expect((yield* native(() => db.browser(0, "/transactions/not-an-id"))).status).toBe(404);
+      expect(
+        yield* native(() =>
+          db.exec(
+            "SELECT operation,outcome FROM audit_entries WHERE record_type='session_call' AND operation='transactions.getTransaction'"
           )
-        ).toEqual([{ n: 1 }]);
-        expect((yield* patRead("/transactions/not-an-id")).status).toBe(404);
-        expect((yield* native(() => db.browser(0, "/transactions/not-an-id"))).status).toBe(404);
-        expect(
-          yield* native(() =>
-            db.exec(
-              "SELECT operation,outcome FROM audit_entries WHERE record_type='session_call' AND operation='transactions.getTransaction'"
-            )
-          )
-        ).toEqual([{ operation: "transactions.getTransaction", outcome: "not_found" }]);
-        expect(
-          yield* native(() => db.owner(bob.user).exec("SELECT count(*) AS n FROM audit_entries"))
-        ).toEqual([{ n: 0 }]);
-      })
+        )
+      ).toEqual([{ operation: "transactions.getTransaction", outcome: "not_found" }]);
+      expect(
+        yield* native(() => db.owner(bob.user).exec("SELECT count(*) AS n FROM audit_entries"))
+      ).toEqual([{ n: 0 }]);
+    })
   );
   test.effect.each(["corrupt", "unavailable", "revoked"] as const)(
     "preserves the %s history refusal and atomic credential accounting at the native owner",
@@ -244,14 +247,19 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         ).toEqual([{ n: 0 }]);
         const results = yield* hosted(db, [cases[0]], kind === "corrupt");
 
-        if (kind === "corrupt") {
-          expect(results).toEqual([]);
-          expect(
-            yield* native(() => db.exec("SELECT state,answer,receipt_digest FROM hosted_turns"))
-          ).toEqual([{ state: "failed", answer: null, receipt_digest: null }]);
-        } else {
-          expect(results.map((result) => result.outcome)).toEqual(["Succeeded"]);
-        }
+        expect(results.map((result) => result.outcome)).toEqual(
+          kind === "corrupt" ? [] : ["Succeeded"]
+        );
+
+        const hostedTurns = native(() =>
+          db.exec("SELECT state,answer,receipt_digest FROM hosted_turns")
+        );
+
+        yield* Effect.gen(function* () {
+          expect(yield* hostedTurns).toEqual([
+            { state: "failed", answer: null, receipt_digest: null },
+          ]);
+        }).pipe(Effect.when(Effect.succeed(kind === "corrupt")));
 
         expect(yield* native(() => db.exec("SELECT count(*) AS n FROM transactions"))).toEqual([
           { n: 1 },

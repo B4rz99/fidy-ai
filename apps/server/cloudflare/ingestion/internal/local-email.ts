@@ -1,6 +1,6 @@
 import type { LocalIngestionRequest } from "../contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Predicate, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import PostalMime from "postal-mime";
 import {
@@ -17,6 +17,7 @@ import { allowancePeriod } from "../../../src/core/quotas/operations";
 import { allowanceConsumptionCount } from "../../quotas/operations";
 import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
+import { ConsentSubject } from "../../../src/shell/consent/contract";
 import { lookupExternalEventRoute } from "../../directory/operations";
 import {
   type ForwardedEmailMessage,
@@ -118,7 +119,7 @@ const address = Effect.fn(function* (user: UserId, id: string, part: string) {
   const sql = yield* SqliteClient;
 
   const authority = protectConsentStatement({
-    subject: { _tag: "User", userId: user },
+    subject: ConsentSubject.User({ userId: user }),
     requirement: "active",
     statement: {
       sql: "SELECT u.time_zone FROM forwarding_addresses a JOIN users u ON u.id=a.user_id WHERE a.user_id=? AND a.id=? AND a.local_part=? AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=u.id)",
@@ -371,7 +372,7 @@ const liveReceipt = Effect.fn(function* (user: UserId, id: string, current: numb
   const sql = yield* SqliteClient;
 
   const authority = protectConsentStatement({
-    subject: { _tag: "User", userId: user },
+    subject: ConsentSubject.User({ userId: user }),
     requirement: "granted",
     statement: {
       sql: "SELECT * FROM forwarded_email_receipts WHERE id=? AND user_id=? AND expires_at_ms>? AND state='queued' AND outcome IS NULL AND deferred_checked_at_ms IS NULL AND EXISTS(SELECT 1 FROM commercial_allowance_consumptions WHERE user_id=? AND allowance='forwarded_email' AND identity=?) AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=?)",
@@ -393,7 +394,7 @@ const settleEmail = Effect.fn(function* (
 ) {
   const sql = yield* SqliteClient;
 
-  if (outcome._tag === "Interpreted") {
+  if (Predicate.isTagged(outcome, "Interpreted")) {
     const context = yield* Schema.decodeEffect(UserContext)({
       serviceMarket: "CO",
       locale: "es-CO",
@@ -515,59 +516,63 @@ export const recoverEmailStages = Effect.fn(function* (
     sql`UPDATE forwarded_email_receipts SET stage_checked_at_ms=${current} WHERE id IN(SELECT id FROM forwarded_email_receipts WHERE state='storing' AND stage_checked_at_ms<=${current - emailStageRetryMs} AND expires_at_ms>${current} ORDER BY stage_checked_at_ms LIMIT 8) RETURNING *`
   );
 
-  for (const raw of rows) {
-    const receipt = yield* Schema.decodeUnknownEffect(Receipt)(raw),
-      user = yield* Schema.decodeUnknownEffect(UserId)(raw.user_id);
+  yield* Effect.forEach(
+    rows,
+    Effect.fnUntraced(function* (raw) {
+      const receipt = yield* Schema.decodeUnknownEffect(Receipt)(raw),
+        user = yield* Schema.decodeUnknownEffect(UserId)(raw.user_id);
 
-    if (!receipt.object_key.startsWith(userPrivateObjectPrefix(user) + "email/")) {
-      return yield* fail();
-    }
+      if (!receipt.object_key.startsWith(userPrivateObjectPrefix(user) + "email/")) {
+        return yield* fail();
+      }
 
-    const head = yield* Effect.tryPromise(() => env.EMAIL_BUCKET.head(receipt.object_key));
-    yield* settleObservedOriginal("email", receipt.object_key, Option.fromNullOr(head));
+      const head = yield* Effect.tryPromise(() => env.EMAIL_BUCKET.head(receipt.object_key));
+      yield* settleObservedOriginal("email", receipt.object_key, Option.fromNullOr(head));
 
-    const stored =
-      head?.size === receipt.byte_length &&
-      head.customMetadata?.purpose === "forwarded-email" &&
-      head.checksums.sha256 !== undefined &&
-      Hex.encode(new Uint8Array(head.checksums.sha256)) === receipt.delivery_digest;
+      const stored =
+        head?.size === receipt.byte_length &&
+        head.customMetadata?.purpose === "forwarded-email" &&
+        head.checksums.sha256 !== undefined &&
+        Hex.encode(new Uint8Array(head.checksums.sha256)) === receipt.delivery_digest;
 
-    yield* withStoreCapacity("required")(
-      Effect.gen(function* () {
-        const now = yield* Clock.currentTimeMillis;
+      yield* withStoreCapacity("required")(
+        Effect.gen(function* () {
+          const now = yield* Clock.currentTimeMillis;
 
-        const [active] =
-          yield* sql`SELECT a.id,a.local_part FROM forwarded_email_receipts r LEFT JOIN forwarding_addresses a ON r.forwarding_address_id=a.id AND r.user_id=a.user_id WHERE r.user_id=${user} AND r.id=${receipt.id} AND r.state='storing' AND r.expires_at_ms>${now}`;
+          const [active] =
+            yield* sql`SELECT a.id,a.local_part FROM forwarded_email_receipts r LEFT JOIN forwarding_addresses a ON r.forwarding_address_id=a.id AND r.user_id=a.user_id WHERE r.user_id=${user} AND r.id=${receipt.id} AND r.state='storing' AND r.expires_at_ms>${now}`;
 
-        if (active === undefined) return;
+          if (active === undefined) return;
 
-        if (!(yield* activeForwardingRoute(user, active))) {
-          yield* sql`UPDATE forwarded_email_receipts SET state='discarding' WHERE user_id=${user} AND id=${receipt.id}`;
+          if (!(yield* activeForwardingRoute(user, active))) {
+            yield* sql`UPDATE forwarded_email_receipts SET state='discarding' WHERE user_id=${user} AND id=${receipt.id}`;
 
-          return;
-        }
-
-        if (raw.capacity_claimed !== 1) {
-          if (now >= receipt.received_at_ms + abandonmentMs) {
-            yield* sql`UPDATE forwarded_email_receipts SET state='discarding' WHERE id=${receipt.id} AND state='storing' AND capacity_claimed=0`;
+            return;
           }
 
-          return;
-        }
+          if (raw.capacity_claimed !== 1) {
+            if (now >= receipt.received_at_ms + abandonmentMs) {
+              yield* sql`UPDATE forwarded_email_receipts SET state='discarding' WHERE id=${receipt.id} AND state='storing' AND capacity_claimed=0`;
+            }
 
-        if (stored) {
-          yield* activateLocalEmail(user, receipt.id, now);
+            return;
+          }
 
-          return;
-        }
+          if (stored) {
+            yield* activateLocalEmail(user, receipt.id, now);
 
-        if (now < receipt.received_at_ms + abandonmentMs) return;
-        const review = newId();
-        yield* sql`INSERT INTO ingestion_review_items(id,user_id,source_kind,email_receipt_id,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone) VALUES(${review},${user},'email',${receipt.id},'processing-interrupted',${now},${receipt.expires_at_ms},'CO','es-CO',${receipt.time_zone})`;
-        yield* sql`UPDATE forwarded_email_receipts SET state='queued',outcome='needs-review',outcome_review_id=${review} WHERE user_id=${user} AND id=${receipt.id}`;
-      })
-    );
-  }
+            return;
+          }
+
+          if (now < receipt.received_at_ms + abandonmentMs) return;
+          const review = newId();
+          yield* sql`INSERT INTO ingestion_review_items(id,user_id,source_kind,email_receipt_id,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone) VALUES(${review},${user},'email',${receipt.id},'processing-interrupted',${now},${receipt.expires_at_ms},'CO','es-CO',${receipt.time_zone})`;
+          yield* sql`UPDATE forwarded_email_receipts SET state='queued',outcome='needs-review',outcome_review_id=${review} WHERE user_id=${user} AND id=${receipt.id}`;
+        })
+      );
+    }),
+    { discard: true }
+  );
 
   return rows.length;
 });

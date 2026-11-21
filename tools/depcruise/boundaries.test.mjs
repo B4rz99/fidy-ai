@@ -148,9 +148,9 @@ await test("future portable and native owners share one privacy and direction po
           modules: [
             { source: from, dependencies: [{ resolved: to }] },
             { source: to, dependencies: [] },
-            ...[`${owner}/contract.ts`, `${peer}/contract.ts`]
-              .filter((source) => source !== from && source !== to)
-              .map((source) => ({ source, dependencies: [] })),
+            ...[`${owner}/contract.ts`, `${peer}/contract.ts`].flatMap((source) =>
+              source === from || source === to ? [] : [{ source, dependencies: [] }]
+            ),
           ],
         },
         "/synthetic/apps/server"

@@ -1,11 +1,12 @@
 import { dual } from "effect/Function";
-import { Cause, Effect, Exit, Option } from "effect";
+import { Cause, Data, Effect, Exit, Option, Predicate } from "effect";
 import {
   HostedInferenceError,
   type HostedInferenceFailureReason,
   type HostedInvalidOutputDescription,
 } from "../../../src/shell/hosted-inference/contract";
 import type {
+  ClassifiedFailure,
   DeclaredOutcome,
   SpanDescriptor,
   TelemetryCode,
@@ -14,13 +15,20 @@ import type {
 } from "../../../src/shell/observability/contract";
 import { Telemetry } from "../../../src/shell/observability/operations";
 
+const ClassifiedFailureCase = Data.taggedEnum<ClassifiedFailure>();
+
+const SpanMetadata = Data.taggedEnum<SpanDescriptor["metadata"]>();
+
 type HostedObservation = Readonly<{
   trigger: "api" | "queue" | "kapso_webhook";
   parent: Option.Option<unknown>;
   release: TelemetryRelease;
 }>;
 
-type ApplicationSpan = Omit<Extract<SpanDescriptor, { metadata: { _tag: "None" } }>, "workKind"> & {
+type ApplicationSpan = Omit<
+  Extract<SpanDescriptor, { metadata: Data.TaggedEnum.Value<SpanDescriptor["metadata"], "None"> }>,
+  "workKind"
+> & {
   readonly workKind: "canonical_operation" | "hosted_turn" | "model_round";
 };
 
@@ -47,7 +55,7 @@ const invalidOutputFailureCodes: Partial<
 };
 
 const modelFailureCode = (reason: HostedInferenceFailureReason): TelemetryCode<"error"> =>
-  reason._tag === "InvalidOutput"
+  Predicate.isTagged(reason, "InvalidOutput")
     ? (invalidOutputFailureCodes[reason.description] ?? modelFailureCodes.InvalidOutput)
     : modelFailureCodes[reason._tag];
 
@@ -65,7 +73,7 @@ const classifiedModelFailure = (cause: Cause.Cause<unknown>): DeclaredOutcome =>
   const failure = error.value;
   const code = modelFailureCode(failure.reason);
 
-  return failure.reason._tag === "InvalidOutput" ||
+  return Predicate.isTagged(failure.reason, "InvalidOutput") ||
     code === "model_response_rejected" ||
     code === "authentication_failed"
     ? { outcome: "rejected", error: Option.some(code), retryable: false }
@@ -103,15 +111,13 @@ const finishApplication = (
     Effect.andThen(
       telemetry.captureFailure(
         Cause.hasDies(exit.cause)
-          ? {
-              _tag: "Defect",
+          ? ClassifiedFailureCase.Defect({
               component: descriptor.component,
               operation: descriptor.operation,
               error: "unexpected_defect",
               cause: exit.cause,
-            }
-          : {
-              _tag: "ExhaustedOperationalFailure",
+            })
+          : ClassifiedFailureCase.ExhaustedOperationalFailure({
               component: descriptor.component,
               operation: descriptor.operation,
               error: Option.getOrElse(outcome.error, () => "operational_failure" as const),
@@ -119,7 +125,7 @@ const finishApplication = (
                 descriptor.workKind === "model_round" ? Option.some("openai") : Option.none(),
               retryable: outcome.retryable,
               cause: exit.cause,
-            }
+            })
       )
     )
   );
@@ -185,7 +191,7 @@ const observeCanonicalResponseWork = <E, R>(
     trigger: "api",
     spanOperation: "fidy.operation",
     workKind: "canonical_operation",
-    metadata: { _tag: "None" },
+    metadata: SpanMetadata.None(),
   });
 
 const observeHostedResponseWork = <E, R>(
@@ -201,7 +207,7 @@ const observeHostedResponseWork = <E, R>(
       trigger: observation.trigger,
       spanOperation: "agent.turn",
       workKind: "hosted_turn",
-      metadata: { _tag: "None" },
+      metadata: SpanMetadata.None(),
     },
     observation.parent
   );

@@ -10,6 +10,7 @@ import { UserId } from "../../../src/core/identity/contract";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { renewalPeriod } from "../../../src/core/subscription/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
+import { ConsentSubject } from "../../../src/shell/consent/contract";
 import { preserveStoreAlarm, withStoreCapacity } from "../../runtime/sqlite/operations";
 import { newId } from "../../secret-material/operations";
 
@@ -53,7 +54,7 @@ const readBoundary = Effect.fn(function* (id: string, environment: string, now: 
   const sql = yield* SqliteClient;
 
   const guard = protectConsentStatement({
-    subject: { _tag: "Owner", column: "a.user_id" },
+    subject: ConsentSubject.Owner({ column: "a.user_id" }),
     requirement: "active",
     statement: {
       sql: `SELECT a.user_id,a.id,a.payment_source_id,a.paid_ends_at_ms,COALESCE(a.calendar_anchor_ms,a.paid_starts_at_ms) anchor,a.billing_period,a.time_zone FROM billing_attempt_context a JOIN subscription_standing s ON s.attempt_id=a.id AND s.user_id=a.user_id JOIN payment_source_context p ON p.id=a.payment_source_id AND p.user_id=a.user_id

@@ -1,0 +1,16 @@
+apps/server/cloudflare/public-worker-refund-origin.test.ts
+  h_c6d49c804e0ad2 1-50
+apps/server/cloudflare/public-worker.ts
+  h_c6d49c804e0ad2 654-655,661-662
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b42c8a109683d940ba4db968277a3611e1483178",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -18,9 +18,9 @@ export const mountPhoneDemo = (shell: HTMLElement): (() => void) => {
 
   const select = (event: MouseEvent): void => {
     if (stopped) return;
-    const button = event.currentTarget;
+    const button = buttons.find((item) => item === event.currentTarget);
 
-    if (!(button instanceof HTMLButtonElement)) return;
+    if (button === undefined) return;
     const template = templates.find((item) => item.dataset.scenario === button.dataset.scenario);
 
     if (template === undefined) return;

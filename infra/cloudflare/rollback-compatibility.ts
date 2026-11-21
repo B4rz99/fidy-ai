@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { Option, Schema } from "effect";
+import { Option, Predicate, Schema } from "effect";
 
 const describedBinding = Schema.StructWithRest(
   Schema.Struct({ name: Schema.NonEmptyString, type: Schema.NonEmptyString }),
@@ -26,11 +26,13 @@ const providerVersion = Schema.Struct({
   }),
 });
 
+export type WorkerBindings = Readonly<Record<string, Schema.Json>>;
+
 export type WorkerResources = Readonly<{
   migrationTag: string;
-  runtime: Readonly<Record<string, unknown>>;
-  bindings: Readonly<Record<string, unknown>>;
-  exports: Readonly<Record<string, unknown>>;
+  runtime: Readonly<Record<string, Schema.Json>>;
+  bindings: WorkerBindings;
+  exports: Readonly<Record<string, Schema.Json>>;
 }>;
 
 const namespaceIdentity = Schema.is(
@@ -93,8 +95,9 @@ export const verifiedVersionResources = ({
 
   return {
     bindings: versionBindings(bindings, revision),
-    migrationTag:
-      typeof script_runtime.migration_tag === "string" ? script_runtime.migration_tag : "",
+    migrationTag: Predicate.isString(script_runtime.migration_tag)
+      ? script_runtime.migration_tag
+      : "",
     runtime: script_runtime,
     exports: { defaultHandlers: script.handlers.toSorted(), namedHandlers },
   };

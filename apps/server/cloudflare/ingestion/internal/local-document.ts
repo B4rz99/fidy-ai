@@ -5,6 +5,7 @@ import { Clock, Effect, Option, Redacted, Schema } from "effect";
 import { HttpClient } from "effect/http";
 import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
+import { ConsentSubject } from "../../../src/shell/consent/contract";
 import { UserId } from "../../../src/core/identity/contract";
 import {
   knownUnsupportedStatementBytes,
@@ -58,7 +59,7 @@ const live = Effect.fn(function* (doc: Document, current: number) {
   const sql = yield* SqliteClient;
 
   const query = protectConsentStatement({
-    subject: { _tag: "User", userId: UserId.make(doc.userId) },
+    subject: ConsentSubject.User({ userId: UserId.make(doc.userId) }),
     requirement: "active",
     statement: {
       sql: "SELECT 1 FROM users WHERE id=? AND whatsapp_portfolio_id=? AND whatsapp_bsuid=? AND whatsapp_verified_at_ms<=? AND NOT EXISTS (SELECT 1 FROM erasure_requests WHERE user_id=?) AND NOT EXISTS(SELECT 1 FROM statement_document_origins WHERE user_id=users.id AND message=? AND (expires_at_ms<=? OR occurred_at_ms!=?))",
@@ -391,27 +392,31 @@ export const recoverDocumentStages = Effect.fn(function* (
 
   let failed = 0;
 
-  for (const raw of rows) {
-    const doc = yield* Schema.decodeUnknownEffect(NativeStatementDocument)(raw);
+  yield* Effect.forEach(
+    rows,
+    Effect.fnUntraced(function* (raw) {
+      const doc = yield* Schema.decodeUnknownEffect(NativeStatementDocument)(raw);
 
-    const publication = yield* Effect.option(
-      publishDocument(doc, storage, { env, origin: Option.none() })
-    );
-
-    if (Option.isNone(publication) || publication.value.status >= serverErrorStatus) failed++;
-
-    if (Option.isSome(publication) && publication.value.status === forbidden) {
-      const id = yield* Schema.decodeUnknownEffect(Schema.String)(raw.id);
-      yield* withStoreCapacity("required")(discardUnpublished(id, storage, current));
-    } else if (
-      Option.isSome(publication) &&
-      [conflict, unprocessable].includes(publication.value.status)
-    ) {
-      yield* withStoreCapacity("required")(
-        sql`UPDATE statement_documents SET last_stage_attempt_at_ms=expires_at_ms WHERE user_id=${doc.userId} AND portfolio=${doc.portfolio} AND message=${doc.message}`
+      const publication = yield* Effect.option(
+        publishDocument(doc, storage, { env, origin: Option.none() })
       );
-    }
-  }
+
+      if (Option.isNone(publication) || publication.value.status >= serverErrorStatus) failed++;
+
+      if (Option.isSome(publication) && publication.value.status === forbidden) {
+        const id = yield* Schema.decodeUnknownEffect(Schema.String)(raw.id);
+        yield* withStoreCapacity("required")(discardUnpublished(id, storage, current));
+      } else if (
+        Option.isSome(publication) &&
+        [conflict, unprocessable].includes(publication.value.status)
+      ) {
+        yield* withStoreCapacity("required")(
+          sql`UPDATE statement_documents SET last_stage_attempt_at_ms=expires_at_ms WHERE user_id=${doc.userId} AND portfolio=${doc.portfolio} AND message=${doc.message}`
+        );
+      }
+    }),
+    { discard: true }
+  );
 
   return { attempted: rows.length, failed };
 });

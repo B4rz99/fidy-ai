@@ -1,4 +1,4 @@
-import { DateTime, Option, Schema } from "effect";
+import { DateTime, Option, Predicate, Schema } from "effect";
 import {
   type CanonicalInput,
   type CanonicalSuccess,
@@ -69,10 +69,16 @@ const dateFilters = ({
   TransactionSearch["filters"],
   "from" | "to"
 > => ({
-  ...(draft.from === "" ? {} : { from: DateTime.toUtc(localMidnight(draft.from, timeZone)) }),
-  ...(draft.to === ""
-    ? {}
-    : { to: DateTime.toUtc(DateTime.add(localMidnight(draft.to, timeZone), { days: 1 })) }),
+  ...Option.match(Option.liftPredicate(draft.from, Predicate.isTruthy), {
+    onNone: () => ({}),
+    onSome: (from) => ({ from: DateTime.toUtc(localMidnight(from, timeZone)) }),
+  }),
+  ...Option.match(Option.liftPredicate(draft.to, Predicate.isTruthy), {
+    onNone: () => ({}),
+    onSome: (to) => ({
+      to: DateTime.toUtc(DateTime.add(localMidnight(to, timeZone), { days: 1 })),
+    }),
+  }),
 });
 
 const invalidDraft = (draft: TransactionFilters): boolean => {

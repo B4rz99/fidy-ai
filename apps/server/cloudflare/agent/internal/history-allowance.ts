@@ -1,4 +1,4 @@
-import { Option, Schema } from "effect";
+import { Option, Predicate, Schema } from "effect";
 import { type CanonicalToolResultEntry } from "../../../src/core/agent/contract";
 import { Transaction, TransactionPresentation } from "../../../src/core/transactions/contract";
 import { DashboardView } from "../../../src/shell/dashboard/contract";
@@ -23,7 +23,7 @@ const containsTransactions = (node: DashboardView["layout"]): boolean => {
 };
 
 export const loadsSavedHistory = (entry: CanonicalToolResultEntry): boolean => {
-  if (entry.outcome._tag !== "Succeeded") return false;
+  if (!Predicate.isTagged(entry.outcome, "Succeeded")) return false;
 
   switch (entry.operation) {
     case "transactions.getTransaction":

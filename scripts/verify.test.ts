@@ -41,7 +41,25 @@ done
     });
     expect(Bun.spawnSync(["chmod", "+x", `${directory}/bun`]).exitCode).toBe(0);
 
-    for (const failure of ["", "cli", "core"]) {
+    const decode = (output: Uint8Array): string => new TextDecoder().decode(output);
+
+    for (const [failure, verifyOutput] of [
+      [
+        "",
+        (result: Bun.SyncSubprocess<"pipe", "pipe">): void =>
+          expect(decode(result.stdout).match(/^CHECK /gmu)).toHaveLength(9),
+      ],
+      [
+        "cli",
+        (result: Bun.SyncSubprocess<"pipe", "pipe">): void =>
+          expect(decode(result.stderr)).toContain("CLI behavior tests"),
+      ],
+      [
+        "core",
+        (result: Bun.SyncSubprocess<"pipe", "pipe">): void =>
+          expect(decode(result.stderr)).toContain("Server core tests"),
+      ],
+    ] as const) {
       Bun.spawnSync(["rm", "-f", `${directory}/cli`, `${directory}/core`]);
 
       const result = Bun.spawnSync(
@@ -62,14 +80,7 @@ done
       );
 
       expect(result.exitCode).toBe(failure === "" ? 0 : 1);
-
-      if (failure === "") {
-        expect(new TextDecoder().decode(result.stdout).match(/^CHECK /gmu)).toHaveLength(9);
-      } else {
-        expect(new TextDecoder().decode(result.stderr)).toContain(
-          failure === "cli" ? "CLI behavior tests" : "Server core tests"
-        );
-      }
+      verifyOutput(result);
     }
   })
 );
@@ -151,16 +162,15 @@ fi
 
         expect(result.exitCode).toBe(failure === "" ? 0 : 1);
 
-        if (failure !== "") {
-          const labels = {
-            rules: "Lint rule regressions",
-            types: "Format",
-            compiler: "oxlint type-aware",
-            suppressions: "Lint suppressions",
-          };
+        const labels = {
+          "": "",
+          rules: "Lint rule regressions",
+          types: "Format",
+          compiler: "oxlint type-aware",
+          suppressions: "Lint suppressions",
+        };
 
-          expect(new TextDecoder().decode(result.stderr)).toContain(labels[failure]);
-        }
+        expect(new TextDecoder().decode(result.stderr)).toContain(labels[failure]);
       }
     })
 );

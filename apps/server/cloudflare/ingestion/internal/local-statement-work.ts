@@ -1,5 +1,5 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, DateTime, Effect, Option, Result, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Predicate, Result, Schema } from "effect";
 import { UserContext, UserId } from "../../../src/core/identity/contract";
 import {
   type InterpretedStatementRow,
@@ -16,6 +16,7 @@ import {
 import { parseStatementFile } from "../../../src/shell/ingestion/operations";
 import { TransactionExtraction } from "../../../src/core/transactions/contract";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
+import { ConsentSubject } from "../../../src/shell/consent/contract";
 import { commitLocalWrite } from "../../canonical-admission/operations";
 import { CanonicalAdmissionUnavailable } from "../../canonical-admission/contract";
 import { prepareSourcedCapture } from "../../transactions/operations";
@@ -63,7 +64,7 @@ const find = Effect.fn(function* (work: typeof StatementWork.Type, current: numb
   const sql = yield* SqliteClient;
 
   const guard = protectConsentStatement({
-    subject: { _tag: "User", userId: UserId.make(work.userId) },
+    subject: ConsentSubject.User({ userId: UserId.make(work.userId) }),
     requirement: "granted",
     statement: {
       sql: `SELECT s.id,s.user_id AS user,s.service_market AS serviceMarket,s.locale,s.time_zone AS timeZone,s.source_format AS format,
@@ -171,9 +172,13 @@ const materialize = Effect.fn(function* (
         return yield* fail(row, current, "resource-limit");
       }
 
-      for (const [index, value] of values.entries()) {
-        yield* sql`INSERT INTO statement_parts VALUES(${row.id},${index},${value})`;
-      }
+      yield* Effect.forEach(
+        values.entries(),
+        Effect.fnUntraced(function* ([index, value]) {
+          yield* sql`INSERT INTO statement_parts VALUES(${row.id},${index},${value})`;
+        }),
+        { discard: true }
+      );
 
       yield* sql`UPDATE statement_submissions SET materialized_rows=${values.length},headers_json=${yield* Schema.encodeEffect(headerCodec)(parsed.success.headers)} WHERE id=${row.id}`;
 
@@ -292,9 +297,13 @@ const finalize = Effect.fn(function* (work: typeof StatementWork.Type) {
 
   let accepted = 0;
 
-  for (const value of results) {
-    accepted += yield* settleRow(row, current, value);
-  }
+  yield* Effect.forEach(
+    results,
+    Effect.fnUntraced(function* (value) {
+      accepted += yield* settleRow(row, current, value);
+    }),
+    { discard: true }
+  );
 
   if (accepted > 0) {
     yield* sql`UPDATE statement_backfill SET consumed_at_ms=coalesce(consumed_at_ms,${current}) WHERE user_id=${row.user} AND submission_id=${row.id}`;
@@ -325,7 +334,7 @@ export const localStatementActivity = Effect.fn(function* (
 
   if (Option.isNone(row)) return finished();
 
-  if (work._tag === "StatementFailed") {
+  if (Predicate.isTagged(work, "StatementFailed")) {
     return yield* withStoreCapacity("required")(fail(row.value, now, "mapping-unavailable"));
   }
 

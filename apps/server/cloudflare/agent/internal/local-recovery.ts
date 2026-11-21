@@ -1,6 +1,6 @@
 import { waitForDocument } from "./local-document-reply";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Predicate, Result, Schema } from "effect";
 import { preserveStoreAlarm, withStoreCapacity } from "../../runtime/sqlite/operations";
 import { hostedTranscriptRetentionMs } from "../contract";
 import { Turn } from "./local-turn";
@@ -22,7 +22,7 @@ export const inspectTurns = Effect.fn(function* (current: number, storage: Durab
    UNION ALL SELECT min(expires_ms)+1 FROM hosted_confirmations
  )`;
 
-  const deadlines = [active?.at, retention?.at].filter((value) => typeof value === "number");
+  const deadlines = [active?.at, retention?.at].filter(Predicate.isNumber);
 
   return deadlines.length > 0
     ? yield* preserveStoreAlarm(storage, Math.max(current, Math.min(...deadlines)))
@@ -36,13 +36,17 @@ const expirePersonalTurnContent = Effect.fn(function* (now: number) {
   const due =
     yield* sql`SELECT id FROM hosted_turns WHERE terminal_ms<${cutoff} AND request_text<>'' ORDER BY terminal_ms,id LIMIT 32`;
 
-  for (const row of due) {
-    const id = yield* Schema.decodeUnknownEffect(Schema.String)(row.id);
-    yield* sql`DELETE FROM hosted_transcript WHERE turn_id=${id}`;
-    yield* sql`DELETE FROM hosted_whatsapp_inbound WHERE turn_id=${id}`;
-    yield* sql`DELETE FROM hosted_confirmations WHERE issued_turn=${id}`;
-    yield* sql`UPDATE hosted_turns SET request_text='',answer=NULL,receipt_digest=NULL,receipt_value=NULL,proposal_iteration=NULL WHERE id=${id}`;
-  }
+  yield* Effect.forEach(
+    due,
+    Effect.fnUntraced(function* (row) {
+      const id = yield* Schema.decodeUnknownEffect(Schema.String)(row.id);
+      yield* sql`DELETE FROM hosted_transcript WHERE turn_id=${id}`;
+      yield* sql`DELETE FROM hosted_whatsapp_inbound WHERE turn_id=${id}`;
+      yield* sql`DELETE FROM hosted_confirmations WHERE issued_turn=${id}`;
+      yield* sql`UPDATE hosted_turns SET request_text='',answer=NULL,receipt_digest=NULL,receipt_value=NULL,proposal_iteration=NULL WHERE id=${id}`;
+    }),
+    { discard: true }
+  );
 
   yield* sql`UPDATE hosted_agent_sessions SET compacted_text=NULL,compacted_through=0 WHERE id IN(SELECT id FROM hosted_agent_sessions WHERE active_ms<${cutoff} AND compacted_text IS NOT NULL ORDER BY active_ms LIMIT 32)`;
   yield* sql`DELETE FROM hosted_compaction_budgets WHERE rowid IN(SELECT rowid FROM hosted_compaction_budgets WHERE day_ms<${cutoff} ORDER BY day_ms LIMIT 32)`;
@@ -102,7 +106,7 @@ export const recoverTurns = Effect.fn(function* (
   const held = next.value;
   const attempt = yield* executeTurn(env, held, storage).pipe(Effect.result);
 
-  if (attempt._tag === "Failure") {
+  if (Result.isFailure(attempt)) {
     const current = yield* Clock.currentTimeMillis;
     yield* finishTurn({ turnId: held.id, user: held.user_id }, "failed", current).pipe(
       withStoreCapacity("required")

@@ -24,6 +24,10 @@ export type ErasureProjection = Readonly<{
   remaining: (userId: string) => OwnedStatement;
 }>;
 
+export type ErasureQuiescence = ErasureProjection["quiescence"];
+
+export const ErasureQuiescence = Data.taggedEnum<ErasureQuiescence>();
+
 export const ErasureHandoff = Schema.Struct({
   userId: UserId,
   reference: ErasureReference,

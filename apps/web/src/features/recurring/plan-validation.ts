@@ -68,25 +68,32 @@ const monthDayProblems = (draft: PlanDraft): ReadonlyArray<PlanProblem> => {
     : unreadable;
 };
 
+const cardPaymentProblem = (draft: PlanDraft): Option.Option<PlanProblem> =>
+  Option.map(
+    Option.liftPredicate(draft, (plan) => plan.cardPayment && plan.kind !== "transfer"),
+    () => ({
+      field: "cardPayment",
+      message: "Un pago de tarjeta debe tener el tipo Transferencia.",
+      clearedBy: ["cardPayment", "kind"],
+    })
+  );
+
+const endDateProblem = (draft: PlanDraft): Option.Option<PlanProblem> =>
+  Option.map(
+    Option.liftPredicate(
+      draft,
+      (plan) => plan.firstDate !== "" && plan.endDate !== "" && plan.endDate < plan.firstDate
+    ),
+    () => ({
+      field: "endDate",
+      message: "La fecha final debe ser igual o posterior a la primera fecha.",
+      clearedBy: ["firstDate", "endDate"],
+    })
+  );
+
 export const findPlanProblems = (draft: PlanDraft): ReadonlyArray<PlanProblem> => [
-  ...(draft.cardPayment && draft.kind !== "transfer"
-    ? [
-        {
-          field: "cardPayment" as const,
-          message: "Un pago de tarjeta debe tener el tipo Transferencia.",
-          clearedBy: ["cardPayment", "kind"],
-        },
-      ]
-    : []),
-  ...(draft.firstDate !== "" && draft.endDate !== "" && draft.endDate < draft.firstDate
-    ? [
-        {
-          field: "endDate" as const,
-          message: "La fecha final debe ser igual o posterior a la primera fecha.",
-          clearedBy: ["firstDate", "endDate"],
-        },
-      ]
-    : []),
+  ...Option.toArray(cardPaymentProblem(draft)),
+  ...Option.toArray(endDateProblem(draft)),
   ...monthDayProblems(draft),
 ];
 

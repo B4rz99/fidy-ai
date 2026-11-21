@@ -1,5 +1,5 @@
-import { browserSecureRandom } from "@/browser/crypto";
-import { DateTime, Effect } from "effect";
+import { SecureRandom } from "effect/crypto";
+import { DateTime, Option, Predicate } from "effect";
 import type { CanonicalSuccess } from "@/transport/client";
 import { type Edit, type Occurrence, money } from "./model";
 
@@ -64,9 +64,12 @@ export const associateTransaction = ({
   settled: boolean;
 }>): Edit => ({
   kind: "fulfill",
-  ...(replaces === "" ? {} : { replaces }),
+  ...Option.match(Option.liftPredicate(replaces, Predicate.isTruthy), {
+    onNone: () => ({}),
+    onSome: (value) => ({ replaces: value }),
+  }),
   fulfillment: {
-    id: Effect.runSync(browserSecureRandom.uuidV4().pipe(Effect.orDie)),
+    id: SecureRandom.uuidV4Unsafe(),
     planId: item.planId,
     date: item.date,
     actualDate: DateTime.formatIsoDate(

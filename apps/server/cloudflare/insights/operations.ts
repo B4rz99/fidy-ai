@@ -14,7 +14,7 @@ import {
   readSchedule,
 } from "./internal/local-insights";
 
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { InsightUnavailable, type PauseNoticeService } from "./contract";
 import { weeklyReportDeliveryQuery as weeklyReportDeliveryQueryOwned } from "./internal/weekly-generation";
 
@@ -45,11 +45,17 @@ export const readLocalDigestReport: typeof readLocalReport = (input) => readLoca
 
 export const nativePauseNotice: PauseNoticeService = {
   bind: (...args: Parameters<typeof bindPauseNotice>) =>
-    bindPauseNotice(...args).pipe(Effect.mapError(() => new InsightUnavailable())),
+    bindPauseNotice(...args).pipe(
+      Effect.mapError((cause) => new InsightUnavailable({ cause: Option.some(cause) }))
+    ),
   include: (...args: Parameters<typeof includePauseNotice>) =>
-    includePauseNotice(...args).pipe(Effect.mapError(() => new InsightUnavailable())),
+    includePauseNotice(...args).pipe(
+      Effect.mapError((cause) => new InsightUnavailable({ cause: Option.some(cause) }))
+    ),
   acknowledge: (...args: Parameters<typeof acknowledgePauseNotice>) =>
-    acknowledgePauseNotice(...args).pipe(Effect.mapError(() => new InsightUnavailable())),
+    acknowledgePauseNotice(...args).pipe(
+      Effect.mapError((cause) => new InsightUnavailable({ cause: Option.some(cause) }))
+    ),
 };
 
 export const localProactivityObservations: typeof nativePendingWork = (flags) =>

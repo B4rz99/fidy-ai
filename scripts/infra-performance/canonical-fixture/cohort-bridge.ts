@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline/promises";
+import { BunRuntime } from "@effect/platform-bun";
 import { Config, Data, Effect, Redacted, Schema } from "effect";
 import { performanceCohortBrowser } from "../../../infra/cloudflare/native-acceptance";
 import {
@@ -100,39 +101,46 @@ const canonical = Effect.fnUntraced(function* (
     return yield* new CohortTransportError();
   }
 
-  const reply = yield* port.call(item.path, {
+  const requestInit = {
     method: item.method,
     headers: {
       ...(yield* headersOf(item)),
       origin: installedOrigins.acceptance.browser,
       "content-type": "application/json",
     },
-    ...(item.body == null
-      ? {}
-      : { body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(item.body) }),
-  });
+  };
+
+  const reply = yield* item.body == null
+    ? port.call(item.path, requestInit)
+    : port.call(item.path, {
+        ...requestInit,
+        body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(item.body),
+      });
 
   return { status: reply.status, data: reply.ok ? yield* io(() => reply.json()) : null };
 });
 
 const dispatch = (port: Browser, local: Local, member: PerformanceMember): Action => {
-  const actions: Readonly<Record<string, Action>> = {
-    login: () => port.open("login"),
-    "cleanup-login": () => port.open("login").pipe(Effect.orElseSucceed(() => null)),
-    register: () => port.open("signup"),
-    survivors: () => port.survivors(),
-    "before-signup": () => port.beforeSignup().pipe(Effect.as(true)),
-    renew: () => port.renew().pipe(Effect.as(true)),
-    refused: () => port.refused(),
-    erase: (item) => headersOf(item).pipe(Effect.flatMap(port.erase)),
-    denied: (item) => headersOf(item).pipe(Effect.flatMap(port.denied), Effect.as(true)),
-    canonical: (item) => canonical(port, item, member),
-  };
+  const actionEntries: ReadonlyArray<readonly [string, Action]> = [
+    ["login", () => port.open("login")],
+    ["cleanup-login", () => port.open("login").pipe(Effect.orElseSucceed(() => null))],
+    ["register", () => port.open("signup")],
+    ["survivors", () => port.survivors()],
+    ["before-signup", () => port.beforeSignup().pipe(Effect.as(true))],
+    ["renew", () => port.renew().pipe(Effect.as(true))],
+    ["refused", () => port.refused()],
+    ["erase", (item) => headersOf(item).pipe(Effect.flatMap(port.erase))],
+    ["denied", (item) => headersOf(item).pipe(Effect.flatMap(port.denied), Effect.as(true))],
+    ["canonical", (item) => canonical(port, item, member)],
+  ];
 
-  return (item) =>
-    Object.hasOwn(actions, item.action)
-      ? (actions[item.action]?.(item) ?? unavailable(item))
-      : local(item);
+  const actions = new Map(actionEntries);
+
+  return (item) => {
+    const action = actions.get(item.action);
+
+    return action === undefined ? local(item) : action(item);
+  };
 };
 
 export const cohortAuthority = Effect.gen(function* () {
@@ -188,10 +196,15 @@ export const serveCohort = Effect.fn(function* (
 });
 
 if (import.meta.main) {
-  await Effect.runPromise(cohortAuthority.pipe(Effect.flatMap((auth) => serveCohort(auth)))).catch(
-    () => {
-      process.stderr.write("Closed cohort command refused\n");
-      process.exitCode = 1;
-    }
+  BunRuntime.runMain(
+    cohortAuthority.pipe(
+      Effect.flatMap((auth) => serveCohort(auth)),
+      Effect.catchCause(() =>
+        Effect.sync(() => {
+          process.stderr.write("Closed cohort command refused\n");
+          process.exitCode = 1;
+        })
+      )
+    )
   );
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { SecureRandom } from "effect/crypto";
 import { BunCrypto, BunFileSystem } from "@effect/platform-bun";
-import { Effect, FileSystem, Option, Schema } from "effect";
+import { Data, Effect, FileSystem, Option, Result, Schema } from "effect";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import * as XLSX from "xlsx/xlsx.mjs";
 import type { WorkBook, WorkSheet } from "xlsx";
@@ -171,11 +171,17 @@ const configCodec = Schema.fromJsonString(
   })
 );
 
+class XlsxProofFailure extends Data.TaggedError("XlsxProofFailure")<{
+  readonly message: string;
+}> {}
+
+const isArrayBuffer = Schema.is(Schema.instanceOf(ArrayBuffer));
+
 const writeWorkbook = (book: WorkBook): Uint8Array => {
   const fresh: WorkBook & { SSF: Record<number, string> } = { ...book, SSF: { 0: "General" } };
   const buffer: unknown = XLSX.write(fresh, { type: "array", compression: true, bookSST: true });
 
-  if (!(buffer instanceof ArrayBuffer)) throw new Error("Expected workbook bytes");
+  if (!isArrayBuffer(buffer)) throw new Error("Expected workbook bytes");
 
   return new Uint8Array(buffer);
 };
@@ -332,32 +338,34 @@ const probeReady = Effect.fn(function* (target: Option.Option<HostedWorkerProof>
 });
 
 const waitReady = Effect.fn(function* (target: Option.Option<HostedWorkerProof>) {
-  for (let attempt = 0; attempt < readinessAttempts; attempt += 1) {
-    const response = yield* Effect.result(probeReady(target));
+  const response = yield* Effect.result(probeReady(target)).pipe(
+    Effect.tap((result) => (Result.isSuccess(result) ? Effect.void : Effect.sleep(readinessDelay))),
+    Effect.repeat({ until: Result.isSuccess, times: readinessAttempts - 1 })
+  );
 
-    if (response._tag === "Success") return;
-    yield* Effect.sleep(readinessDelay);
+  if (Result.isFailure(response)) {
+    return yield* new XlsxProofFailure({ message: "XLSX proof worker did not become ready" });
   }
-
-  throw new Error("XLSX proof worker did not become ready");
 });
 
 const waitInspector = Effect.fn(function* () {
-  for (let attempt = 0; attempt < readinessAttempts; attempt += 1) {
-    const target = yield* Effect.result(
-      Effect.tryPromise(() =>
-        inspectorTarget({
-          port: inspectorPort,
-          signal: Option.some(AbortSignal.timeout(requestTimeout)),
-        })
-      )
-    );
+  const target = yield* Effect.result(
+    Effect.tryPromise(() =>
+      inspectorTarget({
+        port: inspectorPort,
+        signal: Option.some(AbortSignal.timeout(requestTimeout)),
+      })
+    )
+  ).pipe(
+    Effect.tap((result) => (Result.isSuccess(result) ? Effect.void : Effect.sleep(readinessDelay))),
+    Effect.repeat({ until: Result.isSuccess, times: readinessAttempts - 1 })
+  );
 
-    if (target._tag === "Success") return target.success;
-    yield* Effect.sleep(readinessDelay);
+  if (Result.isFailure(target)) {
+    return yield* new XlsxProofFailure({ message: "XLSX proof inspector did not become ready" });
   }
 
-  throw new Error("XLSX proof inspector did not become ready");
+  return target.success;
 });
 
 const measure = Effect.fn(function* (
@@ -425,26 +433,39 @@ const previousParser = baseline
     ).stdout.toString()
   : "";
 
-const proofConfig = (name: string, retiring = false): string =>
-  Schema.encodeSync(configCodec)({
+const proofMigrations = (
+  retiring: boolean
+): ReadonlyArray<
+  | Readonly<{ tag: string; new_sqlite_classes: ReadonlyArray<string> }>
+  | Readonly<{ tag: string; deleted_classes: ReadonlyArray<string> }>
+> => {
+  const created = { tag: "created", new_sqlite_classes: ["XlsxParserProof"] };
+
+  return retiring ? [created, { tag: "retired", deleted_classes: ["XlsxParserProof"] }] : [created];
+};
+
+const proofConfig = (name: string, retiring = false): string => {
+  const limits = remote ? {} : { limits: { cpu_ms: cpuLimit } };
+
+  const durableObjects = durable
+    ? {
+        durable_objects: {
+          bindings: retiring ? [] : [{ name: "PARSER_PROOF", class_name: "XlsxParserProof" }],
+        },
+        migrations: proofMigrations(retiring),
+      }
+    : {};
+
+  return Schema.encodeSync(configCodec)({
     name,
     main: "worker.js",
     compatibility_date: "2026-09-08",
-    ...(remote ? {} : { limits: { cpu_ms: cpuLimit } }),
+    ...limits,
     workers_dev: remote,
     preview_urls: false,
-    ...(durable
-      ? {
-          durable_objects: {
-            bindings: retiring ? [] : [{ name: "PARSER_PROOF", class_name: "XlsxParserProof" }],
-          },
-          migrations: [
-            { tag: "created", new_sqlite_classes: ["XlsxParserProof"] },
-            ...(retiring ? [{ tag: "retired", deleted_classes: ["XlsxParserProof"] }] : []),
-          ],
-        }
-      : {}),
+    ...durableObjects,
   });
+};
 
 const buildWorker = Effect.fn(function* (name: string) {
   const built = yield* Effect.tryPromise(() =>
@@ -473,7 +494,10 @@ const buildWorker = Effect.fn(function* (name: string) {
     })
   );
 
-  if (!built.success) throw new Error("XLSX proof bundle failed");
+  if (!built.success) {
+    return yield* new XlsxProofFailure({ message: "XLSX proof bundle failed" });
+  }
+
   yield* Effect.tryPromise(() => Bun.write(`${directory}/wrangler.json`, proofConfig(name)));
 });
 
@@ -535,24 +559,27 @@ const measureParserOnly = Effect.fn(function* (
   debuggerUrl: string,
   target: Option.Option<HostedWorkerProof>
 ) {
-  for (const rows of [
-    1,
-    smallStatementRows,
-    mediumStatementRows,
-    largerStatementRows,
-    thousandStatementRows,
-    boundedRows,
-  ]) {
-    yield* measure(
-      {
-        name: `parse-only-ordinary-${rows}-rows`,
-        path: "/statement",
-        bytes: synthetic({ rows, text: "Cafe", formatted: false }),
-      },
-      debuggerUrl,
-      target
-    );
-  }
+  yield* Effect.forEach(
+    [
+      1,
+      smallStatementRows,
+      mediumStatementRows,
+      largerStatementRows,
+      thousandStatementRows,
+      boundedRows,
+    ],
+    (rows) =>
+      measure(
+        {
+          name: `parse-only-ordinary-${rows}-rows`,
+          path: "/statement",
+          bytes: synthetic({ rows, text: "Cafe", formatted: false }),
+        },
+        debuggerUrl,
+        target
+      ),
+    { discard: true }
+  );
 });
 
 const program = Effect.gen(function* () {
@@ -593,9 +620,11 @@ const program = Effect.gen(function* () {
   const debuggerUrl = remote ? "" : yield* waitInspector();
   yield* measureParserOnly(debuggerUrl, target);
 
-  for (const fixture of yield* fixtures()) {
-    yield* measure({ ...fixture, path: "/statement-work" }, debuggerUrl, target);
-  }
+  yield* Effect.forEach(
+    yield* fixtures(),
+    (fixture) => measure({ ...fixture, path: "/statement-work" }, debuggerUrl, target),
+    { discard: true }
+  );
 
   yield* overlapRequests(
     debuggerUrl,

@@ -1,5 +1,5 @@
 import { BunFileSystem, BunRuntime } from "@effect/platform-bun";
-import { Data, Effect, FileSystem, Option, Schema } from "effect";
+import { Data, Effect, FileSystem, Option, Schema, Stream } from "effect";
 import { SourceComment, commentsIn, supportsComments } from "./comment-syntax";
 
 const root = new URL("../", import.meta.url);
@@ -45,7 +45,7 @@ const sourceFiles = (): ReadonlyArray<string> => {
 
 const scanFile = Effect.fnUntraced(function* (file: string) {
   const fs = yield* FileSystem.FileSystem;
-  const source = yield* fs.readFileString(cwd + file);
+  const source = yield* fs.stream(cwd + file).pipe(Stream.decodeText(), Stream.mkString);
 
   return yield* Effect.try({
     try: () => commentsIn({ file, source }),
@@ -62,10 +62,7 @@ const existingFiles = Effect.gen(function* () {
     (file) =>
       fs.lstat(cwd + file).pipe(
         Effect.map((info) => (info.type === "File" ? Option.some(file) : Option.none())),
-        Effect.catchIf(
-          (error) => error.reason._tag === "NotFound",
-          () => Effect.succeedNone
-        )
+        Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone)
       ),
     { concurrency: scanConcurrency }
   );
@@ -179,7 +176,7 @@ const checkAgainstBase = (baseline: Baseline): void => {
   if (Option.isNone(previous)) return;
 
   for (const [file, hashes] of baseline) {
-    const allowed = [...(previous.value.get(file) ?? [])];
+    const allowed = Array.from(previous.value.get(file) ?? []);
 
     for (const hash of hashes) {
       const index = allowed.indexOf(hash);

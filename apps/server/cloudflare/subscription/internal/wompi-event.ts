@@ -83,9 +83,7 @@ const signedValues = (event: typeof Body.Type, rawData: unknown): Option.Option<
 
   const values = event.signature.properties.map((name) => ownValue(rawData, name));
 
-  if (values.some(Option.isNone)) return Option.none();
-
-  return Option.some(values.map((value) => Option.getOrThrow(value)).join(""));
+  return Option.map(Option.all(values), (present) => present.join(""));
 };
 
 const verifiedChecksum = (

@@ -78,19 +78,25 @@ export const readLocalTransactionAggregate = Effect.fn(function* (
   const groups = new Map<string, EffectiveTransactionAggregate>();
   let cursor = "";
 
-  for (;;) {
+  const aggregatePage = Effect.gen(function* () {
     const rows = yield* aggregateRows(
       yield* sql`SELECT id,category_revision,category_id,direction,amount,currency FROM transaction_effective_source
       WHERE user_id=${user} AND occurred_at_ms>=${from} AND occurred_at_ms<${toExclusive} AND id>${cursor} ORDER BY id LIMIT ${pageSize}`
     );
 
-    for (const row of rows) {
-      yield* aggregateRow(groups, row);
-      cursor = row.id;
-    }
+    yield* Effect.forEach(
+      rows,
+      Effect.fnUntraced(function* (row) {
+        yield* aggregateRow(groups, row);
+        cursor = row.id;
+      }),
+      { discard: true }
+    );
 
-    if (rows.length < pageSize) break;
-  }
+    return rows.length;
+  });
+
+  yield* aggregatePage.pipe(Effect.repeat({ while: (count) => count >= pageSize }));
 
   return [...groups.entries()]
     .sort(([left], [right]) => Order.String(left, right))

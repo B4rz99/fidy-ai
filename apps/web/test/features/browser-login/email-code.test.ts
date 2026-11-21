@@ -1,6 +1,6 @@
 import { Option } from "effect";
 import { expect, it } from "vitest";
-import { readEmailVerificationCode } from "./email-code";
+import { readEmailVerificationCode } from "@/features/browser-login/email-code";
 
 it.each([
   ["BCDF-GHJK-LMNP-QRST-VWXZ-2345"],

@@ -1,9 +1,13 @@
 import { BunFileSystem } from "@effect/platform-bun";
-import { Clock, Config, Data, Effect, FileSystem } from "effect";
+import { Clock, Config, Data, Effect, FileSystem, Predicate } from "effect";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 class CertificateProcessFailure extends Data.TaggedError("CertificateProcessFailure") {}
+
+class DevBrowserFailure extends Data.TaggedError("DevBrowserFailure")<{
+  readonly message: string;
+}> {}
 
 const root = fileURLToPath(new URL("../", import.meta.url)).replace(/\/$/u, "");
 
@@ -114,9 +118,9 @@ const stop = Effect.fn(function* () {
 
   while ([appPort, apiPort, operatorPort].some(portOccupied)) {
     if ((yield* Clock.currentTimeMillis) >= deadline) {
-      throw new Error(
-        "Local browser listeners did not stop. Inspect their owner before restarting."
-      );
+      return yield* new DevBrowserFailure({
+        message: "Local browser listeners did not stop. Inspect their owner before restarting.",
+      });
     }
 
     yield* Effect.sleep(pollMilliseconds);
@@ -128,11 +132,15 @@ const waitReady = Effect.fn(function* () {
 
   while (!ready()) {
     if (!(yield* registered())) {
-      throw new Error("The browser service stopped before startup completed.");
+      return yield* new DevBrowserFailure({
+        message: "The browser service stopped before startup completed.",
+      });
     }
 
     if ((yield* Clock.currentTimeMillis) >= deadline) {
-      throw new Error(`Startup did not complete. Read ${directory}/server.log.`);
+      return yield* new DevBrowserFailure({
+        message: `Startup did not complete. Read ${directory}/server.log.`,
+      });
     }
 
     yield* Effect.sleep(pollMilliseconds);
@@ -166,7 +174,9 @@ const trustOnLinux = Effect.fn(function* () {
   const fs = yield* FileSystem.FileSystem;
 
   if (Bun.which("certutil") === null) {
-    throw new Error("Install certutil first: sudo apt-get install libnss3-tools");
+    return yield* new DevBrowserFailure({
+      message: "Install certutil first: sudo apt-get install libnss3-tools",
+    });
   }
 
   if (!(yield* fs.exists(`${homedir()}/.pki/nssdb`))) {
@@ -178,14 +188,18 @@ const trustOnLinux = Effect.fn(function* () {
   }
 
   if ((yield* runInteractive(["mkcert", "-install"])) !== 0 || !trusted()) {
-    throw new Error("Could not trust mkcert's CA. Rerun setup and approve the sudo prompt.");
+    return yield* new DevBrowserFailure({
+      message: "Could not trust mkcert's CA. Rerun setup and approve the sudo prompt.",
+    });
   }
 });
 
 const trustOnMacOS = Effect.fn(function* () {
   const ca = execute(["mkcert", "-CAROOT"]);
 
-  if (ca.exitCode !== 0) throw new Error("Could not locate the mkcert CA.");
+  if (ca.exitCode !== 0) {
+    return yield* new DevBrowserFailure({ message: "Could not locate the mkcert CA." });
+  }
 
   const installed = yield* runInteractive([
     "security",
@@ -198,7 +212,9 @@ const trustOnMacOS = Effect.fn(function* () {
   ]);
 
   if (installed !== 0 || !trusted()) {
-    throw new Error("Approve the macOS certificate trust prompt, then rerun setup.");
+    return yield* new DevBrowserFailure({
+      message: "Approve the macOS certificate trust prompt, then rerun setup.",
+    });
   }
 });
 
@@ -206,11 +222,11 @@ const setup = Effect.fn(function* () {
   const fs = yield* FileSystem.FileSystem;
 
   if (Bun.which("mkcert") === null) {
-    throw new Error(
-      macOS
+    return yield* new DevBrowserFailure({
+      message: macOS
         ? "Install mkcert first: brew install mkcert"
-        : "Install mkcert first: sudo apt-get install mkcert libnss3-tools"
-    );
+        : "Install mkcert first: sudo apt-get install mkcert libnss3-tools",
+    });
   }
 
   yield* fs.makeDirectory(directory, { recursive: true, mode: 0o700 });
@@ -229,9 +245,10 @@ const start = Effect.fn(function* () {
   const fs = yield* FileSystem.FileSystem;
 
   if (!(yield* fs.exists(certificate)) || !trusted()) {
-    throw new Error(
-      "Local HTTPS is not ready. Run bun run dev:browser setup once and approve its trust prompt."
-    );
+    return yield* new DevBrowserFailure({
+      message:
+        "Local HTTPS is not ready. Run bun run dev:browser setup once and approve its trust prompt.",
+    });
   }
 
   if ((yield* registered()) && ready()) {
@@ -245,7 +262,7 @@ const start = Effect.fn(function* () {
 
   if (macOS) yield* launchWithLaunchd(executablePath);
   else yield* launchDetached();
-  yield* waitReady().pipe(Effect.onError(() => stop()));
+  yield* waitReady().pipe(Effect.onError(() => stop().pipe(Effect.orDie)));
   print(
     `Ready: ${app}/app/recurring\nTest login: ${app}/login\nLogs: ${serverLog}\nStop: bun run dev:browser stop`
   );
@@ -263,7 +280,10 @@ const launchDetached = Effect.fn(function* () {
     serverLog,
   ]);
 
-  if (launched.exitCode !== 0) throw new Error("Could not start the local browser service.");
+  if (launched.exitCode !== 0) {
+    return yield* new DevBrowserFailure({ message: "Could not start the local browser service." });
+  }
+
   yield* fs.writeFileString(serviceGroupFile, new TextDecoder().decode(launched.stdout));
 });
 
@@ -312,17 +332,21 @@ const program = Effect.gen(function* () {
     yield* start();
   } else if (command === "status") {
     if (!(yield* registered()) || !ready()) {
-      throw new Error("Local browser service is not ready. Run bun run dev:browser.");
+      return yield* new DevBrowserFailure({
+        message: "Local browser service is not ready. Run bun run dev:browser.",
+      });
     }
 
     print(`Ready: ${app}/app/recurring`);
-  } else throw new Error("Use start, setup, stop, restart, or status.");
+  } else {
+    return yield* new DevBrowserFailure({ message: "Use start, setup, stop, restart, or status." });
+  }
 });
 
 await Effect.runPromise(program.pipe(Effect.provide(BunFileSystem.layer))).catch(
   (error: unknown) => {
     process.stderr.write(
-      `${error instanceof Error ? error.message : "Local browser setup failed."}\n`
+      `${Predicate.isError(error) ? error.message : "Local browser setup failed."}\n`
     );
     process.exitCode = 1;
   }

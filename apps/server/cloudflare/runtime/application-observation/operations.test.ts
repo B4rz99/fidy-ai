@@ -1,7 +1,10 @@
-import { HostedInferenceError } from "../../../src/shell/hosted-inference/contract";
+import {
+  HostedInferenceError,
+  type HostedInferenceFailureReason,
+} from "../../../src/shell/hosted-inference/contract";
 import { CanonicalOperationId } from "../../../src/core/canonical-operations/contract";
 import { it } from "@effect/vitest";
-import { Effect, Exit, Option } from "effect";
+import { Data, Effect, Exit, Option } from "effect";
 import { expect } from "vitest";
 import assert from "node:assert/strict";
 import {
@@ -20,6 +23,10 @@ import {
   observeCanonicalResponse,
   observeHostedResponse,
 } from "./operations";
+
+const SpanMetadata = Data.taggedEnum<SpanDescriptor["metadata"]>();
+
+const FailureReason = Data.taggedEnum<HostedInferenceFailureReason>();
 
 it.effect(
   "classifies canonical refusals and unavailable responses without reading private response content",
@@ -47,21 +54,25 @@ it.effect(
           }),
       });
 
-      for (const [status, outcome] of [
-        [200, "succeeded"],
-        [403, "rejected"],
-        [503, "failed"],
-      ] as const) {
-        const response = new Response("private-financial-body", { status });
-        expect(
-          yield* observeCanonicalResponse(
-            Effect.succeed(response),
-            CanonicalOperationId.make("transactions.listTransactions")
-          ).pipe(Effect.provideService(Telemetry, telemetry))
-        ).toBe(response);
-        expect(response.bodyUsed).toBe(false);
-        expect(outcomes.at(-1)?.outcome).toBe(outcome);
-      }
+      yield* Effect.forEach(
+        [
+          [200, "succeeded"],
+          [403, "rejected"],
+          [503, "failed"],
+        ] as const,
+        Effect.fnUntraced(function* ([status, outcome]) {
+          const response = new Response("private-financial-body", { status });
+          expect(
+            yield* observeCanonicalResponse(
+              Effect.succeed(response),
+              CanonicalOperationId.make("transactions.listTransactions")
+            ).pipe(Effect.provideService(Telemetry, telemetry))
+          ).toBe(response);
+          expect(response.bodyUsed).toBe(false);
+          expect(outcomes.at(-1)?.outcome).toBe(outcome);
+        }),
+        { discard: true }
+      );
 
       expect(descriptors).toHaveLength(3);
       expect(outcomes).toHaveLength(3);
@@ -72,7 +83,7 @@ it.effect(
           trigger: "api",
           spanOperation: "fidy.operation",
           workKind: "canonical_operation",
-          metadata: { _tag: "None" },
+          metadata: SpanMetadata.None(),
         }))
       );
     })
@@ -82,7 +93,7 @@ it.effect("nests model work beneath a hosted Turn and preserves provider failure
   Effect.gen(function* () {
     const parents: string[] = [];
     let nextSpan = 1;
-    const failure = { _tag: "ProviderUnavailable" };
+    const failure = FailureReason.ProviderUnavailable();
 
     const telemetry = makeTelemetryService({
       ...DisabledTelemetryResource.adapter,
@@ -108,7 +119,7 @@ it.effect("nests model work beneath a hosted Turn and preserves provider failure
         trigger: "api",
         spanOperation: "agent.model",
         workKind: "model_round",
-        metadata: { _tag: "None" },
+        metadata: SpanMetadata.None(),
       }),
       { trigger: "api", parent: Option.none(), release: "unknown" }
     ).pipe(Effect.provideService(Telemetry, telemetry), Effect.exit);
@@ -153,50 +164,58 @@ it.effect(
 
       const failures = [
         new HostedInferenceError({
-          reason: { _tag: "ProviderQuotaExceeded" },
+          reason: FailureReason.ProviderQuotaExceeded(),
           retryable: false,
           retryAfter: Option.none(),
         }),
         new HostedInferenceError({
-          reason: { _tag: "ProviderUnavailable" },
+          reason: FailureReason.ProviderUnavailable(),
           retryable: true,
           retryAfter: Option.none(),
         }),
         new HostedInferenceError({
-          reason: { _tag: "CapacityExceeded", inputTokens: 765_432 },
+          reason: FailureReason.CapacityExceeded({ inputTokens: 765_432 }),
           retryable: false,
           retryAfter: Option.none(),
         }),
         new HostedInferenceError({
-          reason: { _tag: "InvalidOutput", description: "Hosted tool arguments were invalid" },
+          reason: FailureReason.InvalidOutput({
+            description: "Hosted tool arguments were invalid",
+          }),
           retryable: false,
           retryAfter: Option.none(),
         }),
         new HostedInferenceError({
-          reason: { _tag: "InvalidOutput", description: "Hosted provider response was invalid" },
+          reason: FailureReason.InvalidOutput({
+            description: "Hosted provider response was invalid",
+          }),
           retryable: false,
           retryAfter: Option.none(),
         }),
         new HostedInferenceError({
-          reason: { _tag: "StructuredOutputExceeded" },
+          reason: FailureReason.StructuredOutputExceeded(),
           retryable: false,
           retryAfter: Option.none(),
         }),
       ];
 
-      for (const failure of failures) {
-        assert.deepStrictEqual(
-          yield* observeApplicationOperation(Effect.fail(failure), {
-            component: "agent",
-            operation: "agent.modelRound",
-            trigger: "api",
-            spanOperation: "agent.model",
-            workKind: "model_round",
-            metadata: { _tag: "None" },
-          }).pipe(Effect.provideService(Telemetry, telemetry), Effect.exit),
-          Exit.fail(failure)
-        );
-      }
+      yield* Effect.forEach(
+        failures,
+        Effect.fnUntraced(function* (failure) {
+          assert.deepStrictEqual(
+            yield* observeApplicationOperation(Effect.fail(failure), {
+              component: "agent",
+              operation: "agent.modelRound",
+              trigger: "api",
+              spanOperation: "agent.model",
+              workKind: "model_round",
+              metadata: SpanMetadata.None(),
+            }).pipe(Effect.provideService(Telemetry, telemetry), Effect.exit),
+            Exit.fail(failure)
+          );
+        }),
+        { discard: true }
+      );
 
       expect(outcomes).toEqual([
         {

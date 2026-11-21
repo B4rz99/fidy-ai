@@ -1,7 +1,10 @@
 import { Data, Effect, Option, Redacted, Schema } from "effect";
 import { DaviplataOtpPolicy, type PaymentEnrollment } from "../../src/core/subscription/contract";
 import { UnknownJsonString } from "../../src/shell/schema-codecs/contract";
-import type { OutboundHttpResponse } from "../../src/shell/outbound-http/contract";
+import {
+  OutboundHttpRequest,
+  type OutboundHttpResponse,
+} from "../../src/shell/outbound-http/contract";
 import type { OutboundHttpService } from "../../src/shell/outbound-http/operations";
 
 export class DaviplataSandboxProofFailure extends Data.TaggedError("DaviplataSandboxProofFailure")<{
@@ -155,12 +158,7 @@ const otp = ({
 }>): Effect.Effect<unknown, DaviplataSandboxProofFailure> =>
   execute(
     outbound,
-    {
-      _tag: "WompiDaviplataSandboxOtp",
-      step,
-      authorizationId,
-      token,
-    },
+    OutboundHttpRequest.WompiDaviplataSandboxOtp({ step, authorizationId, token }),
     step === "send" ? "otp-send-request" : "otp-confirm-request"
   ).pipe(
     Effect.flatMap((response) =>
@@ -196,7 +194,7 @@ export const authorizeDaviplataSandbox = Effect.fnUntraced(function* (
 
   const token = yield* execute(
     input.outbound,
-    { _tag: "WompiDaviplataSandboxToken", outcome: input.outcome },
+    OutboundHttpRequest.WompiDaviplataSandboxToken({ outcome: input.outcome }),
     "tokenization-request"
   ).pipe(
     Effect.flatMap((response) => json(response, "tokenization-response")),

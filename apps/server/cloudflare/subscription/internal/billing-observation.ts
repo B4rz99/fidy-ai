@@ -1,4 +1,4 @@
-import { Effect, Exit, Option, Schema } from "effect";
+import { Effect, Exit, Option, Ref, Schema } from "effect";
 import {
   BillingCollectionFailure,
   type BillingObservationWorkflow,
@@ -145,7 +145,14 @@ export const runLocalCancellationLoop = (
       if (Option.isNone(observe)) return yield* failure();
       const run = Effect.runPromiseWith(yield* Effect.context<never>());
 
-      for (let index = 0; index < maximumCandidateLookupAttempts; index++) {
+      const nextIndex = yield* Ref.make(0);
+
+      const observeOwner = (): Promise<boolean> =>
+        run(callCancellationOwner(input.environment, input.work, "observe"));
+
+      const observeCandidate = Effect.gen(function* () {
+        const index = yield* Ref.getAndUpdate(nextIndex, (current) => current + 1);
+
         if (index > 0) {
           yield* attempt(() =>
             input.sleep(`source-cancellation-wait-v3-${index}`, candidateCooldownMs + 1)
@@ -156,11 +163,15 @@ export const runLocalCancellationLoop = (
           observe.value(
             `verify-source-cancellation-v3-${index}`,
             { retries: { limit: 0, delay: "1 second" } },
-            () => run(callCancellationOwner(input.environment, input.work, "observe"))
+            observeOwner
           )
         );
 
-        if (!pending) return;
-      }
+        return pending;
+      });
+
+      yield* observeCandidate.pipe(
+        Effect.repeat({ while: Boolean, times: maximumCandidateLookupAttempts - 1 })
+      );
     })
   );

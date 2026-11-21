@@ -106,9 +106,13 @@ it.live(
 
       yield* controlsDigest(pair, send).pipe(Effect.ignore);
 
-      for (const body of ["json", "empty"] as const) {
-        expect(yield* observePairingStart(pair, body, send)).toBe("HTTP 503");
-      }
+      yield* Effect.forEach(
+        ["json", "empty"] as const,
+        Effect.fnUntraced(function* (body) {
+          expect(yield* observePairingStart(pair, body, send)).toBe("HTTP 503");
+        }),
+        { discard: true }
+      );
 
       yield* controlsDigest(pair, (request) =>
         bufferedAcceptanceSend(client)(request).pipe(

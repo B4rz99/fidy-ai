@@ -2,7 +2,7 @@ import { PendingRead } from "@/ui/components/pending-read";
 
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import { type JSX, useState } from "react";
 import type { CanonicalSuccess } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
@@ -147,7 +147,7 @@ const LoadedSuggestions = ({
   const state = useAtomValue(resource).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(resource);
 
-  if (state._tag === "Failure") {
+  if (Predicate.isTagged(state, "Failure")) {
     return (
       <div role="alert">
         No pudimos leer las sugerencias.{" "}
@@ -158,7 +158,9 @@ const LoadedSuggestions = ({
     );
   }
 
-  if (state._tag !== "Ready") return <PendingRead label="Cargando patrones históricos" />;
+  if (!Predicate.isTagged(state, "Ready")) {
+    return <PendingRead label="Cargando patrones históricos" />;
+  }
 
   return (
     <SuggestionResults
@@ -298,14 +300,16 @@ type ManagementEmptyProps = Pick<ManagementProps, "readState" | "disabled" | "cr
     reset: () => void;
   }>;
 
+type PlanEmptyCopy = Readonly<{
+  title: string;
+  description: string;
+}>;
+
 const planEmptyCopy = ({
   hasPlans,
   filtered,
   status,
-}: Pick<ManagementEmptyProps, "hasPlans" | "filtered" | "status">): Readonly<{
-  title: string;
-  description: string;
-}> => {
+}: Pick<ManagementEmptyProps, "hasPlans" | "filtered" | "status">): PlanEmptyCopy => {
   if (!hasPlans) {
     return {
       title: "Aún no tienes recurrentes",

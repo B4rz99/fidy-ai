@@ -1,4 +1,4 @@
-import { BunFileSystem } from "@effect/platform-bun";
+import { BunFileSystem, BunRuntime } from "@effect/platform-bun";
 import { Effect, Option, Schema } from "effect";
 import type { DurableObjectStorageHandle, Miniflare } from "miniflare";
 import { approve, forward, makeBrowserRuntime, prepareBrowserUser } from "../../dev-browser-api";
@@ -130,4 +130,4 @@ const start = Effect.gen(function* () {
   return yield* Effect.never;
 });
 
-await Effect.runPromise(start.pipe(Effect.scoped, Effect.provide(BunFileSystem.layer)));
+BunRuntime.runMain(start.pipe(Effect.scoped, Effect.provide(BunFileSystem.layer)));

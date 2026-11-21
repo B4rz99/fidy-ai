@@ -1,3 +1,4 @@
+import { ConsentSubject } from "./consent-subject";
 import { type OAuthConnectionId } from "../../../src/core/oauth-agents/contract";
 import {
   type OAuthAuthorization,
@@ -34,7 +35,7 @@ export const grantStatement = ({
   const fresh = freshSessionConditions(input);
 
   return protectConsentStatement({
-    subject: { _tag: "User", userId: input.session.user_id },
+    subject: ConsentSubject.User({ userId: input.session.user_id }),
     requirement: "active",
     statement: {
       sql: `INSERT INTO oauth_connections (id,request_id,user_id,client_id,claimed_client_name,redirect_uri,resource,scopes_json,approved_at_ms,expires_at_ms,refresh_allowed)

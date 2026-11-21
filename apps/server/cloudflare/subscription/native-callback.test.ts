@@ -1,20 +1,22 @@
 import { caseDriver } from "../erasure-purge.test-fixture";
 import type { Miniflare } from "miniflare";
-import { settleUserBillingUrl } from "./contract";
+import { type LocalBillingCollection, settleUserBillingUrl } from "./contract";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, Schedule } from "effect";
+import { Data, Effect, Schedule } from "effect";
 import { expect } from "vitest";
 import { alice, bob, seed } from "../financial-user-store.test-fixture";
 import { native, nativeBillingPlatform } from "../user-store.test-fixture";
 import { browserOrigins, productionTopology } from "../runtime/contract";
 import { Hex } from "effect/encoding";
 
+const BillingWire = Data.taggedEnum<typeof LocalBillingCollection.Encoded>();
+
 const attemptId = "22430000-0000-4000-8000-000000000001";
 
 const reference = "fidy-" + attemptId;
 
-const work = { _tag: "CollectUserBillingAttempt", userId: alice.user, attemptId };
+const work = BillingWire.CollectUserBillingAttempt({ userId: alice.user, attemptId });
 
 const until = (check: Effect.Effect<boolean>): Effect.Effect<void, "pending"> =>
   check.pipe(
@@ -68,6 +70,30 @@ const observer = (
     return response.status;
   });
 
+type CallbackFixture = Effect.Success<ReturnType<typeof callbackFixture>>;
+
+const expectWompiCustodyPending = Effect.fnUntraced(function* (
+  owner: CallbackFixture["owner"],
+  runtime: CallbackFixture["runtime"]
+) {
+  expect(yield* owner.exec("SELECT followup_due_at_ms FROM billing_attempts")).toEqual([
+    { followup_due_at_ms: null },
+  ]);
+  const driver = yield* caseDriver(runtime);
+  expect(
+    yield* driver
+      .step()
+      .pipe(Effect.repeat({ until: (phase) => phase === "ExternalPending", times: 12 }))
+  ).toBe("ExternalPending");
+  expect(
+    yield* native(() =>
+      driver.storage.exec(
+        "SELECT observed_use,status FROM erasure_case_custodians WHERE custodian='Wompi'"
+      )
+    )
+  ).toEqual([{ observed_use: 1, status: "Pending" }]);
+});
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect.each([false, true])(
     "settles an authenticated Wompi callback during the charge POST with erasure requested=%s",
@@ -94,22 +120,24 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           )
         ).toEqual([{ user_id: alice.user, operation_id: attemptId }]);
 
-        if (erase) {
-          const accepted = yield* native(() =>
-            runtime.dispatchFetch(
-              `https://${productionTopology.ingress.hostname}/web/privacy/erasure`,
-              {
-                method: "POST",
-                headers: {
-                  origin: browserOrigins.production,
-                  "content-type": "application/json",
-                  "Fidy-Session-Binding": alice.session,
-                  cookie: "__Host-fidy_session=" + alice.bearer,
-                },
-                body: JSON.stringify({ confirm: true }),
-              }
-            )
-          );
+        const erasureRequest = native(() =>
+          runtime.dispatchFetch(
+            `https://${productionTopology.ingress.hostname}/web/privacy/erasure`,
+            {
+              method: "POST",
+              headers: {
+                origin: browserOrigins.production,
+                "content-type": "application/json",
+                "Fidy-Session-Binding": alice.session,
+                cookie: "__Host-fidy_session=" + alice.bearer,
+              },
+              body: JSON.stringify({ confirm: true }),
+            }
+          )
+        );
+
+        yield* Effect.gen(function* () {
+          const accepted = yield* erasureRequest;
 
           expect(accepted.status).toBe(202);
           const driver = yield* caseDriver(runtime);
@@ -118,7 +146,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           expect(yield* owner.exec("SELECT status,collection_state FROM billing_attempts")).toEqual(
             [{ status: "pending", collection_state: "sent" }]
           );
-        }
+        }).pipe(Effect.when(Effect.succeed(erase)));
 
         const stamp = 1712345678;
         const id = "provider-callback-id";
@@ -173,24 +201,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           { current_paid_attempt_id: attemptId },
         ]);
 
-        if (erase) {
-          expect(yield* owner.exec("SELECT followup_due_at_ms FROM billing_attempts")).toEqual([
-            { followup_due_at_ms: null },
-          ]);
-          const driver = yield* caseDriver(runtime);
-          expect(
-            yield* driver
-              .step()
-              .pipe(Effect.repeat({ until: (phase) => phase === "ExternalPending", times: 12 }))
-          ).toBe("ExternalPending");
-          expect(
-            yield* native(() =>
-              driver.storage.exec(
-                "SELECT observed_use,status FROM erasure_case_custodians WHERE custodian='Wompi'"
-              )
-            )
-          ).toEqual([{ observed_use: 1, status: "Pending" }]);
-        }
+        yield* expectWompiCustodyPending(owner, runtime).pipe(Effect.when(Effect.succeed(erase)));
 
         expect(yield* native(() => db.exec("SELECT count(*) AS n FROM charge_posts"))).toEqual([
           { n: 1 },
@@ -228,16 +239,20 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           attemptId
         );
 
-        for (const wrong of [
-          { sourceId: 5300 },
-          { currency: "USD" },
-          { environment: "production" },
-          { reference: "fidy-22430000-0000-4000-8000-000000000009" },
-          { amountInCents: 0 },
-          { userId: bob.user },
-        ]) {
-          expect(yield* observe({ ...work, ...wrong })).toBe(204);
-        }
+        yield* Effect.forEach(
+          [
+            { sourceId: 5300 },
+            { currency: "USD" },
+            { environment: "production" },
+            { reference: "fidy-22430000-0000-4000-8000-000000000009" },
+            { amountInCents: 0 },
+            { userId: bob.user },
+          ],
+          Effect.fnUntraced(function* (wrong) {
+            expect(yield* observe({ ...work, ...wrong })).toBe(204);
+          }),
+          { discard: true }
+        );
 
         expect(yield* observe(work, bob.user)).toBe(204);
         expect(

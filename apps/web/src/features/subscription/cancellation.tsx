@@ -10,7 +10,7 @@ import { PaymentFeedback } from "./workspace";
 import {
   type Cancellation,
   type CancellationManagement,
-  type makeCancellationManagement,
+  type cancellationManagementAtom,
 } from "./cancellation-command";
 
 const dateFormatter = new Intl.DateTimeFormat("es-CO", {
@@ -103,7 +103,7 @@ const CancellationReview = ({
   </section>
 );
 
-type CancellationCommand = ReturnType<typeof makeCancellationManagement>;
+type CancellationCommand = ReturnType<typeof cancellationManagementAtom>;
 
 const CancellationActions = ({
   current,

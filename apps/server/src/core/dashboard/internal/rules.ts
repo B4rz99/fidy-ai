@@ -1,5 +1,5 @@
 import { layoutLeaves } from "./layout";
-import { Effect, BigInt as EffectBigInt, Option, Schema, SchemaIssue } from "effect";
+import { Effect, BigInt as EffectBigInt, Option, Predicate, Schema, SchemaIssue } from "effect";
 import {
   type Axis,
   type BesidePlacement,
@@ -32,10 +32,10 @@ const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1();
 type StandardIssue = ReturnType<typeof formatIssues>["issues"][number];
 
 const toDashboardIssue = (issue: StandardIssue): DashboardIssue => ({
-  path:
-    Option.getOrThrow(Option.fromNullishOr(issue.path)).length === 0
-      ? Option.none()
-      : Option.some(Option.getOrThrow(Option.fromNullishOr(issue.path)).map(String).join(".")),
+  path: Option.fromNullishOr(issue.path).pipe(
+    Option.filter((path) => path.length > 0),
+    Option.map((path) => path.map(String).join("."))
+  ),
   message: issue.message,
 });
 
@@ -125,10 +125,16 @@ const normalizeSplit = (node: Readonly<SplitNode>): SplitNode => {
 
   const divisor = expanded.reduce((current, child) => EffectBigInt.gcd(current, child.weight), 0n);
 
+  const [firstExpanded, secondExpanded, ...restExpanded] = expanded;
+
+  if (firstExpanded === undefined || secondExpanded === undefined) {
+    return { ...node, children };
+  }
+
   const expandedChildren: AtLeastTwo<WeightedLayoutNode> = [
-    Option.getOrThrow(Option.fromUndefinedOr(expanded[0])),
-    Option.getOrThrow(Option.fromUndefinedOr(expanded[1])),
-    ...expanded.slice(2),
+    firstExpanded,
+    secondExpanded,
+    ...restExpanded,
   ];
 
   const weights = mapAtLeastTwo(expandedChildren, (child) => child.weight / divisor);
@@ -292,14 +298,13 @@ const collapseAfterChildRemoval = (
   node: Readonly<SplitNode>,
   children: ReadonlyArray<Readonly<SplitNode["children"][number]>>
 ): LayoutNode => {
-  if (children.length === 1) {
-    return Option.getOrThrow(Option.fromUndefinedOr(children[0])).node;
-  }
+  const [first, second, ...rest] = children;
 
-  const first = Option.getOrThrow(Option.fromUndefinedOr(children[0]));
-  const second = Option.getOrThrow(Option.fromUndefinedOr(children[1]));
+  if (first === undefined) return node;
 
-  return normalizeSplit({ ...node, children: [first, second, ...children.slice(2)] });
+  if (second === undefined) return first.node;
+
+  return normalizeSplit({ ...node, children: [first, second, ...rest] });
 };
 
 const removeWidget = (input: WidgetLookup): Option.Option<WidgetRemoval> => {
@@ -374,7 +379,7 @@ export const applyAdd = ({
 }>): Effect.Effect<DashboardDocument, DashboardFailure> => {
   const shouldRejectDuplicate = duplicatePolicies.has(duplicatePolicy);
 
-  if (typeof edit.at === "string") {
+  if (Predicate.isString(edit.at)) {
     if (shouldRejectDuplicate && hasLayoutWidget(document.layout, edit.widget.id)) {
       return Effect.fail(new DuplicateWidgetId({ widgetId: edit.widget.id }));
     }
@@ -473,8 +478,11 @@ const resizeChildren = (
 ): SplitNode["children"] => {
   if (size.kind === "weight") {
     const adjacentIndex = resizedIndex < children.length - 1 ? resizedIndex + 1 : resizedIndex - 1;
-    const resized = Option.getOrThrow(Option.fromUndefinedOr(children[resizedIndex]));
-    const adjacent = Option.getOrThrow(Option.fromUndefinedOr(children[adjacentIndex]));
+    const resized = children[resizedIndex];
+    const adjacent = children[adjacentIndex];
+
+    if (resized === undefined || adjacent === undefined) return children;
+
     const pairWeight = resized.weight + adjacent.weight;
 
     const resizedWeight = SplitWeight.make(

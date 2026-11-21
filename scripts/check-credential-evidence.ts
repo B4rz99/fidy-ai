@@ -675,15 +675,16 @@ const readConfiguredSecrets = Effect.fn("CredentialEvidenceGate.readConfiguredSe
     const configured = new Set<string>();
     const sourceGlobs = ["apps/server/src/**/*.ts", "apps/server/scripts/**/*.ts"];
 
-    for (const pattern of sourceGlobs) {
-      const sources = new Bun.Glob(pattern);
+    const sourcePaths = sourceGlobs
+      .flatMap((pattern) => Array.from(new Bun.Glob(pattern).scanSync({ cwd: "." })))
+      .filter((path) => !path.endsWith(".test.ts"));
 
-      for (const path of sources.scanSync({ cwd: "." })) {
-        if (path.endsWith(".test.ts")) continue;
-        const source = yield* Effect.tryPromise(() => Bun.file(path).text()).pipe(Effect.orDie);
+    const sources = yield* Effect.forEach(sourcePaths, (path) =>
+      Effect.tryPromise(() => Bun.file(path).text()).pipe(Effect.orDie)
+    );
 
-        for (const name of configuredSecretNames(source)) configured.add(name);
-      }
+    for (const source of sources) {
+      for (const name of configuredSecretNames(source)) configured.add(name);
     }
 
     return configured;

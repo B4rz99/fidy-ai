@@ -7,7 +7,7 @@ import {
 import type { CleanupCommand, CleanupPermission } from "../../erasure-store/contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Effect, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import { cancelProviderHandoff } from "./reservations";
 import { withStoreCapacity } from "../../runtime/sqlite/operations";
 
@@ -51,21 +51,24 @@ const deletionPage = 32;
 const releaseIdentityHolds = Effect.fn(function* (user: string) {
   const sql = yield* SqliteClient;
 
-  for (const [table, identity] of [
-    ["provider_routes", "issuer,subject,creation_attempt"],
-    ["whatsapp_routes", "portfolio,bsuid,attempt_id,revision"],
-    ["verified_email_routes", "normalized_address,reservation_id,revision"],
-    ["recovery_routes", "code_digest,attempt_id,revision,generation"],
-  ] as const) {
-    const key = sql.unsafe(identity);
+  const unfinished = yield* Effect.findFirst(
+    [
+      ["provider_routes", "issuer,subject,creation_attempt"],
+      ["whatsapp_routes", "portfolio,bsuid,attempt_id,revision"],
+      ["verified_email_routes", "normalized_address,reservation_id,revision"],
+      ["recovery_routes", "code_digest,attempt_id,revision,generation"],
+    ] as const,
+    ([table, identity]) => {
+      const key = sql.unsafe(identity);
 
-    const rows =
-      yield* sql`DELETE FROM ${sql(table)} WHERE user_id=${user} AND (${key}) IN (SELECT ${key} FROM ${sql(table)} WHERE user_id=${user} LIMIT ${deletionPage}) RETURNING 1`;
+      return Effect.map(
+        sql`DELETE FROM ${sql(table)} WHERE user_id=${user} AND (${key}) IN (SELECT ${key} FROM ${sql(table)} WHERE user_id=${user} LIMIT ${deletionPage}) RETURNING 1`,
+        (rows) => rows.length === deletionPage
+      );
+    }
+  );
 
-    if (rows.length === deletionPage) return false;
-  }
-
-  return true;
+  return Option.isNone(unfinished);
 });
 
 export const cleanDirectoryCase = Effect.fn(function* (
@@ -96,23 +99,27 @@ export const cleanDirectoryCase = Effect.fn(function* (
 
   if (invitations.length === deletionPage) return false;
 
-  for (const table of [
-    "session_routes",
-    "pat_routes",
-    "oauth_routes",
-    "oauth_review_requests",
-    "pat_bootstrap",
-    "recovery_rotations",
-    "identity_replacements",
-    "channel_approvals",
-    "support_handoffs",
-    "browser_pairings",
-  ]) {
-    const rows =
-      yield* sql`DELETE FROM ${sql(table)} WHERE rowid IN(SELECT rowid FROM ${sql(table)} WHERE user_id=${user} LIMIT 32) RETURNING 1`;
+  const unfinished = yield* Effect.findFirst(
+    [
+      "session_routes",
+      "pat_routes",
+      "oauth_routes",
+      "oauth_review_requests",
+      "pat_bootstrap",
+      "recovery_rotations",
+      "identity_replacements",
+      "channel_approvals",
+      "support_handoffs",
+      "browser_pairings",
+    ],
+    (table) =>
+      Effect.map(
+        sql`DELETE FROM ${sql(table)} WHERE rowid IN(SELECT rowid FROM ${sql(table)} WHERE user_id=${user} LIMIT 32) RETURNING 1`,
+        (rows) => rows.length === deletionPage
+      )
+  );
 
-    if (rows.length === deletionPage) return false;
-  }
+  if (Option.isSome(unfinished)) return false;
 
   const events =
     yield* sql`DELETE FROM external_event_routes WHERE rowid IN(SELECT rowid FROM external_event_routes WHERE user_id=${user} AND (kind='forwarding' OR (kind='wompi' AND ${Number(permission.wompi)}=1) OR (kind='whatsapp' AND ${Number(permission.whatsapp)}=1)) LIMIT 32) RETURNING 1`;
@@ -146,8 +153,14 @@ export const inspectDirectoryScope = Effect.fn(function* (
 
   const sql = yield* SqliteClient;
 
-  const rows =
+  const routes =
     yield* sql`SELECT r.rowid AS cursor,r.endpoint,r.lookup FROM external_event_routes r JOIN erasure_barriers b ON b.user_id=r.user_id WHERE b.user_id=${admission.userId} AND b.reference=${admission.reference} AND r.kind=${admission.custodian === "Wompi" ? "wompi" : "whatsapp"} AND r.rowid>${admission.after} ORDER BY r.rowid LIMIT 17`;
+
+  const rows = yield* Schema.decodeUnknownEffect(
+    Schema.Array(
+      Schema.Struct({ cursor: Schema.Unknown, endpoint: Schema.Unknown, lookup: Schema.Unknown })
+    )
+  )(routes);
 
   return custodyScopePage(rows);
 });

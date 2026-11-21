@@ -13,38 +13,36 @@ type UserEnvironment = ConstructorParameters<typeof NativeUser>[1];
 
 const marker = "private-fixture";
 
-const heldBucket = (bucket: R2Bucket, storage: DurableObjectStorage): R2Bucket =>
-  new Proxy(bucket, {
-    get(target, property) {
-      if (property === "put") {
-        return (...args: Parameters<R2Bucket["put"]>) =>
-          Effect.runPromise(
-            Effect.gen(function* () {
-              const released = yield* Effect.tryPromise(() =>
-                storage.get<boolean>(
-                  args[0].startsWith("samples/") ? "hold-sample" : "fixture-hold"
-                )
-              ).pipe(
-                Effect.repeat({
-                  while: (value) => value === true,
-                  schedule: Schedule.spaced("20 millis"),
-                }),
-                Effect.timeoutOption("30 seconds")
-              );
+const heldPut =
+  (bucket: R2Bucket, storage: DurableObjectStorage): R2Bucket["put"] =>
+  (...args) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const released = yield* Effect.tryPromise(() =>
+          storage.get<boolean>(args[0].startsWith("samples/") ? "hold-sample" : "fixture-hold")
+        ).pipe(
+          Effect.repeat({
+            while: (value) => value === true,
+            schedule: Schedule.spaced("20 millis"),
+          }),
+          Effect.timeoutOption("30 seconds")
+        );
 
-              if (Option.isNone(released)) return yield* Effect.die("Fixture release timed out");
+        if (Option.isNone(released)) return yield* Effect.die("Fixture release timed out");
 
-              return yield* Effect.tryPromise(() => target.put(...args));
-            })
-          );
-      }
+        return yield* Effect.tryPromise(() => bucket.put(...args));
+      })
+    );
 
-      const value: unknown = Reflect.get(target, property);
-      const bound: unknown = typeof value === "function" ? value.bind(target) : value;
-
-      return bound;
-    },
-  });
+const heldBucket = (bucket: R2Bucket, storage: DurableObjectStorage): R2Bucket => ({
+  head: bucket.head.bind(bucket),
+  get: bucket.get.bind(bucket),
+  put: heldPut(bucket, storage),
+  createMultipartUpload: bucket.createMultipartUpload.bind(bucket),
+  resumeMultipartUpload: bucket.resumeMultipartUpload.bind(bucket),
+  delete: bucket.delete.bind(bucket),
+  list: bucket.list.bind(bucket),
+});
 
 export class UserStore extends NativeUser {
   constructor(state: DurableObjectState, env: UserEnvironment) {

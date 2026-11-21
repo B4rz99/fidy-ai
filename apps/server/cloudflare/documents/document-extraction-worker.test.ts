@@ -21,7 +21,7 @@ const extract = (
     bindings
   );
 
-const responseBody = (response: Response): Promise<unknown> => response.json();
+const responseBody = (response: Response): Promise<Schema.Json> => response.json();
 
 const readFixture = (name: string): Promise<ArrayBuffer> =>
   Bun.file(new URL(`./fixtures/${name}`, import.meta.url)).arrayBuffer();

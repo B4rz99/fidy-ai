@@ -1,5 +1,5 @@
 import { AcceptanceProofUnavailable } from "./release-isolation/contract";
-import { Effect, Schema } from "effect";
+import { Effect, Layer, ManagedRuntime, Schema } from "effect";
 import core, { UserStore as ApplicationUserStore } from "./core-worker";
 import { isPerformanceEvidence } from "./release-isolation/operations";
 import { SharedStoreMarkers, isStorageCompatibility } from "./storage-bootstrap/contract";
@@ -16,10 +16,12 @@ export class UserStore extends ApplicationUserStore {
 
 const compatibility = Schema.Struct({ core: SmokeIdentity, markers: SharedStoreMarkers });
 
+const fallbackRuntime = ManagedRuntime.make(Layer.empty);
+
 export default {
   ...core,
   fetch: (request, environment, context): Promise<Response> =>
-    Effect.runPromise(
+    fallbackRuntime.runPromise(
       Effect.gen(function* () {
         if (isPerformanceEvidence(request)) return new Response(null, { status: 404 });
 

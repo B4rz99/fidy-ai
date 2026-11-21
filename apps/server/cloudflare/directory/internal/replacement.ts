@@ -15,14 +15,13 @@ import { UserId } from "../../../src/core/identity/contract";
 
 type Change = typeof ReservedIdentity.Type;
 
+const isResponse = Schema.is(Schema.instanceOf(Response));
+
 const conflictStatus = 409;
 
 const refusal = (): Response => new Response(null, { status: conflictStatus });
 
-const replay = Effect.fn(function* (
-  input: typeof ReplacementInput.Type,
-  existing: Readonly<Record<string, unknown>>
-) {
+const replay = Effect.fn(function* (input: typeof ReplacementInput.Type, existing: unknown) {
   const selected = yield* Schema.decodeUnknownEffect(ReservedIdentity)(existing);
   const match = Struct.keys(ReplacementInput.fields).every((key) => selected[key] === input[key]);
   const sql = yield* SqliteClient;
@@ -30,9 +29,13 @@ const replay = Effect.fn(function* (
 
   if (!match || held.length > 0) return refusal();
 
-  if (existing.state === "reserved") return selected;
+  const { state } = yield* Schema.decodeUnknownEffect(Schema.Struct({ state: Schema.Unknown }))(
+    existing
+  );
 
-  return existing.state === "committed" ? new Response(null) : refusal();
+  if (state === "reserved") return selected;
+
+  return state === "committed" ? new Response(null) : refusal();
 });
 
 const reserve = Effect.fn(function* (input: typeof ReplacementInput.Type) {
@@ -169,7 +172,7 @@ export const directoryIdentityRequest = Effect.fn(function* (
 
   const record = yield* reserve(input).pipe(withStoreCapacity("growth"));
 
-  if (record instanceof Response) return record;
+  if (isResponse(record)) return record;
 
   return yield* reconcile(record, users, false);
 });

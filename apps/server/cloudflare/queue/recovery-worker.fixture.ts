@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { Clock, Effect, Schema } from "effect";
-import { makeCoreQueue } from "./runtime";
+import { coreQueueHandler } from "./runtime";
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 
 const user = "10000000-0000-4000-8000-000000000001";
@@ -113,7 +113,7 @@ const workflow = (owner: DurableObjectStub<QueueRecorder>): Workflow => ({
   deleteBatch: unavailable,
 });
 
-const consume = makeCoreQueue(makeWorkerTelemetry(() => undefined));
+const consume = coreQueueHandler(makeWorkerTelemetry(() => undefined));
 
 export default {
   fetch: (_req: Request, env: Environment): Promise<Response> =>

@@ -13,6 +13,15 @@ const limitReply = (): Response =>
 
 type Window = Readonly<{ scope: string; limit: number; duration: number }>;
 
+const windowFull = Effect.fn(function* (window: Window, now: number) {
+  const sql = yield* SqliteClient;
+
+  const rows =
+    yield* sql`SELECT id FROM bootstrap_admissions WHERE scope=${window.scope} AND expires_at_ms>${now} LIMIT 1 OFFSET ${window.limit - 1}`;
+
+  return rows.length > 0;
+});
+
 export const chargeBootstrapWindows = Effect.fn(function* (windows: ReadonlyArray<Window>) {
   const sql = yield* SqliteClient;
 
@@ -20,16 +29,16 @@ export const chargeBootstrapWindows = Effect.fn(function* (windows: ReadonlyArra
     const now = yield* Clock.currentTimeMillis;
     yield* sql`DELETE FROM bootstrap_admissions WHERE id IN(SELECT id FROM bootstrap_admissions WHERE expires_at_ms<=${now} ORDER BY expires_at_ms LIMIT 32)`;
 
-    for (const window of windows) {
-      const [full] =
-        yield* sql`SELECT id FROM bootstrap_admissions WHERE scope=${window.scope} AND expires_at_ms>${now} LIMIT 1 OFFSET ${window.limit - 1}`;
+    const full = yield* Effect.findFirst(windows, (window) => windowFull(window, now));
 
-      if (full !== undefined) return Option.some(limitReply());
-    }
+    if (Option.isSome(full)) return Option.some(limitReply());
 
-    for (const window of windows) {
-      yield* sql`INSERT INTO bootstrap_admissions(scope,expires_at_ms) VALUES(${window.scope},${now + window.duration})`;
-    }
+    yield* Effect.forEach(
+      windows,
+      (window) =>
+        sql`INSERT INTO bootstrap_admissions(scope,expires_at_ms) VALUES(${window.scope},${now + window.duration})`,
+      { discard: true }
+    );
 
     return Option.none<Response>();
   }).pipe(withStoreCapacity("growth"));
@@ -44,14 +53,16 @@ export const admitBootstrap = Effect.fn(function* (request: Request) {
   const cheap =
     path.endsWith("/status") || path.endsWith("/disclosure") || path.endsWith("/redeem");
 
+  const exchangeWindows = cheap
+    ? []
+    : [
+        { scope: "exchange:" + source, limit: 30, duration: minute },
+        { scope: "exchanges", limit: 300, duration: minute },
+      ];
+
   return yield* chargeBootstrapWindows([
     { scope: "source:" + source, limit: 120, duration: minute },
     { scope: "global", limit: 1200, duration: minute },
-    ...(cheap
-      ? []
-      : [
-          { scope: "exchange:" + source, limit: 30, duration: minute },
-          { scope: "exchanges", limit: 300, duration: minute },
-        ]),
+    ...exchangeWindows,
   ]);
 });

@@ -1,4 +1,4 @@
-import { Data, Effect, Schema } from "effect";
+import { Data, Effect, Option, Schema } from "effect";
 import { type BoundedBodyReadFailed } from "../http/contract";
 import { awaitRequestAbort, collectBoundedRequestBody } from "../http/operations";
 
@@ -46,7 +46,7 @@ type DocumentExtractionBindings = {
   readonly AI: {
     readonly toMarkdown: (
       documents: ReadonlyArray<{ readonly blob: Blob; readonly name: string }>
-    ) => Promise<unknown>;
+    ) => Promise<Schema.Json>;
   };
 };
 
@@ -64,6 +64,7 @@ type RejectionReason =
 
 class ExtractionRejected extends Data.TaggedError("ExtractionRejected")<{
   readonly reason: RejectionReason;
+  readonly cause: Option.Option<unknown>;
 }> {}
 
 const statusByReason = {
@@ -94,13 +95,13 @@ const containsSequence = (bytes: Uint8Array, sequence: Uint8Array): boolean => {
 
 const readPngInput = (bytes: Uint8Array): Effect.Effect<InputDocument, ExtractionRejected> => {
   if (bytes.byteLength < pngHeaderBytes) {
-    return Effect.fail(new ExtractionRejected({ reason: "malformed-file" }));
+    return Effect.fail(new ExtractionRejected({ reason: "malformed-file", cause: Option.none() }));
   }
 
   const chunkName = new TextDecoder().decode(bytes.subarray(pngChunkNameStart, pngChunkNameEnd));
 
   if (chunkName !== "IHDR") {
-    return Effect.fail(new ExtractionRejected({ reason: "malformed-file" }));
+    return Effect.fail(new ExtractionRejected({ reason: "malformed-file", cause: Option.none() }));
   }
 
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -108,7 +109,7 @@ const readPngInput = (bytes: Uint8Array): Effect.Effect<InputDocument, Extractio
   const height = view.getUint32(pngHeightOffset);
 
   if (width === 0 || height === 0) {
-    return Effect.fail(new ExtractionRejected({ reason: "malformed-file" }));
+    return Effect.fail(new ExtractionRejected({ reason: "malformed-file", cause: Option.none() }));
   }
 
   if (
@@ -116,7 +117,7 @@ const readPngInput = (bytes: Uint8Array): Effect.Effect<InputDocument, Extractio
     height > maximumImageDimension ||
     width * height > maximumImagePixels
   ) {
-    return Effect.fail(new ExtractionRejected({ reason: "resource-limit" }));
+    return Effect.fail(new ExtractionRejected({ reason: "resource-limit", cause: Option.none() }));
   }
 
   return Effect.succeed({ mime: "image/png", name: "statement.png" });
@@ -125,11 +126,11 @@ const readPngInput = (bytes: Uint8Array): Effect.Effect<InputDocument, Extractio
 const detectInput = Effect.fn(function* (bytes: Uint8Array) {
   if (startsWith(bytes, pdfSignature)) {
     if (!containsSequence(bytes, pdfEndMarker)) {
-      return yield* new ExtractionRejected({ reason: "malformed-file" });
+      return yield* new ExtractionRejected({ reason: "malformed-file", cause: Option.none() });
     }
 
     if (containsSequence(bytes, pdfEncryptionMarker)) {
-      return yield* new ExtractionRejected({ reason: "password-required" });
+      return yield* new ExtractionRejected({ reason: "password-required", cause: Option.none() });
     }
 
     return { mime: "application/pdf", name: "statement.pdf" } as const;
@@ -139,7 +140,7 @@ const detectInput = Effect.fn(function* (bytes: Uint8Array) {
     return yield* readPngInput(bytes);
   }
 
-  return yield* new ExtractionRejected({ reason: "unsupported-format" });
+  return yield* new ExtractionRejected({ reason: "unsupported-format", cause: Option.none() });
 });
 
 const convertRequest = Effect.fn(function* (
@@ -153,7 +154,7 @@ const convertRequest = Effect.fn(function* (
 
   const conversion = yield* Effect.raceFirst(
     Effect.tryPromise({
-      catch: () => new ExtractionRejected({ reason: "conversion-failed" }),
+      catch: () => new ExtractionRejected({ reason: "conversion-failed", cause: Option.none() }),
       try: () =>
         bindings.AI.toMarkdown([
           { blob: new Blob([blobBytes], { type: input.mime }), name: input.name },
@@ -163,21 +164,23 @@ const convertRequest = Effect.fn(function* (
   );
 
   const [result] = yield* Schema.decodeUnknownEffect(ConversionResults)(conversion).pipe(
-    Effect.mapError(() => new ExtractionRejected({ reason: "conversion-failed" }))
+    Effect.mapError(
+      (cause) => new ExtractionRejected({ reason: "conversion-failed", cause: Option.some(cause) })
+    )
   );
 
   if (result.format !== "markdown") {
-    return yield* new ExtractionRejected({ reason: "conversion-failed" });
+    return yield* new ExtractionRejected({ reason: "conversion-failed", cause: Option.none() });
   }
 
   if (result.data.length > maximumOutputBytes) {
-    return yield* new ExtractionRejected({ reason: "resource-limit" });
+    return yield* new ExtractionRejected({ reason: "resource-limit", cause: Option.none() });
   }
 
   const outputBytes = new TextEncoder().encode(result.data).byteLength;
 
   if (outputBytes > maximumOutputBytes) {
-    return yield* new ExtractionRejected({ reason: "resource-limit" });
+    return yield* new ExtractionRejected({ reason: "resource-limit", cause: Option.none() });
   }
 
   return Response.json({

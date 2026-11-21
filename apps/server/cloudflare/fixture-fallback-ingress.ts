@@ -1,14 +1,16 @@
 import { AcceptanceProofUnavailable } from "./release-isolation/contract";
-import { Effect } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import ingress from "./public-worker";
 import { isPerformanceEvidence } from "./release-isolation/operations";
 import { isStorageCompatibility } from "./storage-bootstrap/contract";
 
 export * from "./public-worker";
 
+const fallbackRuntime = ManagedRuntime.make(Layer.empty);
+
 export default {
   fetch: (request, environment): Promise<Response> =>
-    Effect.runPromise(
+    fallbackRuntime.runPromise(
       Effect.gen(function* () {
         if (isPerformanceEvidence(request)) return new Response(null, { status: 404 });
 

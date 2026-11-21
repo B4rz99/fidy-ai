@@ -81,7 +81,7 @@ type Props = Readonly<{
   filters: Filters;
   previous: Option.Option<string>;
   applyFilters: (filters: Filters) => void;
-  month: (step: number) => void;
+  selectMonth: (month: string) => void;
   earlier: (month: string) => void;
   revealEarlier: RefCallback<HTMLDetailsElement>;
   timeZone: PlanInput["timeZone"];
@@ -571,7 +571,7 @@ const WorkspaceBody = ({
           filtered={Object.keys(filters).length > 0}
           calendar={calendar}
           setCalendar={setCalendar}
-          month={props.month}
+          selectMonth={props.selectMonth}
         />
       ) : null}
       <InvalidFulfillments view={view} save={save} disabled={disabled} />

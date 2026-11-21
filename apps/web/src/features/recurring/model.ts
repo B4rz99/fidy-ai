@@ -87,6 +87,12 @@ export const monthLabel = (month: string): string =>
     year: "numeric",
     timeZone: "UTC",
   });
+export const shortMonthLabel = (month: string): string =>
+  DateTime.format(DateTime.makeUnsafe(`${month}-01`), {
+    locale: "es-CO",
+    month: "short",
+    timeZone: "UTC",
+  }).replace(".", "");
 export const shiftMonth = ({ month, step }: Readonly<{ month: string; step: number }>): string =>
   DateTime.formatIsoDateUtc(
     DateTime.add(DateTime.makeUnsafe(`${month}-01`), { months: step })

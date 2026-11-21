@@ -33,7 +33,7 @@ import {
   recurringWorkspaceQuery,
   useRecurringPlanning,
 } from "./controller";
-import { type Filters, type PlanInput, planStatus, shiftMonth } from "./model";
+import { type Filters, type PlanInput, planStatus } from "./model";
 
 export type { CaptureEditorProps } from "./capture-context";
 
@@ -164,7 +164,7 @@ const ResourceContent = ({
         filters={props.filters}
         previous={props.previous}
         applyFilters={props.applyFilters}
-        month={(step) => props.selectMonth(shiftMonth({ month: props.month, step }))}
+        selectMonth={props.selectMonth}
         earlier={disclosure.request}
         revealEarlier={disclosure.reveal}
         timeZone={props.timeZone}

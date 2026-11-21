@@ -29,7 +29,7 @@ import {
   diagnoseNativePlan,
   diagnoseSuccessorApply,
 } from "./native-plan-diagnostics";
-import { firstInstallEdge } from "./native-storage-release";
+import { firstInstallEdge, planCanonicalHostPreview } from "./native-storage-release";
 import { confirmInterruptedSmokeConsumer } from "./native-smoke-consumer-recovery";
 import { nativeResourceInventory, requireNativeResourcePlan } from "./native-graph";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
@@ -159,12 +159,15 @@ const preflight = Effect.fn(function* (phase: typeof Phase.Type, preview: boolea
       diagnoseFreshTarget
     );
   }
+  if (phase === "stage-hosts" && preview) {
+    return yield* planCanonicalHostPreview.pipe(
+      Effect.provide(ReleaseHttpLive),
+      Effect.timeout("60 seconds"),
+      nativeResourceStage("host capture")
+    );
+  }
   yield* releaseCommand({
-    args: [
-      "bun",
-      "native-storage-release.ts",
-      phase === "stage-hosts" && preview ? "plan-hosts" : releaseChecks[phase],
-    ],
+    args: ["bun", "native-storage-release.ts", releaseChecks[phase]],
     lifetime: phase === "stage-hosts" && !preview ? "started-write" : "read-only",
   }).pipe(nativeResourceStage(phase === "upload" ? "upload verification" : "host capture"));
 });

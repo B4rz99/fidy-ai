@@ -314,6 +314,17 @@ const readZone = Effect.fn(function* (read: Read, accountId: string) {
   return zone;
 });
 
+const checkCanonicalInventory =
+  (mode: NativeHostMode, section: string) =>
+  <A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    work.pipe(
+      Effect.tapCause(() =>
+        mode === "staged"
+          ? Effect.logError("Canonical edge inventory failed at " + section)
+          : Effect.void
+      )
+    );
+
 export const inspectDeployedEdge = Effect.fn(function* (
   env: Pick<ProductionReleaseConfig, "account" | "token">,
   client: HttpClient.HttpClient,
@@ -332,7 +343,9 @@ export const inspectDeployedEdge = Effect.fn(function* (
       )
       .pipe(Effect.provideService(HttpClient.HttpClient, client));
   const account = "accounts/" + env.account + "/";
-  const zone = yield* readZone(read, env.account);
+  const zone = yield* readZone(read, env.account).pipe(
+    checkCanonicalInventory(stage.hosts, "zone identity")
+  );
   const hosts = hostWorkers(stage.hosts);
   const attached = yield* inspectHosts({
     read,
@@ -343,8 +356,10 @@ export const inspectDeployedEdge = Effect.fn(function* (
     staging: stage.staging === true,
     incumbentTransfer: "incumbentTransfer" in stage && stage.incumbentTransfer,
     installed,
-  });
-  const builds = yield* inspectBuilds({ read, account, installed, client });
+  }).pipe(checkCanonicalInventory(stage.hosts, "DNS and Worker attachments"));
+  const builds = yield* inspectBuilds({ read, account, installed, client }).pipe(
+    checkCanonicalInventory(stage.hosts, "Workers Builds triggers")
+  );
   const access = yield* inspectNativeAccess({
     read,
     account,
@@ -362,6 +377,8 @@ export const inspectDeployedEdge = Effect.fn(function* (
         .filter((item) => item.script.startsWith("fidy-native-"))
         .flatMap((item) => [item.tag, item.script]),
     ],
-  });
+  }).pipe(
+    checkCanonicalInventory(stage.hosts, "protected Access applications, policies and bindings")
+  );
   return { zoneId: zone.id, hosts: attached, builds, access };
 });

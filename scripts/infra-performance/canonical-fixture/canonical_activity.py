@@ -11,7 +11,7 @@ import subprocess
 import sys
 from zipfile import ZipFile
 
-from canonical_host_source import WORKFLOW_REF
+from canonical_host_source import WORKFLOW_REF, protected_release_job
 from successor_source import cloudflare
 from hosted import HERE
 from qualified_release import actions_get, git_read, protected_archive
@@ -38,8 +38,7 @@ def opened_release(reference, verifier, get=actions_get, git=git_read):
         raise ValueError("Opening archive came from outside the current protected lineage")
     run, body = protected_archive(revision, reference["artifactId"], reference["sha256"],
                                   prefix="native-canonical-signup-open-", conclusions={"success"}, get=get)
-    inventory = json.loads(get(f"runs/{run}/attempts/1/jobs?per_page=100"))
-    job, = inventory["jobs"]
+    job = protected_release_job(run, get)
     expected = (
         "Capture exact closed canonical versions and the protected User Store census",
         "Upload only the compatible exact canonical signup versions",
@@ -48,8 +47,7 @@ def opened_release(reference, verifier, get=actions_get, git=git_read):
         "Retain exact canonical signup deployment and redirect evidence",
     )
     observed = [(step["name"], step["conclusion"]) for step in job["steps"] if step["name"] in expected]
-    if (inventory["total_count"] != 1 or job["name"] != "release" or job["conclusion"] != "success"
-            or observed != [(name, "success") for name in expected]):
+    if observed != [(name, "success") for name in expected]:
         raise ValueError("The protected opening did not confirm the canonical deployment")
     with ZipFile(BytesIO(body)) as archive:
         entry, = archive.infolist()

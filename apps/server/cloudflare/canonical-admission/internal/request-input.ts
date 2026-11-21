@@ -121,7 +121,16 @@ const rawInput = ({
     );
 
     return Schema.decodeOption(operation.httpInput)(wire);
-  }).pipe(Effect.orElseSucceed(() => Option.none()));
+  }).pipe(
+    Effect.tapError(() =>
+      Effect.logWarning({
+        component: "canonical-admission",
+        operation: "rawInput",
+        outcome: "rejected",
+      })
+    ),
+    Effect.orElseSucceed(() => Option.none())
+  );
 
 const requiredScopes = (
   operation: CatalogOperation,
@@ -189,6 +198,13 @@ export const validatedCanonicalInput = (
 
     return Option.some({ inputHash: digest, scopes: scopes.value });
   }).pipe(
+    Effect.tapCause(() =>
+      Effect.logWarning({
+        component: "canonical-admission",
+        operation: "validatedCanonicalInput",
+        outcome: "rejected",
+      })
+    ),
     Effect.catchDefect(() => Effect.succeedNone),
     Effect.orElseSucceed(() => Option.none())
   );
@@ -208,6 +224,13 @@ export const localCanonicalArguments = Effect.fnUntraced(function* (
       Option.match({
         onNone: () => Effect.succeedNone,
         onSome: (decoded) => Schema.encodeEffect(operation.input)(decoded).pipe(Effect.asSome),
+      })
+    ),
+    Effect.tapError(() =>
+      Effect.logWarning({
+        component: "canonical-admission",
+        operation: "localCanonicalArguments",
+        outcome: "rejected",
       })
     ),
     Effect.orElseSucceed(() => Option.none())

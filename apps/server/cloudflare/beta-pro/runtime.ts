@@ -198,5 +198,8 @@ export const handleBetaPro = Effect.fn(
 
     return yield* userRequest(environment, { command: command.value, authority });
   },
+  Effect.tapError(() =>
+    Effect.logWarning({ component: "beta-pro", operation: "handleBetaPro", outcome: "unavailable" })
+  ),
   Effect.orElseSucceed(() => refused(betaStatus.unavailable))
 );

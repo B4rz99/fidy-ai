@@ -93,6 +93,7 @@ const browserWithIntent = (runtime: Miniflare, intent: "signup" | "login"): Brow
       handoffReference === undefined ? start : { ...start, handoffReference }
     );
 
+    expect(started.status).toBe(okStatus);
     const cookie = started.headers.get("set-cookie")?.split(";")[0] ?? "";
 
     const { authorizationUrl } = yield* Schema.decodeUnknownEffect(
@@ -125,6 +126,7 @@ const browserWithIntent = (runtime: Miniflare, intent: "signup" | "login"): Brow
     expect(response.status).toBe(redirectStatus);
     yield* native(() => response.arrayBuffer());
     const status = yield* post(`/web/providers/${provider}/status`, proof);
+    expect(status.status).toBe(okStatus);
     const review = yield* native(() => status.json());
 
     return { proof, attempt: state, review };

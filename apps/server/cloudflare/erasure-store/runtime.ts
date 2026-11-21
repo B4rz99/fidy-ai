@@ -66,9 +66,19 @@ export class Erasure extends DurableObject<ErasureEnvironment> {
     return this.runtime.runPromise(advanceErasureCases(this.ctx.storage, this.env));
   }
   private command(request: Request): Promise<Response> {
-    const unavailable = Effect.catchCause(() =>
-      Effect.succeed(new Response(null, { status: 503 }))
-    );
+    const unavailable = <E, R>(
+      command: Effect.Effect<Response, E, R>
+    ): Effect.Effect<Response, never, R> =>
+      command.pipe(
+        Effect.tapCause(() =>
+          Effect.logWarning({
+            component: "erasure-store",
+            operation: "command",
+            outcome: "unavailable",
+          })
+        ),
+        Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+      );
 
     if ([confirmDrainUrl, confirmPurgeUrl].includes(request.url)) {
       return this.runtime.runPromise(confirmPurge(request).pipe(unavailable));

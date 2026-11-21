@@ -221,6 +221,13 @@ export const dispatchLocalDashboard = Effect.fn(
 
     return yield* runLocalMutation({ ...unit, input, work: runDashboard });
   },
+  Effect.tapCause(() =>
+    Effect.logWarning({
+      component: "dashboard",
+      operation: "dispatchDashboard",
+      outcome: "unavailable",
+    })
+  ),
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
 

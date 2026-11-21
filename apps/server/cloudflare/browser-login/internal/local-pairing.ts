@@ -36,6 +36,19 @@ const unauthorizedStatus = 401;
 
 const missingStatus = 404;
 
+const reportedDiscard = <A, E, R>(
+  discard: Effect.Effect<A, E, R>
+): Effect.Effect<unknown, never, R> =>
+  discard.pipe(
+    Effect.catch(() =>
+      Effect.logWarning({
+        component: "browser-login",
+        operation: "discardSession",
+        outcome: "failed",
+      })
+    )
+  );
+
 class SessionActivationUnavailable extends Data.TaggedError("SessionActivationUnavailable") {}
 
 const Ready = Schema.Struct({
@@ -202,7 +215,7 @@ export const redeemLocalPairing = Effect.fn(function* (
   return yield* sessionRoute(directory, registerSessionUrl, body).pipe(
     Effect.flatMap((registered) => (registered.ok ? activate : Effect.succeed(unavailable()))),
     Effect.onExit((exit) =>
-      Exit.isSuccess(exit) && exit.value.ok ? Effect.void : discard.pipe(Effect.ignore)
+      Exit.isSuccess(exit) && exit.value.ok ? Effect.void : reportedDiscard(discard)
     )
   );
 });

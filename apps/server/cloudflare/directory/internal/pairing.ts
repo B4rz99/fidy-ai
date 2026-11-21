@@ -84,11 +84,11 @@ const inspectPairing = Effect.fn(function* (pairingId: string, digest: string) {
       });
 
       if (Predicate.isTagged(decision, "WrongVerifier")) {
-        yield* sql`UPDATE browser_pairings SET wrong_attempts=${decision.wrongVerifierAttempts} WHERE id=${pairingId}`;
+        yield* sql`UPDATE browser_pairings SET wrong_attempts=${decision.wrongVerifierAttempts} WHERE id=${pairingId} AND wrong_attempts=${row.wrong_attempts} AND user_id IS NULL`;
       }
 
       if (Predicate.isTagged(decision, "Pending")) {
-        yield* sql`UPDATE browser_pairings SET last_poll_ms=${DateTime.toEpochMillis(decision.acceptedAt)} WHERE id=${pairingId}`;
+        yield* sql`UPDATE browser_pairings SET last_poll_ms=${DateTime.toEpochMillis(decision.acceptedAt)} WHERE id=${pairingId} AND last_poll_ms IS ${row.last_poll_ms} AND user_id IS NULL`;
 
         return Response.json(
           {
@@ -102,7 +102,7 @@ const inspectPairing = Effect.fn(function* (pairingId: string, digest: string) {
 
       if (Predicate.isTagged(decision, "SlowDown")) {
         const retry = Math.min(maximumPollSeconds, decision.retryAfterSeconds);
-        yield* sql`UPDATE browser_pairings SET minimum_poll_seconds=${Math.min(maximumPollSeconds, decision.minimumPollIntervalSeconds)} WHERE id=${pairingId}`;
+        yield* sql`UPDATE browser_pairings SET minimum_poll_seconds=${Math.min(maximumPollSeconds, decision.minimumPollIntervalSeconds)} WHERE id=${pairingId} AND minimum_poll_seconds=${row.minimum_poll_seconds} AND user_id IS NULL`;
 
         return Response.json(
           { error: { code: "rate_limited", retryAfterSeconds: retry } },

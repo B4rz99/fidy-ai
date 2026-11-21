@@ -18,15 +18,18 @@ const datasets: ReadonlyArray<Readonly<{ value: Dataset; label: string }>> = [
   { value: "many", label: "500 rows" },
   { value: "stale", label: "Stale" },
 ];
+
 const restoreEnvironment = (_element: HTMLElement): (() => void) => {
   const root = document.documentElement;
   const fontSize = root.style.fontSize;
   const dark = root.classList.contains("dark");
+
   return (): void => {
     root.style.fontSize = fontSize;
     root.classList.toggle("dark", dark);
   };
 };
+
 const FixtureWorkspace = ({
   props,
   dataset,
@@ -35,6 +38,7 @@ const FixtureWorkspace = ({
   const [capture, setCapture] = useState("");
   const categories = fixtureCategories(props.categories);
   const view = fixtureWorkspace({ dataset, categories, filters });
+
   return (
     <RecurringWorkspace
       {...props}
@@ -60,11 +64,13 @@ const FixtureWorkspace = ({
     />
   );
 };
+
 export const RecurringDataPreview = (props: PreviewProps): JSX.Element => {
   const search = useSearch({ strict: false });
   const navigate = useNavigate();
   const dataset = "recurringData" in search ? (search.recurringData ?? "demo") : "demo";
   const [largeText, setLargeText] = useState(false);
+
   return (
     <>
       <div className="pb-24">

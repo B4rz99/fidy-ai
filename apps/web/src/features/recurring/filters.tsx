@@ -16,10 +16,12 @@ type FilterProps = Readonly<{
   categories: ReadonlyArray<Category>;
   apply: (filters: Filters) => void;
 }>;
+
 type DraftProps = Readonly<{
   draft: Readonly<Record<string, string>>;
   change: (name: string, value: string) => void;
 }>;
+
 const FilterChoice = ({
   name,
   label,
@@ -44,6 +46,7 @@ const FilterChoice = ({
     onChange={(value) => change(name, value)}
   />
 );
+
 const FilterChoices = ({
   categories,
   ...props
@@ -74,20 +77,25 @@ const FilterChoices = ({
     />
   </>
 );
+
 export const FiltersForm = ({ filters, categories, apply }: FilterProps): JSX.Element => {
   const [draft, setDraft] = useState<Readonly<Record<string, string>>>(() => ({ ...filters }));
   const [invalid, setInvalid] = useState(false);
   const change = (name: string, value: string): void => setDraft({ ...draft, [name]: value });
+
   return (
     <section id="recurring-filters" aria-label="Filtrar recurrentes" data-recurring-slot="filters">
       <form
         className="flex flex-wrap items-center gap-3"
         onSubmit={(event) => {
           event.preventDefault();
+
           const parsed = Schema.decodeOption(RecurringFilters)(
             Object.fromEntries(Object.entries(draft).filter(([, value]) => value !== ""))
           );
+
           setInvalid(Option.isNone(parsed));
+
           if (Option.isSome(parsed)) apply(parsed.value);
         }}
       >

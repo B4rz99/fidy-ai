@@ -7,7 +7,7 @@ import { useReviewExpired } from "./expiry";
 import type { ReviewDecisions, ReviewEditorState, ReviewWorkspaceQuery } from "./decisions";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   CheckmarkCircle02Icon,
@@ -37,6 +37,7 @@ type Props = Readonly<{
   workspaceQuery: ReviewWorkspaceQuery;
   originalExpiresAt: Item["expiresAt"];
 }>;
+
 export const ReviewEditor = (props: Props): JSX.Element => {
   const item = {
     ...props.item,
@@ -45,7 +46,9 @@ export const ReviewEditor = (props: Props): JSX.Element => {
       second: props.originalExpiresAt,
     }),
   };
+
   const expired = useReviewExpired(item);
+
   return expired ? (
     <ExpiredReviewItem item={item} />
   ) : (
@@ -55,6 +58,7 @@ export const ReviewEditor = (props: Props): JSX.Element => {
     </>
   );
 };
+
 const ExpiredReviewItem = ({
   item,
 }: Readonly<{
@@ -77,6 +81,7 @@ const ExpiredReviewItem = ({
     </div>
   </section>
 );
+
 const ReviewItemEditor = ({
   item,
   decisions,
@@ -85,6 +90,7 @@ const ReviewItemEditor = ({
   originalExpiresAt,
 }: Props): JSX.Element => {
   const apiClient = useRouter().options.context.apiClient;
+
   const [query] = useState(() =>
     reviewItemQuery({
       client: apiClient,
@@ -92,22 +98,27 @@ const ReviewItemEditor = ({
       id: item.id,
     })
   );
+
   const [categoryQuery] = useState(() => workspaceCategoriesQuery(apiClient).view);
   const detail = useAtomValue(query).pipe(presentCanonicalQuery);
   const categories = useAtomValue(categoryQuery).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
   const refreshCategories = useAtomRefresh(categoryQuery);
+
   const recover = (): void => {
-    if (detail._tag === "Ready") decisions.editor(detail.value.data).recover();
+    if (Predicate.isTagged(detail, "Ready")) decisions.editor(detail.value.data).recover();
     else refresh();
     refreshCategories();
   };
-  if (detail._tag === "Initial" || categories._tag === "Initial") {
+
+  if (Predicate.isTagged(detail, "Initial") || Predicate.isTagged(categories, "Initial")) {
     return <ReviewItemUnavailable item={item} recover={recover} loading />;
   }
-  if (detail._tag !== "Ready" || categories._tag !== "Ready") {
+
+  if (!Predicate.isTagged(detail, "Ready") || !Predicate.isTagged(categories, "Ready")) {
     return <ReviewItemUnavailable item={item} recover={recover} loading={false} />;
   }
+
   if (decisions.editor(detail.value.data).recovering) {
     return (
       <ReviewItemFrame item={item}>
@@ -115,6 +126,7 @@ const ReviewItemEditor = ({
       </ReviewItemFrame>
     );
   }
+
   return (
     <ReviewItemFrame item={detail.value.data.item}>
       {[detail, categories].some((state) => Option.isSome<unknown>(state.refreshFailure)) ? (
@@ -136,6 +148,7 @@ const ReviewItemEditor = ({
     </ReviewItemFrame>
   );
 };
+
 const ReviewItemUnavailable = ({
   item,
   recover,
@@ -155,6 +168,7 @@ const ReviewItemUnavailable = ({
     )}
   </ReviewItemFrame>
 );
+
 const ReviewItemFrame = ({
   item,
   children,
@@ -167,6 +181,7 @@ const ReviewItemFrame = ({
     {children}
   </section>
 );
+
 const RecoveringReviewItem = ({
   recover,
 }: Readonly<{
@@ -179,6 +194,7 @@ const RecoveringReviewItem = ({
     </Button>
   </div>
 );
+
 const ReviewItemFailure = ({
   recover,
 }: Readonly<{
@@ -190,6 +206,7 @@ const ReviewItemFailure = ({
     </Button>
   </ReviewNotice>
 );
+
 const ReadyEditor = ({
   detail,
   originalExpiresAt,
@@ -208,10 +225,13 @@ const ReadyEditor = ({
   const editor = decisions.editor(detail);
   const act = (kind: "Create" | "Skip"): void => decisions.decide(detail, kind);
   const locked = editor.locked || disabled;
+
   if (editor.detail.item.status !== "pending") {
     return <HistoryDetail {...{ detail: editor.detail, originalExpiresAt, locked, decisions }} />;
   }
+
   const failed = ["uncertain", "failed"].includes(editor.feedback);
+
   return (
     <>
       <div data-review="columns">
@@ -248,6 +268,7 @@ const ReadyEditor = ({
     </>
   );
 };
+
 const ReviewEditorActions = ({
   editor,
   locked,
@@ -266,6 +287,7 @@ const ReviewEditorActions = ({
     </Button>
   </>
 );
+
 const feedbackCopy = {
   saved: "Borrador guardado",
   saving: "Guardando borrador…",
@@ -273,12 +295,14 @@ const feedbackCopy = {
   failed: "El elemento cambió. Actualiza para revisar la versión guardada.",
   uncertain: "No pudimos confirmar el guardado. Actualiza antes de continuar.",
 } as const;
+
 const historyTitles = {
   pending: "Por revisar",
   skipped: "Elemento omitido",
   created: "Transacción creada",
   expired: "Este elemento venció",
 };
+
 const HistoryDetail = ({
   detail,
   originalExpiresAt,
@@ -316,6 +340,7 @@ const HistoryDetail = ({
     </div>
   </div>
 );
+
 const CreatedTransactionLink = ({ item }: Readonly<{ item: Item }>): JSX.Element =>
   item.status === "created" ? (
     <Button
@@ -327,7 +352,9 @@ const CreatedTransactionLink = ({ item }: Readonly<{ item: Item }>): JSX.Element
   ) : (
     <></>
   );
+
 const sourceIcons = { statement: File01Icon, media: Image01Icon, email: Mail01Icon };
+
 const ReviewItemHeading = ({
   item,
 }: Readonly<{
@@ -348,12 +375,15 @@ const ReviewItemHeading = ({
     </Badge>
   </header>
 );
+
 const historyDescription = (item: Item): string => {
   if (item.status === "created") {
     return "Creaste una transacción a partir de este elemento.";
   }
+
   return "Restáuralo para devolverlo a Pendientes y volver a editarlo. Su vencimiento original se conserva.";
 };
+
 const ReviewEditorNotice = ({
   feedback,
   creationRequired,
@@ -374,6 +404,7 @@ const ReviewEditorNotice = ({
       </ReviewNotice>
     );
   }
+
   if (creationRequired) {
     return (
       <ReviewNotice text={reason} error={false}>
@@ -381,5 +412,6 @@ const ReviewEditorNotice = ({
       </ReviewNotice>
     );
   }
+
   return <></>;
 };

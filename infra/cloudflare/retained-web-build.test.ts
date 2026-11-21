@@ -24,23 +24,28 @@ it.effect(
       );
       const store = InMemoryService();
       const state = Layer.succeed(State, store);
+
       const stack = Alchemy.Stack(
         "RetainedWebBuild",
         { providers: Command.providers(), state },
         Command.Build("Build", { cwd, outdir: "dist", command: "bun build.ts" })
       );
+
       const inspect = Effect.fn(function* (install: boolean) {
         return yield* evalStack(
           stack,
           Effect.fn(function* (compiled) {
             const plan = yield* Plan.make(compiled);
             const [row] = Plan.describePlan(plan).resources;
+
             if (install) yield* Apply.apply(plan).pipe(Effect.provide(compiled.services));
+
             return row?.action;
           }),
           { stage: "production" }
         ).pipe(Effect.provideService(State, store));
       });
+
       expect(yield* inspect(true)).toBe("create");
       yield* fs.remove(cwd + "/dist", { recursive: true });
       expect(yield* inspect(false)).toBe("update");

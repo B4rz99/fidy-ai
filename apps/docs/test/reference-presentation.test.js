@@ -9,6 +9,7 @@ const propertyRow = (html, name) => {
   const rows = Array.from(table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gu), (match) => match[1]);
   const row = rows.find((candidate) => candidate.includes(`<code>${name}</code>`));
   assert.ok(row, `Missing property row: ${name}`);
+
   return row;
 };
 
@@ -22,6 +23,7 @@ await test("readers can identify required transaction fields without interpretin
     new URL("../dist/reference/transactions.createtransaction/index.html", import.meta.url),
     "utf8"
   );
+
   assertRequired(html, "occurredAt");
   assert.match(html, /Cuerpo HTTP/u);
   assert.match(html, /Respuestas y errores/u);
@@ -42,6 +44,7 @@ await test("all published schemas remain individually readable with named proper
     new URL("../dist/referencia/esquemas/index.html", import.meta.url),
     "utf8"
   );
+
   assert.ok(html.includes('aria-label="Buscar por nombre de esquema"'));
   assert.equal(Array.from(html.matchAll(/id="schema-[a-zA-Z0-9_]+"/gu)).length, 286);
   assert.ok(html.includes('id="schema-ValidationFailedEncoded"'));
@@ -55,19 +58,24 @@ await test("path parameters, inline batch permissions and union bodies remain ex
     new URL("../dist/reference/transactions.updatetransaction/index.html", import.meta.url),
     "utf8"
   );
+
   assert.ok(update.includes("id (path, obligatorio)"));
   assert.ok(update.includes('id="parametros-http"'));
   assert.ok(update.includes("expectedRevision"));
+
   const batch = await readFile(
     new URL("../dist/reference/operations.executeatomicbatch/index.html", import.meta.url),
     "utf8"
   );
+
   assert.ok(batch.includes("Se evalúan los permisos de cada operación del lote."));
   assertRequired(batch, "calls");
+
   const union = await readFile(
     new URL("../dist/reference/dashboard.applydashboardedit/index.html", import.meta.url),
     "utf8"
   );
+
   assert.ok(union.includes("Una de estas variantes del contrato:"));
   assert.ok(union.includes("variantes; la definición completa conserva todas sus condiciones."));
 });
@@ -77,6 +85,7 @@ await test("operations without HTTP parameters retain their explicit empty param
     new URL("../dist/reference/transactions.createtransaction/index.html", import.meta.url),
     "utf8"
   );
+
   assert.ok(html.includes("Esta operación no declara parámetros HTTP."));
   assert.ok(html.includes('id="parametros-http"'));
 });
@@ -86,6 +95,7 @@ await test("parameter-only operations label their parameter region with its own 
     new URL("../dist/reference/budgets.listbudgets/index.html", import.meta.url),
     "utf8"
   );
+
   assert.match(
     html,
     /<section aria-labelledby="parametros-http">\s*<h2 id="parametros-http">\s*Parámetros HTTP\s*<\/h2>/u
@@ -97,9 +107,11 @@ await test("empty parameter JSON stays keyboard readable without an unconditiona
     new URL("../dist/reference/budgets.listbudgets/index.html", import.meta.url),
     "utf8"
   );
+
   const parameters = html.match(
     /<section aria-labelledby="parametros-http">[\s\S]*?<\/section>/u
   )?.[0];
+
   assert.ok(parameters, "Missing parameters region");
   assert.match(parameters, /<pre\b[^>]*tabindex="0"/u);
   assert.match(parameters, /<div class="reference-json-footer" hidden>/u);

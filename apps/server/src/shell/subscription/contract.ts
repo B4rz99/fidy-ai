@@ -106,14 +106,17 @@ const invalidError = {
   code: "card_enrollment_invalid",
   message: "La inscripción ya no es válida. Revisa la oferta e intenta de nuevo.",
 } as const;
+
 const rateLimitedError = {
   code: "card_enrollment_rate_limited",
   message: "Demasiados intentos de inscripción. Intenta más tarde.",
 } as const;
+
 const unavailableError = {
   code: "card_enrollment_unavailable",
   message: "La inscripción no está disponible temporalmente. Intenta más tarde.",
 } as const;
+
 const InvalidFields = {
   error: Schema.Struct({
     code: Schema.Literal(invalidError.code),
@@ -182,6 +185,7 @@ const TokenText = Schema.String.check(
   Schema.isNonEmpty(),
   Schema.isMaxLength(maximumTransientPaymentTokenCharacters)
 );
+
 const SubmitBase = {
   enrollmentId: PaymentEnrollmentId,
   paymentRequestId: PaymentRequestId,
@@ -214,6 +218,7 @@ export const SubmitPaymentEnrollmentPayload = Schema.Union([
   }),
   Schema.Struct({ paymentSourceMode: Schema.Literal("reuse"), ...SubmitBase }),
 ]);
+
 export type SubmitPaymentEnrollmentPayload = typeof SubmitPaymentEnrollmentPayload.Type;
 
 const directErrors = [

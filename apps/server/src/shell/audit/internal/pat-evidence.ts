@@ -81,6 +81,7 @@ export const recordOnePATRevocation = ({
   input,
 }: Readonly<{ session: FreshSessionSubject; input: RevokeAuditInput }>): OwnedStatement => {
   const selected = patIdentityQuery({ userId: session.user_id, shortId: input.shortId });
+
   return {
     sql: `INSERT INTO audit_entries(record_type,id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms) SELECT 'credential_call',?,?,?,id,'pats.revokePAT','accepted',? FROM (${selected.sql}) WHERE changes() = 1`,
     params: [input.id, session.user_id, session.id, input.current, ...selected.params],

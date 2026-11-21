@@ -28,6 +28,7 @@ export const findKeywordCategory = <Category extends string>(
 ): Effect.Effect<Option.Option<Category>> => {
   const { counterparty, rules } = input;
   const normalizedCounterparty = normalizeCategoryKeyword(counterparty);
+
   const matching = rules
     .filter((rule) => normalizedCounterparty.includes(normalizeCategoryKeyword(rule.keyword)))
     .toSorted(
@@ -37,6 +38,7 @@ export const findKeywordCategory = <Category extends string>(
     );
 
   const first = matching[0];
+
   return Effect.succeed(first === undefined ? Option.none() : Option.some(first.categoryId));
 };
 
@@ -50,10 +52,11 @@ export const hasKeywordRule = ({
   readonly excluding: Option.Option<typeof KeywordRuleId.Encoded>;
 }>): Effect.Effect<boolean> => {
   const normalized = normalizeCategoryKeyword(keyword);
+
   return Effect.succeed(
     rules.some(
       (rule) =>
-        !(excluding._tag === "Some" && excluding.value === rule.id) &&
+        !Option.exists(excluding, (id) => id === rule.id) &&
         normalizeCategoryKeyword(rule.keyword) === normalized
     )
   );

@@ -1,5 +1,5 @@
 import { layoutLeaves } from "./layout";
-import { Effect, BigInt as EffectBigInt, Option, Schema, SchemaIssue } from "effect";
+import { Effect, BigInt as EffectBigInt, Option, Predicate, Schema, SchemaIssue } from "effect";
 import {
   type Axis,
   type BesidePlacement,
@@ -32,10 +32,10 @@ const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1();
 type StandardIssue = ReturnType<typeof formatIssues>["issues"][number];
 
 const toDashboardIssue = (issue: StandardIssue): DashboardIssue => ({
-  path:
-    Option.getOrThrow(Option.fromNullishOr(issue.path)).length === 0
-      ? Option.none()
-      : Option.some(Option.getOrThrow(Option.fromNullishOr(issue.path)).map(String).join(".")),
+  path: Option.fromNullishOr(issue.path).pipe(
+    Option.filter((path) => path.length > 0),
+    Option.map((path) => path.map(String).join("."))
+  ),
   message: issue.message,
 });
 
@@ -43,6 +43,7 @@ const toInvalidDashboardResult = (error: Schema.SchemaError): InvalidDashboardRe
   const [issue = { path: Option.none(), message: error.message }, ...rest] = formatIssues(
     error.issue
   ).issues.map(toDashboardIssue);
+
   return new InvalidDashboardResult({ issues: [issue, ...rest] });
 };
 
@@ -67,6 +68,7 @@ const mapAtLeastTwo = <Input, Output>(
   mapValue: (value: Readonly<Input>, index: number) => Output
 ): AtLeastTwo<Output> => {
   const [first, second, ...remaining] = values;
+
   return [
     mapValue(first, 0),
     mapValue(second, 1),
@@ -106,6 +108,7 @@ const expandChild = (child: SplitChild, axis: Axis, scale: ChildScale): Expansio
 
 const normalizeSplit = (node: Readonly<SplitNode>): SplitNode => {
   const children = node.children;
+
   const weighted: ReadonlyArray<DenominatedChild> = children.map((child) => ({
     child,
     denominator:
@@ -113,20 +116,33 @@ const normalizeSplit = (node: Readonly<SplitNode>): SplitNode => {
         ? 1n
         : child.node.children.reduce((sum, nested) => sum + splitWeightInteger(nested.weight), 0n),
   }));
+
   const common = weighted.reduce((product, entry) => product * entry.denominator, 1n);
+
   const expanded = weighted.flatMap(({ child, denominator }) =>
     expandChild(child, node.axis, { keep: common, flatten: common / denominator })
   );
+
   const divisor = expanded.reduce((current, child) => EffectBigInt.gcd(current, child.weight), 0n);
+
+  const [firstExpanded, secondExpanded, ...restExpanded] = expanded;
+
+  if (firstExpanded === undefined || secondExpanded === undefined) {
+    return { ...node, children };
+  }
+
   const expandedChildren: AtLeastTwo<WeightedLayoutNode> = [
-    Option.getOrThrow(Option.fromUndefinedOr(expanded[0])),
-    Option.getOrThrow(Option.fromUndefinedOr(expanded[1])),
-    ...expanded.slice(2),
+    firstExpanded,
+    secondExpanded,
+    ...restExpanded,
   ];
+
   const weights = mapAtLeastTwo(expandedChildren, (child) => child.weight / divisor);
+
   if (weights.some((weight) => weight > 1000n)) {
     return { ...node, children };
   }
+
   return {
     ...node,
     children: mapAtLeastTwo(expandedChildren, (child, index) => ({
@@ -154,7 +170,9 @@ const addAtRoot = (
     weight: SplitWeight.make(1),
     node: { kind: "leaf" as const, widget },
   };
+
   const column = rootColumn(layout);
+
   if (Option.isSome(column)) {
     return {
       ...column.value,
@@ -162,7 +180,9 @@ const addAtRoot = (
         at === "top" ? [child, ...column.value.children] : [...column.value.children, child],
     };
   }
+
   const previous = { weight: SplitWeight.make(1), node: layout };
+
   return {
     kind: "split",
     axis: "column",
@@ -186,14 +206,18 @@ const addBesideLeaf = (
   input: BesideInput
 ): BesideAddition => {
   const duplicate = input.checkDuplicate && layout.widget.id === input.widget.id;
+
   if (layout.widget.id !== input.placement.besideWidget) {
     return { duplicate, layout: Option.none() };
   }
+
   const previous = { weight: SplitWeight.make(1), node: layout };
+
   const added = {
     weight: SplitWeight.make(1),
     node: { kind: "leaf" as const, widget: input.widget },
   };
+
   return {
     duplicate,
     layout: Option.some({
@@ -210,16 +234,20 @@ const addBesideWithoutDuplicateCheck = (
 ): BesideAddition => {
   for (const [index, child] of layout.children.entries()) {
     const addition = addBeside(child.node, input);
+
     if (Option.isNone(addition.layout)) continue;
     const addedLayout = addition.layout.value;
+
     const children = mapAtLeastTwo(layout.children, (current, childIndex) =>
       childIndex === index ? { ...current, node: addedLayout } : current
     );
+
     return {
       duplicate: input.checkDuplicate,
       layout: Option.some(normalizeSplit({ ...layout, children })),
     };
   }
+
   return { duplicate: input.checkDuplicate, layout: Option.none() };
 };
 
@@ -229,20 +257,25 @@ const addBesideWithDuplicateCheck = (
 ): BesideAddition => {
   const additions = mapAtLeastTwo(layout.children, (child) => addBeside(child.node, input));
   let duplicate = false;
+
   for (const addition of additions) {
     duplicate ||= addition.duplicate;
   }
+
   for (const [replacementIndex, replacement] of additions.entries()) {
     if (Option.isNone(replacement.layout)) continue;
     const replacementLayout = replacement.layout.value;
+
     const children = mapAtLeastTwo(layout.children, (child, index) =>
       index === replacementIndex ? { ...child, node: replacementLayout } : child
     );
+
     return {
       duplicate,
       layout: Option.some(normalizeSplit({ ...layout, children })),
     };
   }
+
   return { duplicate, layout: Option.none() };
 };
 
@@ -250,6 +283,7 @@ const addBeside = (layout: Readonly<LayoutNode>, input: BesideInput): BesideAddi
   if (layout.kind === "leaf") {
     return addBesideLeaf(layout, input);
   }
+
   return input.checkDuplicate
     ? addBesideWithDuplicateCheck(layout, input)
     : addBesideWithoutDuplicateCheck(layout, input);
@@ -264,16 +298,18 @@ const collapseAfterChildRemoval = (
   node: Readonly<SplitNode>,
   children: ReadonlyArray<Readonly<SplitNode["children"][number]>>
 ): LayoutNode => {
-  if (children.length === 1) {
-    return Option.getOrThrow(Option.fromUndefinedOr(children[0])).node;
-  }
-  const first = Option.getOrThrow(Option.fromUndefinedOr(children[0]));
-  const second = Option.getOrThrow(Option.fromUndefinedOr(children[1]));
-  return normalizeSplit({ ...node, children: [first, second, ...children.slice(2)] });
+  const [first, second, ...rest] = children;
+
+  if (first === undefined) return node;
+
+  if (second === undefined) return first.node;
+
+  return normalizeSplit({ ...node, children: [first, second, ...rest] });
 };
 
 const removeWidget = (input: WidgetLookup): Option.Option<WidgetRemoval> => {
   const { node, widgetId } = input;
+
   switch (node.kind) {
     case "leaf":
       return node.widget.id === widgetId
@@ -290,18 +326,22 @@ const removeSplitWidget = (
 ): Option.Option<WidgetRemoval> => {
   for (const [index, child] of node.children.entries()) {
     const removal = removeWidget({ node: child.node, widgetId });
+
     if (Option.isNone(removal)) continue;
     const children = [...node.children];
+
     if (Option.isSome(removal.value.layout)) {
       children[index] = { ...child, node: removal.value.layout.value };
     } else {
       children.splice(index, 1);
     }
+
     return Option.some({
       widget: removal.value.widget,
       layout: Option.some(collapseAfterChildRemoval(node, children)),
     });
   }
+
   return Option.none();
 };
 
@@ -313,9 +353,11 @@ export const applyRemove = (
 ): Effect.Effect<DashboardDocument, DashboardFailure> => {
   const { document, widgetId } = input;
   const removal = removeWidget({ node: document.layout, widgetId });
+
   if (Option.isNone(removal)) {
     return Effect.fail(new WidgetNotFound({ widgetId, role: "edit-target" }));
   }
+
   return Option.match(removal.value.layout, {
     onNone: () => Effect.fail(new LastWidgetRemoval({ widgetId })),
     onSome: (layout) => revalidateDocument({ ...document, layout }),
@@ -336,24 +378,30 @@ export const applyAdd = ({
   duplicatePolicy: DuplicatePolicy;
 }>): Effect.Effect<DashboardDocument, DashboardFailure> => {
   const shouldRejectDuplicate = duplicatePolicies.has(duplicatePolicy);
-  if (typeof edit.at === "string") {
+
+  if (Predicate.isString(edit.at)) {
     if (shouldRejectDuplicate && hasLayoutWidget(document.layout, edit.widget.id)) {
       return Effect.fail(new DuplicateWidgetId({ widgetId: edit.widget.id }));
     }
+
     return revalidateDocument({
       ...document,
       layout: addAtRoot(document.layout, edit.widget, edit.at),
     });
   }
+
   const placement = edit.at;
+
   const addition = addBeside(document.layout, {
     widget: edit.widget,
     placement,
     checkDuplicate: shouldRejectDuplicate,
   });
+
   if (shouldRejectDuplicate && addition.duplicate) {
     return Effect.fail(new DuplicateWidgetId({ widgetId: edit.widget.id }));
   }
+
   return Option.match(addition.layout, {
     onNone: () =>
       Effect.fail(
@@ -370,8 +418,10 @@ const replaceWidget = (
   if (layout.kind === "leaf") {
     return layout.widget.id === widget.id ? Option.some({ ...layout, widget }) : Option.none();
   }
+
   for (const [index, child] of layout.children.entries()) {
     const replacement = replaceWidget(child.node, widget);
+
     if (Option.isSome(replacement)) {
       return Option.some({
         ...layout,
@@ -381,6 +431,7 @@ const replaceWidget = (
       });
     }
   }
+
   return Option.none();
 };
 
@@ -392,6 +443,7 @@ export const applyUpdate = ({
   DashboardFailure
 > => {
   const layout = replaceWidget(document.layout, widget);
+
   return Option.isSome(layout)
     ? revalidateDocument({ ...document, layout: layout.value })
     : Effect.fail(new WidgetNotFound({ widgetId: widget.id, role: "edit-target" }));
@@ -402,6 +454,7 @@ const regionMatches = (
   widgetIds: Readonly<LayoutRegionSelector>
 ): boolean => {
   const regionWidgetIds = layoutLeaves(node).map(({ widget }) => widget.id);
+
   return (
     regionWidgetIds.length === widgetIds.length &&
     regionWidgetIds.every((widgetId, index) => widgetId === widgetIds[index])
@@ -425,9 +478,13 @@ const resizeChildren = (
 ): SplitNode["children"] => {
   if (size.kind === "weight") {
     const adjacentIndex = resizedIndex < children.length - 1 ? resizedIndex + 1 : resizedIndex - 1;
-    const resized = Option.getOrThrow(Option.fromUndefinedOr(children[resizedIndex]));
-    const adjacent = Option.getOrThrow(Option.fromUndefinedOr(children[adjacentIndex]));
+    const resized = children[resizedIndex];
+    const adjacent = children[adjacentIndex];
+
+    if (resized === undefined || adjacent === undefined) return children;
+
     const pairWeight = resized.weight + adjacent.weight;
+
     const resizedWeight = SplitWeight.make(
       Math.round(
         Math.min(
@@ -437,18 +494,23 @@ const resizeChildren = (
         ) * splitWeightPrecision
       ) / splitWeightPrecision
     );
+
     const adjacentWeight = SplitWeight.make(
       Math.round((pairWeight - resizedWeight) * splitWeightPrecision) / splitWeightPrecision
     );
+
     return mapAtLeastTwo(children, (child, index) => {
       if (index === resizedIndex) return { ...child, weight: resizedWeight };
+
       return index === adjacentIndex ? { ...child, weight: adjacentWeight } : child;
     });
   }
+
   const { numerator, denominator } = ratioParts[size.ratio];
   const siblingCount = children.length - 1;
   const targetWeight = Schema.decodeSync(SplitWeight)(numerator * siblingCount);
   const siblingWeight = Schema.decodeSync(SplitWeight)(denominator - numerator);
+
   return mapAtLeastTwo(children, (child, index) => ({
     ...child,
     weight: index === resizedIndex ? targetWeight : siblingWeight,
@@ -460,6 +522,7 @@ const resizeRegion = (
   edit: Readonly<Extract<DashboardEdit, { readonly op: "resize-region" }>>
 ): Option.Option<LayoutNode> => {
   if (node.kind === "leaf") return Option.none();
+
   for (const [index, child] of node.children.entries()) {
     if (regionMatches(child.node, edit.widgetIds)) {
       return Option.some({
@@ -467,7 +530,9 @@ const resizeRegion = (
         children: resizeChildren(node.children, index, edit.size),
       });
     }
+
     const replacement = resizeRegion(child.node, edit);
+
     if (Option.isSome(replacement)) {
       return Option.some({
         ...node,
@@ -477,6 +542,7 @@ const resizeRegion = (
       });
     }
   }
+
   return Option.none();
 };
 
@@ -513,15 +579,19 @@ export const applyMove = ({
   edit: Readonly<Extract<DashboardEdit, { readonly op: "move-widget" }>>;
 }>): Effect.Effect<DashboardDocument, DashboardFailure> => {
   const removal = removeWidget({ node: document.layout, widgetId: edit.widgetId });
+
   if (Option.isNone(removal)) {
     return Effect.fail(new WidgetNotFound({ widgetId: edit.widgetId, role: "edit-target" }));
   }
+
   if (Option.contains(besideWidgetId(edit.at), edit.widgetId)) {
     return Effect.fail(new SelfPlacement({ widgetId: edit.widgetId }));
   }
+
   if (Option.isNone(removal.value.layout)) {
     return revalidateDocument(document);
   }
+
   return applyAdd({
     document: { ...document, layout: removal.value.layout.value },
     edit: { op: "add-widget", widget: removal.value.widget, at: edit.at },
@@ -542,11 +612,13 @@ const replaceSwappedWidgets = (
       [first.id, second],
       [second.id, first],
     ]);
+
     return Option.match(Option.fromUndefinedOr(replacements.get(layout.widget.id)), {
       onNone: () => layout,
       onSome: (widget) => ({ ...layout, widget }),
     });
   }
+
   return {
     ...layout,
     children: mapAtLeastTwo(layout.children, (child) => ({
@@ -566,16 +638,21 @@ export const applySwap = ({
   if (edit.widgetId === edit.withWidgetId) {
     return Effect.fail(new SelfPlacement({ widgetId: edit.widgetId }));
   }
+
   const first = widgetById(document.layout, edit.widgetId);
+
   if (Option.isNone(first)) {
     return Effect.fail(new WidgetNotFound({ widgetId: edit.widgetId, role: "edit-target" }));
   }
+
   const second = widgetById(document.layout, edit.withWidgetId);
+
   if (Option.isNone(second)) {
     return Effect.fail(
       new WidgetNotFound({ widgetId: edit.withWidgetId, role: "placement-target" })
     );
   }
+
   return revalidateDocument({
     ...document,
     layout: replaceSwappedWidgets(document.layout, first.value, second.value),

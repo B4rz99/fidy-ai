@@ -1,6 +1,6 @@
 import { understoodCategory } from "./sqlite-history";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Array as Arr, DateTime, Effect, Option, Schema } from "effect";
 import { UtcTimestamp } from "../../../src/core/_shared/time";
 import type { PlanningTransactionFacts, PlanningTransactionRange } from "../contract";
 import type { Transaction } from "../../../src/core/transactions/contract";
@@ -8,6 +8,7 @@ import { type effectiveHistoryPage, selectedEffectiveHistoryPage } from "./effec
 import { decodeTransactionRow } from "./transaction-history";
 
 const maximumSelection = 128;
+
 const decodeFacts = (rows: ReadonlyArray<unknown>): Option.Option<PlanningTransactionFacts> =>
   Option.map(
     Option.all(rows.slice(0, maximumSelection).map(decodeTransactionRow)),
@@ -29,6 +30,7 @@ const idsPage = (
     bindings: [userId, Schema.encodeSync(Schema.fromJsonString(Schema.Array(Schema.String)))(ids)],
     limit: maximumSelection + 1,
   });
+
 const rangePage = Effect.fn(function* (
   userId: string,
   range: PlanningTransactionRange,
@@ -46,29 +48,32 @@ const rangePage = Effect.fn(function* (
     limit: maximumSelection + 1,
   });
 });
+
 const localFacts = Effect.fn(function* (page: ReturnType<typeof effectiveHistoryPage>) {
   const sql = yield* SqliteClient;
   const rows = yield* sql.unsafe(page.sql, page.bindings);
+
   const facts = rows.every(understoodCategory)
     ? decodeFacts(rows)
     : Option.none<PlanningTransactionFacts>();
+
   return yield* Effect.fromOption(facts);
 });
+
 export const localPlanningRange = Effect.fn(function* (
   user: string,
   range: PlanningTransactionRange
 ) {
   return yield* localFacts(yield* rangePage(user, range, true));
 });
+
 export const localPlanningReferences = Effect.fn(function* (
   user: string,
   ids: ReadonlyArray<string>
 ) {
-  const transactions: Transaction[] = [];
-  for (let offset = 0; offset < ids.length; offset += maximumSelection) {
-    const page = idsPage(user, ids.slice(offset, offset + maximumSelection), true);
-    const found = yield* localFacts(page);
-    transactions.push(...found.transactions);
-  }
-  return transactions;
+  const pages = yield* Effect.forEach(Arr.chunksOf(ids, maximumSelection), (selection) =>
+    localFacts(idsPage(user, selection, true))
+  );
+
+  return pages.flatMap((found): Transaction[] => [...found.transactions]);
 });

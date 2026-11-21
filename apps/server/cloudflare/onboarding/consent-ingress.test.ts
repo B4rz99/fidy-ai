@@ -8,37 +8,51 @@ import { browser, chatWith, signedWebhook } from "../browser-bootstrap.test-fixt
 import { native, nativeBrowserPlatform } from "../user-store.test-fixture";
 
 const caller = "CO.Original";
+
 const firstMessage = "wamid.invitation";
+
 const complete = "/web/providers/google/complete";
+
 const evidence =
   "SELECT (SELECT count(*) FROM whatsapp_invitations) AS invitations,(SELECT count(*) FROM provider_routes) AS providers,(SELECT count(*) FROM whatsapp_routes) AS channels,(SELECT count(*) FROM bootstrap_admissions WHERE scope='whatsapp-sends') AS sends";
+
 const setup = Effect.fn(function* (deployment: Readonly<Record<string, string>> = {}) {
   const runtime = yield* (yield* nativeBrowserPlatform)(undefined, [], deployment);
   const web = browser(runtime);
   yield* web.pair;
+
   const directory = yield* native(() =>
     runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
   );
+
   const exec = Effect.fn(function* (query: string, ...params: Array<string | number>) {
     return yield* native(() => directory.exec(query, ...params));
   });
+
   const send = Effect.fn(function* (options: Omit<Parameters<typeof chatWith>[1], "caller">) {
     const response = yield* chatWith(runtime, { caller, ...options });
     yield* native(() => response.arrayBuffer());
+
     return response.status;
   });
+
   const review = Effect.gen(function* () {
     expect(yield* send({ text: "Hola", message: firstMessage })).toBe(200);
+
     const [row] = yield* Schema.decodeUnknownEffect(
       Schema.Array(Schema.Struct({ id: Schema.String }))
     )(yield* exec("SELECT id FROM whatsapp_invitations WHERE message=?", firstMessage));
+
     if (row === undefined) return yield* Effect.die("Missing invitation");
     const flow = yield* web.verified("registration", row.id);
+
     const approved = yield* Schema.decodeUnknownEffect(
       Schema.Struct({ associationCode: Schema.String, confirmationText: Schema.String })
     )(flow.review);
+
     return { ...approved, proof: flow.proof };
   });
+
   return { runtime, web, exec, send, review };
 });
 
@@ -63,12 +77,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const { runtime, exec, send, web } = yield* setup();
+
         const refused = {
           text: "Hola",
           phone: "573001234599",
           message: "wamid.provider-rejected",
           occurredMs: yield* Clock.currentTimeMillis,
         };
+
         expect(yield* send(refused)).toBe(200);
         expect(yield* send(refused)).toBe(409);
         expect(yield* send({ text: "Hola", message: "wamid.replacement" })).toBe(200);
@@ -76,20 +92,25 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* exec(evidence)).toEqual([
           { invitations: 2, channels: 0, providers: 0, sends: 2 },
         ]);
+
         const [record] = yield* Schema.decodeUnknownEffect(
           Schema.Array(Schema.Struct({ id: Schema.String }))
         )(yield* exec("SELECT id FROM whatsapp_invitations WHERE message=?", refused.message));
+
         if (record === undefined) return yield* Effect.die("Missing rejection");
+
         const wrong = yield* web.post("/web/providers/google/start", {
           ...(yield* web.pair),
           intent: "signup",
           consentRevision: webSignupDisclosure().revision,
           handoffReference: record.id,
         });
+
         expect(wrong.status).toBe(400);
         yield* native(() => wrong.arrayBuffer());
         const delivered = "wamid.rejected-delivery";
         const timestamp = String(Math.floor(refused.occurredMs / 1000));
+
         const bytes = new TextEncoder().encode(
           yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
             phone_number_id: "123456789012345",
@@ -105,10 +126,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             },
           })
         );
+
         const callback = yield* signedWebhook(runtime, bytes, {
           secret: "test-kapso-secret",
           event: "whatsapp.message.delivered",
         });
+
         expect(callback.status).toBe(200);
         yield* native(() => callback.arrayBuffer());
         expect(
@@ -177,19 +200,24 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           OPENAI_API_KEY: "fixture-openai",
           HOSTED_AI_MODEL: "gpt-6-luna",
         });
+
         const { proof, associationCode, confirmationText } = yield* review;
         const occurredMs = (yield* Clock.currentTimeMillis) + 2000;
         expect(yield* send({ text: confirmationText, occurredMs })).toBe(200);
         const result = yield* web.post(complete, { ...proof, associationCode });
         expect(result.status).toBe(200);
         yield* native(() => result.arrayBuffer());
+
         const [row] = yield* Schema.decodeUnknownEffect(
           Schema.Array(Schema.Struct({ user_id: Schema.String }))
         )(yield* exec("SELECT user_id FROM whatsapp_routes WHERE established=1"));
+
         if (row === undefined) return yield* Effect.die("Missing registered chat");
+
         const storage = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: row.user_id })
         );
+
         const request = {
           text: "¿Qué gasté hoy?",
           occurredMs,
@@ -197,6 +225,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           reply: "wamid.original",
           endpoint,
         };
+
         expect(yield* send({ ...request, secret: "incorrect" })).toBe(401);
         expect(yield* send(request)).toBe(202);
         expect(yield* send(request)).toBe(202);
@@ -221,18 +250,22 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const { proof, associationCode, confirmationText } = yield* review;
         const occurredMs = (yield* Clock.currentTimeMillis) + 2000;
         const accept = { text: confirmationText, message: "wamid.confirm", occurredMs };
+
         const deny = {
           text: confirmationText.replace(/^Vincular /u, "No vincular "),
           message: "wamid.deny",
           occurredMs,
         };
+
         const replies = yield* Effect.all([send(accept), send(deny)], { concurrency: 2 });
         expect([...replies].sort((left, right) => left - right)).toEqual([200, 409]);
         const confirmed = replies[0] === 200;
+
         const row = {
           decision: confirmed ? "confirmed" : "denied",
           decision_message: confirmed ? accept.message : deny.message,
         };
+
         expect(yield* exec("SELECT decision,decision_message FROM whatsapp_invitations")).toEqual([
           row,
         ]);

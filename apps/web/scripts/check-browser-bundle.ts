@@ -13,6 +13,7 @@ const forbiddenDependencies = [
 ] as const;
 
 const forbiddenNodeModules = /(^|\/)node_modules\/effect\/dist\/sql(?:\/|$)/u;
+
 const forbiddenNodeBuiltin =
   /^(?:node:|bun:)[^/]+(?:\/|$)|^(?:assert|child_process|cluster|crypto|dgram|dns|fs|http|https|module|net|os|path|perf_hooks|process|stream|timers|tls|tty|util|v8|vm|worker_threads)(?:\/|$)/u;
 
@@ -24,7 +25,9 @@ export type BrowserBundleCheckOptions = Readonly<{
 }>;
 
 type Source = Readonly<{ sourceFile: string; source: string }>;
+
 type SourceImport = Readonly<{ importPath: string; sourceFile: string }>;
+
 type BrowserBuildPlugin = NonNullable<Parameters<typeof Bun.build>[0]["plugins"]>[number];
 
 class BrowserBundleFailure extends Data.TaggedError("BrowserBundleFailure")<{
@@ -41,6 +44,7 @@ const defaultOptions = (): BrowserBundleCheckOptions => ({
 
 const removeOutput = (outdir: string): void => {
   const result = Bun.spawnSync(["rm", "-rf", outdir], { stderr: "pipe" });
+
   if (result.exitCode !== 0) {
     throw new Error(new TextDecoder().decode(result.stderr));
   }
@@ -48,9 +52,11 @@ const removeOutput = (outdir: string): void => {
 
 const repositoryPath = (input: string, webRoot: string, workspaceRoot: string): string => {
   const normalized = input.replaceAll("\\", "/");
+
   const absolute = normalized.startsWith("/")
     ? normalized
     : Bun.fileURLToPath(new URL(normalized, `file://${webRoot}/`)).replaceAll("\\", "/");
+
   return absolute.startsWith(`${workspaceRoot}/`)
     ? absolute.slice(workspaceRoot.length + 1)
     : absolute;
@@ -58,16 +64,21 @@ const repositoryPath = (input: string, webRoot: string, workspaceRoot: string): 
 
 const resolveSourcePath = (basePath: string): Promise<string> => {
   const extensions = ["", ".ts", ".tsx", ".js", ".jsx"];
+
   const find = (index: number): Promise<string> => {
     const extension = extensions[index];
+
     if (extension === undefined) {
       return Promise.reject(new Error(`Could not resolve browser source alias ${basePath}`));
     }
+
     const candidate = `${basePath}${extension}`;
+
     return Bun.file(candidate)
       .exists()
       .then((exists) => (exists ? candidate : find(index + 1)));
   };
+
   return find(0);
 };
 
@@ -133,6 +144,7 @@ const sourceImports = (sources: ReadonlyArray<Source>): ReadonlyArray<SourceImpo
 
 const readWebSources = (webRoot: string): Promise<ReadonlyArray<Source>> => {
   const sourceFiles = Array.from(new Bun.Glob("src/**/*.{ts,tsx}").scanSync({ cwd: webRoot }));
+
   return Promise.all(
     sourceFiles.map((sourceFile) =>
       Bun.file(`${webRoot}/${sourceFile}`)
@@ -149,10 +161,14 @@ const outputImportPath = (
   importPath: string,
   outputs: BuildOutputs
 ): Option.Option<string> => {
-  if (outputs[importPath] !== undefined) return Option.some(importPath);
+  if (outputs[importPath] !== undefined) {
+    return Option.some(importPath);
+  }
+
   const directory = importer.slice(0, importer.lastIndexOf("/") + 1);
   const relative = importPath.startsWith("./") ? importPath.slice(2) : importPath;
   const candidate = `${directory}${relative}`;
+
   return Option.fromUndefinedOr(outputs[candidate]).pipe(Option.as(candidate));
 };
 
@@ -164,12 +180,18 @@ const staticOutputImports = (outputPath: string, outputs: BuildOutputs): Readonl
 const collectStaticOutputs = (entry: string, outputs: BuildOutputs): ReadonlySet<string> => {
   const pending = [entry];
   const visited = new Set<string>();
+
   while (pending.length > 0) {
     const outputPath = pending.pop();
-    if (outputPath === undefined || visited.has(outputPath)) continue;
+
+    if (outputPath === undefined || visited.has(outputPath)) {
+      continue;
+    }
+
     visited.add(outputPath);
     pending.push(...staticOutputImports(outputPath, outputs));
   }
+
   return visited;
 };
 
@@ -188,6 +210,7 @@ const assertNoDashboardInInitialInputs = (inputs: ReadonlyArray<string>): void =
       (input.includes("/features/needs-review/") &&
         !input.endsWith("/features/needs-review/code.ts"))
   );
+
   if (leaked.length > 0) {
     throw new Error(
       `Workspace modules entered the public/auth initial chunk:\n${leaked.join("\n")}`
@@ -199,6 +222,7 @@ const assertDashboardSplitEvidence = (inputs: ReadonlyArray<string>): void => {
   if (!inputs.some((input) => input.includes("/features/dashboard/"))) {
     throw new Error("Dashboard split-chunk evidence is missing from the browser build");
   }
+
   if (!inputs.some((input) => input.includes("node_modules/recharts/"))) {
     throw new Error("Recharts split-chunk evidence is missing from the browser build");
   }
@@ -212,14 +236,17 @@ const assertDashboardChunkIsolation = (
   const outputs = Option.fromUndefinedOr(metafile.outputs).pipe(
     Option.getOrThrowWith(() => new Error("Browser build did not report split outputs"))
   );
+
   const entry = findBrowserEntry(outputs).pipe(
     Option.getOrThrowWith(() => new Error("Browser build did not report the web entry chunk"))
   );
+
   const initialInputs = [...collectStaticOutputs(entry, outputs)].flatMap((outputPath) =>
     Object.keys(outputs[outputPath]?.inputs ?? {}).map((input) =>
       repositoryPath(input, webRoot, workspaceRoot)
     )
   );
+
   assertNoDashboardInInitialInputs(initialInputs);
   assertDashboardSplitEvidence(
     Object.keys(metafile.inputs).map((input) => repositoryPath(input, webRoot, workspaceRoot))
@@ -234,17 +261,20 @@ const validateForbiddenInputs = (
   const inputs = Object.keys(metafile.inputs).map((input) =>
     repositoryPath(input, webRoot, workspaceRoot)
   );
+
   const forbidden = inputs.filter(
     (input) =>
       forbiddenDependencies.some((dependency) => dependency.test(input)) ||
       forbiddenNodeModules.test(input) ||
       forbiddenNodeBuiltin.test(input)
   );
+
   if (forbidden.length > 0) {
     throw new Error(
       `Browser-incompatible runtime modules entered the web bundle:\n${forbidden.join("\n")}`
     );
   }
+
   return inputs.length;
 };
 
@@ -270,11 +300,19 @@ const findForbiddenServerImport = (
           ].includes(importPath) || !sourceFile.startsWith("src/transport/")
         );
       }
-      if (importPath.startsWith("~/")) return true;
-      if (!importPath.startsWith(".")) return false;
+
+      if (importPath.startsWith("~/")) {
+        return true;
+      }
+
+      if (!importPath.startsWith(".")) {
+        return false;
+      }
+
       const resolved = Bun.fileURLToPath(
         new URL(importPath, `file://${webRoot}/${sourceFile.replace(/[^/]+$/u, "")}`)
       );
+
       return resolved.startsWith(`${workspaceRoot}/apps/server/`);
     })
   );
@@ -287,42 +325,51 @@ const assertSourceBoundary = (
   const { webRoot, workspaceRoot } = roots;
   const imports = sourceImports(sources);
   const forbiddenServerImport = findForbiddenServerImport(imports, webRoot, workspaceRoot);
+
   const forbiddenSourceImport = imports.find(
     ({ importPath, sourceFile }) =>
       forbiddenNodeBuiltin.test(importPath) &&
       (!sourceFile.endsWith(".test.ts") ||
         bundledSources.has(Bun.fileURLToPath(new URL(sourceFile, `file://${webRoot}/`))))
   );
+
   const directFetch = sources.find(
     ({ source, sourceFile }) =>
       sourceFile !== "src/transport/initial-request.ts" && /\bfetch\s*\(/u.test(source)
   );
+
   const alternateStateClient = imports.find(({ importPath }) =>
     /^(?:@apollo\/client|@tanstack\/(?:query|react-query)|redux|swr|zustand)(?:\/|$)/u.test(
       importPath
     )
   );
+
   const alternateHttpClient = imports.find(({ importPath }) =>
     /^(?:axios|graphql-request|ky|superagent)(?:\/|$)/u.test(importPath)
   );
+
   if (Option.isSome(forbiddenServerImport)) {
     throw new Error(
       `${forbiddenServerImport.value.sourceFile} imports server code outside the canonical transport seam: ${forbiddenServerImport.value.importPath}`
     );
   }
+
   if (forbiddenSourceImport !== undefined) {
     throw new Error(
       `Browser-incompatible runtime modules entered the web source graph: ${forbiddenSourceImport.sourceFile} imports ${forbiddenSourceImport.importPath}`
     );
   }
+
   if (directFetch !== undefined) {
     throw new Error(`${directFetch.sourceFile} calls fetch directly; use the transport seam`);
   }
+
   if (alternateStateClient !== undefined) {
     throw new Error(
       `${alternateStateClient.sourceFile} imports alternate server state ${alternateStateClient.importPath}`
     );
   }
+
   if (alternateHttpClient !== undefined) {
     throw new Error(
       `${alternateHttpClient.sourceFile} imports alternate HTTP client ${alternateHttpClient.importPath}`

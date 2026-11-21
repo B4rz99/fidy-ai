@@ -33,7 +33,13 @@ import {
   transactionUnavailable as unavailable,
 } from "../../canonical-work/operations";
 
+type BoundStatement = Readonly<{
+  sql: string;
+  bindings: ReadonlyArray<string | number | Uint8Array>;
+}>;
+
 export const TransactionOutput = Schema.toCodecJson(Transaction);
+
 const Row = Schema.Struct({
   id: TransactionId,
   amount: Schema.String,
@@ -46,6 +52,7 @@ const Row = Schema.Struct({
   created_at: Schema.String,
   revision: Schema.Int,
 });
+
 const Query = TransactionQueryValues.mapFields((fields) => ({
   limit: Schema.OptionFromOptionalKey(fields.limit),
   from: Schema.OptionFromOptionalKey(fields.from),
@@ -58,6 +65,7 @@ const Query = TransactionQueryValues.mapFields((fields) => ({
   cursor: Schema.OptionFromOptionalKey(fields.cursor),
   q: Schema.OptionFromOptionalKey(TransactionSearchQuery.fields.q),
 }));
+
 const filters = new Set([
   "limit",
   "from",
@@ -69,21 +77,32 @@ const filters = new Set([
   "amount",
   "cursor",
 ]);
+
 const maxFilters = filters.size;
+
 const maxSearchUrlLength = 2048;
+
 const minimumSearchLength = 2;
+
 const pageSize = maximumTransactionPageSize;
+
 const boundarySize = pageSize + 1;
+
 const failure = (
   code: "unauthenticated" | "validation_failed" | "not_found" | "rate_limited",
   status: number
 ): Response => transactionFailure({ code, status, message: missingTransactionMessage });
+
 const HTTP_INVALID = 400;
+
 const HTTP_NOT_FOUND = 404;
 
 export const invalid = (): Response => failure("validation_failed", HTTP_INVALID);
+
 const notFound = (): Response => failure("not_found", HTTP_NOT_FOUND);
+
 type Subject = CanonicalCaller;
+
 type Selection = Readonly<{ request: Request; subject: Subject }> &
   (
     | Readonly<{ search: true; id: Option.Option<never> }>
@@ -94,8 +113,10 @@ const decodeCursor = (cursor: string): Option.Option<readonly [string, string, s
   const pieces = Schema.decodeUnknownOption(
     Schema.Tuple([Schema.String, Schema.String, TransactionId])
   )(cursor.split("|"));
+
   if (Option.isNone(pieces)) return Option.none();
   const [occurred, created] = pieces.value;
+
   return Option.isSome(DateTime.make(occurred)) && Option.isSome(DateTime.make(created))
     ? Option.some(pieces.value)
     : Option.none();
@@ -103,14 +124,17 @@ const decodeCursor = (cursor: string): Option.Option<readonly [string, string, s
 
 const searchValues = (values: Record<string, string>): Option.Option<Record<string, string>> => {
   const parsed = Schema.decodeUnknownOption(TransactionSearchQuery)(values);
+
   if (Option.isNone(parsed)) return Option.none();
   const term = parsed.value.q.trim().replace(/\s+/gu, " ");
+
   return term.length < minimumSearchLength ? Option.none() : Option.some({ ...values, q: term });
 };
 
 const validEncoding = (query: string): boolean => {
   try {
     decodeURIComponent(query);
+
     return true;
   } catch {
     return false;
@@ -128,6 +152,7 @@ const queryValues = (
   search: boolean
 ): Option.Option<Record<string, string>> => {
   const values = Object.fromEntries(params);
+
   return search ? searchValues(values) : Option.some(values);
 };
 
@@ -143,14 +168,19 @@ export const parseQuery = (
 ): Option.Option<typeof Query.Type> => {
   if (!validSelectedId(selection.id)) return Option.none();
   const search = selection.search === true;
+
   if (search && selection.request.url.length > maxSearchUrlLength) return Option.none();
   const url = new URL(selection.request.url);
+
   if (search && !validEncoding(url.search)) return Option.none();
   const params = url.searchParams;
+
   if (!validParameters(params, search, Option.isSome(selection.id))) return Option.none();
   const values = queryValues(params, search);
+
   if (Option.isNone(values)) return Option.none();
   const decoded = Schema.decodeOption(Query)(values.value);
+
   return Option.filter(decoded, (query) => validDecodedQuery(query, search));
 };
 
@@ -189,20 +219,25 @@ const listFilters = ({
     ["currency =", query.currency],
     ["amount =", Option.map(query.amount, encodeMoneyAmount)],
   ] as const;
+
   for (const [column, value] of fields) {
     if (Option.isSome(value)) {
       conditions.push(`${column} ?`);
       values.push(value.value);
     }
   }
+
   if (Option.isSome(query.q)) {
     conditions.push(
       "(instr(lower(counterparty), lower(?)) > 0 OR instr(lower(notes), lower(?)) > 0)"
     );
     values.push(query.q.value, query.q.value);
   }
-  if (Option.isSome(query.cursor)) {
-    const [occurred, created, recordId] = Option.getOrThrow(decodeCursor(query.cursor.value));
+
+  const cursor = Option.flatMap(query.cursor, decodeCursor);
+
+  if (Option.isSome(cursor)) {
+    const [occurred, created, recordId] = cursor.value;
     conditions.push("(occurred_at_ms, created_at_ms, id) < (?, ?, ?) ");
     values.push(
       DateTime.toEpochMillis(DateTime.makeUnsafe(occurred)),
@@ -210,6 +245,7 @@ const listFilters = ({
       recordId
     );
   }
+
   return {
     where: conditions.join(" AND "),
     bindings: values,
@@ -244,6 +280,7 @@ export const localHistoryPage = ({
     userSelection: { sql: "SELECT ? AS userId", params: [user] },
     ...listFilters({ userId: Option.some(user), query, authority: Option.none() }),
   });
+
 type PresentationSelection = Readonly<{
   userId: string;
   id: string;
@@ -280,12 +317,10 @@ export const presentationQuery = ({
   userId,
   id,
   authority,
-}: PresentationSelection): Readonly<{
-  sql: string;
-  bindings: ReadonlyArray<string | number | Uint8Array>;
-}> => {
+}: PresentationSelection): BoundStatement => {
   const relation = effectiveTransactionRelation(userId);
   const guard = presentationGuard(authority);
+
   return {
     sql: `WITH readiness AS MATERIALIZED (SELECT EXISTS (
         SELECT 1 FROM transaction_projection_state
@@ -336,13 +371,20 @@ export const presentationQuery = ({
     ],
   };
 };
+
 const storedFields = (row: typeof Row.Type): typeof Transaction.Encoded => ({
   id: row.id,
   money: { amount: row.amount, currency: row.currency },
   direction: row.direction,
   categoryId: row.category_id,
-  ...(row.counterparty === null ? {} : { counterparty: row.counterparty }),
-  ...(row.notes === null ? {} : { notes: row.notes }),
+  ...Option.match(Option.fromNullOr(row.counterparty), {
+    onNone: () => ({}),
+    onSome: (counterparty) => ({ counterparty }),
+  }),
+  ...Option.match(Option.fromNullOr(row.notes), {
+    onNone: () => ({}),
+    onSome: (notes) => ({ notes }),
+  }),
   occurredAt: row.occurred_at,
   createdAt: row.created_at,
   revision: row.revision,
@@ -352,6 +394,7 @@ export const decodeTransactionRow = (
   raw: unknown
 ): Option.Option<typeof TransactionOutput.Type> => {
   const row = Schema.decodeUnknownOption(Row)(raw);
+
   return Option.isNone(row)
     ? Option.none()
     : Schema.decodeOption(TransactionOutput)(storedFields(row.value));
@@ -367,7 +410,9 @@ type PresentationMetadata = TransactionPresentation["presentation"];
 
 const presentationMetadata = (row: typeof PresentationRow.Type): PresentationMetadata => {
   if (row.linked === 0) return { kind: "independent" };
+
   if (row.requested_id === row.id) return { kind: "visible-member" };
+
   return { kind: "suppressed-member", requestedId: row.requested_id };
 };
 
@@ -377,16 +422,20 @@ const InspectionOriginal = Schema.Struct({
   ...Row.fields,
   source_kinds: Schema.Array(SourceAttestationKind).check(Schema.isMaxLength(4)),
 });
+
 const InspectionRow = Schema.Struct({
   ...PresentationRow.fields,
   first_original: Schema.NullOr(Schema.fromJsonString(InspectionOriginal)),
   second_original: Schema.NullOr(Schema.fromJsonString(InspectionOriginal)),
 });
+
 export const decodeInspectionRow = (raw: unknown): Option.Option<TransactionInspection> => {
   const decoded = Schema.decodeUnknownOption(InspectionRow)(raw);
+
   if (Option.isNone(decoded)) return Option.none();
   const row = decoded.value;
   const base = { ...storedFields(row), presentation: presentationMetadata(row) };
+
   if (row.linked === 0) {
     return Schema.decodeOption(TransactionInspection)({
       ...base,
@@ -394,8 +443,11 @@ export const decodeInspectionRow = (raw: unknown): Option.Option<TransactionInsp
       sources: [],
     });
   }
+
   const { first_original: first, second_original: second } = row;
+
   if (first === null || second === null || first.id === second.id) return Option.none();
+
   return Schema.decodeOption(TransactionInspection)({
     ...base,
     sources: [
@@ -416,13 +468,16 @@ const decodedHistoryPage = (
   query: typeof Query.Type
 ): Option.Option<typeof TransactionListResponse.Type> => {
   const decoded = rows.results.map(decodeTransactionRow);
+
   if (decoded.some(Option.isNone)) {
     return Option.none();
   }
+
   const transactions = decoded.flatMap((item) => (Option.isSome(item) ? [item.value] : []));
   const size = Option.getOrElse(query.limit, () => pageSize);
   const visible = transactions.slice(0, size);
   const last = visible.at(-1);
+
   const next =
     transactions.length > size && last !== undefined
       ? nextTransactionPage({
@@ -436,6 +491,7 @@ const decodedHistoryPage = (
               : "transactions.listTransactions",
         })
       : [];
+
   return Option.map(Schema.decodeOption(TransactionListResponse.fields.next)(next), (next) => ({
     data: visible,
     next,
@@ -452,6 +508,7 @@ export const decodeLocalHistoryPage = ({
   query: typeof Query.Type;
 }>): ReturnType<typeof decodedHistoryPage> =>
   decodedHistoryPage({ results: rows }, selection, query);
+
 export const presentHistory = ({
   rows,
   selection,
@@ -462,12 +519,16 @@ export const presentHistory = ({
   query: typeof Query.Type;
 }>): Response => {
   const { id } = selection;
+
   if (Option.isSome(id)) {
     const first = rows.results[0];
+
     if (first === undefined) {
       return notFound();
     }
+
     const presentation = decodeInspectionRow(first);
+
     return Option.isNone(presentation)
       ? unavailable()
       : Response.json(
@@ -478,7 +539,9 @@ export const presentHistory = ({
           { headers: noStore }
         );
   }
+
   const page = decodedHistoryPage(rows, selection, query);
+
   return Option.isNone(page)
     ? unavailable()
     : Response.json(
@@ -516,9 +579,11 @@ export const presentPrivacyPage = ({
   Effect.gen(function* () {
     if (rows.length > boundarySize) return unavailable();
     const decoded = Option.all(rows.map(decodeTransactionRow));
+
     if (Option.isNone(decoded)) return unavailable();
     const data = decoded.value.slice(0, pageSize);
     const last = data.at(-1);
+
     const page = yield* Schema.encodeEffect(Schema.toCodecJson(PrivacyTransactionPage))({
       reference,
       scope: "transactions",
@@ -529,5 +594,6 @@ export const presentPrivacyPage = ({
           ? { occurredAt: last.occurredAt, createdAt: last.createdAt, id: last.id }
           : null,
     });
+
     return Response.json(page, { headers: noStore });
-  }).pipe(Effect.orElseSucceed(unavailable));
+  }).pipe(Effect.tapError(Effect.logDebug), Effect.orElseSucceed(unavailable));

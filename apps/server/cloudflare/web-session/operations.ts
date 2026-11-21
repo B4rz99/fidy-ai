@@ -15,16 +15,20 @@ export const readBoundWebSessionProof = (
   const binding = Schema.decodeUnknownOption(WebSessionId)(
     request.headers.get(browserSessionBindingHeader)
   );
+
   const bearer = sessionCookie(request);
+
   if (Option.isNone(binding) || Option.isNone(bearer)) {
     return Promise.resolve(Option.none<{ binding: WebSessionId; digest: Uint8Array }>());
   }
+
   return sessionDigest(bearer.value).then((digest) =>
     Option.some({ digest, binding: binding.value })
   );
 };
 
 type BoundProof = Readonly<{ digest: Uint8Array; binding: WebSessionId; current: number }>;
+
 const lookupBoundProof = (input: BoundProof, requireConsent: boolean): BoundWebSessionLookup =>
   sessionDigestLookup({
     ...input,
@@ -45,13 +49,16 @@ export const resolveBoundCanonicalWebSession = (
 
 export const sessionSetCookie: typeof nativeSessionSetCookie = (...args) =>
   nativeSessionSetCookie(...args);
+
 export const sessionCookie: typeof nativeSessionCookie = (...args) => nativeSessionCookie(...args);
+
 export const sessionDigest: typeof nativeSessionDigest = (...args) => nativeSessionDigest(...args);
 
 export const absentSessionResponse = (path: string): Response => {
   if (path === "/web/session/binding") {
     return Response.json({ binding: null }, { headers: { "cache-control": "no-store" } });
   }
+
   if (path === "/web/session/logout") {
     return new Response(null, {
       status: 204,
@@ -61,6 +68,7 @@ export const absentSessionResponse = (path: string): Response => {
       },
     });
   }
+
   return Response.json(
     {
       error: { code: "unauthenticated", message: "Present a valid credential and retry." },

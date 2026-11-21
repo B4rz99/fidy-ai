@@ -12,6 +12,7 @@ type IndicatorTone =
   | "rose"
   | "income"
   | "expense";
+
 const iconSizes = { plain: 20, category: 20, "category-large": 30, direction: 18 } as const;
 
 export const IconIndicator = ({

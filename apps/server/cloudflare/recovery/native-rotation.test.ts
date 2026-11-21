@@ -26,6 +26,7 @@ const setup = Effect.gen(function* () {
       "original"
     )
   );
+
   const rotate = (binding: string): Effect.Effect<Response> =>
     native(() =>
       db.send(
@@ -39,14 +40,17 @@ const setup = Effect.gen(function* () {
         })
       )
     );
+
   return { db, rotate };
 });
+
 const scenario = Effect.gen(function* () {
   const { db, rotate } = yield* setup;
   expect((yield* rotate(bob.session)).status).toBe(401);
   const freshness = yield* native(() => db.exec("SELECT fresh_until_ms FROM web_sessions"));
   const won = yield* rotate(alice.session);
   expect(won.status).toBe(200);
+
   const read = (
     response: Response
   ): Effect.Effect<
@@ -60,6 +64,7 @@ const scenario = Effect.gen(function* () {
         )
       )
     );
+
   const first = yield* read(won);
   yield* native(() =>
     db.directory.exec(
@@ -82,6 +87,7 @@ const scenario = Effect.gen(function* () {
       const rows = yield* native(() =>
         db.directory.exec("SELECT revision FROM recovery_routes WHERE user_id=?", alice.user)
       );
+
       if (rows.length > 1) yield* Effect.sleep("30 millis");
     })
   );
@@ -104,12 +110,15 @@ const scenario = Effect.gen(function* () {
     { revision: 3 },
   ]);
 });
+
 const fenceFailure = Effect.fn(function* (failure: "revision" | "evidence") {
   const { db, rotate } = yield* setup;
+
   const trigger =
     failure === "revision"
       ? "CREATE TRIGGER change_revision AFTER INSERT ON recovery_rotations BEGIN UPDATE backup_recovery_credentials SET revision=revision+1; END"
       : "CREATE TRIGGER fail_evidence BEFORE INSERT ON audit_entries WHEN NEW.record_type='security_mutation' BEGIN SELECT RAISE(IGNORE); END";
+
   yield* native(() => db.exec(trigger));
   expect((yield* rotate(alice.session)).status).toBe(failure === "revision" ? 401 : 503);
   expect(
@@ -123,6 +132,7 @@ const fenceFailure = Effect.fn(function* (failure: "revision" | "evidence") {
     )
   ).toEqual([]);
 });
+
 const lostAcknowledgement = Effect.gen(function* () {
   const { db, rotate } = yield* setup;
   yield* native(() =>
@@ -138,6 +148,7 @@ const lostAcknowledgement = Effect.gen(function* () {
   yield* native(() => db.exec("UPDATE recovery_rotations SET expires_at_ms=0"));
   yield* native(() => db.exec("DROP TRIGGER hold_ack"));
   yield* native(() => db.checkWork(alice.user));
+
   const outstanding = yield* native(() => db.exec("SELECT id FROM recovery_rotations")).pipe(
     Effect.repeat({
       until: (rows) => rows.length === 0,
@@ -145,6 +156,7 @@ const lostAcknowledgement = Effect.gen(function* () {
       times: 20,
     })
   );
+
   expect(outstanding).toEqual([]);
   expect(
     yield* native(() =>
@@ -152,6 +164,7 @@ const lostAcknowledgement = Effect.gen(function* () {
     )
   ).toEqual([{ revision: 2 }]);
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("fences a delayed rotation after the observed revision changes", () =>
     fenceFailure("revision")

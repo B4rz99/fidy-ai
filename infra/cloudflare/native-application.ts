@@ -39,21 +39,28 @@ export const nativeState = Layer.unwrap(
   Effect.gen(function* () {
     const development = yield* Alchemy.ALCHEMY_DEV,
       stage = yield* Alchemy.Stage;
+
     const backend = resolveStateBackend({ development, stage });
+
     if (backend === "cloudflare") return Cloudflare.state();
+
     if (backend === "local") return Alchemy.localState();
+
     return Alchemy.inMemoryState();
-  }).pipe(Effect.orDie)
+  }).pipe(Effect.catchTag("ConfigError", Effect.die))
 );
+
 const workerPolicy = {
   compatibility: { date: "2026-09-08" },
   observability: freeTierWorkerObservability,
   workersDev: false,
 } as const;
+
 const apiCompatibility = {
   ...workerPolicy.compatibility,
   flags: ["enable_request_signal", "request_signal_passthrough"],
 };
+
 const network = (
   release: NativeRelease,
   acceptance: string,
@@ -62,6 +69,7 @@ const network = (
   release.development
     ? undefined
     : { name: acceptance, aliases: release.hosts === "staged" ? [ordinary] : [] };
+
 const candidate = (release: NativeRelease): Cloudflare.WorkerProps["version"] =>
   release.development
     ? undefined
@@ -70,6 +78,7 @@ const candidate = (release: NativeRelease): Cloudflare.WorkerProps["version"] =>
         tag: release.release.versionTag,
         message: release.closed ? "isolated" : "release",
       };
+
 const releaseWorkerMain = (role: "Core" | "Ingress", release: NativeRelease): string =>
   release.accountingRollout
     ? accountingWorkerMain(role)
@@ -79,6 +88,7 @@ const bindSandboxCertificate = Effect.fn(function* (core: Cloudflare.Worker) {
   const certificate = yield* Config.String("BANCOLOMBIA_SANDBOX_CERTIFICATE_ID").pipe(
     Config.withDefault("")
   );
+
   if (certificate !== "") {
     yield* Schema.decodeEffect(Schema.String.check(Schema.isUUID()))(certificate).pipe(
       Effect.orDie
@@ -113,6 +123,7 @@ const coreWorker = Effect.fn(function* ({
     ERASURE_SUPPORT_AUDIENCE,
     ...access
   } = yield* privateAccessBindings(release);
+
   const core = yield* Cloudflare.Worker("Core", {
     ...workerPolicy,
     compatibility: apiCompatibility,
@@ -141,6 +152,7 @@ const coreWorker = Effect.fn(function* ({
       SMOKE_WORKFLOW: executor.reference,
     },
   });
+
   yield* bindPlannedText(core, {
     BETA_PRO_AUDIENCE,
     SAMPLE_REVIEW_AUDIENCE,
@@ -150,9 +162,12 @@ const coreWorker = Effect.fn(function* ({
     CONNECTION_SYNCHRONIZATION_QUEUE_NAME: queues.CONNECTION_SYNCHRONIZATION_QUEUE.queueName,
     OPERATIONAL_CANARY_QUEUE_NAME: queues.OPERATIONAL_CANARY_QUEUE.queueName,
   });
+
   if (!release.development && !release.closed) yield* bindSandboxCertificate(core);
+
   return core;
 });
+
 const webApplication = Effect.fn(function* (release: NativeRelease) {
   return yield* Cloudflare.Website.StaticSite("Web", {
     name: installationNames.Web,
@@ -174,10 +189,13 @@ const webApplication = Effect.fn(function* (release: NativeRelease) {
     workersDev: false,
   });
 });
+
 export const nativeApplication = Effect.gen(function* () {
   const release = yield* nativeReleaseContext(yield* Alchemy.ALCHEMY_DEV, yield* Alchemy.Stage);
+
   const queues = yield* nativeQueues(release.resourceRevision),
     buckets = yield* nativeBuckets;
+
   const executor = yield* nativeSmokeExecutor({ release, queues, buckets });
   const core = yield* coreWorker({ release, queues, buckets, executor });
   yield* installConsumers({
@@ -192,6 +210,7 @@ export const nativeApplication = Effect.gen(function* () {
     main: "../../apps/server/cloudflare/ingestion/email-worker.ts",
     env: { RELEASE_GIT_SHA: release.supportRevision },
   });
+
   const ingress = yield* Cloudflare.Worker("Ingress", {
     ...workerPolicy,
     compatibility: apiCompatibility,
@@ -209,7 +228,10 @@ export const nativeApplication = Effect.gen(function* () {
         : executor.smoke,
     },
   });
+
   const web = yield* webApplication(release);
+
   if (release.development) yield* marketingSite(release.release.gitRevision, false);
+
   return { apiUrl: ingress.url, webUrl: web.url };
 });

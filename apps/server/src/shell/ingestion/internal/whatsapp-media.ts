@@ -1,3 +1,4 @@
+import { OutboundHttpRequest } from "~/shell/outbound-http/contract";
 import { Digest } from "effect/crypto";
 import { Data, DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { maximumStatementBytes } from "~/core/ingestion/contract";
@@ -14,6 +15,7 @@ const Mime = Schema.Literals([
   "text/csv",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ]);
+
 const Metadata = Schema.Struct({
   id: Schema.String,
   mime_type: Mime,
@@ -25,21 +27,29 @@ const Metadata = Schema.Struct({
   download_url: Schema.String,
   download_url_expires_at: Schema.String,
 });
+
 const Media = Schema.Struct({
   bytes: Schema.Uint8Array,
   sha256: StatementContentDigest,
   mimeType: Mime,
 });
+
 const maximumSignedMediaTokenLength = 8192;
+
 const signedToken = Schema.NonEmptyString.check(Schema.isMaxLength(maximumSignedMediaTokenLength));
+
 const httpOK = 200;
-class StatementMediaUnavailable extends Data.TaggedError("StatementMediaUnavailable")<{}> {}
+
+class StatementMediaUnavailable extends Data.TaggedError("StatementMediaUnavailable")<{
+  readonly cause: unknown;
+}> {}
 
 const readSignedToken = (
   value: string
 ): Effect.Effect<Redacted.Redacted<string>, StatementMediaUnavailable> =>
   Effect.gen(function* () {
     const url = yield* Effect.try(() => new URL(value));
+
     if (
       url.origin !== "https://api.kapso.ai" ||
       url.username !== "" ||
@@ -47,14 +57,17 @@ const readSignedToken = (
       url.hash !== "" ||
       url.pathname !== "/meta/whatsapp/media_download"
     ) {
-      return yield* new StatementMediaUnavailable();
+      return yield* new StatementMediaUnavailable({ cause: undefined });
     }
+
     const token = Schema.decodeUnknownOption(signedToken)(url.searchParams.get("token"));
+
     if ([...url.searchParams.keys()].length !== 1 || Option.isNone(token)) {
-      return yield* new StatementMediaUnavailable();
+      return yield* new StatementMediaUnavailable({ cause: undefined });
     }
+
     return Redacted.make(token.value);
-  }).pipe(Effect.mapError(() => new StatementMediaUnavailable()));
+  }).pipe(Effect.mapError((cause) => new StatementMediaUnavailable({ cause })));
 
 export const readWhatsAppStatementMedia = ({
   outbound,
@@ -68,33 +81,47 @@ export const readWhatsAppStatementMedia = ({
   current: number;
 }>): Effect.Effect<typeof Media.Type, StatementMediaUnavailable, Digest.Digest> =>
   Effect.gen(function* () {
-    const response = yield* outbound.execute({
-      _tag: "KapsoMediaMetadata",
-      mediaId,
-      businessPhoneNumberId,
-    });
-    if (response.status !== httpOK) return yield* new StatementMediaUnavailable();
+    const response = yield* outbound.execute(
+      OutboundHttpRequest.KapsoMediaMetadata({ mediaId, businessPhoneNumberId })
+    );
+
+    if (response.status !== httpOK) {
+      return yield* new StatementMediaUnavailable({ cause: undefined });
+    }
+
     const json = yield* Schema.decodeEffect(UnknownJsonString)(
       new TextDecoder().decode(response.body)
     );
+
     const metadata = yield* Schema.decodeUnknownEffect(Metadata)(json);
     const expiry = DateTime.make(metadata.download_url_expires_at);
+
     if (
       metadata.id !== mediaId ||
       Option.isNone(expiry) ||
       DateTime.toEpochMillis(expiry.value) <= current
     ) {
-      return yield* new StatementMediaUnavailable();
+      return yield* new StatementMediaUnavailable({ cause: undefined });
     }
+
     const token = yield* readSignedToken(metadata.download_url);
-    const download = yield* outbound.execute({ _tag: "KapsoMediaDownload", token });
+    const download = yield* outbound.execute(OutboundHttpRequest.KapsoMediaDownload({ token }));
+
     if (download.status !== httpOK || download.body.length !== metadata.file_size) {
-      return yield* new StatementMediaUnavailable();
+      return yield* new StatementMediaUnavailable({ cause: undefined });
     }
+
     const crypto = yield* Digest.Digest;
+
     const digest = yield* crypto
       .digest(Digest.sha256, download.body)
-      .pipe(Effect.catchDefect(() => Effect.fail(new StatementMediaUnavailable())));
-    if (Hex.encode(digest) !== metadata.sha256) return yield* new StatementMediaUnavailable();
+      .pipe(
+        Effect.catchDefect(() => Effect.fail(new StatementMediaUnavailable({ cause: undefined })))
+      );
+
+    if (Hex.encode(digest) !== metadata.sha256) {
+      return yield* new StatementMediaUnavailable({ cause: undefined });
+    }
+
     return { bytes: download.body, sha256: metadata.sha256, mimeType: metadata.mime_type };
-  }).pipe(Effect.mapError(() => new StatementMediaUnavailable()));
+  }).pipe(Effect.mapError((cause) => new StatementMediaUnavailable({ cause })));

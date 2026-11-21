@@ -15,18 +15,27 @@ type CategoryIllustration = Readonly<{
   icon: ComponentProps<typeof HugeiconsIcon>["icon"];
   tone: "sage" | "sky" | "peach" | "lavender" | "butter" | "rose";
 }>;
+
 const categoryVisual = (label: string): CategoryIllustration => {
   const normalized = label.toLocaleLowerCase("es-CO");
+
   if (/restaur|comida/.test(normalized)) return { icon: Restaurant01Icon, tone: "rose" };
+
   if (/mercado|aliment|compra/.test(normalized)) {
     return { icon: ShoppingCart01Icon, tone: "sage" };
   }
+
   if (/entreten|suscrip/.test(normalized)) return { icon: ComputerIcon, tone: "sky" };
+
   if (/transport/.test(normalized)) return { icon: Bus01Icon, tone: "lavender" };
+
   if (/hogar|vivienda/.test(normalized)) return { icon: Home01Icon, tone: "butter" };
+
   if (/ingreso|salario/.test(normalized)) return { icon: Briefcase01Icon, tone: "sage" };
+
   return { icon: CreditCardIcon, tone: "peach" };
 };
+
 export const CategoryVisual = ({
   label,
   bubble,
@@ -34,6 +43,7 @@ export const CategoryVisual = ({
 }: Readonly<{ label: string; bubble: boolean; large: boolean }>): JSX.Element => {
   const visual = categoryVisual(label);
   const compactAppearance = bubble ? "category" : "plain";
+
   return (
     <IconIndicator
       icon={visual.icon}

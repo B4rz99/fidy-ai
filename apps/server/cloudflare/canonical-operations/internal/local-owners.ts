@@ -10,7 +10,6 @@ import { prepareLocalConnection } from "../../connections/operations";
 import { userOwnedAgentCapability } from "../../../src/shell/canonical-policy/contract";
 import { getBoundOperationCatalog } from "../../../src/shell/canonical-catalog/contract";
 import type { OAuthCanonicalAdmission } from "../../../src/shell/mcp/contract";
-import type { OAuthReviewBinding } from "../../oauth-confirmation/contract";
 import {
   readLocalPATActivity,
   readLocalPATMetadata,
@@ -19,7 +18,7 @@ import {
 } from "../../tokens/operations";
 import { prepareLocalPreferences } from "../../identity/operations";
 import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Effect, Option, Schema } from "effect";
+import { Array as Arr, Cause, Effect, Option, Predicate, Result, Schema } from "effect";
 import type { OperationId } from "../../../src/shell/api";
 import type { UserId } from "../../../src/core/identity/contract";
 import { getCanonicalOperationInput } from "../../../src/shell/canonical-operations/operations";
@@ -69,15 +68,38 @@ import {
 import { prepareLocalWrite } from "../../canonical-admission/operations";
 
 const firstFailureStatus = 400;
+
+type PreparedCorrections = Result.Result<ReadonlyArray<LocalMutationPlan>, LocalMutationResult>;
+
+const acceptCorrection =
+  (accepted: ReadonlyArray<LocalMutationPlan>) =>
+  (plan: LocalMutationPreparation): PreparedCorrections =>
+    "commit" in plan ? Result.succeed(Arr.append(accepted, plan)) : Result.fail(plan);
+
+const refusal = (value: LocalMutationResult): Option.Option<LocalMutationResult> =>
+  value.status >= firstFailureStatus ? Option.some(value) : Option.none();
+
+const commitUntilRefused = (
+  plans: ReadonlyArray<LocalMutationPlan>
+): Effect.Effect<Option.Option<LocalMutationResult>, CanonicalAdmissionUnavailable, SqliteClient> =>
+  Effect.reduce(
+    plans,
+    () => Option.none<LocalMutationResult>(),
+    (prior, plan) =>
+      Option.isSome(prior) ? Effect.succeed(prior) : plan.commit.pipe(Effect.map(refusal))
+  );
+
 type Context = { user: UserId; current: number; storage: DurableObjectStorage } & Partial<{
   hostedTurn: string;
   accountability: { turnId: string; sessionId: string };
   commercial: { origin: string; offers: Option.Option<Schema.Json> };
 }>;
+
 type Prepare = (
   input: unknown,
   context: Context
 ) => Effect.Effect<LocalMutationPreparation, CanonicalAdmissionUnavailable, SqliteClient>;
+
 const owner = <Id extends OperationId, E>(
   id: Id,
   prepare: (
@@ -94,6 +116,7 @@ const owner = <Id extends OperationId, E>(
       Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
     ),
 ];
+
 const groupReview = Effect.fn(function* (plans: ReadonlyArray<LocalMutationPlan>) {
   const facts = yield* Effect.forEach(plans, (plan) =>
     Option.match(plan.review, {
@@ -102,6 +125,7 @@ const groupReview = Effect.fn(function* (plans: ReadonlyArray<LocalMutationPlan>
         Effect.fail(new CanonicalAdmissionUnavailable({ cause: "unreviewed correction" })),
     })
   );
+
   return {
     effect: facts.map((fact) => fact.effect).join("\n"),
     revision: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Array(Schema.String)))(
@@ -109,11 +133,13 @@ const groupReview = Effect.fn(function* (plans: ReadonlyArray<LocalMutationPlan>
     ),
   };
 });
+
 const decisionOwner = Effect.fn(function* (target: string, context: Context) {
   const origin =
     context.hostedTurn === undefined
       ? Option.none()
       : yield* localHostedStatementOrigin(context.hostedTurn, target, context.user);
+
   return { ...context, origin, requiresOrigin: context.hostedTurn !== undefined };
 });
 
@@ -159,6 +185,7 @@ const credentialMetadata = Effect.fnUntraced(function* ({
   if (accountability === undefined) {
     return yield* new CanonicalAdmissionUnavailable({ cause: "missing hosted authority" });
   }
+
   return {
     userId: user,
     current,
@@ -169,6 +196,7 @@ const credentialMetadata = Effect.fnUntraced(function* ({
     },
   };
 });
+
 export const hostedOwners = new Map<string, Prepare>([
   readOwner("ingestion.submitForExtraction", ({ payload }, { user, current, hostedTurn }) =>
     readLocalDocumentPublication(payload, {
@@ -186,6 +214,7 @@ export const hostedOwners = new Map<string, Prepare>([
       if (commercial === undefined || Option.isNone(commercial.offers)) {
         return yield* new CanonicalAdmissionUnavailable({ cause: "pricing_unavailable" });
       }
+
       return subscriptionReadResult(commercial.offers.value);
     })
   ),
@@ -194,6 +223,7 @@ export const hostedOwners = new Map<string, Prepare>([
       if (commercial === undefined) {
         return yield* new CanonicalAdmissionUnavailable({ cause: "browser_origin_unavailable" });
       }
+
       return subscriptionReadResult(upgradeLocation(commercial.origin));
     })
   ),
@@ -303,7 +333,9 @@ export const localBatchOwners = new Map<string, Prepare>([
   ),
   owner("ingestion.applyReviewEdit", ({ payload }, context) =>
     prepareLocalReviewEdit(payload, context.user, context.current).pipe(
-      Effect.map((plan) => (payload._tag === "Create" ? wakeAfterCapture(plan, context) : plan))
+      Effect.map((plan) =>
+        Predicate.isTagged(payload, "Create") ? wakeAfterCapture(plan, context) : plan
+      )
     )
   ),
   owner("connections.connectInstitution", ({ payload }, { user, current, storage }) =>
@@ -329,24 +361,30 @@ export const localBatchOwners = new Map<string, Prepare>([
   ),
   owner("transactions.updateTransactions", ({ payload }, { user, current }) =>
     Effect.gen(function* () {
-      const plans: LocalMutationPlan[] = [];
-      for (const { id, expectedRevision } of payload.transactions) {
-        const plan = yield* prepareLocalCorrection(
-          { id, input: { expectedRevision, changes: payload.changes } },
-          user,
-          current
-        );
-        if (!("commit" in plan)) return plan;
-        plans.push(plan);
-      }
+      const prepared = yield* Effect.reduce(
+        payload.transactions,
+        (): PreparedCorrections => Result.succeed([]),
+        (accepted, { id, expectedRevision }) =>
+          Result.isFailure(accepted)
+            ? Effect.succeed(accepted)
+            : prepareLocalCorrection(
+                { id, input: { expectedRevision, changes: payload.changes } },
+                user,
+                current
+              ).pipe(Effect.map(acceptCorrection(accepted.success)))
+      );
+
+      if (Result.isFailure(prepared)) return prepared.failure;
+      const plans = prepared.success;
+
       return prepareLocalWrite({
         targets: plans.flatMap((plan) => plan.targets),
         review: groupReview(plans),
         commit: Effect.gen(function* () {
-          for (const plan of plans) {
-            const value = yield* plan.commit;
-            if (value.status >= firstFailureStatus) return value;
-          }
+          const refused = yield* commitUntilRefused(plans);
+
+          if (Option.isSome(refused)) return refused.value;
+
           return {
             status: 200,
             outcome: "success",
@@ -407,11 +445,14 @@ export const localBatchOwners = new Map<string, Prepare>([
 ]);
 
 type GrantUnit = Pick<Parameters<typeof stageLocalPATGrant>[0], "request" | "directory" | "owns">;
+
 const reserveGrant = Effect.fn(function* (unit: GrantUnit, operation: string, input: Schema.Json) {
   const { payload } = yield* Schema.decodeUnknownEffect(Schema.Struct({ payload: Schema.Json }))(
     input
   );
+
   const staged = yield* stageLocalPATGrant({ ...unit, operation, payload });
+
   const prepare: Prepare = (_input, { user, current, storage }) =>
     Effect.succeed(
       prepareLocalWrite({
@@ -425,14 +466,19 @@ const reserveGrant = Effect.fn(function* (unit: GrantUnit, operation: string, in
           ),
       })
     );
+
   return prepare;
 });
+
 type ReservedGrant = { reserve: (input: Schema.Json) => ReturnType<typeof reserveGrant> };
+
 export const batchOwnersFor = (unit: GrantUnit): ReadonlyMap<string, Prepare | ReservedGrant> => {
   const owners = new Map<string, Prepare | ReservedGrant>(localBatchOwners);
+
   for (const id of ["pats.createManualPAT", "pats.approvePATPairing", "pats.inspectPATPairing"]) {
     owners.set(id, { reserve: (input) => reserveGrant(unit, id, input) });
   }
+
   return owners;
 };
 
@@ -448,30 +494,44 @@ const reviewCalls = Effect.fn(function* (admission: OAuthCanonicalAdmission) {
     : [{ operation: admission.operation, input: admission.input }];
 });
 
+const reviewEntry = Effect.fnUntraced(function* (
+  child: Effect.Success<ReturnType<typeof reviewCalls>>[number],
+  context: Context
+) {
+  const operation = yield* Effect.fromNullishOr(
+    getBoundOperationCatalog().byId.get(child.operation)
+  );
+
+  const scope = Option.getOrNull(userOwnedAgentCapability(operation.policy.access));
+
+  if (operation.policy.agentConfirmation !== "required") {
+    return {
+      binding: { operation: operation.id, scope, effect: "", revision: "" },
+      sensitive: false,
+    };
+  }
+
+  const prepare = yield* Effect.fromNullishOr(localBatchOwners.get(operation.id));
+  const plan = yield* prepare(child.input, context);
+
+  if (!("commit" in plan) || Option.isNone(plan.review)) {
+    return yield* new Cause.NoSuchElementError();
+  }
+
+  return {
+    binding: { operation: operation.id, scope, ...(yield* plan.review.value) },
+    sensitive: true,
+  };
+});
+
 export const localReviewBinding = Effect.fn(
   function* (admission: OAuthCanonicalAdmission, context: Context) {
-    const catalog = getBoundOperationCatalog(),
-      binding: Array<OAuthReviewBinding[number]> = [];
-    const calls = yield* reviewCalls(admission);
-    let sensitive = false;
-    for (const child of calls) {
-      const operation = catalog.byId.get(child.operation);
-      if (operation === undefined) return Option.none<OAuthReviewBinding>();
-      const scope = Option.getOrNull(userOwnedAgentCapability(operation.policy.access));
-      if (operation.policy.agentConfirmation !== "required") {
-        binding.push({ operation: operation.id, scope, effect: "", revision: "" });
-        continue;
-      }
-      sensitive = true;
-      const prepare = localBatchOwners.get(operation.id);
-      if (prepare === undefined) return Option.none<OAuthReviewBinding>();
-      const plan = yield* prepare(child.input, context);
-      if (!("commit" in plan) || Option.isNone(plan.review)) {
-        return Option.none<OAuthReviewBinding>();
-      }
-      binding.push({ operation: operation.id, scope, ...(yield* plan.review.value) });
-    }
-    return Option.some(sensitive ? binding : []);
+    const entries = yield* Effect.forEach(yield* reviewCalls(admission), (child) =>
+      reviewEntry(child, context)
+    );
+
+    return entries.some((entry) => entry.sensitive) ? entries.map((entry) => entry.binding) : [];
   },
+  Effect.catchNoSuchElement,
   Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
 );

@@ -12,21 +12,26 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         ["read", "write"],
         nativeConnectionPlatform
       );
+
       const protocol = protocolFor(runtime);
+
       const start = {
         name: "connections.connectInstitution",
         args: { payload: { institutionId: "bancolombia" } },
         retryKey: "one-connection",
       };
+
       const first = yield* protocol(credential.access_token, "tools/call", start);
       const output = yield* native(() => first.json());
       expect(output).toMatchObject({ result: { isError: false } });
       const repeated = yield* protocol(credential.access_token, "tools/call", start);
       expect(yield* native(() => repeated.json())).toEqual(output);
+
       const list = yield* protocol(credential.access_token, "tools/call", {
         name: "connections.listConnections",
         args: {},
       });
+
       expect(yield* native(() => list.text())).toContain("Connecting");
       expect(yield* owner.exec("SELECT count(*) AS n FROM connection_attempts")).toEqual([
         { n: 1 },

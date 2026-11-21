@@ -21,6 +21,7 @@ type ToolbarProps = Readonly<{
   toggleFilters: () => void;
   filterCount: number;
 }>;
+
 export const RecurringToolbar = ({
   tab,
   setTab,
@@ -72,6 +73,7 @@ export const RecurringToolbar = ({
     </div>
   </header>
 );
+
 const ToolbarTabs = ({ tab, setTab }: Pick<ToolbarProps, "tab" | "setTab">): JSX.Element => (
   <nav aria-label="Vistas de recurrentes" data-recurring-slot="tabs">
     <Button
@@ -96,6 +98,7 @@ const ToolbarTabs = ({ tab, setTab }: Pick<ToolbarProps, "tab" | "setTab">): JSX
     </Button>
   </nav>
 );
+
 type MonthProps = Readonly<{
   view: Workspace;
   filtered: boolean;
@@ -103,6 +106,7 @@ type MonthProps = Readonly<{
   setCalendar: (value: boolean) => void;
   selectMonth: (month: string) => void;
 }>;
+
 export const MonthlyOverview = (props: MonthProps): JSX.Element => (
   <section
     aria-label="Resumen mensual"
@@ -118,6 +122,7 @@ export const MonthlyOverview = (props: MonthProps): JSX.Element => (
     <Summary view={props.view} filtered={props.filtered} />
   </section>
 );
+
 const MonthControls = ({ view, calendar, setCalendar, selectMonth }: MonthProps): JSX.Element => (
   <div data-recurring-slot="month-controls">
     <h2>

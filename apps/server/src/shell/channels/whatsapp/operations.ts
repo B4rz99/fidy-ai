@@ -30,19 +30,25 @@ export const authenticateWhatsAppInbound = Effect.fn(function* (input: {
   readonly receivedAt: DateTime.Utc;
 }) {
   const unknown = yield* authenticateAndDecodeKapsoBody(input);
+
   const deliveryKey = yield* Schema.decodeEffect(WhatsAppDeliveryKey)(input.deliveryKey).pipe(
     Effect.mapError(invalidKapsoPayload)
   );
+
   const businessPortfolioId = yield* Schema.decodeEffect(WhatsAppBusinessPortfolioId)(
     input.businessPortfolioId
   ).pipe(Effect.mapError(invalidKapsoPayload));
+
   const envelope = yield* Schema.decodeUnknownEffect(RawKapsoEnvelope)(unknown).pipe(
     Effect.mapError(invalidKapsoPayload)
   );
+
   const rawEvents = "data" in envelope ? envelope.data : [envelope];
+
   if (rawEvents.length > maxWhatsAppDeliveryEvents) {
     return yield* new WhatsAppBatchTooLarge();
   }
+
   const events = yield* Effect.forEach(
     rawEvents,
     (event) => projectEvent(event, businessPortfolioId, input.receivedAt),
@@ -50,7 +56,9 @@ export const authenticateWhatsAppInbound = Effect.fn(function* (input: {
       concurrency: 1,
     }
   ).pipe(Effect.mapError(invalidKapsoPayload));
+
   const [first, ...rest] = events;
+
   return { deliveryKey, events: [first, ...rest] } satisfies WhatsAppWebhookReceipt;
 });
 
@@ -58,7 +66,9 @@ export const authenticateHostedStatus = Effect.fn(function* (
   input: WhatsAppLifecycleAuthentication
 ) {
   const latest = yield* decodeLifecycleStatus(input);
+
   if (Option.isNone(latest)) return yield* invalidKapsoPayload("uncorrelated hosted status");
+
   return projectHostedStatus(latest.value);
 });
 
@@ -66,7 +76,9 @@ export const authenticateDisclosureStatus = Effect.fn(function* (
   input: WhatsAppLifecycleAuthentication
 ) {
   const latest = yield* decodeLifecycleStatus(input);
+
   if (Option.isNone(latest)) return yield* invalidKapsoPayload("uncorrelated disclosure status");
+
   return { ...latest.value.evidence, businessPhoneNumberId: latest.value.businessPhoneNumberId };
 });
 
@@ -78,15 +90,19 @@ export const authenticateIdentityChange = Effect.fn(function* (input: {
   readonly receivedAt: DateTime.Utc;
 }) {
   const unknown = yield* authenticateAndDecodeKapsoBody(input);
+
   const businessPortfolioId = yield* Schema.decodeEffect(WhatsAppBusinessPortfolioId)(
     input.businessPortfolioId
   ).pipe(Effect.mapError(invalidKapsoPayload));
+
   const envelope = yield* Schema.decodeUnknownEffect(RawMetaEnvelope)(unknown).pipe(
     Effect.mapError(invalidKapsoPayload)
   );
+
   const messages = envelope.entry.flatMap((entry) =>
     entry.changes.flatMap((change) => change.value.messages ?? [])
   );
+
   if (messages.length > maxWhatsAppDeliveryEvents) return yield* new WhatsAppBatchTooLarge();
 
   const projected = yield* Effect.forEach(
@@ -94,13 +110,16 @@ export const authenticateIdentityChange = Effect.fn(function* (input: {
     (message) => projectIdentityChange(message, businessPortfolioId, input.receivedAt),
     { concurrency: 1 }
   );
+
   const changes: ReadonlyArray<WhatsAppIdentityChangeEvent> = EffectArray.getSomes(projected);
+
   return changes;
 });
 
 export const formatWhatsAppMoney = (money: ReadonlyMoney): string => {
   const [whole = "", fraction] = encodeMoneyAmount(money.amount).split(".");
   const amount = `${whole.replace(/\B(?=(\d{3})+(?!\d))/gu, ".")}${fraction === undefined ? "" : `,${fraction}`}`;
+
   return `${amount} ${money.currency === "COP" ? "pesos" : money.currency}`;
 };
 
@@ -118,10 +137,13 @@ const months = [
   "noviembre",
   "diciembre",
 ];
+
 export const formatWhatsAppDate = (date: string): string => {
   const [year, month, day] = date.split("-");
+
   return `${Number(day)} de ${months[Number(month) - 1]} de ${year}`;
 };
+
 export const formatWhatsAppLocalDate = ({
   date,
   timeZone,
@@ -129,6 +151,7 @@ export const formatWhatsAppLocalDate = ({
   Option.map(DateTime.setZoneNamed(date, timeZone), (local) =>
     formatWhatsAppDate(DateTime.formatIsoDate(local))
   );
+
 export const formatWhatsAppCategory = (id: string): Option.Option<string> =>
   Option.map(
     Option.fromUndefinedOr(listLaunchCategories().find((category) => category.id === id)),

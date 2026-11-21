@@ -6,6 +6,7 @@ export type PlanProblem = Readonly<{
   message: string;
   clearedBy: ReadonlyArray<string>;
 }>;
+
 export type PlanDraft = Readonly<{
   kind: string;
   cardPayment: boolean;
@@ -15,15 +16,20 @@ export type PlanDraft = Readonly<{
   day1: string;
   day2: string;
 }>;
+
 export type MonthDay = number | "last";
 
 const maximumMonthDay = 31;
+
 export const parseMonthDay = (text: string): Option.Option<MonthDay> => {
   const normalized = text.trim().toLowerCase();
+
   if (normalized === "último" || normalized === "ultimo" || normalized === "last") {
     return Option.some("last");
   }
+
   const day = /^\d{1,2}$/.test(normalized) ? Number(normalized) : 0;
+
   return day >= 1 && day <= maximumMonthDay ? Option.some(day) : Option.none();
 };
 
@@ -31,6 +37,7 @@ const monthDayProblems = (draft: PlanDraft): ReadonlyArray<PlanProblem> => {
   if (draft.frequency !== "twice-monthly") return [];
   const first = parseMonthDay(draft.day1);
   const second = parseMonthDay(draft.day2);
+
   const unreadable = (
     [
       ["day1", first],
@@ -47,7 +54,9 @@ const monthDayProblems = (draft: PlanDraft): ReadonlyArray<PlanProblem> => {
         ]
       : []
   );
+
   const repeated = Option.isSome(first) && Option.isSome(second) && first.value === second.value;
+
   return repeated
     ? [
         {
@@ -59,25 +68,32 @@ const monthDayProblems = (draft: PlanDraft): ReadonlyArray<PlanProblem> => {
     : unreadable;
 };
 
+const cardPaymentProblem = (draft: PlanDraft): Option.Option<PlanProblem> =>
+  Option.map(
+    Option.liftPredicate(draft, (plan) => plan.cardPayment && plan.kind !== "transfer"),
+    () => ({
+      field: "cardPayment",
+      message: "Un pago de tarjeta debe tener el tipo Transferencia.",
+      clearedBy: ["cardPayment", "kind"],
+    })
+  );
+
+const endDateProblem = (draft: PlanDraft): Option.Option<PlanProblem> =>
+  Option.map(
+    Option.liftPredicate(
+      draft,
+      (plan) => plan.firstDate !== "" && plan.endDate !== "" && plan.endDate < plan.firstDate
+    ),
+    () => ({
+      field: "endDate",
+      message: "La fecha final debe ser igual o posterior a la primera fecha.",
+      clearedBy: ["firstDate", "endDate"],
+    })
+  );
+
 export const findPlanProblems = (draft: PlanDraft): ReadonlyArray<PlanProblem> => [
-  ...(draft.cardPayment && draft.kind !== "transfer"
-    ? [
-        {
-          field: "cardPayment" as const,
-          message: "Un pago de tarjeta debe tener el tipo Transferencia.",
-          clearedBy: ["cardPayment", "kind"],
-        },
-      ]
-    : []),
-  ...(draft.firstDate !== "" && draft.endDate !== "" && draft.endDate < draft.firstDate
-    ? [
-        {
-          field: "endDate" as const,
-          message: "La fecha final debe ser igual o posterior a la primera fecha.",
-          clearedBy: ["firstDate", "endDate"],
-        },
-      ]
-    : []),
+  ...Option.toArray(cardPaymentProblem(draft)),
+  ...Option.toArray(endDateProblem(draft)),
   ...monthDayProblems(draft),
 ];
 
@@ -85,16 +101,21 @@ type PlanFeedback = Readonly<{
   problems: ReadonlyArray<PlanProblem>;
   edited: (field: string) => void;
 }>;
+
 export const PlanFeedbackContext = createContext<PlanFeedback>({
   problems: [],
   edited: () => undefined,
 });
+
 export const usePlanFieldProblem = (field: string): Option.Option<PlanProblem> =>
   Option.fromNullishOr(
     use(PlanFeedbackContext).problems.find((problem) => problem.field === field)
   );
+
 export const usePlanFieldEdited = (): PlanFeedback["edited"] => use(PlanFeedbackContext).edited;
+
 export const planProblemId = (field: string): string => `recurring-${field}-error`;
+
 export const usePlanFieldAria = (
   field: string
 ): Pick<AriaAttributes, "aria-invalid" | "aria-describedby"> =>

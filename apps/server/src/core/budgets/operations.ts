@@ -19,6 +19,7 @@ export const deriveCurrentBudgetMonth = ({
 }>): AppliedBudgetMonth => {
   const zonedNow = DateTime.setZone(now, DateTime.zoneMakeNamedUnsafe(timeZone));
   const zonedFrom = DateTime.startOf(zonedNow, "month");
+
   return {
     from: DateTime.toUtc(zonedFrom),
     to: DateTime.toUtc(DateTime.add(zonedFrom, { months: 1 })),
@@ -43,7 +44,9 @@ type BudgetStatusInput = Readonly<{
 }>;
 
 const threshold80 = 80;
+
 const threshold100 = 100;
+
 const thresholds = [threshold80, threshold100] as const;
 
 export const advanceBudgetLatch = ({
@@ -65,11 +68,15 @@ export const advanceBudgetLatch = ({
     if (spent.currency !== budget.cap.currency) {
       return yield* new CurrencyMismatch({ left: budget.cap.currency, right: spent.currency });
     }
+
     const eighty = BigDecimal.multiply(budget.cap.amount, BigDecimal.make(8n, 1));
     let measured: 0 | typeof threshold80 | typeof threshold100 = 0;
+
     if (BigDecimal.Order(spent.amount, eighty) >= 0) measured = threshold80;
+
     if (BigDecimal.Order(spent.amount, budget.cap.amount) >= 0) measured = threshold100;
     const highestReached = measured > latch.highestReached ? measured : latch.highestReached;
+
     return {
       latch: { ...latch, highestReached },
       newlyReached: thresholds.filter(
@@ -84,6 +91,7 @@ export const calculateBudgetStatus: (
   input: BudgetStatusInput
 ) {
   const { budget, period, spent } = input;
+
   if (budget.cap.currency !== spent.currency) {
     return yield* new CurrencyMismatch({
       left: budget.cap.currency,
@@ -93,6 +101,7 @@ export const calculateBudgetStatus: (
 
   const common = { budget, spent: Money.make(spent), period };
   const comparison = BigDecimal.Order(spent.amount, budget.cap.amount);
+
   if (comparison < 0) {
     return {
       ...common,
@@ -103,9 +112,11 @@ export const calculateBudgetStatus: (
       }),
     } satisfies BudgetStatus;
   }
+
   if (comparison === 0) {
     return { ...common, type: "reached" as const } satisfies BudgetStatus;
   }
+
   return {
     ...common,
     type: "over" as const,

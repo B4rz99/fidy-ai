@@ -26,9 +26,11 @@ export const nativeBuckets = Effect.all({
     ],
   }),
 });
+
 const queue = Effect.fn(function* (id: string, slug: string) {
   return yield* Cloudflare.Queues.Queue(id, { name: "fidy-native-" + slug });
 });
+
 export const nativeQueues = Effect.fn(function* (revision: string) {
   return yield* Effect.all({
     ASYNC_DEAD_LETTERS: queue("AsyncDeadLetters", "async-dead-letters"),
@@ -46,7 +48,9 @@ export const nativeQueues = Effect.fn(function* (revision: string) {
     SMOKE_QUEUE: queue("ReleaseSmokeQueue-" + revision, "smoke-" + revision),
   });
 });
+
 export type NativeQueues = Effect.Success<ReturnType<typeof nativeQueues>>;
+
 export const nativeWorkflows = Effect.sync(() => ({
   CONNECTION_SYNCHRONIZATION_WORKFLOW: Cloudflare.Workflow("ConnectionSynchronizationWorkflow", {
     className: "ConnectionSynchronizationWorkflow",
@@ -77,6 +81,7 @@ export const nativeWorkflows = Effect.sync(() => ({
     workflowName: "fidy-native-login-email",
   }),
 }));
+
 const smokeIdentity = (
   release: NativeRelease
 ): Pick<NativeRelease["shared"], "RELEASE_GIT_SHA" | "CONTRACT_DIGEST"> =>
@@ -97,6 +102,7 @@ export const nativeSmokeExecutor = Effect.fn(function* (input: {
 }) {
   const revision = input.release.resourceRevision,
     workflowName = "fidy-native-smoke-" + revision;
+
   const smoke = yield* Cloudflare.Worker("ReleaseSmoke-" + revision, {
     name: "fidy-native-smoke-" + revision,
     main: nativeSmokeMain,
@@ -122,7 +128,9 @@ export const nativeSmokeExecutor = Effect.fn(function* (input: {
       ...smokeIdentity(input.release),
     },
   });
+
   yield* bindPlannedText(smoke, { SMOKE_QUEUE_NAME: input.queues.SMOKE_QUEUE.queueName });
+
   return {
     smoke,
     reference: Cloudflare.Workflow("ReleaseSmokeReference", {
@@ -132,7 +140,9 @@ export const nativeSmokeExecutor = Effect.fn(function* (input: {
     }),
   };
 });
+
 const workBatchSize = 10;
+
 export const installConsumers = Effect.fn(function* ({
   queues,
   revision,
@@ -160,12 +170,17 @@ export const installConsumers = Effect.fn(function* ({
     ["WeeklyDeliveryConsumer", queues.WEEKLY_DELIVERY_QUEUE, core, workBatchSize],
     ["HostedWhatsAppConsumer", queues.HOSTED_WHATSAPP_QUEUE, core, workBatchSize],
   ] as const;
-  for (const [id, queue, worker, batchSize] of consumers) {
-    yield* Cloudflare.Queues.Consumer(id, {
-      queueId: queue.queueId,
-      scriptName: worker.workerName,
-      deadLetterQueue: queues.ASYNC_DEAD_LETTERS.queueName,
-      settings: { batchSize, maxRetries: 3, maxWaitTimeMs: 0 },
-    });
-  }
+
+  yield* Effect.forEach(
+    consumers,
+    Effect.fnUntraced(function* ([id, queue, worker, batchSize]) {
+      yield* Cloudflare.Queues.Consumer(id, {
+        queueId: queue.queueId,
+        scriptName: worker.workerName,
+        deadLetterQueue: queues.ASYNC_DEAD_LETTERS.queueName,
+        settings: { batchSize, maxRetries: 3, maxWaitTimeMs: 0 },
+      });
+    }),
+    { discard: true }
+  );
 });

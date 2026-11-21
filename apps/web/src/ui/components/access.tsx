@@ -8,7 +8,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { type ComponentProps, type JSX, type ReactNode, type RefCallback, useState } from "react";
-import { Effect, Option } from "effect";
+import { Effect, Option, Predicate } from "effect";
 import { writeClipboardText } from "@/browser/clipboard";
 import { fidyLogoUrl } from "@/ui/brand";
 import { Button } from "./button";
@@ -17,10 +17,15 @@ import { useTheme } from "./theme";
 import "./access.css";
 
 const mascot = new URL("../assets/access/mascot.webp", import.meta.url).href;
+
 const habitat = new URL("../assets/access/habitat-ceiba.webp", import.meta.url).href;
+
 const google = new URL("../assets/access/google.svg", import.meta.url).href;
+
 const microsoft = new URL("../assets/access/microsoft.svg", import.meta.url).href;
+
 export type AccessMethod = "google" | "microsoft" | "email" | "whatsapp";
+
 export const AccessMethodIcon = ({ method }: Readonly<{ method: AccessMethod }>): JSX.Element =>
   method === "google" || method === "microsoft" ? (
     <img src={method === "google" ? google : microsoft} alt="" aria-hidden="true" />
@@ -39,6 +44,7 @@ export const AccessAction = ({
   Readonly<{
     kind: "primary" | "provider" | "alternative" | "icon" | "back" | "link" | "theme" | "outline";
   }>): JSX.Element => <Button variant="ghost" data-access-action={kind} {...props} />;
+
 export const AccessConsent = ({
   accepted,
   onAcceptedChange,
@@ -63,21 +69,26 @@ export const AccessConsent = ({
     </span>
   </label>
 );
+
 export const AccessInput = (props: ComponentProps<typeof Input>): JSX.Element => (
   <Input data-access-input="" {...props} />
 );
+
 export const AccessBack = ({ onClick }: Readonly<{ onClick: () => void }>): JSX.Element => (
   <AccessAction kind="back" onClick={onClick}>
     <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={1.5} aria-hidden="true" />
     Opciones de inicio de sesión
   </AccessAction>
 );
+
 type AccessHeadingProps =
   | Readonly<{ children: ReactNode }>
   | Readonly<{ children: ReactNode; method: AccessMethod }>;
+
 const focusAccessHeading: RefCallback<HTMLHeadingElement> = (heading) => {
   heading?.focus({ preventScroll: true });
 };
+
 export const AccessHeading = (props: AccessHeadingProps): JSX.Element => (
   <h1 data-access-heading="" tabIndex={-1} ref={focusAccessHeading}>
     {props.children}
@@ -91,10 +102,12 @@ const methodLabels: Readonly<Record<AccessMethod, string>> = {
   email: "correo verificado",
   whatsapp: "WhatsApp",
 };
+
 const methodTitles: Readonly<Record<AccessMethod, string>> = {
   ...methodLabels,
   email: "Correo verificado",
 };
+
 export const AccessAlternatives = ({
   exclude,
   choose,
@@ -121,16 +134,18 @@ export const AccessCode = ({
   expired,
 }: Readonly<{ code: string; expired: boolean }>): JSX.Element => {
   const [feedback, setFeedback] = useState("");
+
   const copy = (): void => {
     Effect.runCallback(writeClipboardText(Option.fromUndefinedOr(navigator.clipboard), code), {
       onExit: (outcome): void =>
         setFeedback(
-          outcome._tag === "Success"
+          Predicate.isTagged(outcome, "Success")
             ? "Código copiado"
             : "No pudimos copiarlo. Selecciona el código para copiarlo."
         ),
     });
   };
+
   return (
     <>
       <div data-access-code="" data-expired={expired}>
@@ -186,6 +201,7 @@ const AccessBackground = (): JSX.Element => (
 
 export const AccessLayout = ({ children }: Readonly<{ children: ReactNode }>): JSX.Element => {
   const { theme, toggle, mounted } = useTheme();
+
   return (
     <div ref={mounted} data-access-root="" className={theme === "dark" ? "dark" : ""}>
       <AccessBackground />

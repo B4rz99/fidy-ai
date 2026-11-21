@@ -5,11 +5,15 @@ import { type seed } from "../financial-user-store.test-fixture";
 import { native } from "../user-store.test-fixture";
 
 const portfolio = "123456789012345";
+
 const recipient = "CO.13491208655302741918";
+
 const secondMs = 1000,
   accepted = 202,
   ok = 200;
+
 const timestamp = Effect.map(Clock.currentTimeMillis, (ms) => String(Math.floor(ms / secondMs)));
+
 const signedWebhook = (
   runtime: Miniflare
 ): ((
@@ -23,9 +27,11 @@ const signedWebhook = (
       conversation: { business_scoped_user_id: recipient },
       message,
     }).pipe(Effect.orDie);
+
     const signature = new Bun.CryptoHasher("sha256", "callback-fixture-secret")
       .update(body)
       .digest("hex");
+
     return yield* native(() =>
       runtime.dispatchFetch("https://api.fidyapp.com/providers/kapso/callback", {
         method: "POST",
@@ -38,6 +44,7 @@ const signedWebhook = (
       })
     );
   });
+
 const waitForEvidence = (
   owner: Effect.Success<ReturnType<typeof seed>>
 ): ((sql: string) => Effect.Effect<{ value: string }, string | Schema.SchemaError>) =>
@@ -49,8 +56,10 @@ const waitForEvidence = (
       ),
       Effect.retry({ times: 120, schedule: Schedule.spaced("50 millis") })
     );
+
     return yield* Schema.decodeUnknownEffect(Schema.Struct({ value: Schema.String }))(row);
   });
+
 const checkCompleted = Effect.fnUntraced(function* (
   owner: Effect.Success<ReturnType<typeof seed>>,
   batched: boolean
@@ -61,21 +70,24 @@ const checkCompleted = Effect.fnUntraced(function* (
       batched ? "operations.executeAtomicBatch" : "ingestion.skipNeedsReviewItem"
     )
   ).toEqual([{ outcome: "CanonicalOperationFailed" }, { outcome: "Succeeded" }]);
-  if (batched) {
+
+  yield* Effect.gen(function* () {
     expect(
       yield* owner.exec("SELECT operation,outcome FROM hosted_batch_child_audit ORDER BY position")
     ).toEqual([
       { operation: "ingestion.skipNeedsReviewItem", outcome: "success" },
       { operation: "dashboard.initializeDashboard", outcome: "success" },
     ]);
-  }
+  }).pipe(Effect.when(Effect.succeed(batched)));
 });
+
 export const completeHostedClarification = Effect.fnUntraced(function* (
   runtime: Miniflare,
   owner: Effect.Success<ReturnType<typeof seed>>,
   { item, batched }: { item: string; batched: boolean }
 ) {
   const webhook = signedWebhook(runtime);
+
   const say = Effect.fnUntraced(function* (id: string, text: string) {
     const received = yield* webhook("whatsapp.message.received", id, {
       id,
@@ -84,13 +96,17 @@ export const completeHostedClarification = Effect.fnUntraced(function* (
       type: "text",
       text: { body: text },
     });
+
     expect(received.status).toBe(accepted);
   });
+
   const observe = waitForEvidence(owner);
+
   const delivered = Effect.fnUntraced(function* (id: string) {
     const held = yield* observe(
       "SELECT correlation AS value FROM whatsapp_deliveries WHERE family='hosted' AND state='ambiguous'"
     );
+
     const result = yield* webhook("whatsapp.message.delivered", id, {
       id,
       kapso: {
@@ -107,11 +123,13 @@ export const completeHostedClarification = Effect.fnUntraced(function* (
         ],
       },
     });
+
     expect(result.status).toBe(ok);
     yield* observe(
       "SELECT 'completed' AS value WHERE NOT EXISTS(SELECT 1 FROM hosted_turns WHERE state='proposed')"
     );
   });
+
   yield* delivered("wamid.document-ready");
   yield* say(
     "wamid.statement-skip",

@@ -1,7 +1,7 @@
 import { PendingRead } from "@/ui/components/pending-read";
 
 import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import type { AsyncResult, AtomRegistry } from "effect/reactivity";
 import { type JSX, type ReactNode, Suspense, useContext, useState } from "react";
 import { lazyRouteComponent, useRouter } from "@tanstack/react-router";
@@ -27,8 +27,11 @@ const DashboardRoutePresentation = lazyRouteComponent(
   () => import("./view"),
   "DashboardRouteContent"
 );
+
 const DashboardViewComponent = lazyRouteComponent(() => import("./view"), "DashboardViewComponent");
+
 DashboardRoutePresentation.preload?.()?.catch(() => undefined);
+
 DashboardViewComponent.preload?.()?.catch(() => undefined);
 
 export const DashboardFeature = ({
@@ -41,6 +44,7 @@ export const DashboardFeature = ({
   const phase = useAtomValue(dashboard.phase);
   const registry = useContext(RegistryContext);
   const refresh = (): DashboardReadAttempt => dashboard.refresh(registry);
+
   return (
     <Suspense fallback={<PendingRead label="Cargando tablero" />}>
       <DashboardRouteContent
@@ -49,7 +53,7 @@ export const DashboardFeature = ({
         phase={phase}
         onRefresh={refresh}
       />
-      {result._tag === "Success" ? children : null}
+      {Predicate.isTagged(result, "Success") ? children : null}
     </Suspense>
   );
 };
@@ -76,6 +80,7 @@ const unavailableCatalogError: DashboardEditorError = {
   message: "Los demás controles siguen disponibles.",
   onRefresh: Option.none(),
 };
+
 const staleDashboardError: DashboardEditorError = {
   title: "El cambio se guardó, pero no pudimos actualizar el tablero",
   message: "Mostramos el último tablero disponible. Intenta actualizarlo de nuevo.",
@@ -88,7 +93,9 @@ const resolveEditorError = (
   dashboardFailed: boolean
 ): Option.Option<DashboardEditorError> => {
   if (Option.isSome(editError)) return editError;
+
   if (catalogFailed) return Option.some(unavailableCatalogError);
+
   return dashboardFailed ? Option.some(staleDashboardError) : Option.none();
 };
 
@@ -105,7 +112,7 @@ const DashboardQueryNotice = <E,>({
         Actualizando tablero…
       </p>
     ) : null}
-    {state._tag === "Ready" && Option.isSome(state.refreshFailure) ? (
+    {Predicate.isTagged(state, "Ready") && Option.isSome(state.refreshFailure) ? (
       <div className="m-4">
         <CanonicalQueryRetry
           description="Mostramos el último tablero disponible."
@@ -123,7 +130,8 @@ const DashboardQueryNotice = <E,>({
 const catalogUnavailable = (
   state: CanonicalQueryState<Readonly<{ data: ReadonlyArray<unknown> }>, unknown>
 ): boolean =>
-  state._tag === "Failure" || (state._tag === "Ready" && Option.isSome(state.refreshFailure));
+  Predicate.isTagged(state, "Failure") ||
+  (Predicate.isTagged(state, "Ready") && Option.isSome(state.refreshFailure));
 
 const CatalogQueryNotice = <E,>({
   onRefresh,
@@ -133,9 +141,12 @@ const CatalogQueryNotice = <E,>({
   state: CanonicalQueryState<Readonly<{ data: ReadonlyArray<unknown> }>, E>;
 }>): JSX.Element => {
   const failed = catalogUnavailable(state);
+
   return (
     <>
-      {state._tag === "Initial" ? <PendingRead label="Cargando catálogo del tablero" /> : null}
+      {Predicate.isTagged(state, "Initial") ? (
+        <PendingRead label="Cargando catálogo del tablero" />
+      ) : null}
       {failed ? (
         <Button
           className="m-4"
@@ -177,9 +188,11 @@ const DashboardLoadNotice = ({
       return <></>;
     case "initializing":
       if (waiting) return <></>;
+
       return <p aria-live="polite">No pudimos inicializar el tablero.</p>;
     case "reading-initialized":
       if (waiting) return <></>;
+
       return <p aria-live="polite">El tablero se inicializó, pero no pudimos leerlo.</p>;
   }
 };
@@ -199,12 +212,14 @@ export const DashboardRouteContent = ({
   const catalogResult = useAtomValue(catalogAtom);
   const refreshCatalog = useAtomRefresh(catalogAtom);
   const dashboardState = presentCanonicalQuery(result);
+
   const { lifecycleRef, editError, refresh, ...editing } = useDashboardEditing({
     apiClient,
     onRefresh,
     dashboard: dashboardState,
   });
-  if (dashboardState._tag !== "Ready") {
+
+  if (!Predicate.isTagged(dashboardState, "Ready")) {
     return (
       <div className="contents" ref={lifecycleRef}>
         <DashboardLoadNotice phase={phase} waiting={dashboardState.waiting} />
@@ -234,7 +249,7 @@ export const DashboardRouteContent = ({
         <DashboardViewComponent
           initialEditing={false}
           editor={Option.some({
-            catalog: catalogState._tag === "Ready" ? catalogState.value.data : [],
+            catalog: Predicate.isTagged(catalogState, "Ready") ? catalogState.value.data : [],
             error,
             ...editing,
           })}

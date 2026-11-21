@@ -1,4 +1,4 @@
-import { DateTime, Option } from "effect";
+import { DateTime } from "effect";
 
 export const registryObject = (
   input: Readonly<{ key: string; etag: string; size: number; uploaded: number }>
@@ -19,6 +19,7 @@ export const registryBody = (
 ): R2ObjectBody => {
   const { object, value } = input;
   const response = new Response(value);
+
   return {
     key: object.key,
     version: object.version,
@@ -29,7 +30,7 @@ export const registryBody = (
     checksums: object.checksums,
     storageClass: object.storageClass,
     writeHttpMetadata: (headers) => object.writeHttpMetadata(headers),
-    body: Option.getOrThrow(Option.fromNullOr(response.body)),
+    body: response.body ?? new ReadableStream(),
     get bodyUsed() {
       return response.bodyUsed;
     },

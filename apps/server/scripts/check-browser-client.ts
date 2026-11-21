@@ -5,9 +5,11 @@ import { decodeBuildMetafile } from "./build-metafile";
 const serverRoot = Bun.fileURLToPath(new URL("..", import.meta.url))
   .replaceAll("\\", "/")
   .replace(/\/$/u, "");
+
 const workspaceRoot = Bun.fileURLToPath(new URL("../../../", import.meta.url))
   .replaceAll("\\", "/")
   .replace(/\/$/u, "");
+
 const entrypoints = [
   "src/client.ts",
   "src/browser-bootstrap.ts",
@@ -50,24 +52,31 @@ const forbiddenDependency = [
 
 const repositoryPath = (path: string): string => {
   const normalized = path.replaceAll("\\", "/");
+
   const absolute = Bun.fileURLToPath(new URL(normalized, `file://${serverRoot}/`)).replaceAll(
     "\\",
     "/"
   );
+
   const root = absolute.startsWith(`${serverRoot}/`) ? serverRoot : workspaceRoot;
+
   return absolute.startsWith(`${root}/`) ? absolute.slice(root.length + 1) : normalized;
 };
 
 const outdir = `/tmp/fidy-browser-client-${process.pid}`;
+
 const removeOutput = (): void => {
   const result = Bun.spawnSync(["rm", "-rf", outdir], { stderr: "pipe" });
+
   if (result.exitCode !== 0) {
     throw new Error(new TextDecoder().decode(result.stderr));
   }
 };
 
 removeOutput();
+
 const mkdir = Bun.spawnSync(["mkdir", "-p", outdir], { stderr: "pipe" });
+
 if (mkdir.exitCode !== 0) {
   throw new Error(new TextDecoder().decode(mkdir.stderr));
 }
@@ -87,11 +96,13 @@ try {
 
   const metafile = decodeBuildMetafile(result.metafile);
   const inputs = Object.keys(metafile.inputs).map(repositoryPath);
+
   const unexpectedInput = inputs.filter(
     (input) =>
       !safeSource.some((pattern) => pattern.test(input)) &&
       !safeDependency.some((pattern) => pattern.test(input))
   );
+
   const forbidden = inputs.filter((input) =>
     forbiddenDependency.some((pattern) => pattern.test(input))
   );
@@ -105,6 +116,7 @@ try {
         ? `Forbidden dependencies in ${entrypoints.join(", ")}:\n${forbidden.map((path) => `  - ${path}`).join("\n")}`
         : undefined,
     ].filter((section): section is string => section !== undefined);
+
     throw new Error(
       `${sections.join("\n")}\nThe browser client seam may derive from admitted declarations, not server implementations.`
     );

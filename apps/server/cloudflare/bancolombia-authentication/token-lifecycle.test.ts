@@ -1,7 +1,7 @@
 import { Digest, SecureRandom } from "effect/crypto";
 import * as assert from "node:assert/strict";
 import { expect, it } from "@effect/vitest";
-import { Cause, Context, DateTime, Effect, Exit, Layer, Redacted, Schema } from "effect";
+import { Cause, Context, DateTime, Effect, Exit, Layer, Predicate, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
 import { exportJWK, exportPKCS8, generateKeyPair, jwtVerify } from "jose";
@@ -10,7 +10,9 @@ import { BancolombiaAuthenticationFailed } from "./contract";
 import { verifyBancolombiaSandboxTokenLifecycle } from "./operations";
 
 const issuer = "https://auth1-api-open-finance-sandbox.ambientesbc.com";
+
 const as = "https://as1-api-open-finance-sandbox.ambientesbc.com";
+
 const clientId = "10000000-0000-4000-8000-000000000001";
 
 type Scenario =
@@ -22,6 +24,7 @@ type Scenario =
   | "still-active"
   | "foreign-client"
   | "endpoint-drift";
+
 const discoveryResponse = (scenario: Scenario): Response =>
   Response.json({
     issuer,
@@ -38,15 +41,18 @@ const discoveryResponse = (scenario: Scenario): Response =>
       introspection_endpoint: `${as}/introspection`,
     },
   });
+
 const verifiedForm = Effect.fn(function* (
   request: HttpClientRequest.HttpClientRequest,
   key: CryptoKey,
   assertions: Set<string>
 ) {
-  if (request.body._tag !== "Uint8Array") throw new Error("Expected form");
+  assert.ok(Predicate.isTagged(request.body, "Uint8Array"), "Expected form");
   const form = new URLSearchParams(new TextDecoder().decode(request.body.body));
   const assertion = form.get("client_assertion");
+
   if (assertion === null) throw new Error("Missing assertion");
+
   const verified = yield* Effect.tryPromise(() =>
     jwtVerify(assertion, key, {
       issuer: clientId,
@@ -56,39 +62,50 @@ const verifiedForm = Effect.fn(function* (
       currentDate: DateTime.toDateUtc(DateTime.makeUnsafe(0)),
     })
   );
+
   if (verified.payload.jti === undefined) throw new Error("Missing assertion identity");
   expect(assertions.has(verified.payload.jti)).toBe(false);
   assertions.add(verified.payload.jti);
   expect(request.headers.authorization).toBeUndefined();
+
   return form;
 });
+
 const introspectionResponse = (scenario: Scenario, revoked: boolean): Response => {
   if (scenario === "unauthorized-inspection") return new Response(null, { status: 401 });
+
   return Response.json({
     active: scenario === "inactive-before" ? false : scenario === "still-active" || !revoked,
     client_id: scenario === "foreign-client" ? "other-client" : clientId,
   });
 };
+
 const lifecycle = Effect.fn(function* (scenario: Scenario) {
   const services = yield* Layer.build(TestCrypto);
   const secureRandom = Context.get(services, SecureRandom.SecureRandom);
   const digest = Context.get(services, Digest.Digest);
   const key = yield* Effect.tryPromise(() => generateKeyPair("RS256", { extractable: true }));
+
   const publicKey = {
     ...(yield* Effect.tryPromise(() => exportJWK(key.publicKey))),
     kid: "test",
     alg: "RS256",
   };
+
   const assertions = new Set<string>();
   const requests: string[] = [];
   let revoked = false;
+
   const httpClient = HttpClient.make((request) =>
     Effect.gen(function* () {
       requests.push(request.url);
+
       if (request.method === "GET") {
         return HttpClientResponse.fromWeb(request, discoveryResponse(scenario));
       }
+
       const form = yield* verifiedForm(request, key.publicKey, assertions).pipe(Effect.orDie);
+
       if (request.url === `${as}/token`) {
         return HttpClientResponse.fromWeb(
           request,
@@ -100,21 +117,28 @@ const lifecycle = Effect.fn(function* (scenario: Scenario) {
           })
         );
       }
+
       expect(form.get("token")).toBe("synthetic-lifecycle-token");
       expect(form.get("token_type_hint")).toBe("access_token");
       expect(form.get("grant_type")).toBeNull();
+
       if (request.url === `${as}/token/revoke`) {
         revoked = true;
+
         if (scenario === "expired-during") yield* TestClock.adjust("2 seconds");
+
         return HttpClientResponse.fromWeb(
           request,
           new Response(null, { status: scenario === "revocation-rejected" ? 400 : 200 })
         );
       }
+
       expect(request.url).toBe(`${as}/introspection`);
+
       return HttpClientResponse.fromWeb(request, introspectionResponse(scenario, revoked));
     })
   );
+
   const result = yield* verifyBancolombiaSandboxTokenLifecycle({
     secureRandom,
     digest,
@@ -123,6 +147,7 @@ const lifecycle = Effect.fn(function* (scenario: Scenario) {
     privateKey: Redacted.make(yield* Effect.tryPromise(() => exportPKCS8(key.privateKey))),
     httpClient,
   }).pipe(Effect.exit);
+
   return { result, requests };
 });
 
@@ -173,8 +198,8 @@ it.effect.each([
       expect(requests.filter((url) => url === `${as}/token/revoke`)).toHaveLength(
         scenario === "endpoint-drift" ? 0 : 1
       );
-      if (scenario === "endpoint-drift") {
-        expect(requests).toEqual([`${issuer}/.well-known/openid-configuration`]);
-      }
+
+      const discoveryOnly = [`${issuer}/.well-known/openid-configuration`];
+      expect(scenario === "endpoint-drift" ? requests : discoveryOnly).toEqual(discoveryOnly);
     })
 );

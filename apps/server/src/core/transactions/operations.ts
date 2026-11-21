@@ -51,6 +51,7 @@ export const orderTransactionPair = (
   if (input.firstTransactionId === input.secondTransactionId) {
     return Effect.fail(new SameTransactionPair({ transactionId: input.firstTransactionId }));
   }
+
   return Effect.succeed(
     input.firstTransactionId.localeCompare(input.secondTransactionId) < 0
       ? input
@@ -80,17 +81,22 @@ export const decideTransactionLink = Effect.fn(function* (
   if (first.money.currency !== second.money.currency) {
     return yield* new IneligibleTransactionPair({ reason: "different-currency" });
   }
+
   if (!Equal.equals(first.money.amount, second.money.amount)) {
     return yield* new IneligibleTransactionPair({ reason: "different-amount" });
   }
+
   if (first.direction !== second.direction) {
     return yield* new IneligibleTransactionPair({ reason: "incompatible-direction" });
   }
+
   const pair = yield* orderTransactionPair({
     firstTransactionId: first.id,
     secondTransactionId: second.id,
   });
+
   const visibleMember = selectVisibleMember(first, second);
+
   return {
     pair,
     visibleTransactionId: visibleMember.id,

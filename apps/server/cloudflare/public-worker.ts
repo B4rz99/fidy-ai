@@ -102,11 +102,15 @@ const apiSecurityHeaders = {
 
 const resolveBrowserOrigin = (configuredOrigin: string): Option.Option<string> => {
   if (configuredOrigin === browserOrigins.local) return Option.some(browserOrigins.local);
+
   if (configuredOrigin === browserOrigins.acceptance) return Option.some(browserOrigins.acceptance);
+
   if (configuredOrigin === browserOrigins.nativeAcceptance) {
     return Option.some(browserOrigins.nativeAcceptance);
   }
+
   if (configuredOrigin === browserOrigins.production) return Option.some(browserOrigins.production);
+
   return Option.none();
 };
 
@@ -115,6 +119,7 @@ const appendVary = (headers: Headers, field: string): void => {
     .split(",")
     .map((value) => value.trim())
     .filter((value) => value.length > 0);
+
   if (!fields.some((value) => value.toLowerCase() === field.toLowerCase())) fields.push(field);
   headers.set("vary", fields.join(", "));
 };
@@ -125,6 +130,7 @@ const applyApiPolicy = (
   origin: Option.Option<string>
 ): Response => {
   const headers = new Headers(response.headers);
+
   for (const [name, value] of Object.entries(apiSecurityHeaders)) headers.set(name, value);
   appendVary(headers, "Origin");
   headers.set(
@@ -160,6 +166,7 @@ const forbiddenOrigin = (): Response =>
   Response.json({ status: "forbidden_origin" }, { status: 403 });
 
 const serviceUnavailableStatus = 503;
+
 const unavailable = (): Response =>
   Response.json({ status: "unavailable" }, { status: serviceUnavailableStatus });
 
@@ -169,13 +176,16 @@ const smokeUnavailable = (
   stage: SmokeFailureStage
 ): Response => {
   const response = unavailable();
+
   if (
     new URL(request.url).pathname !== smokePath ||
     !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })
   ) {
     return response;
   }
+
   response.headers.set(smokeFailureHeader, stage);
+
   return response;
 };
 
@@ -197,11 +207,14 @@ const preflightResponse = (request: Request, browserOrigin: string): Response =>
   const requestedMethod = Option.fromNullishOr(
     request.headers.get("access-control-request-method")
   );
+
   const requestedHeaders = Option.fromNullishOr(
     request.headers.get("access-control-request-headers")
   );
+
   const path = new URL(request.url).pathname;
   const methods = allowedMethods(path);
+
   if (
     !Option.exists(requestedMethod, (method) => methods.includes(method)) ||
     !isAllowedPreflightHeaders(requestedHeaders)
@@ -217,6 +230,7 @@ const preflightResponse = (request: Request, browserOrigin: string): Response =>
     "access-control-allow-methods": methods.join(", "),
     "access-control-max-age": "600",
   });
+
   return applyApiPolicy(
     new Response(null, { headers, status: 204 }),
     browserOrigin,
@@ -229,44 +243,61 @@ const categoryAuthorizationFailure = (
   environment: PublicEnvironment
 ): Option.Option<Response> => {
   if (new URL(request.url).pathname !== listCategoriesPath) return Option.none();
+
   if (
     request.headers.has("cookie") &&
     request.headers.get("origin") === environment.BROWSER_ORIGIN
   ) {
     return Option.none();
   }
+
   if (request.headers.get("authorization")?.startsWith("Bearer ") === true) {
     return Option.none();
   }
+
   return Option.some(unauthenticated());
 };
 
 const callbackPath = "/providers/kapso/callback";
+
 const wompiBillingEventPath = "/providers/wompi/billing-events";
+
 const pairingPaths = ["/web/pairings", "/web/pairings/redeem", "/web/session/logout"] as const;
+
 const userPath = "/user";
+
 const hostedBrowserPaths = new Set<string>([
   "/web/hosted-turns",
   "/web/hosted-turns/delivery",
   "/web/hosted-turns/progress",
 ]);
+
 const enrollmentPath = (path: string): boolean => Option.isSome(paymentEnrollmentTransport(path));
+
 const rotateRecoveryPath = "/recovery/backup-code/rotate";
+
 const replacementPaths = [
   emailReplacementOperations.request.path,
   emailReplacementOperations.complete.path,
 ] as const;
+
 const sampleReviewPath = "/internal/sample-review";
+
 const erasureSupportPath = "/internal/titular-erasure";
+
 const supportRecoveryPath = "/internal/support-recovery";
+
 const refundMethods = (path: string): ReadonlyArray<string> =>
   path === refundSupportBasePath ? ["POST"] : ["GET"];
+
 const refundSupportPath = (path: string): boolean =>
   path === refundSupportBasePath || refundSupportReadPath.test(path);
+
 const emailAuthenticationPaths = [
   "/web/email/authentication/start",
   "/web/email/authentication/complete",
 ] as const;
+
 const postPaths = new Set<string>([
   callbackPath,
   wompiBillingEventPath,
@@ -290,6 +321,7 @@ const postPaths = new Set<string>([
   smokePath,
   ...hostedBrowserPaths,
 ]);
+
 const browserMutationPaths = new Set<string>([
   rotateRecoveryPath,
   ...replacementPaths,
@@ -304,11 +336,13 @@ const browserMutationPaths = new Set<string>([
   statementStagingPath,
   ...hostedBrowserPaths,
 ]);
+
 const sessionPaths = new Set<string>([
   userPath,
   browserSessionBindingPath,
   ...browserMutationPaths,
 ]);
+
 const preflightPaths = new Set<string>([
   browserSessionBindingPath,
   providerPaths.disclosure,
@@ -316,6 +350,7 @@ const preflightPaths = new Set<string>([
   userPath,
   ...browserMutationPaths,
 ]);
+
 const ownedPaths = new Set<string>([
   connectionCallbackPath,
   browserSessionBindingPath,
@@ -327,11 +362,14 @@ const ownedPaths = new Set<string>([
   userPath,
   ...postPaths,
 ]);
+
 const oauthPath = (path: string): boolean =>
   Object.values(oauthPaths).some((owned) => owned === path);
+
 const dedicatedBrowserPath = (path: string): boolean =>
   Option.isSome(connectionBrowserTransport(path)) ||
   Option.isSome(processingConsentTransport(path));
+
 const ownedPath = (path: string): boolean =>
   dedicatedBrowserPath(path) ||
   oauthPath(path) ||
@@ -341,8 +379,10 @@ const ownedPath = (path: string): boolean =>
   transactionPath(path) ||
   patRoute(path) ||
   canonicalRoute(path);
+
 const oauthMethods = (path: string): ReadonlyArray<string> => {
   if (path === oauthPaths.mcp) return ["GET", "POST"];
+
   return [
     oauthPaths.register,
     oauthPaths.token,
@@ -354,37 +394,53 @@ const oauthMethods = (path: string): ReadonlyArray<string> => {
     ? ["POST"]
     : ["GET"];
 };
+
 const specialMethods = (path: string): Option.Option<ReadonlyArray<string>> => {
   const browserTransport = connectionBrowserTransport(path).pipe(
     Option.orElse(() => processingConsentTransport(path))
   );
+
   if (Option.isSome(browserTransport)) return Option.some([browserTransport.value.method]);
+
   if (oauthPath(path)) return Option.some(oauthMethods(path));
+
   if (refundSupportPath(path)) return Option.some(refundMethods(path));
+
   return paymentEnrollmentTransport(path).pipe(Option.map((transport) => [transport.method]));
 };
+
 const allowedMethods = (path: string): ReadonlyArray<string> => {
   const special = specialMethods(path);
+
   if (Option.isSome(special)) return special.value;
+
   if (transactionPath(path)) return transactionMethods(path);
+
   if (patRoute(path)) return patMethods(path);
+
   if (path === smokePath) return ["GET", "POST"];
+
   if (ownedPaths.has(path)) return [postPaths.has(path) ? "POST" : "GET"];
+
   return canonicalMethods(path);
 };
+
 const callbackHeaders = (request: Request): Headers =>
   new Headers([
     ["x-webhook-signature", request.headers.get("x-webhook-signature") ?? ""],
     ["x-webhook-event", request.headers.get("x-webhook-event") ?? ""],
     ["x-idempotency-key", request.headers.get("x-idempotency-key") ?? ""],
   ]);
+
 const wompiEventHeaders = (request: Request): Headers =>
   new Headers({
     "content-type": request.headers.get("content-type") ?? "",
     "x-event-checksum": request.headers.get("x-event-checksum") ?? "",
   });
+
 const providerHeaders = (request: Request, path: string): Headers =>
   path === callbackPath ? callbackHeaders(request) : wompiEventHeaders(request);
+
 const cookieForwardPaths = new Set<string>([
   "/web/session/logout",
   rotateRecoveryPath,
@@ -394,6 +450,7 @@ const cookieForwardPaths = new Set<string>([
 
 const browserHeaders = (request: Request, path: string): Headers => {
   const headers = new Headers({ "content-type": request.headers.get("content-type") ?? "" });
+
   if (
     cookieForwardPaths.has(path) ||
     replacementPaths.some((owned) => owned === path) ||
@@ -401,13 +458,16 @@ const browserHeaders = (request: Request, path: string): Headers => {
   ) {
     headers.set("cookie", request.headers.get("cookie") ?? "");
   }
+
   return headers;
 };
+
 const supportHeaders = (request: Request): Headers =>
   new Headers({
     "content-type": request.headers.get("content-type") ?? "",
     "cf-access-jwt-assertion": request.headers.get("cf-access-jwt-assertion") ?? "",
   });
+
 const forwardsSession = (request: Request, path: string): boolean =>
   path === browserSessionBindingPath ||
   path === userPath ||
@@ -418,6 +478,7 @@ const forwardsSession = (request: Request, path: string): boolean =>
 
 const credentialPath = (path: string): boolean =>
   path === userPath || transactionPath(path) || memoryPath(path);
+
 const credentialBearerHeaders = (request: Request, path: string): Option.Option<Headers> =>
   credentialPath(path) && !request.headers.has("cookie") && request.headers.has("authorization")
     ? Option.some(
@@ -427,14 +488,18 @@ const credentialBearerHeaders = (request: Request, path: string): Option.Option<
         })
       )
     : Option.none();
+
 const directHeaders = (request: Request, path: string): Option.Option<Headers> => {
   if (patDirectRoute(path)) {
     return Option.some(new Headers({ "content-type": request.headers.get("content-type") ?? "" }));
   }
+
   if (patBrowserRoute(path)) return Option.some(browserHeaders(request, path));
+
   if (path === callbackPath || path === wompiBillingEventPath) {
     return Option.some(providerHeaders(request, path));
   }
+
   if (
     [
       supportRecoveryPath,
@@ -447,6 +512,7 @@ const directHeaders = (request: Request, path: string): Option.Option<Headers> =
   ) {
     return Option.some(supportHeaders(request));
   }
+
   return Option.none();
 };
 
@@ -456,23 +522,31 @@ const fallbackHeaders = (request: Request, path: string): Headers => {
       cookie: request.headers.get("cookie") ?? "",
       "content-type": request.headers.get("content-type") ?? "",
     });
+
     if (path === browserSessionBindingPath) {
       headers.set("origin", request.headers.get("origin") ?? "");
       const binding = request.headers.get(browserSessionBindingHeader);
+
       if (binding !== null) headers.set(browserSessionBindingHeader, binding);
     }
+
     return headers;
   }
+
   const headers = new Headers(request.headers);
   headers.delete(smokeProofHeader);
+
   return headers;
 };
+
 const oauthHeaders = (request: Request, path: string): Headers => {
   const headers = new Headers({ "content-type": request.headers.get("content-type") ?? "" });
+
   if (oauthBrowserPath(path)) {
     headers.set("origin", request.headers.get("origin") ?? "");
     headers.set("cookie", request.headers.get("cookie") ?? "");
   }
+
   if (path === oauthPaths.mcp) {
     for (const name of [
       "authorization",
@@ -484,18 +558,23 @@ const oauthHeaders = (request: Request, path: string): Headers => {
       "mcp-name",
     ]) {
       const value = request.headers.get(name);
+
       if (value !== null) headers.set(name, value);
     }
   }
+
   return headers;
 };
+
 const specialForwardedHeaders = (request: Request, path: string): Option.Option<Headers> => {
   if (path === connectionCallbackPath) {
     return Option.some(new Headers({ cookie: request.headers.get("cookie") ?? "" }));
   }
+
   const browserTransport = connectionBrowserTransport(path).pipe(
     Option.orElse(() => processingConsentTransport(path))
   );
+
   if (Option.isSome(browserTransport)) {
     return Option.some(
       new Headers(
@@ -506,7 +585,9 @@ const specialForwardedHeaders = (request: Request, path: string): Option.Option<
       )
     );
   }
+
   if (oauthPath(path)) return Option.some(oauthHeaders(request, path));
+
   return paymentEnrollmentTransport(path).pipe(
     Option.map(
       (transport) =>
@@ -516,9 +597,12 @@ const specialForwardedHeaders = (request: Request, path: string): Option.Option<
     )
   );
 };
+
 const forwardedHeaders = (request: Request, path: string): Headers => {
   const special = specialForwardedHeaders(request, path);
+
   if (Option.isSome(special)) return special.value;
+
   if (path === smokePath) {
     return new Headers({
       [smokeProofHeader]: request.headers.get(smokeProofHeader) ?? "",
@@ -526,13 +610,19 @@ const forwardedHeaders = (request: Request, path: string): Headers => {
       "content-type": "application/json",
     });
   }
+
   const direct = directHeaders(request, path);
+
   if (Option.isSome(direct)) return direct.value;
   const bearerHeaders = credentialBearerHeaders(request, path);
+
   if (Option.isSome(bearerHeaders)) return bearerHeaders.value;
+
   if (isBrowserMutation(path)) return browserHeaders(request, path);
+
   return fallbackHeaders(request, path);
 };
+
 const canonicalAdmissionHeaders = (
   request: Request,
   environment: PublicEnvironment,
@@ -540,10 +630,13 @@ const canonicalAdmissionHeaders = (
 ): Effect.Effect<void, void> =>
   Effect.gen(function* () {
     headers.delete("x-canonical-source");
+
     if (!canonicalRoute(new URL(request.url).pathname)) return;
+
     if (request.headers.has("fidy-retry-key")) {
       headers.set("Fidy-Retry-Key", request.headers.get("fidy-retry-key") ?? "");
     }
+
     if (!request.headers.has("authorization")) return;
     headers.set(
       "x-canonical-source",
@@ -554,6 +647,7 @@ const canonicalAdmissionHeaders = (
       })
     );
   });
+
 const preservesCoreQuery = (path: string): boolean =>
   path === browserSessionBindingPath ||
   path === connectionCallbackPath ||
@@ -563,22 +657,28 @@ const preservesCoreQuery = (path: string): boolean =>
   dedicatedBrowserPath(path) ||
   path === providerPaths.callback ||
   path === microsoftProviderPaths.callback;
+
 const forwardCandidateVersionOverride = (
   request: Request,
   environment: PublicEnvironment,
   headers: Headers
 ): void => {
   headers.delete(smokeVersionHeader);
+
   const operatorRoute =
     new URL(request.url).pathname === erasureSupportPath &&
     request.method === "POST" &&
     (request.headers.get("cf-access-jwt-assertion") ?? "") !== "";
+
   if (!operatorRoute && !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) {
     return;
   }
+
   const override = request.headers.get(smokeVersionHeader);
+
   if (override !== null) headers.set(smokeVersionHeader, override);
 };
+
 const needsProviderSource = (path: string): boolean =>
   [
     "/web/pairings",
@@ -586,6 +686,7 @@ const needsProviderSource = (path: string): boolean =>
     ...Object.values(providerPaths),
     ...Object.values(microsoftProviderPaths),
   ].some((owned) => owned === path);
+
 const coreRequest = (
   request: Request,
   environment: PublicEnvironment
@@ -594,10 +695,12 @@ const coreRequest = (
     const path = new URL(request.url).pathname;
     const headers = forwardedHeaders(request, path);
     const binding = request.headers.get(browserSessionBindingHeader);
+
     if (binding !== null) headers.set(browserSessionBindingHeader, binding);
     forwardCandidateVersionOverride(request, environment, headers);
     yield* canonicalAdmissionHeaders(request, environment, headers);
     headers.delete("x-provider-source");
+
     if (needsProviderSource(path)) {
       headers.set(
         "x-provider-source",
@@ -608,6 +711,7 @@ const coreRequest = (
         })
       );
     }
+
     if (path === "/pat-pairings" || oauthPath(path)) {
       headers.set(
         oauthPath(path) ? "x-oauth-source" : "x-pat-source",
@@ -618,6 +722,7 @@ const coreRequest = (
         })
       );
     }
+
     if (oauthPath(path)) {
       return new Request(`https://core.internal${path}${new URL(request.url).search}`, {
         redirect: "manual",
@@ -628,6 +733,7 @@ const coreRequest = (
         duplex: "half",
       });
     }
+
     return new Request(
       new Request(
         `https://core.internal${path}${preservesCoreQuery(path) ? new URL(request.url).search : ""}`,
@@ -645,6 +751,7 @@ const hasPreflight = (path: string): boolean =>
   transactionPath(path) ||
   patRoute(path) ||
   canonicalRoute(path);
+
 const isBrowserMutation = (path: string): boolean => browserMutationPaths.has(path);
 
 const isPreflight = (request: Request, path: string, origin: Option.Option<string>): boolean =>
@@ -663,17 +770,20 @@ const disallowedSupportOrigin = (path: string, origin: Option.Option<string>): b
 
 const isAllowedMethod = (request: Request, path: string): boolean =>
   allowedMethods(path).includes(request.method);
+
 const atomicBatchPath = (path: string): boolean =>
   Option.exists(
     canonicalOperation({ method: "POST", path }),
     (operation) => operation.id === atomicBatchOperation
   );
+
 const cookieAdmittedPath = (path: string): boolean =>
   transactionPath(path) ||
   atomicBatchPath(path) ||
   memoryPath(path) ||
   path === listCategoriesPath ||
   keywordRulePath(path);
+
 const oauthBrowserPath = (path: string): boolean =>
   [
     oauthPaths.review,
@@ -683,8 +793,10 @@ const oauthBrowserPath = (path: string): boolean =>
     oauthPaths.revoke,
     oauthPaths.revokeAll,
   ].some((owned) => owned === path);
+
 const bearerUserRead = (request: Request, path: string): boolean =>
   path === userPath && request.headers.has("authorization") && !request.headers.has("cookie");
+
 const requiresBrowserOrigin = (request: Request, path: string): boolean =>
   dedicatedBrowserPath(path) ||
   oauthBrowserPath(path) ||
@@ -709,15 +821,20 @@ const mixedConsentCredentials = (request: Request, path: string): boolean =>
 
 const rejectsMcpIngress = (request: Request, browserOrigin: string): boolean => {
   const url = new URL(request.url);
+
   if (url.pathname !== oauthPaths.mcp) return false;
+
   if (request.headers.has("origin")) return true;
   let apiOrigin = `https://${productionTopology.ingress.hostname}`;
+
   if (browserOrigin === browserOrigins.local) {
     apiOrigin = `http://127.0.0.1:${productionTopology.ingress.localPort}`;
   } else if (browserOrigin === browserOrigins.acceptance) {
     apiOrigin = "https://127.0.0.1:4174";
   }
+
   const host = request.headers.get("host");
+
   return url.origin !== apiOrigin || (host !== null && host.toLowerCase() !== url.host);
 };
 
@@ -727,33 +844,41 @@ const rejectedBrowserProof = (
   origin: Option.Option<string>
 ): boolean => {
   const path = new URL(request.url).pathname;
+
   return (
     mixedConsentCredentials(request, path) ||
     (requiresBrowserOrigin(request, path) && !Option.contains(origin, environment.BROWSER_ORIGIN))
   );
 };
+
 const gateOwnedRequest = (
   request: Request,
   environment: PublicEnvironment,
   origin: Option.Option<string>
 ): Option.Option<Response> => {
   const path = new URL(request.url).pathname;
+
   const policy = (response: Response): Option.Option<Response> =>
     Option.some(applyApiPolicy(response, environment.BROWSER_ORIGIN, origin));
+
   if (!ownedPath(path)) {
     return policy(Response.json({}, { status: 404 }));
   }
+
   if (rejectsSmokeIngress(request, origin, environment)) {
     return policy(Response.json({}, { status: 404 }));
   }
+
   if (disallowedSupportOrigin(path, origin)) {
     return Option.some(
       applyApiPolicy(forbiddenOrigin(), environment.BROWSER_ORIGIN, Option.none())
     );
   }
+
   if (isPreflight(request, path, origin)) {
     return Option.some(preflightResponse(request, environment.BROWSER_ORIGIN));
   }
+
   if (!isAllowedMethod(request, path)) {
     return policy(
       Response.json(
@@ -767,9 +892,11 @@ const gateOwnedRequest = (
       )
     );
   }
+
   if (rejectedBrowserProof(request, environment, origin)) {
     return policy(forbiddenOrigin());
   }
+
   return Option.map(categoryAuthorizationFailure(request, environment), (response) =>
     applyApiPolicy(response, environment.BROWSER_ORIGIN, origin)
   );
@@ -783,23 +910,29 @@ const coreSmokeFailure = (
   const stage = Schema.decodeUnknownOption(SmokeFailureStage)(
     response.headers.get(smokeFailureHeader)
   );
+
   const unavailableResponse = smokeUnavailable(
     request,
     environment,
     Option.getOrElse(stage, () => "core_response")
   );
+
   const equality = Schema.decodeUnknownOption(SmokeIdentityEquality)(
     response.headers.get(smokeIdentityHeader)
   );
+
   if (Option.contains(stage, "identity") && Option.isSome(equality)) {
     unavailableResponse.headers.set(smokeIdentityHeader, equality.value);
   }
+
   const version = Schema.decodeUnknownOption(SmokeIdentity.fields.workerVersionId)(
     response.headers.get(smokeCoreVersionHeader)
   );
+
   if (Option.contains(stage, "identity") && Option.isSome(version)) {
     unavailableResponse.headers.set(smokeCoreVersionHeader, version.value);
   }
+
   return unavailableResponse;
 };
 
@@ -810,20 +943,26 @@ const projectCoreSmokeResponse = (
 ): Effect.Effect<Response, Cause.UnknownError> =>
   Effect.gen(function* () {
     if (new URL(request.url).pathname !== smokePath) return response;
+
     if (response.status === serviceUnavailableStatus) {
       return coreSmokeFailure(request, environment, response);
     }
+
     if (!response.ok) return response;
     const version = environment.CF_VERSION_METADATA?.id;
+
     if (version === undefined || environment.CONTRACT_DIGEST === undefined) {
       return smokeUnavailable(request, environment, "configuration");
     }
+
     const decoded = yield* Effect.tryPromise(() =>
       response.json().then(Schema.decodeUnknownOption(SmokeResponse))
     );
+
     if (Option.isNone(decoded)) {
       return smokeUnavailable(request, environment, "public_response");
     }
+
     return Response.json(
       {
         ...decoded.value,
@@ -851,10 +990,12 @@ const bindCoreAcceptance = Effect.fn(function* (
 ) {
   forwarded.headers.delete(acceptanceProofHeader);
   forwarded.headers.delete(acceptanceApiHeader);
+
   if (Option.isSome(deadline)) {
     const pair = Object.values(installedOrigins).find(
       (item) => item.browser === environment.BROWSER_ORIGIN
     );
+
     if (pair !== undefined) forwarded.headers.set(acceptanceApiHeader, pair.api);
     forwarded.headers.set(
       acceptanceProofHeader,
@@ -867,11 +1008,13 @@ const bindCoreAcceptance = Effect.fn(function* (
     );
   }
 });
+
 type OwnedRouting = {
   origin: Option.Option<string>;
   telemetry: TelemetryService;
   deadline: Option.Option<number>;
 };
+
 const routeOwnedRequest = (
   request: Request,
   environment: PublicEnvironment,
@@ -880,6 +1023,7 @@ const routeOwnedRequest = (
   if (hasMixedQueryCredentials(request)) {
     return Effect.succeed(applyApiPolicy(unauthenticated(), environment.BROWSER_ORIGIN, origin));
   }
+
   if (rejectsMcpIngress(request, environment.BROWSER_ORIGIN)) {
     return Effect.succeed(
       applyApiPolicy(
@@ -889,23 +1033,29 @@ const routeOwnedRequest = (
       )
     );
   }
+
   const rejection = gateOwnedRequest(request, environment, origin);
+
   if (Option.isSome(rejection)) {
     return Effect.succeed(rejection.value);
   }
+
   return Effect.gen(function* () {
     const forwarded = yield* coreRequest(request, environment);
     yield* bindCoreAcceptance(forwarded, environment, deadline);
     forwarded.headers.delete(workerInternalTraceHeader);
     const trace = yield* telemetry.captureDurableContext;
+
     if (Option.isSome(trace)) {
       forwarded.headers.set(workerInternalTraceHeader, encodeTraceParent(trace.value));
     }
+
     const response = yield* Effect.tryPromise({
       try: (signal) =>
         environment.CORE.fetch(forwarded, { signal: AbortSignal.any([request.signal, signal]) }),
       catch: () => undefined,
     });
+
     return yield* projectCoreSmokeResponse(response, request, environment);
   }).pipe(
     Effect.match({
@@ -938,9 +1088,11 @@ const annotateSmokeVersion = (
 ): Response => {
   if (!smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) return response;
   const version = environment.CF_VERSION_METADATA?.id;
+
   if (version === undefined) return response;
   const headers = new Headers(response.headers);
   headers.set("x-fidy-smoke-worker-version", version);
+
   return new Response(response.body, { status: response.status, headers });
 };
 
@@ -958,8 +1110,10 @@ const forwardStorageProbe = Effect.fn(function* (request: Request, environment: 
   ) {
     return new Response(null, { status: 404 });
   }
+
   const admitted = new Headers({ [smokeProofHeader]: environment.SMOKE_PROOF ?? "" });
   forwardCandidateVersionOverride(request, environment, admitted);
+
   const result = yield* Effect.tryPromise(() =>
     environment.CORE.fetch(request.url, {
       method: request.method,
@@ -967,11 +1121,13 @@ const forwardStorageProbe = Effect.fn(function* (request: Request, environment: 
       signal: request.signal,
     })
   ).pipe(Effect.orElseSucceed(() => new Response(null, { status: 503 })));
+
   const headers = new Headers({
     "cache-control": "no-store",
     "content-type": "application/json",
     "x-fidy-smoke-worker-version": environment.CF_VERSION_METADATA?.id ?? "",
   });
+
   return new Response(result.body, { status: result.status, headers });
 });
 
@@ -991,20 +1147,27 @@ const forwardPerformanceEvidence = Effect.fn(function* (
   ) {
     return new Response(null, { status: 404 });
   }
+
   const headers = new Headers();
+
   for (const name of ["origin", "cookie", "fidy-session-binding", "content-type"]) {
     headers.set(name, request.headers.get(name) ?? "");
   }
+
   const url = new URL(request.url);
+
   const forwarded = new Request("https://core.internal" + url.pathname + url.search, {
     method: "POST",
     headers,
     body: request.body,
     signal: request.signal,
   });
+
   yield* bindCoreAcceptance(forwarded, environment, deadline);
+
   return yield* Effect.tryPromise(() => environment.CORE.fetch(forwarded));
 });
+
 const privateForward = (
   request: Request,
   environment: PublicEnvironment,
@@ -1015,11 +1178,13 @@ const privateForward = (
         Effect.orElseSucceed(() => new Response(null, { status: 503 }))
       )
     : forwardStorageProbe(request, environment);
+
 const privateReleaseRequest = (request: Request): boolean =>
   isStorageProbe(request) ||
   isAcceptanceWindow(request) ||
   isAcceptanceReceipt(request) ||
   isPerformanceEvidence(request);
+
 const fetchEffect = (
   request: Request,
   environment: PublicEnvironment,
@@ -1028,6 +1193,7 @@ const fetchEffect = (
   Effect.gen(function* () {
     if (request.signal.aborted) return yield* Effect.interrupt;
     const browserOrigin = resolveBrowserOrigin(environment.BROWSER_ORIGIN);
+
     if (Option.isNone(browserOrigin)) {
       return applyApiPolicy(
         smokeUnavailable(request, environment, "configuration"),
@@ -1035,25 +1201,35 @@ const fetchEffect = (
         Option.none()
       );
     }
+
     const origin = Option.fromNullishOr(request.headers.get("origin"));
+
     if (Option.exists(origin, (value) => value !== browserOrigin.value)) {
       return applyApiPolicy(forbiddenOrigin(), browserOrigin.value, origin);
     }
+
     const admitted = yield* releaseAdmission(request, environment, "ingress");
+
     if (Option.isSome(admitted.denial)) {
       return applyApiPolicy(admitted.denial.value, browserOrigin.value, origin);
     }
+
     if (privateReleaseRequest(request)) {
       return yield* privateForward(request, environment, admitted.deadline);
     }
+
     const distributionResponse = yield* cliDistributionResponse(request);
+
     if (Option.isSome(distributionResponse)) {
       return applyApiPolicy(distributionResponse.value, browserOrigin.value, origin);
     }
+
     const sandboxResponse = bancolombiaSandboxResponse(request);
+
     if (Option.isSome(sandboxResponse)) {
       return applyApiPolicy(sandboxResponse.value, browserOrigin.value, origin);
     }
+
     return yield* routeOwnedRequest(
       request,
       { ...environment, BROWSER_ORIGIN: browserOrigin.value },
@@ -1086,7 +1262,9 @@ export const makePublicWorker = (telemetry: TelemetryService): PublicWorker => (
           Effect.map(telemetry.captureDurableContext, (trace) => {
             const headers = new Headers(response.headers);
             headers.delete(telemetryTraceHeader);
+
             if (Option.isSome(trace)) headers.set(telemetryTraceHeader, trace.value.traceId);
+
             return new Response(response.body, {
               status: response.status,
               statusText: response.statusText,

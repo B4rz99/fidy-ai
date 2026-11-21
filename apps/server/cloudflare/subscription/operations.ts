@@ -34,6 +34,7 @@ export const cancelLocalSubscription = Effect.fnUntraced(function* (
   input: Parameters<typeof retainCancellation>[0]
 ) {
   const result = yield* retainCancellation(input);
+
   if (Option.isNone(result)) {
     const absent: LocalMutationResult = {
       status: 404,
@@ -43,14 +44,18 @@ export const cancelLocalSubscription = Effect.fnUntraced(function* (
         next: [],
       },
     };
+
     return absent;
   }
+
   const data = yield* Schema.encodeEffect(SubscriptionCancellation)(result.value);
+
   const completed: LocalMutationResult = {
     status: 200,
     outcome: "success",
     body: { data, next: [] },
   };
+
   return completed;
 });
 
@@ -71,28 +76,36 @@ export const readLocalSubscriptionOffers = Effect.fnUntraced(function* (
   const response = yield* Effect.tryPromise(() =>
     pricing.getByName(pricingName).fetch("https://pricing.internal/offers")
   );
+
   if (!response.ok) {
     return yield* new CanonicalAdmissionUnavailable({ cause: "pricing_unavailable" });
   }
+
   return yield* Effect.tryPromise(() => response.json()).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(SubscriptionOffers)),
     Effect.flatMap(Schema.encodeEffect(SubscriptionOffers))
   );
 });
+
 export const readLocalSubscriptionStatus = Effect.fn(function* (
   user: Parameters<typeof getSubscriptionStatus>[0]
 ) {
   const { data } = yield* getSubscriptionStatus(user).pipe(
     Effect.provideService(SqlClient.SqlClient, yield* SqliteClient)
   );
+
   return yield* Schema.encodeEffect(Schema.toCodecJson(SubscriptionStatus))(data);
 });
+
 export const subscriptionReadResult = (data: Schema.Json): LocalMutationResult => ({
   status: 200,
   outcome: "success",
   body: { data, next: [] },
 });
-export const upgradeLocation = (origin: string): { url: string } => ({
+
+type UpgradeLocation = Readonly<{ url: string }>;
+
+export const upgradeLocation = (origin: string): UpgradeLocation => ({
   url: new URL("/upgrade", origin).href,
 });
 
@@ -105,22 +118,27 @@ export const observeLocalSubscription = Effect.fn(
     env: { PRICING: DurableObjectNamespace; BROWSER_ORIGIN: string }
   ) {
     const selection = unit.operation.id;
+
     const offers =
       selection === "subscription.listSubscriptionOffers"
         ? Option.some(yield* readLocalSubscriptionOffers(env.PRICING))
         : Option.none();
+
     return yield* runLocalMutation({
       ...unit,
       input: Effect.succeedSome(true),
       work: Effect.fn(function* (_, user) {
         if (Option.isSome(offers)) return subscriptionReadResult(offers.value);
+
         if (selection === "subscription.getUpgradeUrl") {
           return subscriptionReadResult(upgradeLocation(env.BROWSER_ORIGIN));
         }
+
         return subscriptionReadResult(yield* readLocalSubscriptionStatus(user));
       }),
     });
   },
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
 

@@ -1,5 +1,7 @@
+import type { Data } from "effect";
 import { expectTypeOf } from "vitest";
 import type {
+  AuditActor,
   AuditAuthority,
   AuditQueryCall,
   AuthorizedAuditCall,
@@ -10,7 +12,12 @@ type PublicationCall<Operation extends string> = Omit<
   OwnerAuditCall,
   "caller" | "operation" | "outcome"
 > &
-  Readonly<{ caller: { _tag: "Publication" }; operation: Operation; outcome: "success" }>;
+  Readonly<{
+    caller: Data.TaggedEnum.Value<AuditActor, "Publication">;
+    operation: Operation;
+    outcome: "success";
+  }>;
+
 type CredentialCall<
   Table extends AuditAuthority["table"],
   Operation extends string,
@@ -21,6 +28,7 @@ type CredentialCall<
     operation: Operation;
     outcome: Outcome;
   }>;
+
 type QueryCall<Operation extends string> = Omit<AuditQueryCall, "operation"> &
   Readonly<{ operation: Operation }>;
 

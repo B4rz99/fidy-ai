@@ -1,9 +1,17 @@
 import { webAuthenticationEndpoints } from "../../src/shell/web-authentication/contract";
-import { Cause, Effect, Option } from "effect";
+import { Cause, Data, Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import { supportRecoveryPath } from "../recovery/contract";
 import { patRoute } from "../tokens/operations";
-import type { TelemetryService } from "../../src/shell/observability/contract";
+import type {
+  ClassifiedFailure,
+  SpanDescriptor,
+  TelemetryService,
+} from "../../src/shell/observability/contract";
+
+const SpanMetadata = Data.taggedEnum<SpanDescriptor["metadata"]>();
+
+const ClassifiedFailureCase = Data.taggedEnum<ClassifiedFailure>();
 
 export const ownsWebAuthenticationPath = (path: string): boolean =>
   path === supportRecoveryPath ||
@@ -18,6 +26,7 @@ const unavailable = (): Response =>
       headers: { "cache-control": "no-store", "content-type": "application/json; charset=utf-8" },
     }
   );
+
 const methodNotAllowed = (): Response =>
   Response.json(
     { status: "method_not_allowed" },
@@ -41,6 +50,7 @@ export const supportResponse = ({
   telemetry: TelemetryService;
 }>): Effect.Effect<Response, never, HttpClient.HttpClient> => {
   if (request.method !== "POST") return Effect.succeed(methodNotAllowed());
+
   return telemetry.rootSpan(
     {
       component: "api",
@@ -48,18 +58,23 @@ export const supportResponse = ({
       trigger: "api",
       spanOperation: "http.server",
       workKind: "http_request",
-      metadata: { _tag: "Http", method: "POST", route: supportRecoveryPath, status: Option.none() },
+      metadata: SpanMetadata.Http({
+        method: "POST",
+        route: supportRecoveryPath,
+        status: Option.none(),
+      }),
     },
     support.pipe(
       Effect.catchCauseIf(Cause.hasDies, () =>
         telemetry
-          .captureFailure({
-            _tag: "Defect",
-            component: "api",
-            operation: "http.supportRecovery",
-            error: "unexpected_defect",
-            cause: undefined,
-          })
+          .captureFailure(
+            ClassifiedFailureCase.Defect({
+              component: "api",
+              operation: "http.supportRecovery",
+              error: "unexpected_defect",
+              cause: undefined,
+            })
+          )
           .pipe(Effect.as(unavailable()))
       )
     )

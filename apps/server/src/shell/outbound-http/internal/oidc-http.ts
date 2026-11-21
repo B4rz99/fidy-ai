@@ -1,9 +1,13 @@
 import { Effect, Redacted } from "effect";
 import { FetchHttpClient, HttpBody, type HttpClient, HttpClientRequest } from "effect/http";
-import { makeProviderTransport } from "./transport";
-import type { ProviderOidcHttpService } from "~/shell/outbound-http/contract";
+import { providerTransport } from "./transport";
+import {
+  ProviderOidcHttpRequest,
+  type ProviderOidcHttpService,
+} from "~/shell/outbound-http/contract";
 
 const maximumResponseBytes = 32768;
+
 const oidcDestinations = {
   google: {
     keys: "https://www.googleapis.com/oauth2/v3/certs",
@@ -24,26 +28,27 @@ export const oidcHttp = (
     httpClient: HttpClient.HttpClient;
   }>
 ): ProviderOidcHttpService => {
-  const http = makeProviderTransport(input.provider)(input.httpClient);
+  const http = providerTransport(input.provider)(input.httpClient);
   const destinations = oidcDestinations[input.provider];
+
   return {
     execute: (request) => {
-      const prepared =
-        request._tag === "SigningKeys"
-          ? HttpClientRequest.get(destinations.keys)
-          : HttpClientRequest.post(destinations.token, {
-              body: HttpBody.text(
-                new URLSearchParams({
-                  grant_type: "authorization_code",
-                  client_id: input.clientId,
-                  client_secret: Redacted.value(input.clientSecret),
-                  redirect_uri: input.redirectUri,
-                  code: Redacted.value(request.code),
-                  code_verifier: Redacted.value(request.verifier),
-                }).toString(),
-                "application/x-www-form-urlencoded"
-              ),
-            });
+      const prepared = ProviderOidcHttpRequest.$is("SigningKeys")(request)
+        ? HttpClientRequest.get(destinations.keys)
+        : HttpClientRequest.post(destinations.token, {
+            body: HttpBody.text(
+              new URLSearchParams({
+                grant_type: "authorization_code",
+                client_id: input.clientId,
+                client_secret: Redacted.value(input.clientSecret),
+                redirect_uri: input.redirectUri,
+                code: Redacted.value(request.code),
+                code_verifier: Redacted.value(request.verifier),
+              }).toString(),
+              "application/x-www-form-urlencoded"
+            ),
+          });
+
       return http
         .execute(prepared, maximumResponseBytes)
         .pipe(

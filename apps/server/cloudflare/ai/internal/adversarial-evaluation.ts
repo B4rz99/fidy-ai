@@ -1,5 +1,15 @@
 import { newId } from "../../secret-material/operations";
-import { Cause, Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
+import {
+  Cause,
+  Clock,
+  DateTime,
+  Effect,
+  Exit,
+  Layer,
+  ManagedRuntime,
+  Option,
+  Schema,
+} from "effect";
 import {
   type HostedInferenceError,
   type HostedInferenceService,
@@ -21,14 +31,18 @@ const Configuration = Schema.Struct({
   EVALUATION_MODE: Schema.Literals(["dry-run", "live"]),
   HOSTED_AI_MODEL: Schema.Literal(approvedOpenAiModel),
 });
+
 const statuses = { ok: 200, unavailable: 503, unauthorized: 401, conflict: 409 } as const;
+
 const response = (value: unknown, status: number = statuses.ok): Response =>
   Response.json(value, {
     status,
     headers: { "cache-control": "no-store", "content-type": "application/json" },
   });
+
 const authorized = (request: Request, environment: EvaluationEnvironment): boolean => {
   const url = new URL(request.url);
+
   return (
     !request.headers.has("origin") &&
     request.headers.get("authorization") === `Bearer ${environment.EVALUATION_TOKEN}` &&
@@ -36,6 +50,7 @@ const authorized = (request: Request, environment: EvaluationEnvironment): boole
     url.search === ""
   );
 };
+
 type Metadata = Readonly<{
   instanceId: string;
   commit: string;
@@ -55,6 +70,7 @@ type Metadata = Readonly<{
   containment: string;
   semanticGrade: string;
 }>;
+
 const metadataFor = (environment: EvaluationEnvironment, instanceId: string): Metadata => ({
   instanceId,
   commit: environment.EVALUATION_COMMIT,
@@ -74,8 +90,11 @@ const metadataFor = (environment: EvaluationEnvironment, instanceId: string): Me
   containment: "not_exercised_no_tool_executor",
   semanticGrade: "manual_review_required",
 });
+
+const evaluationRuntime = ManagedRuntime.make(Layer.empty);
+
 const manifest = (metadata: Metadata): Promise<Response> =>
-  Effect.runPromise(
+  evaluationRuntime.runPromise(
     evidenceHash(Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(adversarialCorpus)).pipe(
       Effect.map((corpusSha256) =>
         response({
@@ -92,11 +111,13 @@ const manifest = (metadata: Metadata): Promise<Response> =>
       )
     )
   );
+
 const failureCategory = (cause: Cause.Cause<HostedInferenceError>): string =>
   Option.match(Cause.findErrorOption(cause), {
     onNone: () => "ExecutionInterrupted",
     onSome: (failure) => failure.reason._tag,
   });
+
 const visibleResult = ({
   text,
   toolCalls,
@@ -119,6 +140,7 @@ type CaseInput = Readonly<{
   entry: (typeof adversarialCorpus)[number];
   makeInference: MakeInference;
 }>;
+
 const executeCase = ({
   environment,
   budget,
@@ -130,9 +152,12 @@ const executeCase = ({
       model: Option.some(environment.HOSTED_AI_MODEL),
       run: Option.some(budget.run),
     });
+
     const prepared = yield* inference.prepareText(entry.input);
+
     return yield* prepared.execute;
   });
+
 const caseResponse = (
   input: Readonly<{
     metadata: Metadata;
@@ -144,6 +169,7 @@ const caseResponse = (
   }>
 ): Response => {
   const { metadata, index, entry, budget, recordedAt, result } = input;
+
   return response(
     {
       ...metadata,
@@ -170,6 +196,7 @@ type RunState = {
   identity: Option.Option<string>;
   instanceId: Option.Option<string>;
 };
+
 const fetchEvaluation = (
   state: RunState,
   request: Request,
@@ -178,13 +205,17 @@ const fetchEvaluation = (
   if (Option.isNone(Schema.decodeUnknownOption(Configuration)(environment))) {
     return Promise.resolve(response({ outcome: "configuration_refused" }, statuses.unavailable));
   }
+
   if (!authorized(request, environment)) {
     return Promise.resolve(response({ outcome: "unauthorized" }, statuses.unauthorized));
   }
+
   const identity = `${environment.EVALUATION_COMMIT}:${environment.EVALUATION_MODE}:${environment.EVALUATION_TOKEN}`;
+
   if (Option.isSome(state.identity) && state.identity.value !== identity) {
     return Promise.resolve(response({ outcome: "configuration_changed" }, statuses.conflict));
   }
+
   state.identity = Option.some(identity);
   const budget = Option.getOrElse(state.session, () => state.makeBudget(environment));
   state.session = Option.some(budget);
@@ -192,9 +223,11 @@ const fetchEvaluation = (
   state.instanceId = Option.some(instanceId);
   const metadata = metadataFor(environment, instanceId);
   const path = new URL(request.url).pathname;
+
   if (request.method === "GET" && path === "/manifest") {
     return manifest(metadata);
   }
+
   return evaluate(state, request, { environment, metadata, budget });
 };
 
@@ -208,32 +241,41 @@ const evaluate = (
   }>
 ): Promise<Response> => {
   const { environment, metadata, budget } = input;
+
   if (
     request.method !== "POST" ||
     new URL(request.url).pathname !== `/evaluate/${state.nextIndex}`
   ) {
     return Promise.resolve(response({ outcome: "sequence_refused" }, statuses.conflict));
   }
+
   if (state.busy || state.stopped || state.nextIndex >= evaluationLimits.providerCalls) {
     return Promise.resolve(response({ outcome: "run_closed" }, statuses.conflict));
   }
+
   const index = state.nextIndex++;
   const entry = adversarialCorpus[Math.floor(index / repetitions)];
+
   if (entry === undefined) {
     return Promise.resolve(response({ outcome: "case_absent" }, statuses.conflict));
   }
+
   state.busy = true;
+
   return Effect.gen(function* () {
     const recordedAt = DateTime.formatIso(DateTime.makeUnsafe(yield* Clock.currentTimeMillis));
+
     const result = yield* Effect.exit(
       executeCase({ environment, budget, entry, makeInference: state.makeInference })
     );
+
     return { recordedAt, result };
   }).pipe(
     Effect.map(({ recordedAt, result }) => {
       if (Exit.isFailure(result)) {
         state.stopped = true;
       }
+
       return caseResponse({ metadata, index, entry, budget, recordedAt, result });
     }),
     Effect.onInterrupt(() =>
@@ -246,7 +288,7 @@ const evaluate = (
         state.busy = false;
       })
     ),
-    (work) => Effect.runPromise(work, { signal: request.signal })
+    (work) => evaluationRuntime.runPromise(work, { signal: request.signal })
   );
 };
 
@@ -257,6 +299,7 @@ const fetchWithoutBody = (
 ): Promise<Response> => {
   if (request.body === null) return fetchEvaluation(state, request, environment);
   const reader = request.body.getReader();
+
   return reader
     .read()
     .then((chunk) =>
@@ -270,15 +313,17 @@ const fetchWithoutBody = (
     );
 };
 
-export const makeEvaluationHandler = ({
+type EvaluationHandler = Readonly<{
+  fetch: (request: Request, environment: EvaluationEnvironment) => Promise<Response>;
+}>;
+
+export const evaluationHandler = ({
   makeInference,
   makeBudget,
 }: Readonly<{
   makeInference: MakeInference;
   makeBudget: (environment: EvaluationEnvironment) => EvaluationBudget;
-}>): {
-  fetch: (request: Request, environment: EvaluationEnvironment) => Promise<Response>;
-} => {
+}>): EvaluationHandler => {
   const state: RunState = {
     makeInference,
     makeBudget,
@@ -289,5 +334,6 @@ export const makeEvaluationHandler = ({
     identity: Option.none(),
     instanceId: Option.none(),
   };
+
   return { fetch: (request, environment) => fetchWithoutBody(state, request, environment) };
 };

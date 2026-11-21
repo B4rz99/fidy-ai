@@ -1,5 +1,5 @@
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
-import type { ErasureProjection } from "../../erasure-store/contract";
+import { type ErasureProjection, ErasureQuiescence } from "../../erasure-store/contract";
 
 export const projections: ReadonlyArray<ErasureProjection> = [
   {
@@ -13,7 +13,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       "whatsapp_provider_handoffs",
       "whatsapp_signup_invitations",
     ],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM browser_login_pairings r WHERE r.user_id=? OR r.approval_user_id=? OR r.erasure_user_id=?",

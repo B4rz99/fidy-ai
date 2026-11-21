@@ -18,6 +18,7 @@ export const nativePendingWork = Effect.fn(function* (flags: {
   category: boolean;
 }) {
   const sql = yield* SqliteClient;
+
   const rows = yield* Schema.decodeUnknownEffect(Schema.Array(job))(
     yield* sql`SELECT * FROM (
     SELECT * FROM (SELECT observation_kind AS kind,user_id,id,created_ms AS created,deadline_ms AS deadline FROM reminder_deliveries WHERE ${Number(flags.category)}=1 AND observation_kind='proactivity-delivery' AND terminal_receipt=0 AND state IN('ready','claimed') ORDER BY created_ms,id LIMIT ${proactivityObservationLimit})
@@ -25,13 +26,16 @@ export const nativePendingWork = Effect.fn(function* (flags: {
     UNION ALL SELECT * FROM (SELECT 'weekly-question',user_id,id,created_ms,expires_ms FROM reminder_disclosures WHERE ${Number(flags.weekly)}=1 AND kind='weekly-summary' AND terminal_receipt=0 AND state IN('ready','claimed') ORDER BY created_ms,id LIMIT ${proactivityObservationLimit})
   ) ORDER BY created,id LIMIT ${proactivityObservationLimit}`
   );
+
   return yield* Effect.forEach(rows, (row) =>
     Effect.gen(function* () {
       const userId = row.user_id;
+
       const work =
         row.kind === "weekly-summary"
           ? { version: 1 as const, kind: row.kind, userId, insightEventId: row.id }
           : { version: 1 as const, kind: row.kind, userId, id: row.id };
+
       return {
         id: yield* proactivityWorkflowId(work),
         created: row.created,

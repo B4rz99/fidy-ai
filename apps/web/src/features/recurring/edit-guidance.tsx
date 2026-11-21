@@ -23,6 +23,7 @@ export const EditScope = ({
 }>): JSX.Element => {
   const dates = preservedDates({ document, planId: item.planId, from: item.date });
   const restored = restoredDates({ document, planId: item.planId, from: item.date });
+
   return (
     <section aria-label="Alcance del cambio" className="my-4 grid gap-2 text-sm" aria-live="polite">
       {scope === "once" ? (
@@ -76,16 +77,21 @@ const SelectedScope = ({
   if (item.status === "skipped") {
     return <p>Esta fecha seguirá omitida. Para incluirla, usa Volver a incluir.</p>;
   }
+
   if (!preservesOccurrence({ document, item })) {
     return <UnprotectedScope item={item} document={document} />;
   }
+
   const adjusted = document.exceptions.some(
     (entry) =>
       entry.planId === item.planId && entry.date === item.date && entry.replacement !== undefined
   );
+
   const tracked = hasOccurrenceTracking({ document, item });
+
   const expectation =
     item.plan.money === undefined ? "un importe por confirmar" : money(item.plan.money);
+
   return (
     <p>
       Esta fecha conserva {expectation}
@@ -109,6 +115,7 @@ const UnprotectedScope = ({
       </p>
     );
   }
+
   return (
     <p>
       Esta fecha no tiene ajustes ni seguimiento protegidos. Su expectativa seguirá el calendario

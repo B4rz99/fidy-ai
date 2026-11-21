@@ -4,6 +4,7 @@ import { Schema } from "effect";
 import { ReleaseMetadata } from "../../scripts/release-metadata";
 
 const REQUIRED_PATHS = new Set(["_headers", "deployment-metadata.json", "index.html"]);
+
 const ASSET_SUFFIXES = new Set([
   ".avif",
   ".css",
@@ -20,8 +21,11 @@ const ASSET_SUFFIXES = new Set([
   ".woff",
   ".woff2",
 ]);
+
 const CONTENT_HASHED_ASSET = /^assets\/.+-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$/u;
+
 const SHELL_ASSET_REFERENCE = /(?:href|src)=["']\/(assets\/[^"'?#]+)(?:[?#][^"']*)?["']/gu;
+
 const FORBIDDEN_CONTENT = [
   "BEGIN PRIVATE KEY",
   "CLOUDFLARE_API_TOKEN",
@@ -50,8 +54,9 @@ const allowedPath = (path: string): boolean =>
 
 const validatePath = (path: string): void => {
   const parts = path.toLowerCase().split("/");
-  const serverShaped = parts.some((part) => part.includes("server") || part.includes("worker"));
-  if (!allowedPath(path) || path.endsWith(".map") || serverShaped) {
+  const serverNamed = parts.some((part) => part.includes("server") || part.includes("worker"));
+
+  if (!allowedPath(path) || path.endsWith(".map") || serverNamed) {
     throw new Error(`forbidden production artifact path: ${path}`);
   }
 };
@@ -59,14 +64,18 @@ const validatePath = (path: string): void => {
 const artifactPaths = (directory: string): Promise<readonly string[]> =>
   readdir(directory, { recursive: true, withFileTypes: true }).then((entries) => {
     const paths: Array<string> = [];
+
     for (const entry of entries) {
       if (entry.isDirectory()) continue;
       const path = relative(directory, join(entry.parentPath, entry.name));
+
       if (!entry.isFile()) {
         throw new Error(`forbidden production artifact path: ${path}`);
       }
+
       paths.push(path);
     }
+
     return paths.sort();
   });
 
@@ -77,6 +86,7 @@ const validateContents = (directory: string, path: string): Promise<void> =>
       if (FORBIDDEN_CONTENT.some((marker) => contents.includes(marker))) {
         throw new Error(`forbidden server or Secret material in production artifact: ${path}`);
       }
+
       if (contents.toLowerCase().includes("sourcemappingurl=")) {
         throw new Error(`forbidden source-map material in production artifact: ${path}`);
       }
@@ -86,6 +96,7 @@ export const validateProductionArtifact = (request: ProductionArtifactRequest): 
   artifactPaths(request.directory).then((paths) => {
     const pathSet = new Set(paths);
     const missing = [...REQUIRED_PATHS].filter((path) => !pathSet.has(path));
+
     if (missing.length > 0) {
       throw new Error(`production artifact is missing required files: ${missing.join(", ")}`);
     }
@@ -93,16 +104,20 @@ export const validateProductionArtifact = (request: ProductionArtifactRequest): 
     paths.forEach(validatePath);
     const assetPaths = paths.filter((path) => path.startsWith("assets/"));
     const unhashedAsset = assetPaths.find((path) => !CONTENT_HASHED_ASSET.test(path));
+
     if (unhashedAsset !== undefined) {
       throw new Error(`production artifact asset is not content-hashed: ${unhashedAsset}`);
     }
+
     return Bun.file(`${request.directory}/index.html`)
       .text()
       .then((shell) => {
         const shellAssets = Array.from(shell.matchAll(SHELL_ASSET_REFERENCE), (match) => match[1]);
+
         const missingShellAsset = shellAssets.find(
           (path) => path === undefined || !pathSet.has(path)
         );
+
         if (shellAssets.length === 0 || missingShellAsset !== undefined) {
           throw new Error(
             `production artifact shell references a missing hashed asset${
@@ -110,11 +125,13 @@ export const validateProductionArtifact = (request: ProductionArtifactRequest): 
             }`
           );
         }
+
         return Promise.all(paths.map((path) => validateContents(request.directory, path)));
       })
       .then(() => Bun.file(`${request.directory}/deployment-metadata.json`).json())
       .then((value) => {
         const metadata = Schema.decodeUnknownSync(ReleaseMetadata)(value);
+
         if (
           metadata.gitRevision !== request.expectedSha ||
           metadata.contractDigest !== request.expectedDigest

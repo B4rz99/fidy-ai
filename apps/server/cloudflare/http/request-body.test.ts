@@ -2,7 +2,7 @@ import { deepStrictEqual } from "node:assert";
 import { it } from "@effect/vitest";
 import { Cause, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
-import { expect } from "vitest";
+import { assert, expect } from "vitest";
 import {
   RequestBodyCapacityExceeded,
   RequestBodyDeadlineExceeded,
@@ -28,10 +28,12 @@ it.each(["held", "throws", "rejects"])(
     const cancelled = Promise.withResolvers<void>();
     const cancelSettled = Promise.withResolvers<void>();
     let cancelStarted = false;
+
     const stream = new ReadableStream<Uint8Array>(
       {
         pull(controller): Promise<void> {
           ready.resolve();
+
           return released.promise.then(() => {
             if (!cancelStarted) controller.close();
           });
@@ -39,22 +41,28 @@ it.each(["held", "throws", "rejects"])(
         cancel(): Promise<void> {
           cancelStarted = true;
           cancelled.resolve();
+
           if (cleanup === "throws") throw new Error("private cleanup detail");
+
           if (cleanup === "rejects") return Promise.reject(new Error("private cleanup detail"));
+
           return cancelSettled.promise;
         },
       },
       { highWaterMark: 0 }
     );
+
     const request = new Request("https://api.fidyapp.com/canonical", {
       method: "POST",
       body: stream,
       signal: requestAbort.signal,
     });
+
     return Effect.runPromise(
       Effect.gen(function* () {
         const run = Effect.runPromiseExitWith(yield* Effect.context<never>());
         let decision = false;
+
         const pending = run(
           readBoundedRequestBody(request, requestBodyPolicy).pipe(
             Effect.tap(() =>
@@ -65,17 +73,20 @@ it.each(["held", "throws", "rejects"])(
           ),
           { signal: ownerAbort.signal }
         );
+
         yield* Effect.tryPromise(() => ready.promise);
         requestAbort.abort();
         yield* Effect.tryPromise(() => cancelled.promise).pipe(Effect.timeout("250 millis"));
         const exit = yield* Effect.tryPromise(() => pending);
         expect(Exit.isFailure(exit)).toBe(true);
+
         if (Exit.isFailure(exit)) {
           deepStrictEqual(
             exit,
             Exit.failCause(Cause.annotate(Cause.interrupt(), Cause.annotations(exit.cause)))
           );
         }
+
         expect(request.body?.locked).toBe(false);
         expect(decision).toBe(false);
       }).pipe(
@@ -98,6 +109,7 @@ it.effect(
     const released = Promise.withResolvers<void>();
     const cancelSettled = Promise.withResolvers<void>();
     let cancelled = false;
+
     const request = new Request("https://api.fidyapp.com/canonical", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -105,6 +117,7 @@ it.effect(
         {
           pull(controller): Promise<void> {
             ready.resolve();
+
             return released.promise.then(() => {
               if (!cancelled) {
                 controller.enqueue(new Uint8Array([49]));
@@ -114,18 +127,21 @@ it.effect(
           },
           cancel(): Promise<void> {
             cancelled = true;
+
             return cancelSettled.promise;
           },
         },
         { highWaterMark: 0 }
       ),
     });
+
     return Effect.gen(function* () {
       const fiber = yield* boundedJsonBody({
         request,
         policy: requestBodyPolicy,
         schema: Schema.Finite,
       }).pipe(Effect.exit, Effect.forkScoped);
+
       yield* Effect.tryPromise(() => ready.promise);
       yield* TestClock.adjust("1 second");
       deepStrictEqual(yield* Fiber.join(fiber), Exit.succeed(Option.none()));
@@ -156,11 +172,13 @@ it.effect.each([
       headers: { "content-type": "application/json" },
       body: new Uint8Array(bytes),
     });
+
     const exit = yield* boundedJsonBody({
       request,
       policy: requestBodyPolicy,
       schema: Schema.Finite,
     }).pipe(Effect.exit);
+
     deepStrictEqual(exit, Exit.succeed(expected));
     expect(request.body?.locked).toBe(false);
   })
@@ -177,6 +195,7 @@ it.effect.each([
   ({ contentType, accepted }) =>
     Effect.gen(function* () {
       let pulls = 0;
+
       const request = new Request("https://api.fidyapp.com/canonical", {
         method: "POST",
         headers: contentType === undefined ? {} : { "content-type": contentType },
@@ -191,11 +210,13 @@ it.effect.each([
           { highWaterMark: 0 }
         ),
       });
+
       const result = yield* boundedJsonBody({
         request,
         policy: requestBodyPolicy,
         schema: Schema.Finite,
       });
+
       deepStrictEqual(result, accepted ? Option.some(1) : Option.none());
       expect(pulls).toBe(accepted ? 1 : 0);
       expect(request.body?.locked).toBe(false);
@@ -203,7 +224,9 @@ it.effect.each([
 );
 
 const neverSettlingCancellation = Effect.runPromise(Effect.never);
+
 const decodeRequestBodyPolicy = Schema.decodeSync(RequestBodyPolicy);
+
 const requestBodyPolicy = decodeRequestBodyPolicy({
   deadlineMilliseconds: 1_000,
   maximumBytes: 4,
@@ -211,10 +234,12 @@ const requestBodyPolicy = decodeRequestBodyPolicy({
 
 it.effect("observes a request aborted before cancellation-listener registration", () => {
   const controller = new AbortController();
+
   return Effect.gen(function* () {
     const request = new Request("https://documents.internal/extract", {
       signal: controller.signal,
     });
+
     controller.abort();
     const failure = yield* awaitRequestAbort(request).pipe(Effect.flip);
     expect(failure.reason).toBe("cancelled");
@@ -224,6 +249,7 @@ it.effect("observes a request aborted before cancellation-listener registration"
 it.effect("bounds document collection without awaiting untrusted cancellation on overflow", () =>
   Effect.gen(function* () {
     let cancelled = false;
+
     const request = requestWithBody(
       new ReadableStream({
         start(controller): void {
@@ -231,10 +257,12 @@ it.effect("bounds document collection without awaiting untrusted cancellation on
         },
         cancel(): Promise<void> {
           cancelled = true;
+
           return neverSettlingCancellation;
         },
       })
     );
+
     const failure = yield* collectBoundedRequestBody(request, 4).pipe(Effect.flip);
     expect(failure.reason).toBe("resource-limit");
     expect(cancelled).toBe(true);
@@ -244,18 +272,22 @@ it.effect("bounds document collection without awaiting untrusted cancellation on
 
 it.effect("cancels document collection and unlocks its reader when a request aborts", () => {
   const controller = new AbortController();
+
   return Effect.gen(function* () {
     let cancelled = false;
+
     const request = new Request("https://documents.internal/extract", {
       method: "POST",
       signal: controller.signal,
       body: new ReadableStream({
         cancel(): Promise<void> {
           cancelled = true;
+
           return neverSettlingCancellation;
         },
       }),
     });
+
     const fiber = yield* collectBoundedRequestBody(request, 4).pipe(Effect.flip, Effect.forkScoped);
     yield* Effect.yieldNow;
     controller.abort();
@@ -296,6 +328,7 @@ it.effect("cancels request-body consumption at the first overflowing chunk", () 
     let cancelled = false;
     let pulls = 0;
     const chunks = [new Uint8Array([1, 2]), new Uint8Array([3, 4, 5]), new Uint8Array([6])];
+
     const request = requestWithBody(
       new ReadableStream({
         cancel(): void {
@@ -304,6 +337,7 @@ it.effect("cancels request-body consumption at the first overflowing chunk", () 
         pull(controller): void {
           const chunk = chunks.at(pulls);
           pulls += 1;
+
           if (chunk === undefined) controller.close();
           else controller.enqueue(chunk);
         },
@@ -322,31 +356,37 @@ it.effect("cancels request-body consumption at the first overflowing chunk", () 
 it.effect("deadlines and cancels a request body that never yields a chunk", () =>
   Effect.gen(function* () {
     let cancelled = false;
+
     const request = requestWithBody(
       new ReadableStream({
         cancel(): Promise<void> {
           cancelled = true;
+
           return neverSettlingCancellation;
         },
       })
     );
+
     let businessEffectRan = false;
+
     const fiber = yield* readBoundedRequestBody(request, requestBodyPolicy).pipe(
       Effect.tap(() => Effect.sync(() => (businessEffectRan = true))),
       Effect.exit,
       Effect.forkChild({ startImmediately: true })
     );
+
     yield* Effect.yieldNow;
 
     yield* TestClock.adjust("1 second");
     const exit = yield* Fiber.join(fiber);
 
     expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) {
-      expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toBeInstanceOf(
-        RequestBodyDeadlineExceeded
-      );
-    }
+
+    assert(Exit.isFailure(exit));
+    expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toBeInstanceOf(
+      RequestBodyDeadlineExceeded
+    );
+
     expect(cancelled).toBe(true);
     expect(request.body?.locked).toBe(false);
     expect(businessEffectRan).toBe(false);
@@ -356,6 +396,7 @@ it.effect("deadlines and cancels a request body that never yields a chunk", () =
 it.effect("deadlines and cancels a request body that stalls between chunks", () =>
   Effect.gen(function* () {
     let cancelled = false;
+
     const request = requestWithBody(
       new ReadableStream({
         cancel(): void {
@@ -366,21 +407,24 @@ it.effect("deadlines and cancels a request body that stalls between chunks", () 
         },
       })
     );
+
     const fiber = yield* readBoundedRequestBody(request, requestBodyPolicy).pipe(
       Effect.exit,
       Effect.forkChild({ startImmediately: true })
     );
+
     yield* Effect.yieldNow;
 
     yield* TestClock.adjust("1 second");
     const exit = yield* Fiber.join(fiber);
 
     expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) {
-      expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toBeInstanceOf(
-        RequestBodyDeadlineExceeded
-      );
-    }
+
+    assert(Exit.isFailure(exit));
+    expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toBeInstanceOf(
+      RequestBodyDeadlineExceeded
+    );
+
     expect(cancelled).toBe(true);
     expect(request.body?.locked).toBe(false);
   })

@@ -1,3 +1,4 @@
+import { browserRuntime } from "@/transport/browser-runtime";
 import { PendingRead } from "@/ui/components/pending-read";
 
 import {
@@ -6,7 +7,7 @@ import {
 } from "@/session/transaction-entry";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link, type LoaderFnContext, useRouter } from "@tanstack/react-router";
-import { Effect, Option } from "effect";
+import { Effect, Option, Predicate } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type JSX, useState } from "react";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
@@ -20,14 +21,15 @@ import {
   type TransactionSearch,
 } from "@/features/transactions/feature";
 import { preparationActive, prepareQuery } from "@/transport/query-preparation";
+import { reportBrowserDefect } from "@/transport/browser-defects";
 import type { WebRouterContext } from "./router-context";
 
-TransactionListFeature.preload().catch(() => undefined);
+TransactionListFeature.preload().catch(() => reportBrowserDefect("preparation_failed"));
 
 const currentConsent = <E,>(
   state: CanonicalQueryState<ProcessingConsentStatus, E>
 ): Option.Option<ProcessingConsentStatus> =>
-  state._tag === "Ready" && !state.waiting && Option.isNone(state.refreshFailure)
+  Predicate.isTagged(state, "Ready") && !state.waiting && Option.isNone(state.refreshFailure)
     ? Option.some(state.value)
     : Option.none();
 
@@ -36,10 +38,13 @@ export const TransactionsPage = (): JSX.Element => {
   const [query] = useState(() => transactionEntryConsent(client));
   const status = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
-  if (status._tag === "Failure" && sessionBinding === "none") {
+
+  if (Predicate.isTagged(status, "Failure") && sessionBinding === "none") {
     return <AccessRefused withdrawn={false} />;
   }
+
   const consent = currentConsent(status);
+
   if (Option.isSome(consent)) {
     if (consent.value.status === "Granted") {
       return (
@@ -49,11 +54,14 @@ export const TransactionsPage = (): JSX.Element => {
         </SignedInContent>
       );
     }
+
     if (consent.value.status === "Revoked") return <PrivacyTransactionFeature />;
   }
-  if (status._tag === "Initial") {
+
+  if (Predicate.isTagged(status, "Initial")) {
     return <PendingRead label="Cargando transacciones" />;
   }
+
   return (
     <main className="p-5">
       <p>No pudimos verificar tu acceso a las transacciones.</p>
@@ -83,7 +91,8 @@ TransactionsPage.prepareEntry = ({
   signal: AbortSignal;
 }>): Promise<Readonly<{ preparation: Promise<void> }> | void> => {
   if (preload || !preparationActive(signal)) return Promise.resolve();
-  return Effect.runPromise(
+
+  return browserRuntime.runPromise(
     Effect.gen(function* () {
       const consent = transactionEntryConsent(context.webAuthClient);
       const initial = consumeInitialTransactionConsent(context.registry);
@@ -97,11 +106,14 @@ TransactionsPage.prepareEntry = ({
           },
         })
       );
+
       if (!preparationActive(signal)) return;
       const status = context.registry.get(consent);
+
       if (AsyncResult.isSuccess(status) && status.value.status === "Revoked") {
         yield* Effect.tryPromise(() => PrivacyTransactionFeature.preload());
       }
+
       if (AsyncResult.isSuccess(status) && !status.waiting && status.value.status === "Granted") {
         return {
           preparation: TransactionsPage.preloadData({
@@ -110,9 +122,10 @@ TransactionsPage.prepareEntry = ({
             apiClient: context.apiClient,
             registry: context.registry,
             signal,
-          }).catch(() => undefined),
+          }).catch(() => reportBrowserDefect("preparation_failed")),
         };
       }
+
       return undefined;
     })
   );

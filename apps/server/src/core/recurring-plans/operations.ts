@@ -18,12 +18,18 @@ import {
 } from "./contract";
 
 const monthsPerYear = 12;
+
 const daysPerWeek = 7;
+
 const fortnight = 14;
+
 const halfYear = 6;
+
 const monthlyStep = { monthly: 1, quarterly: 3, "half-yearly": halfYear, yearly: monthsPerYear };
+
 const dateAt = (year: number, month: number, day: number): string =>
   DateTime.formatIsoDateUtc(DateTime.makeUnsafe({ year, month, day }));
+
 const lastDay = (year: number, month: number): number =>
   DateTime.toPartsUtc(
     DateTime.makeUnsafe({ year, month, day: 1 }).pipe(
@@ -31,16 +37,21 @@ const lastDay = (year: number, month: number): number =>
       DateTime.subtract({ days: 1 })
     )
   ).day;
+
 const monthDates = (plan: RecurringPlanInput, offset: number): ReadonlyArray<string> => {
   const anchor = DateTime.toPartsUtc(DateTime.makeUnsafe(plan.firstDate));
+
   const target = DateTime.toPartsUtc(
     DateTime.makeUnsafe({ year: anchor.year, month: anchor.month, day: 1 }).pipe(
       DateTime.add({ months: offset })
     )
   );
+
   const end = lastDay(target.year, target.month);
+
   const days =
     plan.frequency === "twice-monthly" ? (plan.monthDays ?? [anchor.day, "last"]) : [anchor.day];
+
   return [
     ...new Set(
       days.map((day) =>
@@ -49,6 +60,7 @@ const monthDates = (plan: RecurringPlanInput, offset: number): ReadonlyArray<str
     ),
   ].sort();
 };
+
 const monthlyDates = ({
   plan,
   from,
@@ -67,11 +79,14 @@ const monthlyDates = ({
   const start = DateTime.toPartsUtc(DateTime.makeUnsafe(from));
   const elapsed = (start.year - first.year) * monthsPerYear + start.month - first.month;
   const initialOffset = Math.max(0, Math.ceil(elapsed / step) * step);
+
   for (let offset = initialOffset; offset <= months; offset += step) {
     dates.push(...monthDates(plan, offset));
   }
+
   return dates.filter((date) => date >= plan.firstDate && date >= from && date <= through);
 };
+
 export const projectDates = ({
   plan,
   from,
@@ -82,6 +97,7 @@ export const projectDates = ({
   through: string;
 }>): ReadonlyArray<string> => {
   const end = plan.endDate !== undefined && plan.endDate < through ? plan.endDate : through;
+
   if (plan.frequency !== "weekly" && plan.frequency !== "fortnightly") {
     return monthlyDates({
       plan,
@@ -90,8 +106,10 @@ export const projectDates = ({
       step: plan.frequency === "twice-monthly" ? 1 : monthlyStep[plan.frequency],
     });
   }
+
   const step = plan.frequency === "weekly" ? daysPerWeek : fortnight;
   const dates: string[] = [];
+
   for (
     let date = firstWeeklyDate(plan.firstDate, from, step);
     date <= end;
@@ -99,14 +117,17 @@ export const projectDates = ({
   ) {
     dates.push(date);
   }
+
   return dates;
 };
 
 const firstWeeklyDate = (anchor: string, from: string, step: number): string => {
   const first = DateTime.makeUnsafe(anchor);
+
   const elapsed =
     (DateTime.toEpochMillis(DateTime.makeUnsafe(from)) - DateTime.toEpochMillis(first)) /
     millisecondsPerDay;
+
   return DateTime.formatIsoDateUtc(
     DateTime.add(first, { days: Math.max(0, Math.ceil(elapsed / step) * step) })
   );
@@ -117,8 +138,10 @@ export const planAt = ({
   date,
 }: Readonly<{ plan: RecurringPlan; date: string }>): RecurringPlanInput => {
   const revision = plan.revisions.findLast((entry) => entry.from <= date) ?? plan.revisions[0];
+
   return revision.plan;
 };
+
 export const observeRecurringPlan = ({
   document,
   planId,
@@ -137,15 +160,16 @@ export const observeRecurringPlan = ({
   InvalidRecurringEdit
 > =>
   Effect.gen(function* () {
-    yield* Schema.decodeEffect(RecurringDate)(date).pipe(
-      Effect.mapError(() =>
-        InvalidRecurringEdit.make({ message: "Expected a valid local calendar date" })
-      )
-    );
+    if (!Schema.is(RecurringDate)(date)) {
+      return yield* InvalidRecurringEdit.make({ message: "Expected a valid local calendar date" });
+    }
+
     const plan = document.plans.find((entry) => entry.id === planId);
+
     if (plan === undefined) return Option.none();
     const settings = planAt({ plan, date });
     let status: "scheduled" | "active" | "paused" | "stopped" = "active";
+
     if (plan.stoppedOn !== undefined && date >= plan.stoppedOn) status = "stopped";
     else if (
       plan.pauses.some(
@@ -154,13 +178,16 @@ export const observeRecurringPlan = ({
     ) {
       status = "paused";
     } else if (date < settings.firstDate) status = "scheduled";
+
     return Option.some({ plan: settings, status });
   });
+
 const trackedOn = ({ plan, date }: Readonly<{ plan: RecurringPlan; date: string }>): boolean =>
   (plan.stoppedOn === undefined || date < plan.stoppedOn) &&
   !plan.pauses.some(
     (pause) => date >= pause.from && (pause.through === undefined || date < pause.through)
   );
+
 const occurrenceAt = ({
   document,
   plan,
@@ -175,26 +202,30 @@ const occurrenceAt = ({
   const exception = document.exceptions.find(
     (entry) => entry.planId === plan.id && entry.date === date
   );
+
   const input = exception?.replacement ?? planAt({ plan, date });
+
   const fulfillments = document.fulfillments.filter(
     (entry) => entry.planId === plan.id && entry.date === date
   );
+
   const amount = fulfillments.reduce(
     (sum: ReadonlyMoney["amount"], entry) => BigDecimal.sum(sum, entry.money.amount),
     BigDecimal.make(0n, 0)
   );
+
   const completed = { amount, currency: input.currency };
   const settled = isSettled({ fulfillments, plan: input, amount: completed });
   const remaining = remainingMoney({ plan: input, settled, completed });
   const expectedDate = exception?.replacement?.firstDate ?? date;
-  return {
+
+  const occurrence = {
     planId: plan.id,
     date,
     expectedDate,
     plan: input,
     completed,
     fulfillments,
-    ...remaining,
     status: occurrenceStatus({
       skipped: exception?.skipped === true,
       settled,
@@ -203,7 +234,13 @@ const occurrenceAt = ({
       today: today(input),
     }),
   };
+
+  return Option.match(remaining, {
+    onNone: () => occurrence,
+    onSome: (money) => ({ ...occurrence, remaining: money }),
+  });
 };
+
 const isSettled = ({
   fulfillments,
   plan,
@@ -214,30 +251,34 @@ const isSettled = ({
   amount: ReadonlyMoney;
 }>): boolean => {
   if (fulfillments.some((entry) => entry.settled)) return true;
+
   return (
     plan.amountMode === "fixed" &&
     plan.money !== undefined &&
     BigDecimal.Order(amount.amount, plan.money.amount) >= 0
   );
 };
+
 const remainingMoney = ({
   plan,
   settled,
   completed,
-}: Readonly<{ plan: RecurringPlanInput; settled: boolean; completed: ReadonlyMoney }>): Partial<
-  Readonly<{ remaining: ReadonlyMoney }>
-> => {
-  if (plan.money === undefined) return {};
+}: Readonly<{
+  plan: RecurringPlanInput;
+  settled: boolean;
+  completed: ReadonlyMoney;
+}>): Option.Option<ReadonlyMoney> => {
+  if (plan.money === undefined) return Option.none();
   const zero = BigDecimal.make(0n, 0);
-  return {
-    remaining: {
-      currency: plan.currency,
-      amount: settled
-        ? zero
-        : BigDecimal.max(zero, BigDecimal.subtract(plan.money.amount, completed.amount)),
-    },
-  };
+
+  return Option.some({
+    currency: plan.currency,
+    amount: settled
+      ? zero
+      : BigDecimal.max(zero, BigDecimal.subtract(plan.money.amount, completed.amount)),
+  });
 };
+
 const occurrenceStatus = ({
   skipped,
   settled,
@@ -252,10 +293,14 @@ const occurrenceStatus = ({
   today: string;
 }>): RecurringOccurrence["status"] => {
   if (skipped) return "skipped";
+
   if (settled) return "completed";
+
   if (!BigDecimal.isZero(amount.amount)) return "partial";
+
   return expectedDate < today ? "unconfirmed" : "upcoming";
 };
+
 const generatedDates = (
   plan: RecurringPlan,
   from: string,
@@ -268,9 +313,11 @@ const generatedDates = (
       through,
     }).filter((date) => {
       const next = plan.revisions[index + 1];
+
       return (next === undefined || date < next.from) && trackedOn({ plan, date });
     })
   );
+
 const occurrenceKey = (entry: Readonly<{ planId: string; date: string }>): string =>
   `${entry.planId}:${entry.date}`;
 
@@ -284,43 +331,58 @@ export const projectRecurringMonth = ({
   now: DateTime.Utc;
 }>): ReadonlyArray<RecurringOccurrence> => {
   const from = `${month}-01`;
+
   const through = DateTime.formatIsoDateUtc(
     DateTime.makeUnsafe(from).pipe(DateTime.add({ months: 1 }), DateTime.subtract({ days: 1 }))
   );
+
   const exceptions = Map.groupBy(document.exceptions, occurrenceKey);
   const fulfillments = Map.groupBy(document.fulfillments, occurrenceKey);
+
   const retained = Map.groupBy(
     [...document.exceptions, ...document.fulfillments],
     (entry) => entry.planId
   );
+
+  type SchedulePlan = RecurringSchedule["plans"][number];
+
+  const expectedInMonth = (plan: SchedulePlan, date: string): boolean => {
+    const exception = exceptions.get(occurrenceKey({ planId: plan.id, date }))?.[0];
+    const expectedDate = exception?.replacement?.firstDate ?? date;
+
+    return expectedDate >= from && expectedDate <= through;
+  };
+
+  const occurrenceOn = (plan: SchedulePlan, date: string): RecurringOccurrence =>
+    occurrenceAt({
+      document: {
+        ...document,
+        exceptions: exceptions.get(occurrenceKey({ planId: plan.id, date })) ?? [],
+        fulfillments: fulfillments.get(occurrenceKey({ planId: plan.id, date })) ?? [],
+      },
+      plan,
+      date,
+      today: (input) =>
+        DateTime.formatIsoDate(DateTime.makeZonedUnsafe(now, { timeZone: input.timeZone })),
+    });
+
+  const isShown = (plan: SchedulePlan, item: RecurringOccurrence): boolean =>
+    item.fulfillments.length > 0 || trackedOn({ plan, date: item.expectedDate });
+
   return document.plans
     .flatMap((plan) => {
       const dates = new Set([
         ...generatedDates(plan, from, through),
         ...(retained.get(plan.id) ?? []).map((entry) => entry.date),
       ]);
-      return [...dates]
-        .filter((date) => {
-          const exception = exceptions.get(occurrenceKey({ planId: plan.id, date }))?.[0];
-          const expectedDate = exception?.replacement?.firstDate ?? date;
-          return expectedDate >= from && expectedDate <= through;
-        })
-        .map((date) =>
-          occurrenceAt({
-            document: {
-              ...document,
-              exceptions: exceptions.get(occurrenceKey({ planId: plan.id, date })) ?? [],
-              fulfillments: fulfillments.get(occurrenceKey({ planId: plan.id, date })) ?? [],
-            },
-            plan,
-            date,
-            today: (input) =>
-              DateTime.formatIsoDate(DateTime.makeZonedUnsafe(now, { timeZone: input.timeZone })),
-          })
-        )
-        .filter(
-          (item) => item.fulfillments.length > 0 || trackedOn({ plan, date: item.expectedDate })
-        );
+
+      return [...dates].flatMap((date) => {
+        if (!expectedInMonth(plan, date)) return [];
+
+        const item = occurrenceOn(plan, date);
+
+        return isShown(plan, item) ? [item] : [];
+      });
     })
     .sort(
       (left, right) =>
@@ -339,35 +401,46 @@ export const readRecurringOccurrence = ({
   date: string;
 }>): Option.Option<RecurringOccurrence> => {
   const plan = document.plans.find((entry) => entry.id === planId);
+
   if (plan === undefined) return Option.none();
+
   const retained = [...document.exceptions, ...document.fulfillments].some(
     (entry) => entry.planId === planId && entry.date === date
   );
+
   return retained || generatedDates(plan, date, date).includes(date)
     ? Option.some(occurrenceAt({ document, plan, date, today: () => date }))
     : Option.none();
 };
 
 const millisecondsPerDay = 86_400_000;
+
 const maximumDrift = 3;
+
 const normalized = (value: string): string =>
   value
     .normalize("NFKC")
     .replaceAll(/\p{White_Space}+/gu, " ")
     .trim()
     .toLowerCase();
+
 export const validAssociation = ({
   plan,
   fact,
 }: Readonly<{ plan: RecurringPlanInput; fact: RecurringMatchFact }>): boolean =>
   plan.currency === fact.money.currency &&
   (plan.kind === "income" ? fact.direction === "inflow" : fact.direction === "outflow");
+
 const comparable = (plan: RecurringPlanInput, fact: RecurringMatchFact): boolean => {
   if (plan.amountMode !== "fixed" || plan.accountId !== undefined) return false;
+
   if (plan.counterparty === undefined || fact.counterparty === undefined) return false;
+
   if (normalized(plan.counterparty) !== normalized(fact.counterparty)) return false;
+
   return plan.money !== undefined && BigDecimal.equals(plan.money.amount, fact.money.amount);
 };
+
 export const validRecurringFulfillment = ({
   mark,
   fact,
@@ -383,18 +456,23 @@ export const validRecurringFulfillment = ({
   fact.date === mark.actualDate &&
   validAssociation({ plan, fact }) &&
   (mark.automatic !== true || comparable(plan, fact));
+
 const qualifies = (item: RecurringOccurrence, fact: RecurringMatchFact): boolean => {
   if (item.status === "completed" || item.status === "skipped" || item.fulfillments.length > 0) {
     return false;
   }
+
   if (!comparable(item.plan, fact)) return false;
+
   const drift =
     Math.abs(
       DateTime.toEpochMillis(DateTime.makeUnsafe(item.expectedDate)) -
         DateTime.toEpochMillis(DateTime.makeUnsafe(fact.date))
     ) / millisecondsPerDay;
+
   return drift <= maximumDrift && validAssociation({ plan: item.plan, fact });
 };
+
 export const recurringMatchCandidates = ({
   document,
   items,
@@ -410,28 +488,34 @@ export const recurringMatchCandidates = ({
       entry.transactionId === undefined ? [] : [entry.transactionId]
     ),
   ]);
+
   const pairs = items.flatMap((item) =>
     facts
       .filter((fact) => !allocated.has(fact.id) && qualifies(item, fact))
       .map((fact) => ({ item, fact }))
   );
+
   return pairs;
 };
+
 export const uniqueRecurringMatches = (
   pairs: ReadonlyArray<RecurringMatch>
 ): ReadonlyArray<RecurringMatch> => {
   const facts = new Map<string, number>();
   const occurrences = new Map<string, number>();
   const occurrenceKey = (item: RecurringOccurrence): string => `${item.planId}:${item.date}`;
+
   for (const { item, fact } of pairs) {
     facts.set(fact.id, (facts.get(fact.id) ?? 0) + 1);
     const key = occurrenceKey(item);
     occurrences.set(key, (occurrences.get(key) ?? 0) + 1);
   }
+
   return pairs.filter(
     ({ item, fact }) => facts.get(fact.id) === 1 && occurrences.get(occurrenceKey(item)) === 1
   );
 };
+
 export const proposeRecurringMatches = (
   input: Parameters<typeof recurringMatchCandidates>[0]
 ): ReadonlyArray<RecurringMatch> => uniqueRecurringMatches(recurringMatchCandidates(input));
@@ -446,23 +530,33 @@ export const filterRecurring = ({
   items.filter((item) =>
     Object.entries(filters).every(([key, value]: readonly [string, string]) => {
       if (key === "search") return item.plan.name.toLowerCase().includes(value.toLowerCase());
+
       if (key === "status") return item.status === value;
+
       if (key === "kind") return item.plan.kind === value;
+
       if (key === "frequency") return item.plan.frequency === value;
+
       if (key === "currency") return item.plan.currency === value;
+
       if (key === "categoryId") return item.plan.categoryId === value;
+
       if (key === "accountId") return item.plan.accountId === value;
+
       return true;
     })
   );
+
 export const summarizeRecurring = (
   items: ReadonlyArray<RecurringOccurrence>
 ): ReadonlyArray<RecurringSummary> => {
   const groups = new Map<string, RecurringSummary>();
+
   for (const item of items.filter((entry) => entry.status !== "skipped")) {
     const currency = item.plan.currency;
     const key = `${item.plan.kind}:${currency}`;
     const zero = { amount: BigDecimal.make(0n, 0), currency };
+
     const prior = groups.get(key) ?? {
       kind: item.plan.kind,
       currency,
@@ -471,6 +565,7 @@ export const summarizeRecurring = (
       estimated: zero,
       unknown: 0,
     };
+
     groups.set(key, {
       ...prior,
       completed: {
@@ -485,6 +580,7 @@ export const summarizeRecurring = (
       unknown: prior.unknown + unknownCount(item),
     });
   }
+
   return [...groups.values()];
 };
 
@@ -492,6 +588,7 @@ const estimate = (item: RecurringOccurrence): ReadonlyMoney["amount"] =>
   item.plan.amountMode === "estimated"
     ? (item.remaining?.amount ?? BigDecimal.make(0n, 0))
     : BigDecimal.make(0n, 0);
+
 const unknownCount = (item: RecurringOccurrence): number =>
   item.remaining === undefined && item.status !== "completed" ? 1 : 0;
 
@@ -503,23 +600,28 @@ export const emptyRecurringDocument = (): RecurringDocument => ({
   fulfillments: [],
   suggestions: [],
 });
+
 const invalid = (): InvalidRecurringEdit =>
   InvalidRecurringEdit.make({
     message: "Actualiza los recurrentes y revisa los datos antes de guardar.",
   });
+
 const sameKey = (
   left: Readonly<{ planId: string; date: string }>,
   right: Readonly<{ planId: string; date: string }>
 ): boolean => left.planId === right.planId && left.date === right.date;
+
 const withPlan = (document: RecurringDocument, plan: RecurringPlan): RecurringDocument => ({
   ...document,
   plans: document.plans.map((entry) => (entry.id === plan.id ? plan : entry)),
 });
+
 const scopedEdit = (
   document: RecurringDocument,
   edit: Extract<RecurringEdit, { kind: "edit" }>
 ): Option.Option<RecurringDocument> => {
   const plan = document.plans.find((entry) => entry.id === edit.planId);
+
   if (
     plan === undefined ||
     (edit.scope === "once" &&
@@ -527,9 +629,11 @@ const scopedEdit = (
   ) {
     return Option.none();
   }
+
   if (edit.scope === "once" && document.fulfillments.some((entry) => sameKey(entry, edit))) {
     return Option.none();
   }
+
   if (edit.scope === "once") {
     return Option.some({
       ...document,
@@ -539,6 +643,7 @@ const scopedEdit = (
       ],
     });
   }
+
   const frozen = document.fulfillments
     .filter((entry) => entry.planId === edit.planId && entry.date >= edit.date)
     .filter((entry) => !document.exceptions.some((exception) => sameKey(exception, entry)))
@@ -548,32 +653,41 @@ const scopedEdit = (
       skipped: false,
       replacement: { ...planAt({ plan, date: entry.date }), firstDate: entry.date },
     }));
+
   const previous = plan.revisions.filter((entry) => entry.from < edit.date);
   const replacement = { from: edit.date, plan: edit.plan };
   const first = previous[0];
+
   const revisions: RecurringPlan["revisions"] =
     first === undefined ? [replacement] : [first, ...previous.slice(1), replacement];
+
   return Option.some({
     ...withPlan(document, { ...plan, revisions }),
     exceptions: [...document.exceptions, ...frozen],
   });
 };
+
 const lifecycle = (
   document: RecurringDocument,
   edit: Extract<RecurringEdit, { kind: "lifecycle" }>
 ): Option.Option<RecurringDocument> => {
   const plan = document.plans.find((entry) => entry.id === edit.planId);
+
   if (plan === undefined || plan.stoppedOn !== undefined) return Option.none();
   const open = plan.pauses.find((pause) => pause.through === undefined);
+
   if (edit.action === "stop") {
     return Option.some(withPlan(document, { ...plan, stoppedOn: edit.date }));
   }
+
   if (edit.action === "pause") {
     return open === undefined
       ? Option.some(withPlan(document, { ...plan, pauses: [...plan.pauses, { from: edit.date }] }))
       : Option.none();
   }
+
   if (open === undefined || edit.date < open.from) return Option.none();
+
   return Option.some(
     withPlan(document, {
       ...plan,
@@ -583,50 +697,67 @@ const lifecycle = (
     })
   );
 };
+
 const validReplacement = (
   document: RecurringDocument,
   edit: Extract<RecurringEdit, { kind: "fulfill" }>
 ): boolean => {
   if (edit.replaces === undefined) return true;
   const replaced = document.fulfillments.find((entry) => entry.id === edit.replaces);
+
   return replaced !== undefined && sameKey(replaced, edit.fulfillment);
 };
+
 const availableMark = (
   remaining: RecurringDocument["fulfillments"],
   edit: Extract<RecurringEdit, { kind: "fulfill" }>
 ): boolean => {
   const mark = edit.fulfillment;
+
   if (remaining.some((entry) => entry.id === mark.id)) return false;
+
   if (mark.transactionId === undefined) return true;
+
   if (remaining.some((entry) => entry.transactionId === mark.transactionId)) return false;
+
   return !remaining.some((entry) => sameKey(entry, mark) && entry.transactionId === undefined);
 };
+
 const fulfill = (
   document: RecurringDocument,
   edit: Extract<RecurringEdit, { kind: "fulfill" }>
 ): Option.Option<RecurringDocument> => {
   const mark = edit.fulfillment;
   const selected = readRecurringOccurrence({ document, planId: mark.planId, date: mark.date });
+
   if (Option.isNone(selected)) return Option.none();
   const item = selected.value;
+
   if (!validOccurrencePayment(item, mark)) return Option.none();
   const remaining = document.fulfillments.filter((entry) => entry.id !== edit.replaces);
+
   if (!validReplacement(document, edit) || !availableMark(remaining, edit)) return Option.none();
+
   return Option.some({ ...document, fulfillments: [...remaining, mark] });
 };
+
 const suggestion = (
   document: RecurringDocument,
   edit: Extract<RecurringEdit, { kind: "suggestion" }>
 ): Option.Option<RecurringDocument> => {
   const suggestions = document.suggestions.filter((entry) => entry.seriesId !== edit.seriesId);
+
   if (edit.action === "restore") return Option.some({ ...document, suggestions });
+
   if (edit.action === "dismiss") {
     return Option.some({
       ...document,
       suggestions: [...suggestions, { seriesId: edit.seriesId, disposition: "dismissed" }],
     });
   }
+
   if (!document.plans.some((plan) => plan.id === edit.planId)) return Option.none();
+
   return Option.some({
     ...document,
     suggestions: [
@@ -635,11 +766,13 @@ const suggestion = (
     ],
   });
 };
+
 const create = (
   document: RecurringDocument,
   edit: Extract<RecurringEdit, { kind: "create" }>
 ): Option.Option<RecurringDocument> => {
   if (document.plans.some((plan) => plan.id === edit.id)) return Option.none();
+
   const next: RecurringDocument = {
     ...document,
     plans: [
@@ -651,6 +784,7 @@ const create = (
       },
     ],
   };
+
   return edit.seriesId === undefined
     ? Option.some(next)
     : suggestion(next, {
@@ -660,6 +794,7 @@ const create = (
         planId: edit.id,
       });
 };
+
 const skip = (
   document: RecurringDocument,
   edit: Extract<RecurringEdit, { kind: "skip" }>
@@ -667,8 +802,10 @@ const skip = (
   if (Option.isNone(readRecurringOccurrence({ document, planId: edit.planId, date: edit.date }))) {
     return Option.none();
   }
+
   if (document.fulfillments.some((entry) => sameKey(entry, edit))) return Option.none();
   const prior = document.exceptions.find((entry) => sameKey(entry, edit));
+
   return Option.some({
     ...document,
     exceptions: [
@@ -677,18 +814,21 @@ const skip = (
     ],
   });
 };
+
 const reverse = (
   document: RecurringDocument,
   edit: Extract<RecurringEdit, { kind: "reverse" }>
 ): Option.Option<RecurringDocument> => {
   const mark = document.fulfillments.find((entry) => entry.id === edit.fulfillmentId);
   const excluded = mark?.transactionId ?? edit.fulfillmentId;
+
   return Option.some({
     ...document,
     fulfillments: document.fulfillments.filter((entry) => entry.id !== edit.fulfillmentId),
     excludedTransactionIds: [...new Set([...document.excludedTransactionIds, excluded])],
   });
 };
+
 const decide = (
   document: RecurringDocument,
   edit: RecurringEdit
@@ -710,6 +850,7 @@ const decide = (
       return skip(document, edit);
   }
 };
+
 export const applyRecurringEdit = ({
   document,
   command,
@@ -719,7 +860,9 @@ export const applyRecurringEdit = ({
 > => {
   if (document.revision !== command.expectedRevision) return Effect.fail(invalid());
   const next = decide(document, command.edit);
+
   if (Option.isNone(next)) return Effect.fail(invalid());
+
   return Schema.decodeEffect(Schema.toType(RecurringDocument))({
     ...next.value,
     revision: document.revision + 1,

@@ -10,21 +10,40 @@ import { WebSessionId } from "~/core/web-session/contract";
 export const AuditLogEntryId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("AuditLogEntryId"))
   .annotate({ identifier: "AuditLogEntryId" });
+
 export type AuditLogEntryId = typeof AuditLogEntryId.Type;
 
 export const AuditOutcome = Schema.Literals(["succeeded", "rejected", "failed"]);
+
 export type AuditOutcome = typeof AuditOutcome.Type;
 
+export const PatAuditCaller = Schema.TaggedStruct("PAT", { patId: PATId });
+
+export const OAuthAuditCaller = Schema.TaggedStruct("OAuthAgent", {
+  connectionId: OAuthConnectionId,
+  credentialId: OAuthCredentialId,
+});
+
+export const WebSessionAuditCaller = Schema.TaggedStruct("WebSession", {
+  webSessionId: WebSessionId,
+});
+
+export const HostedAuditCaller = Schema.TaggedStruct("HostedAgentSession", {
+  hostedAgentSessionId: HostedAgentSessionId,
+});
+
+export const HostedTurnAuditCaller = Schema.TaggedStruct("HostedTurn", {
+  turnId: TranscriptTurnId,
+});
+
 export const AuditCaller = Schema.Union([
-  Schema.TaggedStruct("PAT", { patId: PATId }),
-  Schema.TaggedStruct("OAuthAgent", {
-    connectionId: OAuthConnectionId,
-    credentialId: OAuthCredentialId,
-  }),
-  Schema.TaggedStruct("WebSession", { webSessionId: WebSessionId }),
-  Schema.TaggedStruct("HostedAgentSession", { hostedAgentSessionId: HostedAgentSessionId }),
-  Schema.TaggedStruct("HostedTurn", { turnId: TranscriptTurnId }),
+  PatAuditCaller,
+  OAuthAuditCaller,
+  WebSessionAuditCaller,
+  HostedAuditCaller,
+  HostedTurnAuditCaller,
 ]).annotate({ identifier: "AuditCaller" });
+
 export type AuditCaller = typeof AuditCaller.Type;
 
 export const AuditLogEntry = Schema.Struct({
@@ -35,6 +54,7 @@ export const AuditLogEntry = Schema.Struct({
   outcome: AuditOutcome,
   occurredAt: UtcTimestamp,
 }).annotate({ identifier: "AuditLogEntry" });
+
 export type AuditLogEntry = typeof AuditLogEntry.Type;
 
 export const OAuthRecentActivity = Schema.Array(
@@ -45,6 +65,7 @@ export const OAuthRecentActivity = Schema.Array(
     occurredAt: AuditLogEntry.fields.occurredAt,
   })
 ).check(Schema.isMaxLength(3));
+
 export type OAuthRecentActivity = typeof OAuthRecentActivity.Type;
 
 export const maximumPATActivityEntries = 50;
@@ -60,4 +81,5 @@ export const PATActivityHistory = Schema.Struct({
   hasMore: Schema.Boolean,
   retainedSince: UtcTimestamp,
 }).annotate({ identifier: "PATActivityHistory" });
+
 export type PATActivityHistory = typeof PATActivityHistory.Type;

@@ -6,8 +6,11 @@ import { alice, bob, nativeTransactionJourney } from "../financial-user-store.te
 import { native } from "../user-store.test-fixture";
 
 const day = 86400000;
+
 const binding = "Fidy-Session-Binding";
+
 const cookie = "__Host-fidy_session=" + alice.bearer;
+
 const scenario = Effect.gen(function* () {
   const db = yield* nativeTransactionJourney;
   yield* native(() =>
@@ -22,6 +25,7 @@ const scenario = Effect.gen(function* () {
       alice.user
     )
   );
+
   const send = (
     headers: Record<string, string>,
     path = "/user",
@@ -35,7 +39,9 @@ const scenario = Effect.gen(function* () {
         })
       )
     );
+
   const original = yield* native(() => db.exec("SELECT idle_expires_at_ms FROM web_sessions"));
+
   const refusals: Array<Record<string, string>> = [
     { cookie },
     { cookie, [binding]: "invalid" },
@@ -44,11 +50,18 @@ const scenario = Effect.gen(function* () {
     { cookie: "__Host-fidy_session=" + bob.bearer, [binding]: alice.session },
     { cookie, [binding]: bob.session, authorization: "Bearer unrelated-credential" },
   ];
-  for (const headers of refusals) {
-    const rejected = yield* send(headers);
-    expect(rejected.status).toBe(401);
-    expect(yield* native(() => rejected.text())).not.toContain(alice.user);
-  }
+
+  yield* Effect.forEach(
+    refusals,
+    (headers) =>
+      Effect.gen(function* () {
+        const rejected = yield* send(headers);
+        expect(rejected.status).toBe(401);
+        expect(yield* native(() => rejected.text())).not.toContain(alice.user);
+      }),
+    { discard: true }
+  );
+
   expect(yield* native(() => db.exec("SELECT idle_expires_at_ms FROM web_sessions"))).toEqual(
     original
   );
@@ -58,12 +71,14 @@ const scenario = Effect.gen(function* () {
   const headers = { cookie, [binding]: alice.session };
   const response = yield* send(headers);
   expect(response.status).toBe(200);
+
   const profile = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       data: Schema.Struct({ id: Schema.String }),
       categories: Schema.Array(Schema.Unknown),
     })
   )(yield* native(() => response.json()));
+
   expect(profile.data.id).toBe(alice.user);
   const now = yield* Clock.currentTimeMillis;
   yield* native(() =>
@@ -117,6 +132,7 @@ const scenario = Effect.gen(function* () {
     )
   ).toEqual([{ count: 2 }]);
 });
+
 const revokedDuringRenewal = Effect.gen(function* () {
   const db = yield* nativeTransactionJourney;
   yield* native(() =>
@@ -143,6 +159,7 @@ const revokedDuringRenewal = Effect.gen(function* () {
     yield* native(() => db.exec("SELECT id FROM audit_entries WHERE record_type='identity_read'"))
   ).toEqual([]);
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "refuses a session revoked during renewal before releasing its profile or read evidence",

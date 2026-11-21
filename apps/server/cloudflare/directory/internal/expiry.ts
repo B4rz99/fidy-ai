@@ -3,16 +3,24 @@ import { Effect, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 
 const retentionAfterExpiryMs = 86400000;
+
 const pageSize = 32,
   supportAdmissionHour = 3_600_000;
+
 const settledPairings = `SELECT p.ordinal,p.expires_at_ms FROM browser_pairings p WHERE p.user_id IS NULL OR p.email_handoff IS NOT NULL OR EXISTS(SELECT 1 FROM provider_attempts a WHERE a.pairing_id=p.id AND (a.acknowledged=1 OR a.state='cancelled')) OR EXISTS(SELECT 1 FROM channel_approvals c WHERE c.pairing_id=p.id) OR EXISTS(SELECT 1 FROM support_handoffs s WHERE s.pairing_id=p.id)`;
+
 const settledInvitations = `SELECT i.id,i.expires_at_ms FROM whatsapp_invitations i WHERE NOT EXISTS(SELECT 1 FROM provider_attempts a WHERE a.invitation=i.id AND a.state='bound' AND a.acknowledged=0)`;
 
 export const drainBootstrapExpiry = Effect.fn(function* (now: number) {
   const sql = yield* SqliteClient;
-  for (const table of ["email_capacity_slots", "media_capacity_slots"]) {
-    yield* sql`UPDATE ${sql(table)} SET receipt=NULL,state=NULL,expires_at_ms=NULL WHERE slot IN (SELECT slot FROM ${sql(table)} WHERE receipt IS NOT NULL AND expires_at_ms<=${now} ORDER BY expires_at_ms LIMIT ${pageSize})`;
-  }
+
+  yield* Effect.forEach(
+    ["email_capacity_slots", "media_capacity_slots"],
+    (table) =>
+      sql`UPDATE ${sql(table)} SET receipt=NULL,state=NULL,expires_at_ms=NULL WHERE slot IN (SELECT slot FROM ${sql(table)} WHERE receipt IS NOT NULL AND expires_at_ms<=${now} ORDER BY expires_at_ms LIMIT ${pageSize})`,
+    { discard: true }
+  );
+
   yield* sql`DELETE FROM session_routes WHERE token_digest IN(SELECT token_digest FROM session_routes WHERE hard_expires_at_ms<=${now} ORDER BY hard_expires_at_ms LIMIT ${pageSize})`;
   yield* sql`DELETE FROM recovery_rotations WHERE id IN(SELECT id FROM recovery_rotations WHERE state<>'reserved' AND expires_at_ms<=${now} ORDER BY expires_at_ms LIMIT ${pageSize})`;
   yield* sql.unsafe(
@@ -36,6 +44,7 @@ export const drainBootstrapExpiry = Effect.fn(function* (now: number) {
 
 export const directoryDeadline = Effect.gen(function* () {
   const sql = yield* SqliteClient;
+
   const [row] = yield* sql.unsafe(
     `SELECT min(column1) AS deadline FROM (VALUES
       ((SELECT min(due_ms) FROM identity_replacement_checks)),
@@ -60,6 +69,7 @@ export const directoryDeadline = Effect.gen(function* () {
     )`,
     [oauthClientIdleMs, supportAdmissionHour, retentionAfterExpiryMs]
   );
+
   return yield* Schema.decodeUnknownEffect(
     Schema.Struct({ deadline: Schema.OptionFromNullOr(Schema.Int) })
   )(row);

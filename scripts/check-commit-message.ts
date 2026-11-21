@@ -8,7 +8,7 @@ const HEADER_PATTERN = /^([a-z]+)\(([a-z0-9-]+)\): #[1-9][0-9]* (.+)$/;
 
 const SCOPE_ROW_PATTERN = /^\|\s*`([a-z0-9-]+)`\s*\|\s*(\S[^|]*?)\s*\|$/;
 
-const HEADER_SHAPE_ERROR = "Commit header must follow format: type(scope): #123 message";
+const HEADER_FORMAT_ERROR = "Commit header must follow format: type(scope): #123 message";
 
 const NAME_COLUMN = 14;
 
@@ -66,6 +66,7 @@ const blockAfter = (markdown: string, marker: string): readonly string[] => {
     .slice(marked + marker.length)
     .split(/\r?\n/)
     .slice(1);
+
   const block = lines.slice(lines.findIndex((line) => !isBlank(line)));
   const end = block.findIndex(isBlank);
 
@@ -145,7 +146,7 @@ const headerErrors = (header: string, allowlist: Allowlist): readonly string[] =
   const match = HEADER_PATTERN.exec(header);
 
   if (match === null) {
-    return [HEADER_SHAPE_ERROR];
+    return [HEADER_FORMAT_ERROR];
   }
 
   const type = match[1];
@@ -153,7 +154,7 @@ const headerErrors = (header: string, allowlist: Allowlist): readonly string[] =
   const summary = match[3];
 
   if (type === undefined || scope === undefined || summary === undefined) {
-    return [HEADER_SHAPE_ERROR];
+    return [HEADER_FORMAT_ERROR];
   }
 
   const errors: string[] = [];
@@ -181,6 +182,7 @@ const messageErrors = (message: string, allowlist: Allowlist): readonly string[]
   const bodyLines = lines
     .slice(2)
     .filter((line) => line.trim().length > 0 && !line.startsWith("#"));
+
   const badBodyLine = bodyLines.find((line) => !line.startsWith("- "));
 
   if (bodyLines.length === 0) {

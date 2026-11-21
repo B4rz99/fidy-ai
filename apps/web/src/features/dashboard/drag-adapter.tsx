@@ -17,7 +17,9 @@ import type { DashboardGesture } from "./editor-model";
 import { dashboardTargetAcceptsSource, resolveDashboardDrop } from "./drag-model";
 
 type DashboardDragData = DashboardDragSource | DashboardDropTarget;
+
 const emptyCandidateId = Option.none<ReturnType<typeof freshWidgetId>>();
+
 const deliberatePointer = PointerSensor.configure({
   activationConstraints: (event) =>
     event.pointerType === "touch"
@@ -47,16 +49,18 @@ export const DashboardDragProvider = ({
   onGesture: (gesture: DashboardGesture) => void;
 }>): JSX.Element => {
   const candidateId = useRef(emptyCandidateId);
+
   const resolve = (
     event: Pick<DragEndEvent, "operation">,
     canceled: boolean
   ): Option.Option<DashboardGesture> =>
     resolveDashboardDrop({
       canceled,
-      makeWidgetId: () => Option.getOrThrow(candidateId.current),
+      makeWidgetId: () => candidateId.current,
       source: decodeDashboardDragSource(event.operation.source?.data),
       target: resolvedTarget(event),
     });
+
   return (
     <DragDropProvider<DashboardDragData>
       onDragStart={() => {
@@ -65,6 +69,7 @@ export const DashboardDragProvider = ({
       onDragEnd={(event) => {
         const gesture = resolve(event, event.canceled);
         candidateId.current = Option.none();
+
         if (Option.isSome(gesture)) onGesture(gesture.value);
       }}
       plugins={(defaults) => [...defaults, dashboardAccessibility]}
@@ -89,6 +94,7 @@ export const DashboardDragHandle = ({
     data: source,
     disabled,
   });
+
   return (
     <button
       aria-label={label}
@@ -152,8 +158,10 @@ export const DashboardDropZone = ({
     collisionPriority: dashboardCollisionPriority(depth),
     data: target,
   });
+
   if (target.kind === "dashboard-edge") {
     const position = target.edge === "top" ? "inset-x-0 top-0" : "inset-x-0 bottom-0";
+
     return (
       <section
         aria-label={label}
@@ -166,6 +174,7 @@ export const DashboardDropZone = ({
       </section>
     );
   }
+
   return (
     <section
       aria-label={label}

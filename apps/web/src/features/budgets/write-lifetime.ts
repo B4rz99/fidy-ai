@@ -11,8 +11,18 @@ export type BudgetWriteContext = Readonly<{
   inlineDraft: Option.Option<BudgetEdit>;
   refreshQueries: () => void;
 }>;
-const makeWriteOwner = (): Readonly<{ version: () => number; advance: () => void }> => {
+
+type WriteOwner = Readonly<{ version: () => number; advance: () => void }>;
+
+type BudgetWriteLifetime = Readonly<{
+  current: () => Option.Option<BudgetWriteContext>;
+  isCurrent: () => boolean;
+  reset: () => void;
+}>;
+
+const makeWriteOwner = (): WriteOwner => {
   let generation = 0;
+
   return {
     version: (): number => generation,
     advance: (): void => {
@@ -20,23 +30,21 @@ const makeWriteOwner = (): Readonly<{ version: () => number; advance: () => void
     },
   };
 };
+
 const initialContext = Option.none<BudgetWriteContext>();
-export const useBudgetWriteLifetime = (
-  context: BudgetWriteContext
-): Readonly<{
-  current: () => Option.Option<BudgetWriteContext>;
-  isCurrent: () => boolean;
-  reset: () => void;
-}> => {
+
+export const useBudgetWriteLifetime = (context: BudgetWriteContext): BudgetWriteLifetime => {
   const latest = useRef(initialContext);
   const [owner] = useState(makeWriteOwner);
   useLayoutEffect(() => {
     latest.current = Option.some(context);
+
     return (): void => {
       latest.current = Option.none();
     };
   });
   const version = owner.version();
+
   return {
     current: () => (owner.version() === version ? latest.current : Option.none()),
     isCurrent: () => owner.version() === version && Option.isSome(latest.current),

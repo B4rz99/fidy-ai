@@ -1,7 +1,9 @@
 import type { SampleReviewResult } from "../../../src/core/ingestion/contract";
 
 const headers = { "cache-control": "no-store" };
+
 export const sampleReply = (status: number): Response => new Response(null, { status, headers });
+
 export const sampleOutcome = (result: typeof SampleReviewResult.Type): Response =>
   Response.json(result, { headers });
 

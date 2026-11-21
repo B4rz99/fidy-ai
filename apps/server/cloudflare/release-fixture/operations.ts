@@ -11,6 +11,7 @@ const fixtureMac = Effect.fn(function* (secret: string, content: string) {
       ["sign"]
     )
   );
+
   return Base64Url.encode(
     new Uint8Array(
       yield* Effect.tryPromise(() =>
@@ -19,6 +20,7 @@ const fixtureMac = Effect.fn(function* (secret: string, content: string) {
     )
   );
 });
+
 type AuthCode = {
   host: "acceptance" | "production";
   subject: string;
@@ -27,6 +29,7 @@ type AuthCode = {
   deadline: number;
   provider: "google" | "microsoft";
 };
+
 const codeFields = (input: AuthCode): string =>
   [
     input.provider,
@@ -39,5 +42,6 @@ const codeFields = (input: AuthCode): string =>
 
 export const issueAcceptanceProviderCode = Effect.fn(function* (input: AuthCode, secret: string) {
   const fields = codeFields(input);
+
   return fields + "." + (yield* fixtureMac(secret, fields));
 });

@@ -7,26 +7,31 @@ it("sends closed provider work only to the private fixture and fetches human Acc
     Effect.gen(function* () {
       const publicCalls: Request[] = [],
         fixtureCalls: Request[] = [];
+
       const capture = (calls: Request[]): typeof fetch =>
         Object.assign(
           (input: string | URL | Request, init?: RequestInit) => {
             calls.push(new Request(input, init));
+
             return Promise.resolve(new Response(null, { status: 204 }));
           },
           { preconnect: () => undefined }
         );
+
       const settings = {
         NATIVE_STORAGE_ADMISSION: "closed",
         RECOVERY_ISOLATION: "isolated",
         CLOUDFLARE_ACCESS_ISSUER: "https://fixture-team.cloudflareaccess.com",
         RELEASE_FIXTURE: { fetch: capture(fixtureCalls) },
       };
+
       const network = capture(publicCalls),
         closed = fetchForInstalledRelease({ transport: network, bindings: settings }),
         request = (url: string): Request =>
           new Request(url, {
             headers: { authorization: "Bearer fixture", "x-test-secret": "fixture" },
           });
+
       yield* Effect.tryPromise(() =>
         closed(request("https://api.resend.com/emails"), { method: "POST" })
       );
@@ -47,6 +52,7 @@ it("sends closed provider work only to the private fixture and fetches human Acc
           [["accept", "application/json"]],
         ],
       ]);
+
       const absent = fetchForInstalledRelease({
         transport: network,
         bindings: {
@@ -54,6 +60,7 @@ it("sends closed provider work only to the private fixture and fetches human Acc
           RECOVERY_ISOLATION: "isolated",
         },
       });
+
       expect((yield* Effect.tryPromise(() => absent("https://api.openai.com"))).status).toBe(503);
       expect(publicCalls.length).toBe(1);
     })

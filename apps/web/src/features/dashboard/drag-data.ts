@@ -8,6 +8,7 @@ export const DashboardDragSourceData = Schema.Union([
     entry: DashboardCatalogEntry,
   }),
 ]);
+
 export type DashboardDragSource = typeof DashboardDragSourceData.Type;
 
 export const DashboardDropTargetData = Schema.Union([
@@ -21,6 +22,7 @@ export const DashboardDropTargetData = Schema.Union([
     edge: Schema.Literals(["top", "right", "bottom", "left", "center"]),
   }),
 ]);
+
 export type DashboardDropTarget = typeof DashboardDropTargetData.Type;
 
 export const dashboardDragData = {

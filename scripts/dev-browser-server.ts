@@ -1,13 +1,22 @@
 import { fileURLToPath } from "node:url";
-import { Data, Effect } from "effect";
+import { BunRuntime } from "@effect/platform-bun";
+import { Cause, Data, Effect, Exit } from "effect";
 import { createServer } from "vite";
 
 class ApiProcessFailure extends Data.TaggedError("ApiProcessFailure") {}
 
+class BrowserServerFailure extends Data.TaggedError("BrowserServerFailure")<{
+  readonly cause: unknown;
+}> {}
+
 const root = fileURLToPath(new URL("../", import.meta.url));
+
 const directory = fileURLToPath(new URL("../.local/browser/", import.meta.url));
+
 const certificate = `${directory}cert.pem`;
+
 const key = `${directory}key.pem`;
+
 const server = await createServer({
   root: `${root}apps/web`,
   define: { "import.meta.env.VITE_API_ORIGIN": JSON.stringify("https://127.0.0.1:4174") },
@@ -19,6 +28,7 @@ const server = await createServer({
     https: { key: await Bun.file(key).text(), cert: await Bun.file(certificate).text() },
   },
 });
+
 const api = Bun.spawn([process.execPath, "scripts/dev-browser-api.ts"], {
   cwd: root,
   env: {
@@ -30,28 +40,46 @@ const api = Bun.spawn([process.execPath, "scripts/dev-browser-api.ts"], {
   stdout: "inherit",
   stderr: "inherit",
 });
-const interrupted = Effect.callback<number>((resume) => {
-  const finish = (): void => resume(Effect.succeed(0));
-  process.once("SIGTERM", finish);
-  process.once("SIGINT", finish);
-  return Effect.sync(() => {
-    process.removeListener("SIGTERM", finish);
-    process.removeListener("SIGINT", finish);
+
+const serve = Effect.gen(function* () {
+  yield* Effect.tryPromise({
+    try: () => server.listen(),
+    catch: (cause) => new BrowserServerFailure({ cause }),
   });
-});
-try {
-  await server.listen();
   server.printUrls();
-  process.exitCode = await Effect.runPromise(
-    Effect.raceFirst(
-      Effect.tryPromise({ try: () => api.exited, catch: () => new ApiProcessFailure() }).pipe(
-        Effect.as(1)
+
+  return yield* Effect.tryPromise({
+    try: () => api.exited,
+    catch: () => new ApiProcessFailure(),
+  }).pipe(Effect.as(1));
+}).pipe(
+  Effect.ensuring(
+    Effect.tryPromise({
+      try: () => server.close(),
+      catch: (cause) => new BrowserServerFailure({ cause }),
+    }).pipe(
+      Effect.andThen(Effect.sync(() => api.kill())),
+      Effect.andThen(
+        Effect.tryPromise({
+          try: () => api.exited,
+          catch: (cause) => new BrowserServerFailure({ cause }),
+        })
       ),
-      interrupted
+      Effect.orDie
     )
-  );
-} finally {
-  await server.close();
-  api.kill();
-  await api.exited;
-}
+  )
+);
+
+BunRuntime.runMain(
+  serve.pipe(
+    Effect.tap((code) =>
+      Effect.sync(() => {
+        process.exitCode = code;
+      })
+    )
+  ),
+  {
+    teardown: (exit, onExit) =>
+      onExit(Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause) ? 1 : 0),
+  }
+);

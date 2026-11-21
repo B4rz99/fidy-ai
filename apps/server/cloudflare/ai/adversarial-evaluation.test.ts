@@ -7,16 +7,17 @@ import {
   type OpenAiTransportRun,
   approvedOpenAiModel,
 } from "../../src/shell/hosted-inference/contract";
-import { makeOpenAiRun } from "./runtime";
+import { openAiRun } from "./runtime";
 import { makeHostedEvaluationHandler } from "./openai-evaluation-worker";
 import {
   type EvaluationBudget,
   type EvaluationEnvironment,
+  evaluationBudget,
   evaluationLimits,
-  makeEvaluationBudget,
 } from "./internal/evaluation-budget";
 
 const token = "a".repeat(64);
+
 const environment = (
   run: OpenAiTransportRun,
   mode: "live" | "dry-run" = "live"
@@ -27,11 +28,13 @@ const environment = (
   EVALUATION_COMMIT: "b".repeat(40),
   EVALUATION_MODE: mode,
 });
+
 const budgetFor = (environment: EvaluationEnvironment): EvaluationBudget =>
-  makeEvaluationBudget({
+  evaluationBudget({
     environment,
-    execute: makeOpenAiRun(Redacted.make(environment.OPENAI_API_KEY)),
+    execute: openAiRun(Redacted.make(environment.OPENAI_API_KEY)),
   });
+
 const request: OpenAiRequest = {
   messages: [{ role: "user", content: "synthetic" }],
   max_completion_tokens: 16_000,
@@ -40,6 +43,7 @@ const request: OpenAiRequest = {
   reasoning_effort: "none",
   store: false,
 };
+
 const accepted = (): Response =>
   Response.json({
     choices: [
@@ -47,6 +51,7 @@ const accepted = (): Response =>
     ],
     usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
   });
+
 const localRequest = (index: number, overrides: RequestInit = {}): Request =>
   new Request(`http://127.0.0.1:8798/evaluate/${index}`, {
     method: "POST",
@@ -61,20 +66,25 @@ it.effect(
       const runExit = Effect.runPromiseExitWith(yield* Effect.context<never>());
       let actual = 0;
       const late: Array<Promise<Exit.Exit<unknown, unknown>>> = [];
+
       const budget: EvaluationBudget = budgetFor(
         environment(() => {
           actual++;
+
           if (actual === 1) {
             late.push(runExit(budget.run(approvedOpenAiModel, request)));
           }
+
           return Promise.resolve(accepted());
         })
       );
+
       const results = yield* Effect.forEach(
         Array.from({ length: evaluationLimits.providerCalls + 1 }),
         () => Effect.exit(budget.run(approvedOpenAiModel, request)),
         { concurrency: "unbounded" }
       );
+
       const lateResults = yield* Effect.tryPromise(() => Promise.all(late));
       expect(lateResults).toHaveLength(1);
       expect(lateResults.every(Exit.isFailure)).toBe(true);
@@ -90,16 +100,20 @@ it.effect(
   () =>
     Effect.gen(function* () {
       let actual = 0;
+
       const budget = budgetFor(
         environment(() => {
           actual++;
+
           return Promise.resolve(accepted());
         })
       );
+
       const oversized: OpenAiRequest = {
         ...request,
         messages: [{ role: "user", content: "x".repeat(evaluationLimits.requestBytes) }],
       };
+
       expect(Exit.isFailure(yield* Effect.exit(budget.run(approvedOpenAiModel, oversized)))).toBe(
         true
       );
@@ -118,12 +132,15 @@ it.effect(
 it.effect("refuses another dispatch at the original elapsed budget without renewing it", () =>
   Effect.gen(function* () {
     let actual = 0;
+
     const budget = budgetFor(
       environment(() => {
         actual++;
+
         return Promise.resolve(accepted());
       })
     );
+
     yield* budget.run(approvedOpenAiModel, request);
     yield* TestClock.adjust(evaluationLimits.elapsedMillis);
     expect(Exit.isFailure(yield* Effect.exit(budget.run(approvedOpenAiModel, request)))).toBe(true);
@@ -135,10 +152,13 @@ it.live("stops after an ambiguous provider failure without exposing its payload 
   Effect.gen(function* () {
     let actual = 0;
     const handler = makeHostedEvaluationHandler();
+
     const env = environment(() => {
       actual++;
+
       return Promise.reject(new Error("synthetic-private-provider-failure"));
     });
+
     const first = yield* Effect.tryPromise(() => handler.fetch(localRequest(0), env));
     expect(first.status).toBe(503);
     const text = yield* Effect.tryPromise(() => first.text());
@@ -155,10 +175,13 @@ it.live(
     Effect.gen(function* () {
       let actual = 0;
       const handler = makeHostedEvaluationHandler();
+
       const env = environment(() => {
         actual++;
+
         return Promise.resolve(accepted());
       });
+
       const requests = [
         localRequest(0, { headers: {} }),
         localRequest(0, {
@@ -167,9 +190,15 @@ it.live(
         localRequest(0, { body: "arbitrary prompt" }),
         localRequest(1),
       ];
-      for (const input of requests) {
-        expect((yield* Effect.tryPromise(() => handler.fetch(input, env))).status).not.toBe(200);
-      }
+
+      yield* Effect.forEach(
+        requests,
+        Effect.fnUntraced(function* (input) {
+          expect((yield* Effect.tryPromise(() => handler.fetch(input, env))).status).not.toBe(200);
+        }),
+        { discard: true }
+      );
+
       expect(
         (yield* Effect.tryPromise(() =>
           handler.fetch(localRequest(0), { ...env, EVALUATION_TOKEN: "" })
@@ -185,18 +214,26 @@ it.live(
     Effect.gen(function* () {
       let actual = 0;
       const handler = makeHostedEvaluationHandler();
+
       const env = environment(() => {
         actual++;
+
         return Promise.resolve(accepted());
       }, "dry-run");
-      for (let index = 0; index < evaluationLimits.providerCalls; index++) {
-        const result = yield* Effect.tryPromise(() => handler.fetch(localRequest(index), env));
-        expect(result.status).toBe(200);
-        const text = yield* Effect.tryPromise(() => result.text());
-        expect(text).toContain('"semanticGrade":"manual_review_required"');
-        expect(text).toContain('"containment":"not_exercised_no_tool_executor"');
-        expect(text).toContain('"mode":"dry-run"');
-      }
+
+      yield* Effect.forEach(
+        Array.from({ length: evaluationLimits.providerCalls }, (_, index) => index),
+        Effect.fnUntraced(function* (index) {
+          const result = yield* Effect.tryPromise(() => handler.fetch(localRequest(index), env));
+          expect(result.status).toBe(200);
+          const text = yield* Effect.tryPromise(() => result.text());
+          expect(text).toContain('"semanticGrade":"manual_review_required"');
+          expect(text).toContain('"containment":"not_exercised_no_tool_executor"');
+          expect(text).toContain('"mode":"dry-run"');
+        }),
+        { discard: true }
+      );
+
       expect(actual).toBe(0);
       expect(
         (yield* Effect.tryPromise(() =>

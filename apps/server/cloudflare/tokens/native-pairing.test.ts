@@ -8,6 +8,20 @@ import { browserOrigins } from "../runtime/contract";
 import { native, nativeUserPlatform } from "../user-store.test-fixture";
 
 type TransportResult = Effect.Effect<Awaited<ReturnType<Miniflare["dispatchFetch"]>>>;
+
+type Post = (path: string, payload: unknown) => TransportResult;
+
+const refusedWrongProof = (post: Post, pairingId: string): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const wrong = yield* post("/pat-pairings/claim", {
+      pairingId,
+      privateDeviceCode: "x".repeat(43),
+    });
+
+    expect(wrong.status).toBe(400);
+    yield* native(() => wrong.text());
+  });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "admits an anonymous CLI pairing and polls its private proof before User handoff",
@@ -15,7 +29,8 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const create = yield* nativeUserPlatform;
         const runtime = yield* create();
-        const post = (path: string, payload: unknown): TransportResult =>
+
+        const post: Post = (path, payload) =>
           native(() =>
             runtime.dispatchFetch("https://api.fidyapp.com" + path, {
               method: "POST",
@@ -23,15 +38,19 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               body: JSON.stringify(payload),
             })
           );
+
         const started = yield* post("/pat-pairings", {
           recipientLabel: "CLI",
           scopes: ["read"],
           lifetimeDays: 7,
         });
+
         expect(started.status).toBe(200);
+
         const proof = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ pairingId: Schema.String, privateDeviceCode: Schema.String })
         )(yield* native(() => started.json()));
+
         const pending = yield* post("/pat-pairings/claim", proof);
         expect(pending.status).toBe(202);
         expect(yield* native(() => pending.json())).toMatchObject({
@@ -47,7 +66,8 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     Effect.gen(function* () {
       const create = yield* nativeUserPlatform;
       const runtime = yield* create();
-      const post = (path: string, payload: unknown): TransportResult =>
+
+      const post: Post = (path, payload) =>
         native(() =>
           runtime.dispatchFetch("https://api.fidyapp.com" + path, {
             method: "POST",
@@ -55,29 +75,33 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             body: JSON.stringify(payload),
           })
         );
+
       const started = yield* post("/pat-pairings", {
         recipientLabel: "CLI",
         scopes: ["read"],
         lifetimeDays: 7,
       });
+
       expect(started.status).toBe(200);
+
       const proof = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ pairingId: Schema.String, privateDeviceCode: Schema.String })
       )(yield* native(() => started.json()));
-      for (let attempt = 0; attempt < 5; attempt += 1) {
-        const wrong = yield* post("/pat-pairings/claim", {
-          pairingId: proof.pairingId,
-          privateDeviceCode: "x".repeat(43),
-        });
-        expect(wrong.status).toBe(400);
-        yield* native(() => wrong.text());
-      }
+
+      yield* Effect.forEach(
+        Array.from({ length: 5 }, (_, attempt) => attempt),
+        () => refusedWrongProof(post, proof.pairingId),
+        { discard: true }
+      );
+
       const dead = yield* post("/pat-pairings/claim", proof);
       expect(dead.status).toBe(400);
       yield* native(() => dead.text());
+
       const directory = yield* native(() =>
         runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
       );
+
       expect(yield* native(() => directory.exec("SELECT id FROM pat_bootstrap"))).toEqual([]);
     })
   );
@@ -88,29 +112,37 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const create = yield* nativeUserPlatform;
         const runtime = yield* create();
         const owner = yield* seed(runtime, alice);
-        const send = (path: string, payload: unknown, browser = false): TransportResult =>
-          native(() =>
+
+        const send = (path: string, payload: unknown, browser = false): TransportResult => {
+          const transport = {
+            "content-type": "application/json",
+            "cf-connecting-ip": "192.0.2.35",
+          };
+
+          const headers = browser
+            ? {
+                ...transport,
+                origin: browserOrigins.production,
+                cookie: "__Host-fidy_session=" + alice.bearer,
+                "Fidy-Session-Binding": alice.session,
+              }
+            : transport;
+
+          return native(() =>
             runtime.dispatchFetch("https://api.fidyapp.com" + path, {
               method: "POST",
-              headers: {
-                "content-type": "application/json",
-                "cf-connecting-ip": "192.0.2.35",
-                ...(browser
-                  ? {
-                      origin: browserOrigins.production,
-                      cookie: "__Host-fidy_session=" + alice.bearer,
-                      "Fidy-Session-Binding": alice.session,
-                    }
-                  : {}),
-              },
+              headers,
               body: JSON.stringify(payload),
             })
           );
+        };
+
         const start = yield* send("/pat-pairings", {
           recipientLabel: "CLI",
           scopes: ["read"],
           lifetimeDays: 7,
         });
+
         const pairing = yield* Schema.decodeUnknownEffect(
           Schema.Struct({
             pairingId: Schema.String,
@@ -118,6 +150,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             privateDeviceCode: Schema.String,
           })
         )(yield* native(() => start.json()));
+
         const batch = (operation: string, payload: unknown): TransportResult =>
           send(
             "/operations/atomic-batch",
@@ -128,6 +161,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             },
             true
           );
+
         const review = yield* batch("pats.inspectPATPairing", { publicCode: pairing.publicCode });
         expect(review.status).toBe(200);
         expect(yield* native(() => review.json())).toMatchObject({
@@ -149,21 +183,27 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const approval = yield* batch("pats.approvePATPairing", { pairingId: pairing.pairingId });
         expect(approval.status).toBe(200);
         yield* native(() => approval.text());
+
         const wrong = yield* send("/pat-pairings/claim", {
           pairingId: pairing.pairingId,
           privateDeviceCode: "x".repeat(43),
         });
+
         expect(wrong.status).toBe(400);
         yield* native(() => wrong.text());
+
         const proof = {
           pairingId: pairing.pairingId,
           privateDeviceCode: pairing.privateDeviceCode,
         };
+
         const claim = yield* send("/pat-pairings/claim", proof);
         expect(claim.status).toBe(200);
+
         const issued = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ bearer: Schema.String, pat: Schema.Struct({ shortId: Schema.String }) })
         )(yield* native(() => claim.json()));
+
         expect(
           yield* native(() =>
             owner.directory.exec(
@@ -185,6 +225,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const runtime = yield* create();
         const owner = yield* seed(runtime, alice);
         yield* seed(runtime, bob);
+
         const browser = (
           path: string,
           subject: typeof alice,
@@ -200,9 +241,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
                 "content-type": "application/json",
                 "cf-connecting-ip": "192.0.2.35",
               },
-              ...(options.method === "POST" ? { body: JSON.stringify(options.body) } : {}),
+              body: options.method === "POST" ? JSON.stringify(options.body) : null,
             })
           );
+
         const payload = {
           requestId: "816551ab-a25e-4167-b87c-f7cc68890071",
           grant: {
@@ -212,8 +254,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(owner.now + 604800000)),
           },
         };
+
         const first = yield* browser("/pats", alice, { method: "POST", body: payload });
         expect(first.status).toBe(200);
+
         const issued = yield* Schema.decodeUnknownEffect(
           Schema.Struct({
             data: Schema.Struct({
@@ -222,11 +266,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }),
           })
         )(yield* native(() => first.json()));
+
         const repeated = yield* browser("/pats", alice, { method: "POST", body: payload });
         expect(repeated.status).toBe(409);
         expect(yield* native(() => repeated.text())).not.toContain(issued.data.bearer);
         const list = yield* browser("/pats", alice, { method: "GET" });
         expect(list.status).toBe(200);
+
         const dates = yield* Schema.decodeUnknownEffect(
           Schema.Tuple([Schema.Struct({ created_at_ms: Schema.Int, expires_at_ms: Schema.Int })])
         )(
@@ -235,6 +281,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             issued.data.pat.shortId
           )
         );
+
         expect(yield* native(() => list.json())).toEqual({
           data: {
             pats: [
@@ -300,6 +347,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             (operation) => ({ operation })
           )
         );
+
         const denied = yield* native(() =>
           runtime.dispatchFetch("https://api.fidyapp.com/transactions", {
             method: "POST",
@@ -315,6 +363,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }),
           })
         );
+
         expect(denied.status).toBe(401);
         yield* native(() => denied.text());
       })
@@ -324,6 +373,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const create = yield* nativeUserPlatform,
         runtime = yield* create(),
         owner = yield* seed(runtime, alice);
+
       const payload = {
         requestId: "816551ab-a25e-4167-b87c-f7cc68890078",
         grant: {
@@ -333,6 +383,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(owner.now + 604800000)),
         },
       };
+
       const post = (calls: unknown[]): TransportResult =>
         native(() =>
           runtime.dispatchFetch("https://api.fidyapp.com/operations/atomic-batch", {
@@ -347,11 +398,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             body: JSON.stringify({ calls }),
           })
         );
+
       const issue = {
         callId: "816551ab-a25e-4167-b87c-f7cc68890161",
         operation: "pats.createManualPAT",
         input: { payload },
       };
+
       const failed = yield* post([
         issue,
         {
@@ -360,12 +413,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           input: { payload: { pairingId: "816551ab-a25e-4167-b87c-f7cc68890070" } },
         },
       ]);
+
       expect(failed.status).toBe(400);
       expect(yield* native(() => failed.json())).toMatchObject({ error: { failedCallIndex: 1 } });
       expect(yield* owner.exec("SELECT count(*) AS n FROM pats")).toEqual([{ n: 0 }]);
       const completed = yield* post([issue]);
       expect(completed.status).toBe(200);
       const reply = yield* native(() => completed.json());
+
       const result = yield* Schema.decodeUnknownEffect(
         Schema.Struct({
           data: Schema.Struct({
@@ -377,6 +432,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           }),
         })
       )(reply);
+
       expect(result.data.results[0].output.data.bearer).toMatch(/^fin_/u);
       const raw = result.data.results[0].output.data.bearer;
       expect(

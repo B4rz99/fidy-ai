@@ -1,9 +1,10 @@
 import { type RefCallback, useCallback, useState } from "react";
 
-export const useDismissedPickerScope = (
-  active: boolean
-): Readonly<{ generation: number; scope: RefCallback<HTMLDivElement> }> => {
+type DismissedPickerScope = Readonly<{ generation: number; scope: RefCallback<HTMLDivElement> }>;
+
+export const useDismissedPickerScope = (active: boolean): DismissedPickerScope => {
   const [generation, setGeneration] = useState(0);
+
   const scope = useCallback<RefCallback<HTMLDivElement>>(
     (node) => {
       if (node === null || active) return;
@@ -19,5 +20,6 @@ export const useDismissedPickerScope = (
     },
     [active]
   );
+
   return { generation, scope };
 };

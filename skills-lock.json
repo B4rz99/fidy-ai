@@ -1,11 +1,18 @@
 {
-  "version": 1,
+  "version": 2,
   "skills": {
+    "install-anti-slop": {
+      "source": "K-Mistele/anti-slop",
+      "commit": "13b020367525e8c6efe6cede8f387697b2a8d907",
+      "sourceType": "github",
+      "skillPath": "skills/install-anti-slop/SKILL.md",
+      "computedHash": "ef362dc61db8bc554516e92fb531e905557b7d9bbe0f7f5d1d6ebab11f41a2dc"
+    },
     "shadcn": {
       "source": "shadcn/ui",
       "sourceType": "github",
       "skillPath": "skills/shadcn/SKILL.md",
-      "computedHash": "c1a68ee06a668aced9ab2b5fbdea5f989864123794eb2e056b339a072dbb7f10"
+      "computedHash": ""
     }
   }
 }

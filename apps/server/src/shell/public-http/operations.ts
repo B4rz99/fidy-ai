@@ -38,6 +38,7 @@ export const matchesRouteTemplate = ({
 }: Readonly<{ template: string; path: string }>): boolean => {
   const expected = template.split("/");
   const actual = path.split("/");
+
   return (
     expected.length === actual.length &&
     expected.every((segment, index) =>

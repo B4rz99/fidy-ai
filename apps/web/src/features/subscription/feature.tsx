@@ -1,13 +1,13 @@
 import { PendingRead } from "@/ui/components/pending-read";
 import { SubscriptionCancellationManagement } from "./cancellation";
-import { makeCancellationManagement, subscriptionStatusQuery } from "./cancellation-command";
+import { cancellationManagementAtom, subscriptionStatusQuery } from "./cancellation-command";
 import { Button } from "@/ui/components/button";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { lazyRouteComponent, useRouter } from "@tanstack/react-router";
-import { Array as EffectArray, Option } from "effect";
+import { Data, Array as EffectArray, Match, Option, Predicate } from "effect";
 import { Atom } from "effect/reactivity";
-import { type EnrollmentInteraction, makeEnrollmentInteraction } from "./interaction";
+import { type EnrollmentInteraction, createEnrollmentInteraction } from "./interaction";
 import { SubscriptionConsentBoundary } from "./consent-boundary";
 import { DaviplataAuthorizationLock } from "./daviplata-activity";
 import { type JSX, type RefCallback, Suspense, useState } from "react";
@@ -22,73 +22,83 @@ import {
   paymentMethodCopy,
   presentSubscriptionOffer,
 } from "./presentation";
-import { type EnrollmentGateway, makeEnrollmentGateway } from "./enrollment-gateway";
+import { type EnrollmentGateway, createEnrollmentGateway } from "./enrollment-gateway";
 import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   OfferSelection,
   PaymentMethodSelection,
-  type StandingViewState,
   SubscriptionStandingView,
   SubscriptionSummary,
   SubscriptionTerms,
   SubscriptionWorkspace,
 } from "./workspace";
+import { StandingViewState } from "./view-state";
 
-export type SubscriptionOffersPageState =
-  | Readonly<{ _tag: "Initial" }>
-  | Readonly<{ _tag: "Loading" }>
-  | Readonly<{ _tag: "Ready"; offers: SubscriptionOffers }>
-  | Readonly<{ _tag: "Refreshing"; offers: SubscriptionOffers }>
-  | Readonly<{
-      _tag: "RefreshFailure";
-      offers: SubscriptionOffers;
-      onRetry: () => void;
-      waiting: boolean;
-    }>
-  | Readonly<{ _tag: "AuthenticationRequired" }>
-  | Readonly<{
-      _tag: "LoadFailure";
-      boundaryFailure: boolean;
-      onRetry: () => void;
-      waiting: boolean;
-    }>;
+type SubscriptionOffersPageState = Data.TaggedEnum<{
+  Initial: {};
+  Loading: {};
+  Ready: Readonly<{ offers: SubscriptionOffers }>;
+  Refreshing: Readonly<{ offers: SubscriptionOffers }>;
+  RefreshFailure: Readonly<{
+    offers: SubscriptionOffers;
+    onRetry: () => void;
+    waiting: boolean;
+  }>;
+  AuthenticationRequired: {};
+  LoadFailure: Readonly<{
+    boundaryFailure: boolean;
+    onRetry: () => void;
+    waiting: boolean;
+  }>;
+}>;
+
+const SubscriptionOffersPageState = Data.taggedEnum<SubscriptionOffersPageState>();
 
 const PaymentDetails = lazyRouteComponent(() => import("./payment-details"), "PaymentDetails");
+
 type SubscriptionStandingPresentation = Readonly<{
   state: StandingViewState;
   refresh: () => void;
   management: JSX.Element;
 }>;
+
 const hasNonTrialPro = (state: StandingViewState): boolean =>
-  state._tag === "Ready" &&
+  Predicate.isTagged(state, "Ready") &&
   state.standing.accessTier === "pro" &&
   (state.standing.hasProGrant || Option.isSome(state.standing.paidSubscription));
+
 const showBillingManagement = (state: StandingViewState): boolean =>
-  state._tag !== "Ready" ||
+  !Predicate.isTagged(state, "Ready") ||
   !state.standing.hasProGrant ||
   Option.isSome(state.standing.paidSubscription);
+
 type ReadyOffersProps = Readonly<{
   standing: SubscriptionStandingPresentation;
   offers: SubscriptionOffers;
   gateway: Option.Option<EnrollmentGateway>;
 }>;
+
 type SubscriptionSelection = EnrollmentInteraction &
   Readonly<{
     presented: ReadonlyArray<SubscriptionOfferPresentation>;
     selectedOffer: Option.Option<SubscriptionOfferPresentation>;
   }>;
+
 const useSubscriptionSelection = ({ offers, gateway }: ReadyOffersProps): SubscriptionSelection => {
   const authorizationLock = DaviplataAuthorizationLock.use();
+
   const [atom] = useState(() =>
-    makeEnrollmentInteraction({
+    createEnrollmentInteraction({
       offers,
       gateway,
       authorizationLock,
     })
   );
+
   const interaction = useAtomValue(atom);
   const presented = offers.map(presentSubscriptionOffer);
+
   const selectedOffer = Option.orElse(
     Option.map(interaction.checkoutPrice, presentSubscriptionOffer),
     () =>
@@ -96,13 +106,16 @@ const useSubscriptionSelection = ({ offers, gateway }: ReadyOffersProps): Subscr
         EffectArray.findFirst(presented, (offer) => offer.id === id)
       )
   );
+
   const currentSelection = offers.some((offer) =>
     Option.contains(interaction.selectedId, offer.id)
   );
+
   const act = (action: () => void): void => {
     interaction.updateOffers(offers);
     action();
   };
+
   return {
     ...interaction,
     canContinue:
@@ -117,19 +130,24 @@ const useSubscriptionSelection = ({ offers, gateway }: ReadyOffersProps): Subscr
     selectedOffer,
     changeSelection: () => {
       const changed = interaction.changeSelection();
+
       if (changed) {
         requestAnimationFrame(() => document.getElementById("subscription-period-title")?.focus());
       }
+
       return changed;
     },
   };
 };
+
 const methodAvailabilityMessage = (
   selection: Pick<SubscriptionSelection, "methodsWaiting" | "methodsFailed">
 ): string => {
   if (selection.methodsFailed) return "No pudimos consultar los métodos de pago. Intenta de nuevo.";
+
   return "No hay métodos de pago disponibles en este momento.";
 };
+
 const OfferOverview = ({
   selection,
   terms,
@@ -177,6 +195,7 @@ const OfferOverview = ({
     </div>
   </>
 );
+
 const Checkout = ({
   selection,
   gateway,
@@ -221,22 +240,27 @@ const Checkout = ({
     })}
   </>
 );
+
 const useEnrollmentLifetime = (interaction: EnrollmentInteraction): RefCallback<HTMLDivElement> => {
   const [lifetimeRef] = useState<RefCallback<HTMLDivElement>>(
     () => (): ReturnType<RefCallback<HTMLDivElement>> => interaction.mount()
   );
+
   return lifetimeRef;
 };
+
 const showCheckout = (selection: EnrollmentInteraction, standing: StandingViewState): boolean =>
   selection.checkout &&
-  (selection.disabled || standing._tag !== "Ready" || !standing.standing.hasProGrant);
+  (selection.disabled || !Predicate.isTagged(standing, "Ready") || !standing.standing.hasProGrant);
+
 const ReadyOffersContent = (props: ReadyOffersProps): JSX.Element => {
   const selection = useSubscriptionSelection(props);
   const lifetimeRef = useEnrollmentLifetime(selection);
   const { standing } = props;
   const paid = hasNonTrialPro(standing.state);
-  const resolved = standing.state._tag === "Ready";
+  const resolved = Predicate.isTagged(standing.state, "Ready");
   const checkout = showCheckout(selection, standing.state);
+
   return (
     <div
       ref={lifetimeRef}
@@ -272,11 +296,13 @@ const ReadyOffersContent = (props: ReadyOffersProps): JSX.Element => {
     </div>
   );
 };
+
 const ReadyOffers = ({ offers, gateway, standing }: ReadyOffersProps): JSX.Element => (
   <DaviplataAuthorizationLock.Provider>
     <ReadyOffersContent gateway={gateway} offers={offers} standing={standing} />
   </DaviplataAuthorizationLock.Provider>
 );
+
 const AuthenticationRequired = (): JSX.Element => (
   <Alert>
     <AlertTitle>Inicia sesión para activar Pro</AlertTitle>
@@ -288,6 +314,7 @@ const AuthenticationRequired = (): JSX.Element => (
     </AlertDescription>
   </Alert>
 );
+
 const LoadFailure = ({
   boundaryFailure,
   onRetry,
@@ -306,16 +333,17 @@ const LoadFailure = ({
     waiting={waiting}
   />
 );
+
 const OffersRefreshFeedback = ({
   state,
 }: Readonly<{ state: SubscriptionOffersPageState }>): JSX.Element => (
   <>
-    {state._tag === "Refreshing" ? (
+    {Predicate.isTagged(state, "Refreshing") ? (
       <p aria-live="polite" className="sr-only">
         Actualizando ofertas…
       </p>
     ) : null}
-    {state._tag === "RefreshFailure" ? (
+    {Predicate.isTagged(state, "RefreshFailure") ? (
       <CanonicalQueryRetry
         description="Mostramos las últimas ofertas disponibles."
         onRetry={state.onRetry}
@@ -327,6 +355,7 @@ const OffersRefreshFeedback = ({
     ) : null}
   </>
 );
+
 const SubscriptionOffersContent = ({
   state,
   gateway,
@@ -336,31 +365,31 @@ const SubscriptionOffersContent = ({
   state: SubscriptionOffersPageState;
   gateway: Option.Option<EnrollmentGateway>;
 }>): JSX.Element => {
-  switch (state._tag) {
-    case "Initial":
-    case "Loading":
-      return <PendingRead label="Cargando ofertas" />;
-    case "Ready":
-    case "Refreshing":
-    case "RefreshFailure":
-      return (
-        <>
-          <OffersRefreshFeedback state={state} />
-          <ReadyOffers gateway={gateway} offers={state.offers} standing={standing} />
-        </>
-      );
-    case "AuthenticationRequired":
-      return <AuthenticationRequired />;
-    case "LoadFailure":
-      return (
-        <LoadFailure
-          boundaryFailure={state.boundaryFailure}
-          onRetry={state.onRetry}
-          waiting={state.waiting}
-        />
-      );
-  }
+  const ready = ({
+    offers,
+  }: Data.TaggedEnum.Value<
+    SubscriptionOffersPageState,
+    "Ready" | "Refreshing" | "RefreshFailure"
+  >): JSX.Element => (
+    <>
+      <OffersRefreshFeedback state={state} />
+      <ReadyOffers gateway={gateway} offers={offers} standing={standing} />
+    </>
+  );
+
+  return SubscriptionOffersPageState.$match(state, {
+    Initial: () => <PendingRead label="Cargando ofertas" />,
+    Loading: () => <PendingRead label="Cargando ofertas" />,
+    Ready: ready,
+    Refreshing: ready,
+    RefreshFailure: ready,
+    AuthenticationRequired: () => <AuthenticationRequired />,
+    LoadFailure: ({ boundaryFailure, onRetry, waiting }) => (
+      <LoadFailure boundaryFailure={boundaryFailure} onRetry={onRetry} waiting={waiting} />
+    ),
+  });
 };
+
 const StandingWithoutOffers = ({
   standing,
   children,
@@ -374,7 +403,7 @@ const StandingWithoutOffers = ({
       {showBillingManagement(standing.state) && standing.management}
       <div className="subscription-offers-feedback">{children}</div>
     </div>
-    {standing.state._tag === "Ready" && (
+    {Predicate.isTagged(standing.state, "Ready") && (
       <SubscriptionSummary
         paid={hasNonTrialPro(standing.state)}
         granted={standing.state.standing.hasProGrant}
@@ -384,6 +413,7 @@ const StandingWithoutOffers = ({
     )}
   </div>
 );
+
 export const SubscriptionOffersView = ({
   state,
   gateway,
@@ -394,11 +424,13 @@ export const SubscriptionOffersView = ({
   standing: SubscriptionStandingPresentation;
 }>): JSX.Element => {
   const content = <SubscriptionOffersContent gateway={gateway} state={state} standing={standing} />;
+
   const hasOfferContent =
-    state._tag === "Ready" ||
-    state._tag === "Refreshing" ||
-    state._tag === "RefreshFailure" ||
-    state._tag === "AuthenticationRequired";
+    Predicate.isTagged(state, "Ready") ||
+    Predicate.isTagged(state, "Refreshing") ||
+    Predicate.isTagged(state, "RefreshFailure") ||
+    Predicate.isTagged(state, "AuthenticationRequired");
+
   return (
     <SubscriptionWorkspace>
       {hasOfferContent ? (
@@ -409,31 +441,31 @@ export const SubscriptionOffersView = ({
     </SubscriptionWorkspace>
   );
 };
+
 const subscriptionOffersQuery = Atom.family((client: FidyClient) =>
   client.query("subscription", "listSubscriptionOffers", {})
 );
+
 const useSubscriptionStanding = (): SubscriptionStandingPresentation => {
   const router = useRouter();
   const client = router.options.context.apiClient;
-  const [cancellation] = useState(() => client.pipe(makeCancellationManagement));
+  const [cancellation] = useState(() => client.pipe(cancellationManagementAtom));
   const query = subscriptionStatusQuery(client);
   const status = useAtomValue(query);
   const refresh = useAtomRefresh(query);
   const view = presentCanonicalQuery(status);
+
   return {
-    state:
-      view._tag === "Ready"
-        ? {
-            _tag: "Ready",
-            standing: view.value.data,
-          }
-        : {
-            _tag: view._tag,
-          },
+    state: Match.valueTags(view, {
+      Initial: () => StandingViewState.Initial(),
+      Failure: () => StandingViewState.Failure(),
+      Ready: ({ value }) => StandingViewState.Ready({ standing: value.data }),
+    }),
     refresh,
     management: <SubscriptionCancellationManagement command={cancellation} />,
   };
 };
+
 const readyOffersState = ({
   offers,
   refreshFailure,
@@ -446,84 +478,74 @@ const readyOffersState = ({
   onRetry: () => void;
 }>): SubscriptionOffersPageState => {
   if (refreshFailure) {
-    return {
-      _tag: "RefreshFailure",
-      offers,
-      onRetry,
-      waiting: refreshing,
-    };
+    return SubscriptionOffersPageState.RefreshFailure({ offers, onRetry, waiting: refreshing });
   }
+
   if (refreshing) {
-    return {
-      _tag: "Refreshing",
-      offers,
-    };
+    return SubscriptionOffersPageState.Refreshing({ offers });
   }
-  return {
-    _tag: "Ready",
-    offers,
-  };
+
+  return SubscriptionOffersPageState.Ready({ offers });
 };
+
 const AuthorizedSubscriptionOffers = (): JSX.Element => {
   const router = useRouter();
   const { authentication } = useSession();
   const standing = useSubscriptionStanding();
   const enrollmentClient = useSubscriptionEnrollmentClient();
-  const [gateway] = useState(() => makeEnrollmentGateway(enrollmentClient));
+  const [gateway] = useState(() => createEnrollmentGateway(enrollmentClient));
   const offers = subscriptionOffersQuery(router.options.context.apiClient);
   const result = useAtomValue(offers);
   const refresh = useAtomRefresh(offers);
+
   if (authentication === "expired") {
     return (
       <SubscriptionOffersView
         standing={standing}
         gateway={Option.none()}
-        state={{
-          _tag: "AuthenticationRequired",
-        }}
+        state={SubscriptionOffersPageState.AuthenticationRequired()}
       />
     );
   }
+
   const queryState = presentCanonicalQuery(result);
-  switch (queryState._tag) {
-    case "Initial":
-      return (
-        <SubscriptionOffersView
-          standing={standing}
-          gateway={Option.none()}
-          state={{
-            _tag: queryState.waiting ? "Loading" : "Initial",
-          }}
-        />
-      );
-    case "Failure":
-      return (
-        <SubscriptionOffersView
-          standing={standing}
-          gateway={Option.none()}
-          state={{
-            _tag: "LoadFailure",
-            boundaryFailure: queryState.failure._tag !== "DeclaredFailure",
-            onRetry: refresh,
-            waiting: queryState.waiting,
-          }}
-        />
-      );
-    case "Ready":
-      return (
-        <SubscriptionOffersView
-          standing={standing}
-          gateway={Option.some(gateway)}
-          state={readyOffersState({
-            offers: queryState.value.data,
-            refreshFailure: Option.isSome(queryState.refreshFailure),
-            refreshing: queryState.waiting,
-            onRetry: refresh,
-          })}
-        />
-      );
-  }
+
+  return Match.valueTags(queryState, {
+    Initial: ({ waiting }) => (
+      <SubscriptionOffersView
+        standing={standing}
+        gateway={Option.none()}
+        state={
+          waiting ? SubscriptionOffersPageState.Loading() : SubscriptionOffersPageState.Initial()
+        }
+      />
+    ),
+    Failure: ({ failure, waiting }) => (
+      <SubscriptionOffersView
+        standing={standing}
+        gateway={Option.none()}
+        state={SubscriptionOffersPageState.LoadFailure({
+          boundaryFailure: !Predicate.isTagged(failure, "DeclaredFailure"),
+          onRetry: refresh,
+          waiting,
+        })}
+      />
+    ),
+    Ready: ({ value, refreshFailure, waiting }) => (
+      <SubscriptionOffersView
+        standing={standing}
+        gateway={Option.some(gateway)}
+        state={readyOffersState({
+          offers: value.data,
+          refreshFailure: Option.isSome(refreshFailure),
+          refreshing: waiting,
+          onRetry: refresh,
+        })}
+      />
+    ),
+  });
 };
+
 export const SubscriptionOffersFeature = (): JSX.Element => (
   <SubscriptionConsentBoundary>
     <AuthorizedSubscriptionOffers />

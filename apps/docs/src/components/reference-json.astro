@@ -3,8 +3,11 @@ import { Code } from "astro:components";
 import type { Schema } from "effect";
 
 type Props = { value: Schema.Json; label: string };
+
 const { value, label } = Astro.props;
+
 const code = JSON.stringify(value, undefined, 2);
+
 const codeTheme = {
   name: "fidy-json",
   colors: { "editor.background": "#202020", "editor.foreground": "#FFF6EF" },
@@ -48,27 +51,32 @@ const codeTheme = {
 </div>
 <script>
   const codePanels = document.querySelectorAll<HTMLElement>(".reference-json pre");
-  const updateOverflow = (panel: HTMLElement): void => {
+
+  const updateOverflow = (panel: Element): void => {
     const footer = panel
       .closest(".reference-json")
       ?.querySelector<HTMLElement>(".reference-json-footer");
+
     if (!footer) return;
     const horizontal = panel.scrollWidth > panel.clientWidth;
     const vertical = panel.scrollHeight > panel.clientHeight;
     footer.hidden = !horizontal && !vertical;
     const direction = footer.querySelector("span");
+
     if (direction) direction.textContent = `${horizontal ? "↔" : ""} ${vertical ? "↕" : ""}`.trim();
   };
+
   const resizeObserver = new ResizeObserver((entries) => {
-    entries.forEach(({ target }) => {
-      if (target instanceof HTMLElement) updateOverflow(target);
-    });
+    entries.forEach(({ target }) => updateOverflow(target));
   });
+
   codePanels.forEach((panel) => {
     updateOverflow(panel);
     resizeObserver.observe(panel);
   });
+
   document.fonts.addEventListener("loadingdone", () => codePanels.forEach(updateOverflow));
+
   document.fonts.ready.then(() => codePanels.forEach(updateOverflow));
 
   document.querySelectorAll<HTMLButtonElement>("[data-reference-copy]").forEach((button) => {
@@ -76,7 +84,9 @@ const codeTheme = {
       const container = button.closest(".reference-json");
       const code = container?.querySelector("pre code")?.textContent;
       const status = container?.querySelector("[role=status]");
+
       if (!code || !status) return;
+
       try {
         await navigator.clipboard.writeText(code);
         status.textContent = "Código copiado";

@@ -1,4 +1,5 @@
-import { Effect, Option } from "effect";
+import { browserRuntime } from "@/transport/browser-runtime";
+import { Effect, Option, Predicate } from "effect";
 import { prepareQuery } from "@/transport/query-preparation";
 import { type AsyncResult, type Atom, type AtomRegistry } from "effect/reactivity";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
@@ -27,6 +28,7 @@ export const budgetStatusQuery = ({
       query: { timeZone: user.timeZone, month },
     })
     .pipe(revalidateWorkspaceQuery);
+
 export const preloadBudgetData = ({
   apiClient,
   registry,
@@ -38,7 +40,7 @@ export const preloadBudgetData = ({
   month: Option.Option<string>;
   signal: Option.Option<AbortSignal>;
 }>): Promise<void> =>
-  Effect.runPromise(
+  browserRuntime.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
         prepareQuery({
@@ -48,9 +50,11 @@ export const preloadBudgetData = ({
         })
       );
       const profile = presentCanonicalQuery(registry.get(workspaceProfileQuery(apiClient)));
-      if (profile._tag !== "Ready" || Option.isSome(profile.refreshFailure)) {
+
+      if (!Predicate.isTagged(profile, "Ready") || Option.isSome(profile.refreshFailure)) {
         return;
       }
+
       return yield* Effect.tryPromise(() =>
         prepareQuery({
           registry,

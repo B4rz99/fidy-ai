@@ -23,20 +23,25 @@ export const admitPurge = Effect.fn(function* (runtime: Miniflare) {
     )
   );
 });
+
 export const caseDriver = Effect.fn(function* (runtime: Miniflare) {
   const storage = yield* native(() =>
     runtime.unsafeGetDurableObjectStorage("core", "Erasure", { name: erasureRegistryName })
   );
+
   const cases = (yield* native(() =>
     runtime.getDurableObjectNamespace("ERASURE", "core")
   )).getByName(erasureRegistryName);
+
   const step = Effect.fn(function* () {
     yield* native(() =>
       storage.exec("UPDATE erasure_cases SET next_check_ms=1 WHERE state<>'ExternalPending'")
     );
     yield* native(() => cases.fetch(ownerCheckUrl, { method: "POST" }));
     yield* Effect.sleep("120 millis");
+
     return (yield* native(() => storage.exec("SELECT state FROM erasure_cases")))[0]?.state;
   });
+
   return { storage, step };
 });

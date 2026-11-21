@@ -2,8 +2,9 @@ import { TokenBearer } from "@fidy/server/client";
 import { Effect, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { runOperationCommand } from "../src/canonical/operations";
-import { makeCanonicalClient, readOperationInput } from "../src/canonical/runtime";
+import { canonicalClientFactory, readOperationInput } from "../src/canonical/runtime";
 import { SavedGrant, apiOrigin } from "../src/credential/contract";
+import { decodePAT } from "./support/pat";
 
 const ServerResponse = Schema.Struct({
   body: Schema.String,
@@ -11,10 +12,10 @@ const ServerResponse = Schema.Struct({
   headers: Schema.Record(Schema.String, Schema.String),
   command: Schema.Literals(["quota", "transaction", "categories"]),
 });
-const grant = Schema.decodeSync(Schema.toCodecJson(SavedGrant))({
+
+const grant = SavedGrant.make({
   origin: apiOrigin,
-  pat: {
-    _tag: "PAT",
+  pat: decodePAT({
     id: "01900000-0000-4000-8000-000000000001",
     shortId: "abcd1234",
     recipientLabel: "Allowance integration",
@@ -24,21 +25,26 @@ const grant = Schema.decodeSync(Schema.toCodecJson(SavedGrant))({
     revokedAt: null,
     createdAt: "2099-01-01T00:00:00.000Z",
     expiresAt: "2099-01-08T00:00:00.000Z",
-  },
+  }),
 });
+
 const secretCharacters = 43;
+
 const bearer = Redacted.make(TokenBearer.make(`fin_abcd1234_${"s".repeat(secretCharacters)}`));
+
 const commands: Readonly<Record<typeof ServerResponse.Type.command, ReadonlyArray<string>>> = {
   quota: ["quota", "getQuota"],
   transaction: ["transactions", "getTransaction", "--input", "-"],
   categories: ["categories", "listCategories"],
 };
+
 await Effect.runPromise(
   Effect.gen(function* () {
     const wire = yield* readOperationInput("-");
     const response = yield* Schema.decodeEffect(Schema.fromJsonString(ServerResponse))(wire);
+
     const failed = yield* runOperationCommand(commands[response.command], {
-      clientFactory: makeCanonicalClient,
+      clientFactory: canonicalClientFactory,
       store: {
         load: Effect.succeedSome({ grant, bearer }),
         save: () => Effect.void,
@@ -63,6 +69,7 @@ await Effect.runPromise(
         }),
       json: true,
     });
+
     process.exitCode = failed ? 1 : 0;
   }).pipe(Effect.scoped)
 );

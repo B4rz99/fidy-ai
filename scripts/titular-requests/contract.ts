@@ -1,7 +1,9 @@
-import { Data, Schema } from "effect";
+import { Schema } from "effect";
 
 export const EvidenceReference = Schema.String.check(Schema.isUUID());
+
 export const LocalDate = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u));
+
 export const RequestKind = Schema.Literals([
   "Access",
   "AuthorizationProof",
@@ -11,7 +13,9 @@ export const RequestKind = Schema.Literals([
   "Withdrawal",
   "Erasure",
 ]);
+
 export const RequesterKind = Schema.Literals(["User", "NonUser", "Representative"]);
+
 export const HandoffWithdrawal = Schema.Union([
   Schema.Struct({ status: Schema.Literal("Recorded"), reference: EvidenceReference }),
   Schema.Struct({ status: Schema.Literals(["NotRequested", "Pending", "Unavailable"]) }),
@@ -23,8 +27,11 @@ export const ErasureHandoff = Schema.Struct({
   scopeRef: EvidenceReference,
   withdrawal: HandoffWithdrawal,
 });
+
 const responsePrepared = { responseRef: EvidenceReference };
+
 const deliveryEvidence = { ...responsePrepared, evidenceRef: EvidenceReference };
+
 export const ResponseDelivery = Schema.Union([
   Schema.Struct({ status: Schema.Literal("NotPrepared") }),
   Schema.Struct({ status: Schema.Literal("Pending"), ...responsePrepared }),
@@ -34,7 +41,9 @@ export const ResponseDelivery = Schema.Union([
 ]);
 
 const addressed = { commandId: EvidenceReference, caseId: EvidenceReference };
+
 const transition = { ...addressed, revision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)) };
+
 export const CaseCommand = Schema.Union([
   Schema.Struct({
     action: Schema.Literal("Receive"),
@@ -111,6 +120,7 @@ export const CaseCommand = Schema.Union([
     responseDate: LocalDate,
   }),
 ]);
+
 export type CaseCommand = typeof CaseCommand.Type;
 
 export const TitularCase = Schema.Struct({
@@ -146,11 +156,14 @@ export const TitularCase = Schema.Struct({
     })
   ),
 });
+
 export type TitularCase = typeof TitularCase.Type;
+
 export const RegisterRequest = Schema.Union([
   Schema.Struct({ operation: Schema.Literal("Apply"), command: CaseCommand }),
   Schema.Struct({ operation: Schema.Literal("Read"), caseId: TitularCase.fields.caseId }),
 ]);
+
 export const CaseReceipt = Schema.Struct({
   case: TitularCase,
   authority: Schema.Literal("manual-record-only"),
@@ -167,8 +180,19 @@ export const CaseReceipt = Schema.Struct({
     calendarReviewRequired: Schema.Boolean,
   }),
 });
+
 export type CaseReceipt = typeof CaseReceipt.Type;
 
-export class RegisterFailure extends Data.TaggedError("RegisterFailure")<{
-  reason: "InvalidInput" | "Conflict" | "InvalidTransition" | "UnsafeStorage" | "Unavailable";
-}> {}
+export class RegisterFailure extends Schema.TaggedError<
+  RegisterFailure,
+  { readonly brand: unique symbol }
+>()("RegisterFailure", {
+  reason: Schema.Literals([
+    "InvalidInput",
+    "Conflict",
+    "InvalidTransition",
+    "UnsafeStorage",
+    "Unavailable",
+  ]),
+  cause: Schema.optional(Schema.Unknown),
+}) {}

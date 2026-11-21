@@ -16,12 +16,15 @@ export type WorkspaceProps = Readonly<{
   budgets: ReadonlyArray<Budget>;
   editing: BudgetEditing;
 }>;
+
 export type SaveState = "idle" | "saving" | "saved" | "failed" | "uncertain";
+
 export type BudgetDraft = Readonly<{
   category: Category;
   budget: Option.Option<Budget>;
   groupCategoryIds: Option.Option<ReadonlyArray<Category["id"]>>;
 }>;
+
 export type BudgetEdit = Readonly<{
   target: BudgetDraft;
   amount: string;
@@ -29,6 +32,7 @@ export type BudgetEdit = Readonly<{
   groupName: string;
   groupCurrency: Option.Option<string>;
 }>;
+
 export type BudgetEditing = Readonly<{
   saveState: SaveState;
   writeAction: "save" | "delete";
@@ -53,11 +57,14 @@ export type BudgetEditing = Readonly<{
   freezePlan: () => void;
   rowKey: (status: BudgetStatus) => string;
 }>;
+
 const monthLabelLength = 7;
+
 export const currentBudgetMonth = (user: CurrentUser): string =>
   DateTime.formatIsoDate(
     DateTime.setZone(DateTime.nowUnsafe(), DateTime.zoneMakeNamedUnsafe(user.timeZone))
   ).slice(0, monthLabelLength);
+
 export const monthShift = ({
   month,
   offset,
@@ -65,6 +72,7 @@ export const monthShift = ({
   DateTime.formatIsoDateUtc(
     DateTime.add(DateTime.makeUnsafe(`${month}-01T00:00:00Z`), { months: offset })
   ).slice(0, monthLabelLength);
+
 export const monthTitle = ({
   month,
   user,
@@ -72,22 +80,34 @@ export const monthTitle = ({
   new Intl.DateTimeFormat(user.locale, { month: "long", year: "numeric", timeZone: "UTC" }).format(
     DateTime.makeUnsafe(`${month}-01T00:00:00Z`).epochMilliseconds
   );
+
 export const categoryFor = ({
   categories,
   id,
-}: Readonly<{ categories: ReadonlyArray<Category>; id: string }>): Category =>
-  Option.getOrThrow(Option.fromUndefinedOr(categories.find((category) => category.id === id)));
+}: Readonly<{ categories: ReadonlyArray<Category>; id: string }>): Option.Option<Category> =>
+  Option.fromUndefinedOr(categories.find((category) => category.id === id));
+
 export const groupFor = ({
   status,
   categories,
 }: Readonly<{ status: BudgetStatus; categories: ReadonlyArray<Category> }>): string =>
   status.budget.groupName ??
-  defaultBudgetGroup(categoryFor({ categories, id: status.budget.categoryId }).label);
+  defaultBudgetGroup(
+    Option.match(categoryFor({ categories, id: status.budget.categoryId }), {
+      onNone: () => "",
+      onSome: (category) => category.label,
+    })
+  );
+
 export const rowDraft = ({
   status,
   categories,
-}: Readonly<{ status: BudgetStatus; categories: ReadonlyArray<Category> }>): BudgetDraft => ({
-  category: categoryFor({ categories, id: status.budget.categoryId }),
-  budget: Option.some(status.budget),
-  groupCategoryIds: Option.none(),
-});
+}: Readonly<{
+  status: BudgetStatus;
+  categories: ReadonlyArray<Category>;
+}>): Option.Option<BudgetDraft> =>
+  Option.map(categoryFor({ categories, id: status.budget.categoryId }), (category) => ({
+    category,
+    budget: Option.some(status.budget),
+    groupCategoryIds: Option.none(),
+  }));

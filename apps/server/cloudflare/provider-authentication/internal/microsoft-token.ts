@@ -3,31 +3,41 @@ import {
   Clock,
   type Config,
   ConfigProvider,
+  Data,
   DateTime,
   Effect,
   Option,
   Redacted,
   Schema,
 } from "effect";
-import { HttpClient } from "effect/http";
+import type { HttpClient } from "effect/http";
 import { createLocalJWKSet, decodeJwt, jwtVerify } from "jose";
-import { makeMicrosoftOutboundHttp } from "../../../src/shell/outbound-http/operations";
+import { ProviderOidcHttp } from "../../../src/shell/outbound-http/operations";
 import type { ProviderOidcHttpService } from "../../../src/shell/outbound-http/contract";
 import { loadMicrosoftClientSecret } from "../../../src/shell/secret-material/operations";
 import type { Validation, VerifiedProviderIdentity } from "./token-contract";
 
+const OidcRequest = Data.taggedEnum<Parameters<ProviderOidcHttpService["execute"]>[0]>();
+
 const successStatus = 200;
+
 const millisecondsPerSecond = 1000;
+
 const maximumSubjectLength = 255;
+
 const maximumContactLength = 320;
+
 const maximumTokenLength = 16384;
+
 const issuerTemplate = "https://login.microsoftonline.com/{tenantid}/v2.0";
+
 const TenantClaims = Schema.Struct({
   tid: Schema.String.check(
     Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u)
   ),
   iss: Schema.String,
 });
+
 const Claims = Schema.Struct({
   ...TenantClaims.fields,
   ver: Schema.Literal("2.0"),
@@ -41,9 +51,11 @@ const Claims = Schema.Struct({
     Schema.String.check(Schema.isMaxLength(maximumContactLength))
   ),
 });
+
 const TokenResponse = Schema.Struct({
   id_token: Schema.String.check(Schema.isMaxLength(maximumTokenLength)),
 });
+
 const SigningKeys = Schema.Struct({
   keys: Schema.Array(
     Schema.Struct({
@@ -58,12 +70,14 @@ const SigningKeys = Schema.Struct({
     })
   ),
 });
+
 type ValidationFailure =
   | Config.ConfigError
   | Cause.UnknownError
   | Schema.SchemaError
   | Effect.Error<ReturnType<ProviderOidcHttpService["execute"]>>
   | "invalid";
+
 const microsoftHttp = (
   input: Validation
 ): Effect.Effect<ProviderOidcHttpService, Config.ConfigError, HttpClient.HttpClient> =>
@@ -74,13 +88,15 @@ const microsoftHttp = (
         ConfigProvider.fromUnknown(input.environment)
       )
     );
-    return makeMicrosoftOutboundHttp({
+
+    return yield* ProviderOidcHttp.make({
+      provider: "microsoft",
       clientId: input.environment.MICROSOFT_CLIENT_ID ?? "",
       clientSecret,
       redirectUri: input.environment.MICROSOFT_REDIRECT_URI ?? "",
-      httpClient: yield* HttpClient.HttpClient,
     });
   });
+
 const signingKeys = ({
   http,
   issuer,
@@ -91,15 +107,20 @@ const signingKeys = ({
   tenant: string;
 }>): Effect.Effect<ReturnType<typeof createLocalJWKSet>, ValidationFailure> =>
   Effect.gen(function* () {
-    const response = yield* http.execute({ _tag: "SigningKeys" });
+    const response = yield* http.execute(OidcRequest.SigningKeys());
+
     if (response.status !== successStatus) return yield* Effect.fail("invalid" as const);
+
     const decoded = yield* Schema.decodeEffect(Schema.fromJsonString(SigningKeys))(
       new TextDecoder().decode(response.body)
     );
+
     const eligible = decoded.keys.filter(
       (key) => key.issuer.replace("{tenantid}", tenant) === issuer
     );
+
     if (eligible.length === 0) return yield* Effect.fail("invalid" as const);
+
     return createLocalJWKSet({
       keys: eligible.map((key) => ({
         ...key,
@@ -107,6 +128,7 @@ const signingKeys = ({
       })),
     });
   });
+
 const validClaims = ({
   claims,
   input,
@@ -127,24 +149,32 @@ export const validateMicrosoftToken = (
 ): Effect.Effect<VerifiedProviderIdentity, ValidationFailure, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const code = input.query.get("code");
+
     if (code === null) return yield* Effect.fail("invalid" as const);
     const http = yield* microsoftHttp(input);
-    const response = yield* http.execute({
-      _tag: "TokenExchange",
-      code: Redacted.make(code),
-      verifier: Redacted.make(input.verifier),
-    });
+
+    const response = yield* http.execute(
+      OidcRequest.TokenExchange({
+        code: Redacted.make(code),
+        verifier: Redacted.make(input.verifier),
+      })
+    );
+
     if (response.status !== successStatus) return yield* Effect.fail("invalid" as const);
+
     const token = yield* Schema.decodeEffect(Schema.fromJsonString(TokenResponse))(
       new TextDecoder().decode(response.body)
     );
+
     const untrusted = yield* Effect.try(() => decodeJwt(token.id_token));
     const tenant = yield* Schema.decodeUnknownEffect(TenantClaims)(untrusted);
     const issuer = issuerTemplate.replace("{tenantid}", tenant.tid);
+
     if (tenant.iss !== issuer) return yield* Effect.fail("invalid" as const);
     const keys = yield* signingKeys({ http, issuer, tenant: tenant.tid });
     const clientId = input.environment.MICROSOFT_CLIENT_ID ?? "";
     const current = yield* Clock.currentTimeMillis;
+
     const verified = yield* Effect.tryPromise(() =>
       jwtVerify(token.id_token, keys, {
         issuer,
@@ -155,10 +185,13 @@ export const validateMicrosoftToken = (
         currentDate: DateTime.toDateUtc(DateTime.makeUnsafe(current)),
       })
     );
+
     const claims = yield* Schema.decodeUnknownEffect(Claims)(verified.payload);
+
     if (!validClaims({ claims, input, clientId, current })) {
       return yield* Effect.fail("invalid" as const);
     }
+
     return {
       issuer,
       subject: claims.sub,

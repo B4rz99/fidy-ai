@@ -4,30 +4,47 @@ import { StatementParseFailed, statementParserLimits } from "~/shell/ingestion/c
 import { decodeXlsxArchive, encodeXlsxArchive } from "./xlsx-archive";
 
 const maximumCells = statementParserLimits.maximumXlsxCells;
+
 const maximumSheets = 20;
+
 const maximumColumns = 200;
+
 const maximumFormatBytes = 256;
+
 const maximumFormatId = 392;
+
 const maximumNumericDigits = 128;
+
 const numericFormattingAllowance = 64;
+
 const xmlChunkCharacters = 1024;
+
 const maximumMetadataRecords = 32;
+
 const maximumMetadataCharges = 4096;
+
 const maximumMetadataWorkBytes = 524_288;
+
 const encoder = new TextEncoder();
+
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
 const limit = (): never => {
   throw new StatementParseFailed({ safeReason: "resource-limit" });
 };
+
 const malformed = (): never => {
   throw new StatementParseFailed({ safeReason: "malformed-file" });
 };
+
 const localName = (name: string): string => name.split(":").at(-1) ?? name;
+
 const size = (text: string): number => encoder.encode(text).length;
+
 const indexFor = (source: string): number => {
   if (!/^\d+$/u.test(source)) return malformed();
   const index = Number(source);
+
   return Number.isSafeInteger(index) ? index : malformed();
 };
 
@@ -35,9 +52,11 @@ const scan = (xml: string, configure: (parser: SaxesParser) => void): void => {
   const parser = new SaxesParser();
   parser.on("doctype", malformed);
   configure(parser);
+
   for (let start = 0; start < xml.length; start += xmlChunkCharacters) {
     parser.write(xml.slice(start, start + xmlChunkCharacters));
   }
+
   parser.close();
 };
 
@@ -45,8 +64,10 @@ const assertNumericText = (text: string): void => {
   const decoded = text.replace(/_x([\da-f]{4})_/giu, (_match, hex: string) =>
     String.fromCharCode(Number.parseInt(hex, 16))
   );
+
   if (decoded.replace(/\D/gu, "").length > maximumNumericDigits) limit();
 };
+
 const assertAttributes = (tag: SaxesTagPlain): void => {
   const canonical = [
     "t",
@@ -62,40 +83,52 @@ const assertAttributes = (tag: SaxesTagPlain): void => {
     "max",
     "ref",
   ];
+
   for (const name of Object.keys(tag.attributes)) {
     if (name.startsWith("xmlns:")) continue;
+
     if (name === "xsi:type" && ["dcterms:created", "dcterms:modified"].includes(tag.name)) continue;
     const alias = localName(name).split("_")[0]?.toLowerCase();
     const expected = canonical.find((attribute) => attribute.toLowerCase() === alias);
+
     if (expected !== undefined && name !== expected) malformed();
   }
 };
 
-const requiredXmlRoots: Readonly<Record<string, string>> = {
-  sheet: "workbook",
-  hyperlink: "worksheet",
-  col: "worksheet",
-  c: "worksheet",
-  f: "worksheet",
-  si: "sst",
-  sstItem: "sst",
-  xf: "styleSheet",
-  numFmt: "styleSheet",
-  metadataType: "metadata",
-  futureMetadata: "metadata",
-};
+const requiredXmlRoots = new Map(
+  Object.entries({
+    sheet: "workbook",
+    hyperlink: "worksheet",
+    col: "worksheet",
+    c: "worksheet",
+    f: "worksheet",
+    si: "sst",
+    sstItem: "sst",
+    xf: "styleSheet",
+    numFmt: "styleSheet",
+    metadataType: "metadata",
+    futureMetadata: "metadata",
+  })
+);
+
 const assertContentType = (tag: SaxesTagPlain): void => {
   const contentType = tag.attributes.ContentType ?? "";
+
   if (/\.(?:comments|threadedcomments|externalLink)\+xml$/iu.test(contentType)) limit();
+
   const binaryFinancialType =
     /^application\/vnd\.ms-excel\.(?:sheet\.binary\.macroEnabled\.main|worksheet|chartsheet|macrosheet|dialogsheet|sharedStrings|styles|comments|sheetMetadata|calcChain)$/u;
+
   if (binaryFinancialType.test(contentType)) limit();
+
   if ((tag.attributes.PartName ?? "").endsWith(".bin") && contentType.endsWith("+xml")) {
     limit();
   }
 };
+
 const assertRelationship = (tag: SaxesTagPlain): void => {
   if (/\/(?:comments|threadedComment|externalLink)$/u.test(tag.attributes.Type ?? "")) limit();
+
   if (
     (tag.attributes.Target ?? "").endsWith(".bin") &&
     /\/(?:worksheet|chartsheet|dialogsheet|macrosheet|officeDocument|styles|sharedStrings)$/u.test(
@@ -105,24 +138,33 @@ const assertRelationship = (tag: SaxesTagPlain): void => {
     limit();
   }
 };
+
 const assertXmlRepresentation = (tag: SaxesTagPlain, root: string): void => {
   const name = localName(tag.name);
+
   if (["comments", "comment", "ThreadedComments", "threadedComment"].includes(name)) limit();
+
   if (["externalLink", "externalBook"].includes(name)) limit();
-  const requiredRoot = requiredXmlRoots[name];
+  const requiredRoot = requiredXmlRoots.get(name);
+
   if (requiredRoot !== undefined && root !== requiredRoot) malformed();
+
   if (name === "Override") assertContentType(tag);
+
   if (name === "Relationship") assertRelationship(tag);
 };
 
 const assertStringChild = (name: string, parent: string): void => {
   if (!["si", "sstItem", "is"].includes(parent)) return;
+
   if (!["t", "r", "rPh", "phoneticPr"].includes(name)) malformed();
 };
 
 type XmlMember = Readonly<{ name: string; root: string; text: string }>;
+
 const xmlMembers = (entries: Map<string, Uint8Array>): ReadonlyArray<XmlMember> => {
   const members: Array<XmlMember> = [];
+
   for (const [name, bytes] of entries) {
     if (
       ["xl/workbook.bin", "meta-inf/manifest.xml", "objectdata.xml", "index/document.iwa"].includes(
@@ -131,12 +173,14 @@ const xmlMembers = (entries: Map<string, Uint8Array>): ReadonlyArray<XmlMember> 
     ) {
       limit();
     }
+
     if (
       !name.endsWith(".xml") &&
       !/^\s*</u.test(new TextDecoder().decode(bytes.subarray(0, xmlChunkCharacters)))
     ) {
       continue;
     }
+
     const text = decoder.decode(bytes);
     let root = "";
     let textLeaf = false;
@@ -152,27 +196,34 @@ const xmlMembers = (entries: Map<string, Uint8Array>): ReadonlyArray<XmlMember> 
         ancestors.push(name);
         textLeaf = ["t", "v", "f"].includes(name);
         assertAttributes(tag);
+
         if (root === "") root = localName(tag.name);
         assertXmlRepresentation(tag, root);
       });
       parser.on("closetag", (tag) => {
         ancestors.pop();
+
         if (["t", "v", "f"].includes(localName(tag.name))) textLeaf = false;
       });
     });
     members.push({ name, root, text });
   }
+
   if (members.some((member) => member.root === "document-content")) return malformed();
+
   return members;
 };
 
 const assertStringItem = (tag: SaxesTagPlain, alreadyOpen: boolean): void => {
   if (alreadyOpen || tag.isSelfClosing || Object.keys(tag.attributes).length !== 0) malformed();
 };
+
 const sharedStringSizes = (members: ReadonlyArray<XmlMember>): ReadonlyArray<number> => {
   const tables = members.filter((member) => member.root === "sst");
+
   if (tables.length > 1) return malformed();
   const sizes: Array<number> = [];
+
   for (const table of tables) {
     let item = false;
     let bytes = 0;
@@ -183,7 +234,9 @@ const sharedStringSizes = (members: ReadonlyArray<XmlMember>): ReadonlyArray<num
       parser.on("opentag", (tag) => {
         const name = localName(tag.name);
         depth += 1;
+
         if (depth === 2 && !["si", "sstItem"].includes(name)) malformed();
+
         if (name === "si" || name === "sstItem") {
           assertStringItem(tag, item);
           item = true;
@@ -191,6 +244,7 @@ const sharedStringSizes = (members: ReadonlyArray<XmlMember>): ReadonlyArray<num
           text = "";
           hasText = false;
         }
+
         if (item && name === "t") hasText = true;
       });
       parser.on("text", (chunk) => {
@@ -202,7 +256,9 @@ const sharedStringSizes = (members: ReadonlyArray<XmlMember>): ReadonlyArray<num
       parser.on("cdata", malformed);
       parser.on("closetag", (tag) => {
         depth -= 1;
+
         if (!["si", "sstItem"].includes(localName(tag.name))) return;
+
         if (!hasText) return malformed();
         assertNumericText(text);
         sizes.push(bytes);
@@ -210,20 +266,27 @@ const sharedStringSizes = (members: ReadonlyArray<XmlMember>): ReadonlyArray<num
       });
     });
   }
+
   return sizes;
 };
 
 const retainFormat = (tag: SaxesTagPlain, formats: Map<number, number>): void => {
   const bytes = size(tag.attributes.formatCode ?? "");
+
   if (bytes > maximumFormatBytes) limit();
   const id = indexFor(tag.attributes.numFmtId ?? "");
+
   if (id > maximumFormatId) limit();
+
   if (formats.has(id)) malformed();
   formats.set(id, bytes);
 };
+
 const assertFormula = (tag: SaxesTagPlain): void => {
   if (localName(tag.name) !== "f") return;
+
   if (["shared", "array"].includes(tag.attributes.t ?? "")) limit();
+
   if (Object.values(tag.attributes).some((value) => /t="(?:shared|array)"/u.test(value))) {
     limit();
   }
@@ -231,21 +294,27 @@ const assertFormula = (tag: SaxesTagPlain): void => {
 
 const formatSizes = (members: ReadonlyArray<XmlMember>): ReadonlyArray<number> => {
   const styles = members.filter((member) => member.root === "styleSheet");
+
   if (styles.length > 1) return malformed();
   const formats = new Map<number, number>();
   const cells: Array<number> = [];
+
   for (const style of styles) {
     let inCellFormats = false;
     const sections = new Set<string>();
     scan(style.text, (parser) => {
       parser.on("opentag", (tag) => {
         const name = localName(tag.name);
+
         if (["numFmts", "cellXfs"].includes(name)) {
           if (sections.has(name)) malformed();
           sections.add(name);
         }
+
         if (name === "cellXfs") inCellFormats = true;
+
         if (name === "numFmt") retainFormat(tag, formats);
+
         if (inCellFormats && name === "xf") cells.push(indexFor(tag.attributes.numFmtId ?? "0"));
       });
       parser.on("closetag", (tag) => {
@@ -253,6 +322,7 @@ const formatSizes = (members: ReadonlyArray<XmlMember>): ReadonlyArray<number> =
       });
     });
   }
+
   return cells.map((id) => formats.get(id) ?? 0);
 };
 
@@ -271,65 +341,90 @@ type WorksheetInput = Readonly<{
   formats: ReadonlyArray<number>;
   charge: (cost: number) => void;
 }>;
+
 const metadataBytes = (tag: SaxesTagPlain): number =>
   Object.entries(tag.attributes).reduce(
     (total, [name, value]) => total + size(name) + size(value),
     numericFormattingAllowance
   );
+
 const maximumWorksheetRow = statementParserLimits.maximumRows + 1;
+
 const lettersPerAlphabet = 26;
+
 const firstColumnCode = "A".charCodeAt(0) - 1;
+
 type WorksheetCoordinate = Readonly<{ column: number; row: number }>;
+
 const hyperlinkCoordinate = (source: string): WorksheetCoordinate => {
   const match = /^\$?([A-Z]{1,3})\$?([1-9]\d{0,9})$/u.exec(source);
   const letters = match?.[1];
   const digits = match?.[2];
+
   if (letters === undefined || digits === undefined) return malformed();
+
   const column = Array.from(letters).reduce(
     (total, letter) => total * lettersPerAlphabet + letter.charCodeAt(0) - firstColumnCode,
     0
   );
+
   const row = Number(digits);
+
   if (column > maximumColumns || row > maximumWorksheetRow) limit();
+
   return { column, row };
 };
-const hyperlinkEndpoints = (
-  source: string
-): Readonly<{ first: WorksheetCoordinate; last: WorksheetCoordinate }> => {
+
+type HyperlinkEndpoints = Readonly<{ first: WorksheetCoordinate; last: WorksheetCoordinate }>;
+
+const hyperlinkEndpoints = (source: string): HyperlinkEndpoints => {
   const parts = source.split(":");
+
   if (parts.length > 2) return malformed();
   const start = parts[0] ?? "";
+
   return { first: hyperlinkCoordinate(start), last: hyperlinkCoordinate(parts[1] ?? start) };
 };
+
 const admitHyperlink = (tag: SaxesTagPlain, charge: (cost: number) => void): void => {
   const { first, last } = hyperlinkEndpoints(tag.attributes.ref ?? "");
+
   if (last.column < first.column || last.row < first.row) malformed();
   const destinations = (last.column - first.column + 1) * (last.row - first.row + 1);
+
   if (destinations > maximumCells) limit();
   const bytes = metadataBytes(tag);
+
   for (let destination = 0; destination < destinations; destination += 1) charge(bytes);
 };
 
 const admitColumns = (tag: SaxesTagPlain, charge: (cost: number) => void): void => {
   const first = indexFor(tag.attributes.min ?? "");
   const last = indexFor(tag.attributes.max ?? "");
+
   if (first === 0 || first > last) malformed();
+
   if (last > maximumColumns) limit();
   const bytes = metadataBytes(tag);
+
   for (let column = first; column <= last; column += 1) charge(bytes);
 };
 
 const admitWorksheetMetadata = (tag: SaxesTagPlain, charge: (cost: number) => void): void => {
   const name = localName(tag.name);
+
   if (name === "col") admitColumns(tag, charge);
+
   if (name === "hyperlink") admitHyperlink(tag, charge);
 };
 
 const admitWorksheet = ({ xml, strings, formats, charge }: WorksheetInput): void => {
   let cell = Option.none<CellCost>();
+
   const open = (tag: SaxesTagPlain): void => {
     const name = localName(tag.name);
     admitWorksheetMetadata(tag, charge);
+
     if (name === "c") {
       if (Option.isSome(cell)) return malformed();
       const style = indexFor(tag.attributes.s ?? "0");
@@ -343,24 +438,31 @@ const admitWorksheet = ({ xml, strings, formats, charge }: WorksheetInput): void
         inValue: false,
       });
     }
+
     if (Option.isSome(cell) && name === "v") cell.value.inValue = true;
     assertFormula(tag);
   };
+
   scan(xml, (parser) => {
     parser.on("opentag", open);
     parser.on("text", (text) => {
       if (Option.isNone(cell)) return;
       cell.value.textBytes += size(text);
       cell.value.text += text;
+
       if (cell.value.inValue) cell.value.value += text;
     });
     parser.on("cdata", malformed);
     parser.on("closetag", (tag) => {
       const name = localName(tag.name);
+
       if (Option.isNone(cell)) return;
+
       if (name === "v") cell.value.inValue = false;
+
       if (name !== "c") return;
       const referenced = cell.value.shared ? strings[indexFor(cell.value.value)] : 0;
+
       if (referenced === undefined) return malformed();
       const valueBytes = cell.value.textBytes + referenced;
       charge(valueBytes + (valueBytes + numericFormattingAllowance) * cell.value.formatBytes);
@@ -380,22 +482,27 @@ const worksheetTarget = (
     target,
     relationshipName.replace(/_rels\/[\s\S]*$/u, "") + target,
   ];
+
   for (const candidate of candidates) {
     const name = candidate.replace(/^\//u, "").toLowerCase();
+
     if (
       members.some((member) => member.name.toLowerCase() === name && member.root === "worksheet")
     ) {
       return name;
     }
   }
+
   return malformed();
 };
+
 const sheetRelationships = (member: XmlMember): Map<string, string> => {
   const targets = new Map<string, string>();
   scan(member.text, (parser) =>
     parser.on("opentag", (tag) => {
       if (localName(tag.name) !== "Relationship") return;
       const allowed = ["Id", "Type", "Target", "TargetMode"];
+
       if (
         Object.keys(tag.attributes).some(
           (name) => !allowed.includes(name) && !name.startsWith("xmlns")
@@ -403,22 +510,30 @@ const sheetRelationships = (member: XmlMember): Map<string, string> => {
       ) {
         malformed();
       }
+
       const id = tag.attributes.Id ?? "";
+
       if (targets.has(id)) malformed();
       targets.set(id, tag.attributes.Target ?? "");
     })
   );
+
   return targets;
 };
+
 const admitSheetReferences = (members: ReadonlyArray<XmlMember>): void => {
   const books = members.filter((member) => member.root === "workbook");
+
   if (books.length !== 1) return malformed();
   const book = books[0];
+
   if (book === undefined) return malformed();
   const relationshipName = book.name.replace(/([^/]+)$/u, "_rels/$1.rels");
+
   const relationships =
     members.find((member) => member.name === relationshipName) ??
     members.find((member) => member.name === "xl/_rels/workbook.xml.rels");
+
   if (relationships === undefined) return malformed();
   const targets = sheetRelationships(relationships);
   const seen = new Set<string>();
@@ -427,8 +542,10 @@ const admitSheetReferences = (members: ReadonlyArray<XmlMember>): void => {
     parser.on("opentag", (tag) => {
       if (localName(tag.name) !== "sheet") return;
       count += 1;
+
       if (count > maximumSheets) limit();
       const allowed = ["name", "sheetId", "state", "r:id"];
+
       if (
         Object.keys(tag.attributes).some(
           (name) => !allowed.includes(name) && !name.startsWith("xmlns")
@@ -436,9 +553,12 @@ const admitSheetReferences = (members: ReadonlyArray<XmlMember>): void => {
       ) {
         malformed();
       }
+
       const target = targets.get(tag.attributes["r:id"] ?? "");
+
       if (target === undefined) return malformed();
       const resolved = worksheetTarget(target, relationships.name, members);
+
       if (seen.has(resolved)) return malformed();
       seen.add(resolved);
     })
@@ -448,11 +568,14 @@ const admitSheetReferences = (members: ReadonlyArray<XmlMember>): void => {
 const admitSheetMetadata = (members: ReadonlyArray<XmlMember>): void => {
   let nodes = 0;
   let workBytes = 0;
+
   const charge = (cost: number): void => {
     nodes += 1;
     workBytes += cost;
+
     if (nodes > maximumMetadataCharges || workBytes > maximumMetadataWorkBytes) limit();
   };
+
   for (const member of members.filter((candidate) => candidate.root === "metadata")) {
     const types: Array<number> = [];
     const future: Array<number> = [];
@@ -462,15 +585,20 @@ const admitSheetMetadata = (members: ReadonlyArray<XmlMember>): void => {
           (total, [name, value]) => total + size(name) + size(value),
           numericFormattingAllowance
         );
+
         charge(bytes);
+
         if (localName(tag.name) === "metadataType") types.push(bytes);
+
         if (localName(tag.name) === "futureMetadata") future.push(bytes);
+
         if (types.length > maximumMetadataRecords || future.length > maximumMetadataRecords) {
           limit();
         }
       });
       parser.on("text", (text) => charge(size(text)));
     });
+
     for (const futureBytes of future) {
       for (const typeBytes of types) charge(futureBytes + typeBytes);
     }
@@ -480,6 +608,7 @@ const admitSheetMetadata = (members: ReadonlyArray<XmlMember>): void => {
 export const admitXlsxArchive = (bytes: Uint8Array): Uint8Array => {
   const entries = decodeXlsxArchive(bytes);
   const members = xmlMembers(entries);
+
   if (
     !members.some(
       (member) => member.name.toLowerCase() === "[content_types].xml" && member.root === "Types"
@@ -487,17 +616,22 @@ export const admitXlsxArchive = (bytes: Uint8Array): Uint8Array => {
   ) {
     malformed();
   }
+
   admitSheetReferences(members);
   const worksheets = members.filter((member) => member.root === "worksheet");
+
   if (worksheets.length === 0) return malformed();
+
   if (worksheets.length > maximumSheets) limit();
   const strings = sharedStringSizes(members);
   const formats = formatSizes(members);
   let referencedBytes = 0;
   let cells = 0;
+
   const charge = (cost: number): void => {
     cells += 1;
     referencedBytes += cost;
+
     if (
       cells > maximumCells ||
       referencedBytes > statementParserLimits.maximumReferencedTextBytes
@@ -505,9 +639,12 @@ export const admitXlsxArchive = (bytes: Uint8Array): Uint8Array => {
       limit();
     }
   };
+
   admitSheetMetadata(members);
+
   for (const worksheet of worksheets) {
     admitWorksheet({ xml: worksheet.text, strings, formats, charge });
   }
+
   return encodeXlsxArchive(entries);
 };

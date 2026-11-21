@@ -1,4 +1,4 @@
-import { DateTime, Option } from "effect";
+import { type Data, DateTime, Match, Option, Predicate } from "effect";
 import { type FormEvent, type JSX } from "react";
 import type { PATPairingReview } from "@/transport/client";
 import { patScopeCopy } from "@/transport/client";
@@ -16,6 +16,7 @@ const formatter = new Intl.DateTimeFormat("es-CO", {
   timeStyle: "short",
   timeZone: "America/Bogota",
 });
+
 const format = (value: DateTime.Utc): JSX.Element => (
   <time dateTime={DateTime.formatIso(value)}>{formatter.format(DateTime.toDate(value))}</time>
 );
@@ -88,11 +89,12 @@ const PairingReviewCard = ({
   approve,
   reset,
 }: Readonly<{
-  state: Extract<PATPairingDisplay, { _tag: "Reviewing" | "Approving" }>;
+  state: Data.TaggedEnum.Value<PATPairingDisplay, "Reviewing" | "Approving">;
   approve: () => void;
   reset: () => void;
 }>): JSX.Element => {
-  const busy = state._tag === "Approving";
+  const busy = Predicate.isTagged(state, "Approving");
+
   return (
     <Card>
       <CardHeader>
@@ -136,16 +138,19 @@ const PairingCodeSection = ({
   update,
   reset,
 }: Readonly<{
-  state: Extract<PATPairingDisplay, { _tag: "Entering" | "Inspecting" }>;
+  state: Data.TaggedEnum.Value<PATPairingDisplay, "Entering" | "Inspecting">;
   reset: () => void;
   inspect: () => void;
   update: (publicCode: string) => void;
 }>): JSX.Element => {
-  const busy = state._tag === "Inspecting";
+  const busy = Predicate.isTagged(state, "Inspecting");
+
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
+
     if (!busy && state.publicCode.trim().length > 0) inspect();
   };
+
   return (
     <section className="flex min-w-0 flex-col gap-5">
       <div className="flex flex-col gap-1">
@@ -191,11 +196,28 @@ export const PATPairingView = ({
   state,
   actions,
 }: Readonly<{ state: PATPairingDisplay; actions: PATPairingActions }>): JSX.Element => {
-  if (state._tag === "Invalid") {
-    return <InvalidPairingCard reset={actions.reset} publicCode={state.publicCode} />;
-  }
-  if (state._tag === "ApprovalUnknown") {
-    return (
+  const review = (
+    reviewing: Data.TaggedEnum.Value<PATPairingDisplay, "Reviewing" | "Approving">
+  ): JSX.Element => (
+    <PairingReviewCard approve={actions.approve} reset={actions.reset} state={reviewing} />
+  );
+
+  const entry = (
+    entering: Data.TaggedEnum.Value<PATPairingDisplay, "Entering" | "Inspecting">
+  ): JSX.Element => (
+    <PairingCodeSection
+      state={entering}
+      inspect={actions.inspect}
+      update={actions.update}
+      reset={actions.reset}
+    />
+  );
+
+  return Match.valueTags(state, {
+    Invalid: ({ publicCode }) => (
+      <InvalidPairingCard reset={actions.reset} publicCode={publicCode} />
+    ),
+    ApprovalUnknown: () => (
       <Card>
         <CardContent>
           <Alert variant="warning">
@@ -213,18 +235,11 @@ export const PATPairingView = ({
           </Button>
         </CardContent>
       </Card>
-    );
-  }
-  if (state._tag === "Approved") return <ApprovedPairingCard />;
-  if (state._tag === "Reviewing" || state._tag === "Approving") {
-    return <PairingReviewCard approve={actions.approve} reset={actions.reset} state={state} />;
-  }
-  return (
-    <PairingCodeSection
-      state={state}
-      inspect={actions.inspect}
-      update={actions.update}
-      reset={actions.reset}
-    />
-  );
+    ),
+    Approved: () => <ApprovedPairingCard />,
+    Reviewing: review,
+    Approving: review,
+    Entering: entry,
+    Inspecting: entry,
+  });
 };

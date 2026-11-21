@@ -6,7 +6,9 @@ import {
 } from "../../../src/core/ingestion/contract";
 
 export const pageSize = 50;
+
 const maximumOffset = 10_000;
+
 export const ReviewPage = Schema.Struct({
   offset: Schema.NumberFromString.check(
     Schema.isInt(),
@@ -18,6 +20,7 @@ export const ReviewPage = Schema.Struct({
   ),
   status: Schema.OptionFromNullOr(NeedsReviewStatus),
 });
+
 export const reviewRow = Schema.Struct({
   id: Schema.String,
   submission_id: Schema.String,
@@ -34,7 +37,9 @@ export const reviewRow = Schema.Struct({
   parser_revision: Schema.String,
   extractor_revision: Schema.String,
 });
+
 type ReviewRow = typeof reviewRow.Type;
+
 export const emailReviewRow = Schema.Struct({
   id: Schema.String,
   receipt_id: Schema.String,
@@ -43,6 +48,7 @@ export const emailReviewRow = Schema.Struct({
   evidence_expires_at_ms: Schema.DateTimeUtcFromMillis,
   time_zone: Schema.String,
 });
+
 type EmailReviewRow = typeof emailReviewRow.Type;
 
 const resolutionMetadata = (
@@ -55,6 +61,7 @@ const resolutionMetadata = (
   ) {
     return Option.none();
   }
+
   return Option.some({
     transactionId: row.transaction_id.value,
     resolvedAt: DateTime.formatIso(row.decided_at_ms.value),
@@ -88,7 +95,8 @@ export const projectEmailRow = ({
   asOf: number;
 }): Option.Option<EmailNeedsReviewItem> => {
   const expired = row.evidence_expires_at_ms.epochMilliseconds <= asOf;
-  return Schema.decodeUnknownOption(EmailNeedsReviewItem)({
+
+  const item = {
     id: row.id,
     receivedEmailId: row.receipt_id,
     reason: row.reason,
@@ -108,10 +116,13 @@ export const projectEmailRow = ({
     issues: [],
     createdAt: DateTime.formatIso(row.created_at_ms),
     status: expired ? "expired" : "pending",
-    ...(expired || row.reason === "processing-interrupted" || row.reason === "consent-revoked"
-      ? {}
-      : { ingestSampleId: row.receipt_id }),
-  });
+  };
+
+  return Schema.decodeUnknownOption(EmailNeedsReviewItem)(
+    expired || row.reason === "processing-interrupted" || row.reason === "consent-revoked"
+      ? item
+      : { ...item, ingestSampleId: row.receipt_id }
+  );
 };
 
 export const reviewPage = (url: URL): Option.Option<typeof ReviewPage.Type> =>

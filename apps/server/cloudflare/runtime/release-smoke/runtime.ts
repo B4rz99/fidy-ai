@@ -1,5 +1,5 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
 import type { SmokeCompletion, SmokeExecutorEnvironment } from "./contract";
 import { SmokeWork, smokeExecutionId, smokeLifetimeMs, smokeMarkerKey } from "./internal/protocol";
 import { SmokeBindingFailed, platform } from "./internal/platform";
@@ -9,14 +9,19 @@ import {
   workerRelease,
 } from "../telemetry/operations";
 
+const boundaryRuntime = ManagedRuntime.make(Layer.empty);
+
 export class ReleaseSmokeWorkflowV2 extends WorkflowEntrypoint<SmokeExecutorEnvironment, unknown> {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<SmokeCompletion> {
     const environment = this.env;
+
     const work = Effect.gen(function* () {
       const decoded = Schema.decodeUnknownOption(SmokeWork)(event.payload);
+
       if (Option.isNone(decoded)) return yield* new SmokeBindingFailed({ stage: "platform" });
       const input = decoded.value;
       const now = yield* Clock.currentTimeMillis;
+
       if (
         input.expiresAtMs <= now ||
         input.expiresAtMs > now + smokeLifetimeMs ||
@@ -26,7 +31,9 @@ export class ReleaseSmokeWorkflowV2 extends WorkflowEntrypoint<SmokeExecutorEnvi
       ) {
         return yield* new SmokeBindingFailed({ stage: "identity" });
       }
+
       const context = yield* Effect.context<never>();
+
       return yield* platform({
         stage: "platform",
         tryWork: () =>
@@ -62,7 +69,8 @@ export class ReleaseSmokeWorkflowV2 extends WorkflowEntrypoint<SmokeExecutorEnvi
           ),
       });
     });
-    return observeWorkerPromise(() => Effect.runPromise(work), {
+
+    return observeWorkerPromise(() => boundaryRuntime.runPromise(work), {
       environment: workerRelease(environment),
       telemetry: cloudflareWorkerTelemetry,
       operation: "workflow.releaseSmoke",

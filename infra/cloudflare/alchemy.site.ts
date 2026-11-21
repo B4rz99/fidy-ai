@@ -16,6 +16,7 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     yield* Config.Literal("marketing-only", "SITE_PUBLICATION");
     const site = yield* marketingSite(yield* Config.String("RELEASE_GIT_SHA"), true);
+
     return { siteUrl: site.url };
   })
 );

@@ -5,12 +5,15 @@ import { Data, Effect } from "effect";
 class FixtureUnavailable extends Data.TaggedError("FixtureUnavailable") {}
 
 const fixtures: Array<string> = [];
+
 afterEach(() => {
   for (const fixture of fixtures.splice(0)) Bun.spawnSync(["rm", "-rf", fixture]);
 });
 
 const authorizedLock = "authorized frozen fixture\n";
+
 const fixtureDigest = new Bun.CryptoHasher("sha256").update(authorizedLock).digest("hex");
+
 const installer = (
   await Bun.file(new URL("./install-workspace.sh", import.meta.url)).text()
 ).replace(/actual" == '[0-9a-f]{64}'/u, `actual" == '${fixtureDigest}'`);
@@ -21,6 +24,7 @@ const runInstaller = Effect.fnUntraced(function* (
   args: ReadonlyArray<string> = []
 ) {
   const temporary = Bun.spawnSync(["mktemp", "-d"]);
+
   if (temporary.exitCode !== 0) return yield* new FixtureUnavailable();
   const root = new TextDecoder().decode(temporary.stdout).trim();
   fixtures.push(root);
@@ -41,6 +45,7 @@ const runInstaller = Effect.fnUntraced(function* (
     catch: () => new FixtureUnavailable(),
   });
   Bun.spawnSync(["chmod", "+x", `${root}/bin/bun`, `${root}/bin/date`]);
+
   return Bun.spawnSync(["bash", `${root}/scripts/install-workspace.sh`, ...args], {
     env: { ...Bun.env, PATH: `${root}/bin:${Bun.env.PATH}` },
   });
@@ -92,24 +97,27 @@ it.effect("installs only the frozen CLI production closure without development h
   })
 );
 
+const expectFrozenClosure = Effect.fnUntraced(function* (
+  scope: string,
+  filters: ReadonlyArray<string>
+) {
+  const result = yield* runInstaller(authorizedLock, "2026-10-10", [scope]);
+  expect(result.exitCode).toBe(0);
+  expect(new TextDecoder().decode(result.stdout)).toBe(
+    ["install", "--frozen-lockfile", ...filters.flatMap((filter) => ["--filter", filter]), ""].join(
+      "\n"
+    )
+  );
+});
+
 it.effect(
   "keeps frozen native and unit test closures while preserving ordinary lifecycle scripts",
   () =>
-    Effect.gen(function* () {
-      for (const [scope, filters] of [
+    Effect.forEach(
+      [
         ["--server-tests", ["@fidy/server"]],
         ["--unit-tests", ["@fidy/server", "@fidy/cli", "@fidy/web"]],
-      ] as const) {
-        const result = yield* runInstaller(authorizedLock, "2026-10-10", [scope]);
-        expect(result.exitCode).toBe(0);
-        expect(new TextDecoder().decode(result.stdout)).toBe(
-          [
-            "install",
-            "--frozen-lockfile",
-            ...filters.flatMap((filter) => ["--filter", filter]),
-            "",
-          ].join("\n")
-        );
-      }
-    })
+      ] as const,
+      ([scope, filters]) => expectFrozenClosure(scope, filters)
+    )
 );

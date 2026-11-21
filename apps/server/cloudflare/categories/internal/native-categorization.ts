@@ -22,9 +22,12 @@ export const resolveLocalCategory = Effect.fn(function* ({
   const release = currentCategoryRelease;
   const revision = activeCategoryTaxonomy(release).id;
   const query = keywordRulesQuery({ userId });
+
   const [owner] =
     yield* sql`SELECT id FROM users WHERE id=${userId} AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=${userId})`;
+
   if (owner === undefined) return yield* new CategoriesUnavailable();
+
   const rows = Option.isSome(capture.counterparty)
     ? yield* sql.unsafe(
         `SELECT selected.*,rule.category_revision AS revision
@@ -32,33 +35,46 @@ export const resolveLocalCategory = Effect.fn(function* ({
         [...query.params, userId]
       )
     : [];
-  for (const row of rows) {
-    const stored = yield* Schema.decodeUnknownEffect(CategoryReference)(row);
-    if (Option.isNone(interpretCategory({ release, reference: stored }))) {
-      return yield* new CategoriesUnavailable();
-    }
-  }
+
+  yield* Effect.forEach(
+    rows,
+    Effect.fnUntraced(function* (row) {
+      const stored = yield* Schema.decodeUnknownEffect(CategoryReference)(row);
+
+      if (Option.isNone(interpretCategory({ release, reference: stored }))) {
+        return yield* new CategoriesUnavailable();
+      }
+    }),
+    { discard: true }
+  );
+
   const rules = keywordRulesFromRows(rows);
+
   if (Option.isNone(rules)) return yield* new CategoriesUnavailable();
   const categoryId = yield* categorizeCapture({ ...capture, rules: rules.value });
   const reference: CategoryReference = { revision, categoryId };
   const category = interpretCategory({ release, reference });
+
   if (Option.isNone(category)) {
     return yield* Option.match(capture.caller, {
       onSome: () => new CategoryNotFound({ categoryId }),
       onNone: () => new CategoriesUnavailable(),
     });
   }
+
   return reference;
 });
+
 export const retainLocalCategory = Effect.fn(function* (reference: CategoryReference) {
   const sql = yield* SqliteClient;
   const category = interpretCategory({ release: currentCategoryRelease, reference });
+
   if (Option.isNone(category)) return yield* new CategoriesUnavailable();
   const { categoryId } = reference;
   yield* sql`INSERT INTO categories(id,label,display_order)
     SELECT ${categoryId},${category.value.label},COALESCE((SELECT MAX(display_order)+1 FROM categories),0)
     WHERE NOT EXISTS(SELECT 1 FROM categories WHERE id=${categoryId})`;
+
   return reference;
 });
 

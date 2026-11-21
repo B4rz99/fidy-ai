@@ -7,6 +7,7 @@ import { digestBytes, newSecret } from "../../secret-material/operations";
 import type { ProviderConfiguration } from "../contract";
 
 const successStatus = 200;
+
 export const providerJson = ({
   body,
   status = 200,
@@ -16,8 +17,10 @@ export const providerJson = ({
   const result = new Headers(headers);
   result.set("cache-control", "no-store");
   result.set("referrer-policy", "no-referrer");
+
   return Response.json(body, { status, headers: result });
 };
+
 const authorizationUrl = ({
   environment,
   provider,
@@ -32,11 +35,13 @@ const authorizationUrl = ({
   challenge: Uint8Array;
 }>): string => {
   const configuration = providerConfiguration({ environment, provider });
+
   const authorization = new URL(
     provider === "google"
       ? "https://accounts.google.com/o/oauth2/v2/auth"
       : "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
   );
+
   authorization.search = new URLSearchParams({
     client_id: configuration.clientId,
     redirect_uri: configuration.redirectUri,
@@ -47,8 +52,10 @@ const authorizationUrl = ({
     code_challenge: Base64Url.encode(challenge),
     code_challenge_method: "S256",
   }).toString();
+
   return authorization.href;
 };
+
 export const prepareAttempt = (
   disclosure: DisclosureSnapshot
 ): Effect.Effect<
@@ -68,11 +75,14 @@ export const prepareAttempt = (
     const verifier = Redacted.value(yield* newSecret);
     const nonce = Redacted.value(yield* newSecret);
     const challenge = yield* digestBytes(new TextEncoder().encode(verifier));
+
     const snapshot = yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(
       disclosure
     );
+
     return { current, state, verifier, nonce, challenge, snapshot };
   });
+
 export const startedResponse = ({
   environment,
   provider,
@@ -90,7 +100,13 @@ export const startedResponse = ({
 }>): Response =>
   providerJson({
     body: {
-      authorizationUrl: authorizationUrl({ environment, provider, state, nonce, challenge }),
+      authorizationUrl: authorizationUrl({
+        environment,
+        provider,
+        state,
+        nonce,
+        challenge,
+      }),
     },
     status: successStatus,
     headers: {

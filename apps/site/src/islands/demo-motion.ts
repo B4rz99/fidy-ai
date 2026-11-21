@@ -1,18 +1,25 @@
 import { enter } from "./motion";
 
 const bubbleDuration = 280;
+
 const bubbleStagger = 550;
+
 const previewDuration = 300;
+
 const previewStagger = 60;
+
 const fillDuration = 500;
+
 const reducedDuration = 160;
+
 const visibilityThreshold = 0.35;
+
 const easing = (element: Element): string =>
   getComputedStyle(element).getPropertyValue("--ease-out").trim();
-const reducedMotion = (): boolean => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const fill = (element: Element, axis: "X" | "Y", delay: number): Animation => {
-  const reduced = reducedMotion();
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
   return element.animate(
     reduced
       ? [{ opacity: 0 }, { opacity: 1 }]
@@ -36,7 +43,8 @@ const playConversation = (root: HTMLElement): ReadonlyArray<Animation> => {
   );
   const resultDelay = (bubbles.length - 1) * bubbleStagger + bubbleDuration;
   const note = root.querySelector(".floating-note");
-  const reduced = reducedMotion();
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
   if (note !== null) {
     animations.push(
       note.animate(
@@ -55,8 +63,11 @@ const playConversation = (root: HTMLElement): ReadonlyArray<Animation> => {
       )
     );
   }
+
   const track = root.querySelector(".mini-track span");
+
   if (track !== null) animations.push(fill(track, "X", resultDelay + previewDuration));
+
   return animations;
 };
 
@@ -73,27 +84,34 @@ const mountDemonstration = (
   let stopped = false;
   let handles = new Set<Animation>();
   const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+
   const settle = (): void => {
     const previous = handles;
     handles = new Set();
+
     for (const animation of previous) animation.cancel();
   };
+
   const replay = (instant: boolean, replace?: () => void): void => {
     if (stopped) return;
     played = true;
     settle();
     replace?.();
+
     if (instant || document.hidden) return;
     const generation = handles;
+
     for (const animation of play()) {
       generation.add(animation);
       const release = (): boolean => generation.delete(animation);
       animation.finished.then(release, release);
     }
   };
+
   const observer = new IntersectionObserver(
     (entries) => {
       if (stopped) return;
+
       for (const entry of entries) {
         if (!entry.isIntersecting) {
           played = false;
@@ -106,12 +124,15 @@ const mountDemonstration = (
     },
     { threshold: [0, visibilityThreshold] }
   );
+
   const changePolicy = (): void => {
     if (!stopped) settle();
   };
+
   observer.observe(root);
   preference.addEventListener("change", changePolicy);
   document.addEventListener("visibilitychange", changePolicy);
+
   return {
     replay,
     dispose: (): void => {
@@ -155,11 +176,14 @@ const playPreview = (root: HTMLElement): ReadonlyArray<Animation> => {
   root
     .querySelectorAll(".feature-chart i")
     .forEach((element, index) => animations.push(fill(element, "Y", index * previewStagger)));
+
   return animations;
 };
 
 export const mountPreview = (node: HTMLDivElement): (() => void) => {
   const art = node.querySelector<HTMLElement>(".feature-art");
+
   if (art === null) return () => {};
+
   return mountDemonstration(art, () => playPreview(art)).dispose;
 };

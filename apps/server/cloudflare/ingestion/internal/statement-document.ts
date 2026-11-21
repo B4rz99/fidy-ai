@@ -1,8 +1,11 @@
 import { Digest } from "effect/crypto";
 import { readWhatsAppStatementMedia } from "../../../src/shell/ingestion/operations";
-import { Effect } from "effect";
+import { Effect, ManagedRuntime } from "effect";
 
-const workerDigest = Effect.runSync(Digest.Digest.pipe(Effect.provide(Digest.layerWebCrypto)));
+const digestRuntime = ManagedRuntime.make(Digest.layerWebCrypto);
+
+const workerDigest = digestRuntime.runSync(Digest.Digest);
+
 export const retrieveHeldStatementMedia = (
   work: Parameters<typeof readWhatsAppStatementMedia>[0]
 ): Effect.Effect<

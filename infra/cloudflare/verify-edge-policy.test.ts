@@ -13,13 +13,24 @@ const policyFixture = Effect.gen(function* () {
   yield* fs.copy(`${workspaceRoot}patches`, `${root}/patches`);
   yield* fs.makeDirectory(`${root}/scripts/infra-performance`, { recursive: true });
   yield* fs.copy(`${workspaceRoot}scripts/pro`, `${root}/scripts/pro`);
-  for (const owner of ["deployed-fleet", "canonical-fixture", "hosted-browser"]) {
-    const directory = `scripts/infra-performance/${owner}`;
-    yield* fs.copy(`${workspaceRoot}${directory}`, `${root}/${directory}`);
-  }
-  for (const name of [".github", "apps", "node_modules", "tsconfig.base.json"]) {
-    yield* fs.symlink(`${workspaceRoot}${name}`, `${root}/${name}`);
-  }
+
+  yield* Effect.forEach(
+    ["deployed-fleet", "canonical-fixture", "hosted-browser"],
+    Effect.fnUntraced(function* (owner) {
+      const directory = `scripts/infra-performance/${owner}`;
+      yield* fs.copy(`${workspaceRoot}${directory}`, `${root}/${directory}`);
+    }),
+    { discard: true }
+  );
+
+  yield* Effect.forEach(
+    [".github", "apps", "node_modules", "tsconfig.base.json"],
+    Effect.fnUntraced(function* (name) {
+      yield* fs.symlink(`${workspaceRoot}${name}`, `${root}/${name}`);
+    }),
+    { discard: true }
+  );
+
   return `${root}/infra/cloudflare`;
 });
 
@@ -33,40 +44,34 @@ const runPolicyGate = (directory: string): Bun.SyncSubprocess<"pipe", "pipe"> =>
 layer(BunFileSystem.layer, { excludeTestServices: true })(
   "mandatory edge policy verification",
   (it) => {
-    it.effect(
-      "accepts the reviewed policy through the Production CLI",
-      () =>
-        Effect.gen(function* () {
-          const directory = yield* policyFixture;
-          const result = yield* Effect.sync(() => runPolicyGate(directory));
-          expect(result.exitCode).toBe(0);
-          expect(new TextDecoder().decode(result.stdout)).toBe("");
-          expect(new TextDecoder().decode(result.stderr)).toBe("");
-        }),
-      20_000
+    it.effect("accepts the reviewed policy through the Production CLI", () =>
+      Effect.gen(function* () {
+        const directory = yield* policyFixture;
+        const result = yield* Effect.sync(() => runPolicyGate(directory));
+        expect(result.exitCode).toBe(0);
+        expect(new TextDecoder().decode(result.stdout)).toBe("");
+        expect(new TextDecoder().decode(result.stderr)).toBe("");
+      })
     );
 
     it.effect.each([
       "worker-observability.ts",
       "../../scripts/pro/runtime.ts",
       "../../scripts/infra-performance/canonical-fixture/canonical_activity.py",
-    ])(
-      "refuses changes in %s without disclosing their contents",
-      (source) =>
-        Effect.gen(function* () {
-          const directory = yield* policyFixture;
-          const fs = yield* FileSystem.FileSystem;
-          const artifact = `${directory}/${source}`;
-          const original = yield* fs.readFileString(artifact);
-          yield* fs.writeFileString(artifact, `${original}\n// private-policy-change\n`);
-          const result = yield* Effect.sync(() => runPolicyGate(directory));
-          expect(result.exitCode).toBe(1);
-          expect(new TextDecoder().decode(result.stdout)).toBe("");
-          expect(new TextDecoder().decode(result.stderr)).toBe(
-            "Desired edge policy differs from the reviewed manifest.\n"
-          );
-        }),
-      20_000
+    ])("refuses changes in %s without disclosing their contents", (source) =>
+      Effect.gen(function* () {
+        const directory = yield* policyFixture;
+        const fs = yield* FileSystem.FileSystem;
+        const artifact = `${directory}/${source}`;
+        const original = yield* fs.readFileString(artifact);
+        yield* fs.writeFileString(artifact, `${original}\n// private-policy-change\n`);
+        const result = yield* Effect.sync(() => runPolicyGate(directory));
+        expect(result.exitCode).toBe(1);
+        expect(new TextDecoder().decode(result.stdout)).toBe("");
+        expect(new TextDecoder().decode(result.stderr)).toBe(
+          "Desired edge policy differs from the reviewed manifest.\n"
+        );
+      })
     );
   }
 );

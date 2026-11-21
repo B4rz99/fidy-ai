@@ -29,14 +29,19 @@ const renderChart = (
       period: widget.period,
       timeZone: facts.context.timeZone,
     });
+
     const ranges = facts.groups.get(widget.id);
-    if (ranges === undefined) return yield* new DashboardUnavailable();
+
+    if (ranges === undefined) return yield* new DashboardUnavailable({ cause: undefined });
+
     const buckets = projectAggregateChart({
       widget,
       ranges,
       lookupCategory: (id) => Option.fromUndefinedOr(facts.categories.get(id)),
     });
-    if (Option.isNone(buckets)) return yield* new DashboardUnavailable();
+
+    if (Option.isNone(buckets)) return yield* new DashboardUnavailable({ cause: undefined });
+
     return { widget, result: { appliedPeriod: period, buckets: buckets.value } };
   });
 
@@ -46,7 +51,9 @@ const renderList = (
 ): Effect.Effect<DashboardWidgetView, DashboardUnavailable> =>
   Effect.gen(function* () {
     const rows = facts.lists.get(widget.id);
-    if (rows === undefined) return yield* new DashboardUnavailable();
+
+    if (rows === undefined) return yield* new DashboardUnavailable({ cause: undefined });
+
     return {
       widget,
       result: {
@@ -73,8 +80,11 @@ const renderMetric = (
       period: widget.period,
       timeZone: facts.context.timeZone,
     });
+
     const ranges = facts.groups.get(widget.id);
-    if (ranges === undefined) return yield* new DashboardUnavailable();
+
+    if (ranges === undefined) return yield* new DashboardUnavailable({ cause: undefined });
+
     return {
       widget,
       result: { appliedPeriod: period, moneyGroups: projectAggregateMetric(widget, ranges) },
@@ -90,10 +100,13 @@ const renderBudget = (
     const zone = facts.context.timeZone;
     const period = resolveDashboardPeriod({ now, period: "this-month", timeZone: zone });
     const category = facts.categories.get(widget.categoryId);
-    if (category === undefined) return yield* new DashboardUnavailable();
+
+    if (category === undefined) return yield* new DashboardUnavailable({ cause: undefined });
+
     const budget = facts.budgets.find(
       (entry) => entry.categoryId === widget.categoryId && entry.cap.currency === widget.currency
     );
+
     if (budget === undefined) {
       return {
         widget,
@@ -105,21 +118,27 @@ const renderBudget = (
         },
       };
     }
+
     const ranges = facts.groups.get(widget.id);
-    if (ranges === undefined) return yield* new DashboardUnavailable();
+
+    if (ranges === undefined) return yield* new DashboardUnavailable({ cause: undefined });
     const spent = projectAggregateBudgetSpent(widget, ranges);
+
     const calculated = yield* calculateBudgetStatus({
       budget,
       spent,
       period: { from: period.from, to: period.toExclusive, timeZone: zone },
-    }).pipe(Effect.mapError(() => new DashboardUnavailable()));
+    }).pipe(Effect.mapError((cause) => new DashboardUnavailable({ cause })));
+
     let status: Extract<
       Extract<DashboardWidgetView, { widget: Extract<Widget, { type: "budget-bar" }> }>["result"],
       { availability: "available" }
     >["status"];
+
     if (calculated.type === "under") status = { type: "under", remaining: calculated.remaining };
     else if (calculated.type === "over") status = { type: "over", overBy: calculated.overBy };
     else status = { type: "reached" };
+
     return {
       widget,
       result: {
@@ -171,16 +190,17 @@ export const renderDashboardView = ({
             Effect.map((rendered) => ({ weight: child.weight, node: rendered }))
           )
         ).pipe(
-          Effect.map(([first, second, ...rest]) => ({
-            kind: "split" as const,
-            axis: node.axis,
-            children: [
-              Option.getOrThrow(Option.fromUndefinedOr(first)),
-              Option.getOrThrow(Option.fromUndefinedOr(second)),
-              ...rest,
-            ],
-          }))
+          Effect.flatMap(([first, second, ...rest]) =>
+            second === undefined
+              ? Effect.die(new Error("A split layout node renders at least two children"))
+              : Effect.succeed({
+                  kind: "split" as const,
+                  axis: node.axis,
+                  children: [first, second, ...rest],
+                })
+          )
         );
+
   return render(document.layout).pipe(
     Effect.map((layout) => ({
       title: document.title,

@@ -7,6 +7,7 @@ export const moveIndicator = ({
 }): void => {
   const list = tab.parentElement;
   const indicator = list?.querySelector<HTMLElement>(".feature-indicator");
+
   if (list === null || indicator == null) return;
   list.dataset.instant = String(instant);
   indicator.style.transform = `translate(${tab.offsetLeft}px, ${tab.offsetTop + tab.offsetHeight - 3}px) scaleX(${tab.offsetWidth})`;
@@ -15,21 +16,29 @@ export const moveIndicator = ({
 export const mountIndicator = (list: HTMLDivElement): (() => void) => {
   const position = (): void => {
     const active = list.querySelector<HTMLButtonElement>('[aria-selected="true"]');
+
     if (active !== null) moveIndicator({ tab: active, instant: true });
   };
+
   const focus = (event: FocusEvent): void => {
-    if (event.target instanceof HTMLButtonElement) {
-      moveIndicator({ tab: event.target, instant: true });
-    }
+    const tab = Array.from(list.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button === event.target
+    );
+
+    if (tab !== undefined) moveIndicator({ tab, instant: true });
   };
+
   position();
   list.addEventListener("focusin", focus);
+
   if (typeof ResizeObserver === "undefined") {
     return (): void => list.removeEventListener("focusin", focus);
   }
+
   const observer = new ResizeObserver(position);
   observer.observe(list);
   list.querySelectorAll("button").forEach((tab) => observer.observe(tab));
+
   return (): void => {
     list.removeEventListener("focusin", focus);
     observer.disconnect();

@@ -4,7 +4,9 @@ export const CanaryPayload = Schema.Struct({
   version: Schema.Literal(1),
   sentAtMs: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
+
 export type CanaryPayload = typeof CanaryPayload.Type;
+
 export const WorkKind = Schema.Literals([
   "browserPairing",
   "emailReplacement",
@@ -13,7 +15,9 @@ export const WorkKind = Schema.Literals([
   "forwardedEmail",
   "proactivity",
 ]);
+
 export type WorkKind = typeof WorkKind.Type;
+
 export const QueueKind = Schema.Literals([
   "browserPairingQueue",
   "emailReplacementQueue",
@@ -23,6 +27,7 @@ export const QueueKind = Schema.Literals([
   "whatsappQueue",
   "proactivityQueue",
 ]);
+
 export type QueueKind = typeof QueueKind.Type;
 
 export type PendingSignal = Readonly<{
@@ -83,4 +88,5 @@ export type CapabilityProbe = Readonly<{
 }>;
 
 export const CoreRejectionBoundary = Schema.Literals(["http", "providerCallback", "mcp"]);
+
 export type CoreRejectionBoundary = typeof CoreRejectionBoundary.Type;

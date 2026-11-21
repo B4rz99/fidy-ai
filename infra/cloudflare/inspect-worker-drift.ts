@@ -6,6 +6,7 @@ import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Data from "effect/Data";
 import * as Layer from "effect/Layer";
@@ -21,19 +22,24 @@ const services = Layer.mergeAll(
   Layer.provideMerge(CliKit.CliKitInteraction, CliKit.layer())
 ).pipe(Layer.provideMerge(PlatformServices));
 
-class DriftInspectionFailed extends Data.TaggedError("DriftInspectionFailed") {}
+class DriftInspectionFailed extends Data.TaggedError("DriftInspectionFailed")<{
+  readonly cause: unknown;
+}> {}
 
 const inspect = Effect.gen(function* () {
   const snapshot = yield* Drift.inspect({
     entrypoint: "alchemy-drift.run.ts",
     stage: "production",
-  }).pipe(Effect.mapError(() => new DriftInspectionFailed()));
+  }).pipe(Effect.mapError((cause) => new DriftInspectionFailed({ cause })));
+
   return workerDriftReport(snapshot.repairPlan.native).join("\n");
 }).pipe(
   Effect.timeout("45 seconds"),
-  Effect.catchCause(() =>
-    Effect.succeed(
-      "Worker drift fields: Core unavailable\nWorker drift fields: Ingress unavailable"
+  Effect.catchCause((cause) =>
+    Effect.logWarning("Worker drift inspection failed", {
+      interrupted: Cause.hasInterrupts(cause),
+    }).pipe(
+      Effect.as("Worker drift fields: Core unavailable\nWorker drift fields: Ingress unavailable")
     )
   )
 );
@@ -44,7 +50,7 @@ if (import.meta.main) {
       Effect.flatMap((report) =>
         Effect.tryPromise({
           try: () => Bun.write(Bun.stdout, `${report}\n`),
-          catch: () => new DriftInspectionFailed(),
+          catch: (cause) => new DriftInspectionFailed({ cause }),
         })
       ),
       Effect.provide(services),

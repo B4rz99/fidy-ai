@@ -3,7 +3,7 @@ import {
   type TranscriptEntry,
   type TranscriptTurnId,
 } from "../../../src/core/agent/contract";
-import { Brand, type DateTime, Option } from "effect";
+import { Brand, Data, type DateTime, Option } from "effect";
 import { type User, type UserId } from "../../../src/core/identity/contract";
 
 import type {
@@ -21,6 +21,8 @@ export type SessionTranscriptEntry = Readonly<{
   sequence: bigint;
   entry: TranscriptEntry;
 }>;
+
+const ActiveRequest = Data.taggedEnum<HostedInitialTextContext["activeRequest"]>();
 
 export const assembleWorkingContext = ({
   sessionId,
@@ -56,9 +58,12 @@ export const assembleWorkingContext = ({
     )
     .toSorted((left, right) => {
       if (left.sequence < right.sequence) return -1;
+
       if (left.sequence > right.sequence) return 1;
+
       return 0;
     });
+
   return makeInitialContext({
     sections: hostedContextSections({
       user,
@@ -72,6 +77,6 @@ export const assembleWorkingContext = ({
       transcript: ordered.map(({ entry }) => entry),
       proactiveReply: Option.filter(proactiveReply, (item) => item.userId === userId),
     }),
-    activeRequest: { _tag: "Present", text: activeRequest },
+    activeRequest: ActiveRequest.Present({ text: activeRequest }),
   });
 };

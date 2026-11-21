@@ -21,9 +21,11 @@ const extract = (
     bindings
   );
 
-const responseBody = (response: Response): Promise<unknown> => response.json();
+const responseBody = (response: Response): Promise<Schema.Json> => response.json();
+
 const readFixture = (name: string): Promise<ArrayBuffer> =>
   Bun.file(new URL(`./fixtures/${name}`, import.meta.url)).arrayBuffer();
+
 type ToMarkdownResult = Awaited<
   ReturnType<Parameters<typeof documentExtractionWorker.fetch>[1]["AI"]["toMarkdown"]>
 >;
@@ -54,6 +56,7 @@ describe("Document extraction Worker proof", () => {
       const response = yield* Effect.tryPromise(() =>
         extract("%PDF-1.4\n%%EOF", { AI: { toMarkdown: () => Promise.resolve(result) } })
       );
+
       expect(response.status).toBe(422);
       expect(yield* Effect.tryPromise(() => responseBody(response))).toEqual({
         outcome: "rejected",
@@ -73,9 +76,11 @@ describe("Document extraction Worker proof", () => {
         const response = yield* Effect.tryPromise(() => extract(body, bindings));
 
         expect(response.status).toBe(200);
+
         const result = yield* Schema.decodeUnknownEffect(ConvertedResponse)(
           yield* Effect.tryPromise(() => responseBody(response))
         );
+
         expect(result.outcome).toBe("converted");
         expect(result.outputBytes).toBe(16);
         expect(result.elapsedMilliseconds).toBeGreaterThanOrEqual(0);
@@ -90,6 +95,7 @@ describe("Document extraction Worker proof", () => {
     Effect.gen(function* () {
       const body = yield* Effect.tryPromise(() => readFixture("valid-image.png"));
       const bindings = successfulBindings("image");
+
       const response = yield* Effect.tryPromise(() =>
         extract(body, bindings, { headers: { "content-type": "application/pdf" } })
       );
@@ -164,6 +170,7 @@ describe("Document extraction Worker proof", () => {
   it.effect("rejects a declared body above the input ceiling before invoking Workers AI", () =>
     Effect.gen(function* () {
       const bindings = successfulBindings("must not run");
+
       const response = yield* Effect.tryPromise(() =>
         extract("%PDF-1.7\n%%EOF", bindings, {
           headers: { "content-length": String(documentExtractionLimits.maximumInputBytes + 1) },
@@ -179,6 +186,7 @@ describe("Document extraction Worker proof", () => {
     Effect.gen(function* () {
       let cancelled = false;
       const chunk = new Uint8Array(documentExtractionLimits.maximumInputBytes / 5);
+
       const body = new ReadableStream<Uint8Array>({
         cancel: (): void => {
           cancelled = true;
@@ -187,6 +195,7 @@ describe("Document extraction Worker proof", () => {
           controller.enqueue(chunk);
         },
       });
+
       const bindings = successfulBindings("must not run");
       const response = yield* Effect.tryPromise(() => extract(body, bindings));
 
@@ -201,6 +210,7 @@ describe("Document extraction Worker proof", () => {
       const bindings = successfulBindings(
         "x".repeat(documentExtractionLimits.maximumOutputBytes + 1)
       );
+
       const response = yield* Effect.tryPromise(() => extract("%PDF-1.4\n%%EOF", bindings));
 
       expect(response.status).toBe(413);
@@ -217,6 +227,7 @@ describe("Document extraction Worker proof", () => {
       const bindings: Parameters<typeof documentExtractionWorker.fetch>[1] = {
         AI: { toMarkdown: vi.fn(() => Promise.reject(new Error("provider details"))) },
       };
+
       const response = yield* Effect.tryPromise(() => extract("%PDF-1.4\n%%EOF", bindings));
 
       expect(response.status).toBe(422);
@@ -229,20 +240,25 @@ describe("Document extraction Worker proof", () => {
 
   it.effect("stops awaiting Workers AI when the request is cancelled", () => {
     const controller = new AbortController();
+
     return Effect.gen(function* () {
       const conversionStarted = Promise.withResolvers<void>();
       const pendingConversion = Promise.withResolvers<ToMarkdownResult>();
+
       const bindings: Parameters<typeof documentExtractionWorker.fetch>[1] = {
         AI: {
           toMarkdown: vi.fn(() => {
             conversionStarted.resolve();
+
             return pendingConversion.promise;
           }),
         },
       };
+
       const responsePromise = extract("%PDF-1.4\n%%EOF", bindings, {
         signal: controller.signal,
       });
+
       yield* Effect.tryPromise(() => conversionStarted.promise);
       controller.abort();
       const response = yield* Effect.tryPromise(() => responsePromise);

@@ -20,36 +20,43 @@ import {
 
 export type HostedConversationChannel = "web" | "whatsapp";
 
-export type HostedContextSection =
-  | Readonly<{
-      _tag: "AssistantPolicy";
-      channel: HostedConversationChannel;
-      user: Pick<User, "serviceMarket" | "locale" | "timeZone">;
-    }>
-  | Readonly<{ _tag: "TurnStarted"; startedAt: DateTime.Utc; timeZone: string }>
-  | Readonly<{ _tag: "ContinuityBoundary"; boundary: "open" | "close" }>
-  | Readonly<{ _tag: "Memory"; text: string }>
-  | Readonly<{ _tag: "CompactedConversation"; text: string }>
-  | Readonly<{ _tag: "Transcript"; entry: TranscriptEntry }>
-  | Readonly<{ _tag: "ProactiveReply"; entry: ProactiveTranscriptEntry }>
-  | Readonly<{
-      _tag: "ToolResult";
-      toolCallId: Extract<
-        TranscriptEntry,
-        { readonly _tag: "CanonicalToolResultEntry" }
-      >["toolCallId"];
-      operation: CanonicalOperationId;
-      outcome: Extract<TranscriptEntry, { readonly _tag: "CanonicalToolResultEntry" }>["outcome"];
-    }>
-  | Readonly<{ _tag: "InvalidOutputFeedback"; description: string }>;
+type CanonicalToolResultEntry = Data.TaggedEnum.Value<TranscriptEntry, "CanonicalToolResultEntry">;
+
+export type HostedContextSection = Data.TaggedEnum<{
+  AssistantPolicy: {
+    readonly channel: HostedConversationChannel;
+    readonly user: Pick<User, "serviceMarket" | "locale" | "timeZone">;
+  };
+  TurnStarted: { readonly startedAt: DateTime.Utc; readonly timeZone: string };
+  ContinuityBoundary: { readonly boundary: "open" | "close" };
+  Memory: { readonly text: string };
+  CompactedConversation: { readonly text: string };
+  Transcript: { readonly entry: TranscriptEntry };
+  ProactiveReply: { readonly entry: ProactiveTranscriptEntry };
+  ToolResult: {
+    readonly toolCallId: CanonicalToolResultEntry["toolCallId"];
+    readonly operation: CanonicalOperationId;
+    readonly outcome: CanonicalToolResultEntry["outcome"];
+  };
+  InvalidOutputFeedback: { readonly description: string };
+}>;
+
+export const HostedContextSection = Data.taggedEnum<HostedContextSection>();
+
+export type HostedActiveRequest = Data.TaggedEnum<{
+  Absent: {};
+  Present: { readonly text: string };
+}>;
+
+export const HostedActiveRequest = Data.taggedEnum<HostedActiveRequest>();
 
 export type HostedTextContext = Readonly<{
   sections: ReadonlyArray<HostedContextSection>;
-  activeRequest: Readonly<{ _tag: "Absent" }> | Readonly<{ _tag: "Present"; text: string }>;
+  activeRequest: HostedActiveRequest;
 }>;
 
 export type HostedInitialTextContext = HostedTextContext &
-  Readonly<{ activeRequest: Readonly<{ _tag: "Present"; text: string }> }> &
+  Readonly<{ activeRequest: Data.TaggedEnum.Value<HostedActiveRequest, "Present"> }> &
   Brand.Brand<"HostedInitialTextContext">;
 
 export type HostedStructuredContext = Readonly<{
@@ -57,28 +64,28 @@ export type HostedStructuredContext = Readonly<{
   entries: ReadonlyArray<TranscriptEntry>;
 }>;
 
-export type PreparedHostedText = Readonly<{
-  execute: Effect.Effect<HostedTextResult, HostedInferenceError>;
-  repairInvalidOutput: Effect.Effect<PreparedHostedText, HostedInferenceError>;
+export type PreparedHostedText<Requirements = never> = Readonly<{
+  execute: Effect.Effect<HostedTextResult<Requirements>, HostedInferenceError, Requirements>;
+  repairInvalidOutput: Effect.Effect<PreparedHostedText<Requirements>, HostedInferenceError>;
   discard: Effect.Effect<void, HostedInferenceError>;
 }> &
   Brand.Brand<"PreparedHostedText">;
 
-export type PreparedHostedStructured<Output> = Readonly<{
-  execute: Effect.Effect<Output, HostedInferenceError>;
+export type PreparedHostedStructured<Output, Requirements = never> = Readonly<{
+  execute: Effect.Effect<Output, HostedInferenceError, Requirements>;
   discard: Effect.Effect<void, HostedInferenceError>;
 }> &
   Brand.Brand<"PreparedHostedStructured">;
 
-export type HostedContinuationEvent = Extract<
+export type HostedContinuationEvent = Data.TaggedEnum.Value<
   HostedContextSection,
-  { readonly _tag: "ToolResult" | "InvalidOutputFeedback" }
+  "ToolResult" | "InvalidOutputFeedback"
 >;
 
-export type HostedTextContinuation = Readonly<{
+export type HostedTextContinuation<Requirements = never> = Readonly<{
   prepare: (
     events: ReadonlyArray<HostedContinuationEvent>
-  ) => Effect.Effect<PreparedHostedText, HostedInferenceError>;
+  ) => Effect.Effect<PreparedHostedText<Requirements>, HostedInferenceError>;
 }> &
   Brand.Brand<"HostedTextContinuation">;
 
@@ -103,21 +110,20 @@ export type HostedInvalidOutputDescription =
   | "Hosted structured provider response was invalid"
   | "Hosted structured output was malformed";
 
-export type HostedInferenceFailureReason =
-  | Readonly<{ _tag: "InvalidAuthority" }>
-  | Readonly<{ _tag: "CapacityExceeded"; inputTokens: number }>
-  | Readonly<{
-      _tag: "ActiveRequestCapacityExceeded";
-      inputTokens: number;
-      maximumTokens: number;
-    }>
-  | Readonly<{ _tag: "InvalidOutput"; description: HostedInvalidOutputDescription }>
-  | Readonly<{ _tag: "ProviderUnavailable" }>
-  | Readonly<{ _tag: "ProviderQuotaExceeded" }>
-  | Readonly<{ _tag: "ResourceLimit" }>
-  | Readonly<{ _tag: "AdmissionUnavailable" }>
-  | Readonly<{ _tag: "StructuredOutputExceeded" }>
-  | Readonly<{ _tag: "StructuredOutputTimedOut" }>;
+export type HostedInferenceFailureReason = Data.TaggedEnum<{
+  InvalidAuthority: {};
+  CapacityExceeded: { readonly inputTokens: number };
+  ActiveRequestCapacityExceeded: { readonly inputTokens: number; readonly maximumTokens: number };
+  InvalidOutput: { readonly description: HostedInvalidOutputDescription };
+  ProviderUnavailable: {};
+  ProviderQuotaExceeded: {};
+  ResourceLimit: {};
+  AdmissionUnavailable: {};
+  StructuredOutputExceeded: {};
+  StructuredOutputTimedOut: {};
+}>;
+
+export const HostedInferenceFailureReason = Data.taggedEnum<HostedInferenceFailureReason>();
 
 const hostedInferenceErrorMessages: Readonly<Record<HostedInferenceFailureReason["_tag"], string>> =
   {
@@ -147,6 +153,7 @@ export const HostedToolCallMaximum = Schema.Int.check(
   Schema.isGreaterThan(0),
   Schema.isLessThanOrEqualTo(maximumToolCallsPerTurn)
 ).pipe(Schema.brand("HostedToolCallMaximum"));
+
 export type HostedToolCallMaximum = typeof HostedToolCallMaximum.Type;
 
 export type HostedTextToolPolicy = Readonly<{
@@ -177,24 +184,24 @@ export type HostedTextToolCall = Readonly<{
 
 export type HostedFinishReason = Response.FinishReason;
 
-export type HostedTextResult = Readonly<{
+export type HostedTextResult<Requirements = never> = Readonly<{
   text: unknown;
   toolCalls: ReadonlyArray<HostedTextToolCall>;
   finishReason: HostedFinishReason;
   usage: HostedTextUsage;
-  continuation: HostedTextContinuation;
+  continuation: HostedTextContinuation<Requirements>;
 }>;
 
-export type HostedInferenceService = Readonly<{
+export type HostedInferenceService<Requirements = never> = Readonly<{
   countText: (text: string) => Effect.Effect<number>;
   countTranscript: (entries: ReadonlyArray<TranscriptEntry>) => Effect.Effect<number>;
   prepareText: (
     request: HostedTextRequest
-  ) => Effect.Effect<PreparedHostedText, HostedInferenceError>;
+  ) => Effect.Effect<PreparedHostedText<Requirements>, HostedInferenceError>;
   validateText: (request: HostedTextValidationRequest) => Effect.Effect<void, HostedInferenceError>;
   prepareStructured: <Output, Encoded extends Readonly<Record<string, unknown>>>(
     request: HostedStructuredRequest<Output, Encoded>
-  ) => Effect.Effect<PreparedHostedStructured<Output>, HostedInferenceError>;
+  ) => Effect.Effect<PreparedHostedStructured<Output, Requirements>, HostedInferenceError>;
 }>;
 
 export type HostedInferenceStubBehavior = Readonly<{
@@ -214,6 +221,7 @@ const approvedOpenAiModelId = "gpt-6-luna" as const;
 export const ApprovedOpenAiModel = Schema.Literal(approvedOpenAiModelId).pipe(
   Schema.brand("ApprovedOpenAiModel")
 );
+
 export type ApprovedOpenAiModel = typeof ApprovedOpenAiModel.Type;
 
 export const approvedOpenAiModel = ApprovedOpenAiModel.make(approvedOpenAiModelId);
@@ -281,14 +289,14 @@ export type OpenAiTransportRun = (
   options: Readonly<{ signal: AbortSignal }>
 ) => Promise<Response>;
 
-export type OpenAiRun = (
+export type OpenAiRun<Requirements = never> = (
   model: ApprovedOpenAiModel,
   request: OpenAiRequest
-) => Effect.Effect<Response, HostedInferenceError | Cause.UnknownError>;
+) => Effect.Effect<Response, HostedInferenceError | Cause.UnknownError, Requirements>;
 
-export type OpenAiConfiguration = Readonly<{
+export type OpenAiConfiguration<Requirements = never> = Readonly<{
   model: Option.Option<string>;
-  run: Option.Option<OpenAiRun>;
+  run: Option.Option<OpenAiRun<Requirements>>;
 }>;
 
 export type HostedConformanceCheck =

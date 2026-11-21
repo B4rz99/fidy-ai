@@ -4,8 +4,10 @@ import { Checkbox } from "@/ui/components/checkbox";
 import { OAuthClient, OAuthNotice, OAuthStatus } from "@/ui/components/oauth-review";
 
 const exampleDurations = ["7", "30", "90", "365"];
+
 const PermissionExample = (): JSX.Element => {
   const [selected, select] = useState(true);
+
   return (
     <OAuthClient name="Agente de ejemplo">
       <fieldset className="oauth-permissions">
@@ -23,8 +25,10 @@ const PermissionExample = (): JSX.Element => {
     </OAuthClient>
   );
 };
+
 const DurationExample = (): JSX.Element => {
   const [duration, select] = useState("90");
+
   return (
     <fieldset className="oauth-duration">
       <legend>Duración de ejemplo</legend>
@@ -42,6 +46,7 @@ const DurationExample = (): JSX.Element => {
     </fieldset>
   );
 };
+
 const ReviewExample = ({
   decide,
 }: Readonly<{ decide: (kind: "success" | "information" | "warning") => void }>): JSX.Element => (
@@ -70,6 +75,7 @@ const ReviewExample = ({
     </aside>
   </div>
 );
+
 const outcomes = {
   success: {
     title: "Aprobación registrada",
@@ -88,6 +94,7 @@ const outcomes = {
 
 export const OAuthReference = (): JSX.Element => {
   const [state, select] = useState<"review" | "success" | "information" | "warning">("review");
+
   return (
     <section id="oauth" aria-label="Autorizaciones de ejemplo">
       <h2 className="mb-4 text-2xl font-semibold">Autorizaciones</h2>

@@ -1,4 +1,4 @@
-import { Clock, Effect, Schema } from "effect";
+import { Clock, Effect, Predicate, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import type { Miniflare } from "miniflare";
 import { newId } from "./secret-material/operations";
@@ -6,6 +6,7 @@ import { productionTopology } from "./runtime/contract";
 import { native } from "./user-store.test-fixture";
 
 const millisecondsPerSecond = 1000;
+
 type ChatOptions = Partial<
   Readonly<{
     endpoint: string;
@@ -16,16 +17,18 @@ type ChatOptions = Partial<
     reply: string;
   }>
 >;
+
 export const chatWith = Effect.fn(function* (
   runtime: Miniflare,
   { text, caller, ...options }: Readonly<{ text: string; caller: string }> & ChatOptions
 ) {
   const now = yield* Clock.currentTimeMillis;
+
   const bytes = new TextEncoder().encode(
     yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
       message: {
         id: options.message ?? newId(),
-        ...(options.reply === undefined ? {} : { context: { id: options.reply } }),
+        context: options.reply === undefined ? undefined : { id: options.reply },
         timestamp: String(Math.floor((options.occurredMs ?? now) / millisecondsPerSecond)),
         type: "text",
         from_user_id: caller,
@@ -36,6 +39,7 @@ export const chatWith = Effect.fn(function* (
       phone_number_id: options.endpoint ?? "123456789012345",
     })
   );
+
   return yield* signedWebhook(runtime, bytes, options.secret ?? "test-kapso-secret");
 });
 
@@ -44,10 +48,10 @@ export const signedWebhook = Effect.fn(function* (
   bytes: Uint8Array<ArrayBuffer>,
   signature: string | Readonly<{ secret: string; event: string }>
 ) {
-  const { secret, event } =
-    typeof signature === "string"
-      ? { secret: signature, event: "whatsapp.message.received" }
-      : signature;
+  const { secret, event } = Predicate.isString(signature)
+    ? { secret: signature, event: "whatsapp.message.received" }
+    : signature;
+
   const key = yield* native(() =>
     crypto.subtle.importKey(
       "raw",
@@ -57,7 +61,9 @@ export const signedWebhook = Effect.fn(function* (
       ["sign"]
     )
   );
+
   const digest = yield* native(() => crypto.subtle.sign("HMAC", key, bytes));
+
   return yield* native(() =>
     runtime.dispatchFetch(
       `https://${productionTopology.ingress.hostname}/providers/kapso/callback`,

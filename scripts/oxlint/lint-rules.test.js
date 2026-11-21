@@ -18,7 +18,9 @@ import testGuards from "./test-guards.js";
 import effectRecovery from "./effect-recovery.js";
 
 const routeFile = fileURLToPath(new URL("../../apps/web/src/app/routes.ts", import.meta.url));
+
 const otherFile = fileURLToPath(new URL("../../apps/web/src/app/other.ts", import.meta.url));
+
 const tester = new RuleTester({ languageOptions: { parserOptions: { lang: "ts" } } });
 
 tester.run("effect-recovery/no-catch-succeed-none", effectRecovery.rules["no-catch-succeed-none"], {
@@ -253,21 +255,40 @@ tester.run(
 );
 
 const workspaceRoot = fileURLToPath(new URL("../..", import.meta.url));
+
+const jevVariables = new Set([
+  "CI",
+  "TYPESAFE_API_KEY",
+  "TYPESAFE_AI_API_KEY",
+  "FACTORY_API_KEY",
+  "AI_GATEWAY_API_KEY",
+  "VERCEL_OIDC_TOKEN",
+]);
+
+const lintEnvironment = Object.fromEntries(
+  Object.entries(process.env).filter(([name]) => !jevVariables.has(name))
+);
+
 const testProbe = join(workspaceRoot, `apps/web/src/.lint-test-probe-${process.pid}.test.tsx`);
+
 try {
   writeFileSync(
     testProbe,
     'import { vi } from "vitest";\nimport { render } from "@testing-library/react";\nimport { Effect } from "effect";\nvi.mock("./owner", () => ({}));\nEffect.catch(() => Effect.succeedNone);\n'
   );
+
   const result = spawnSync(
     "./node_modules/.bin/oxlint",
     ["--config", ".oxlintrc.json", testProbe],
-    { cwd: workspaceRoot, encoding: "utf8" }
+    { cwd: workspaceRoot, encoding: "utf8", env: lintEnvironment }
   );
+
   const report = `${result.stdout}\n${result.stderr}`;
+
   for (const rule of ["no-tsx-tests", "no-module-mocks", "no-react-test-tools"]) {
     assert.ok(report.includes(`test-guards(${rule})`), report);
   }
+
   assert.ok(report.includes("effect-recovery(no-catch-succeed-none)"), report);
   assert.notEqual(result.status, 0);
 } finally {
@@ -277,13 +298,16 @@ try {
 const probeFile = fileURLToPath(
   new URL(`../../apps/web/src/app/.lint-interface-probe-${process.pid}.ts`, import.meta.url)
 );
+
 try {
   writeFileSync(probeFile, "interface Ordinary { readonly value: string }\n");
+
   const result = spawnSync(
     "./node_modules/.bin/oxlint",
     ["--config", ".oxlintrc.json", probeFile],
-    { cwd: workspaceRoot, encoding: "utf8" }
+    { cwd: workspaceRoot, encoding: "utf8", env: lintEnvironment }
   );
+
   assert.match(`${result.stdout}\n${result.stderr}`, /effect-guards\(no-ordinary-interface\)/u);
   assert.notEqual(result.status, 0);
 } finally {
@@ -291,6 +315,7 @@ try {
 }
 
 const designProbe = join(workspaceRoot, "apps/web/src/app/.lint-design-probe.tsx");
+
 const designCases = [
   { expression: '<Alert className="bg-success-subtle" />', rule: "no-restyle" },
   { expression: '<Alert variant="success">Guardado</Alert>' },
@@ -317,6 +342,7 @@ const designCases = [
   { expression: '<Button variant="outline" className="w-full">Guardar</Button>' },
   { expression: '<CardContent className="flex gap-4 px-6">Contenido</CardContent>' },
 ];
+
 try {
   for (const { expression, rule } of designCases) {
     writeFileSync(
@@ -337,12 +363,15 @@ try {
         "\n" +
         `export const DesignProbe = (): JSX.Element => ${expression};\n`
     );
+
     const result = spawnSync(
       "./node_modules/.bin/oxlint",
       ["--config", ".oxlintrc.json", designProbe],
-      { cwd: workspaceRoot, encoding: "utf8" }
+      { cwd: workspaceRoot, encoding: "utf8", env: lintEnvironment }
     );
+
     const report = `${result.stdout}\n${result.stderr}`;
+
     if (rule) {
       assert.ok(report.includes(`shadcn(${rule})`), report);
       assert.notEqual(result.status, 0);
@@ -355,8 +384,10 @@ try {
 }
 
 const isolatedRoot = mkdtempSync(join(tmpdir(), "fidy-symbol-guidance-"));
+
 try {
   symlinkSync(join(workspaceRoot, "node_modules"), join(isolatedRoot, "node_modules"), "dir");
+
   for (const directory of [
     "apps/server/scripts",
     "apps/server/src",
@@ -366,6 +397,7 @@ try {
   ]) {
     mkdirSync(join(isolatedRoot, directory), { recursive: true });
   }
+
   const guardPath = join(isolatedRoot, "apps/server/scripts/check-lint-guards.ts");
   const sourcePath = join(isolatedRoot, "apps/web/src/symbol-probe.ts");
   copyFileSync(

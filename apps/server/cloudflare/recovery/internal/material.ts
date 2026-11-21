@@ -2,6 +2,7 @@ import { BackupRecoveryCode } from "../../../src/core/recovery/contract";
 import { Schema } from "effect";
 
 const recoveryAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
 const recoverySymbolCount = 25;
 
 export const sampleRecoveryCode = (): BackupRecoveryCode =>

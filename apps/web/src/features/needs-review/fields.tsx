@@ -27,6 +27,7 @@ type Props = Readonly<{
   categories: ReadonlyArray<Category>;
   timeZone: string;
 }>;
+
 export const ReviewFields = (props: Props): JSX.Element => {
   const active =
     useMatch({
@@ -34,7 +35,9 @@ export const ReviewFields = (props: Props): JSX.Element => {
       shouldThrow: false,
       select: (match) => (match.search.status ?? "pending") === "pending",
     }) ?? false;
+
   const { generation, scope } = useDismissedPickerScope(active);
+
   return (
     <div hidden={!active} inert={!active} ref={scope}>
       <ReviewFieldControls key={generation} {...props} />
@@ -53,19 +56,24 @@ const ReviewFieldControls = memo((props: Props): JSX.Element => (
     </div>
   </div>
 ));
+
 const ReviewMoney = ({ draft, change, locked }: Props): JSX.Element => {
   const [visited, setVisited] = useState(false);
+
   const error = visited
     ? Option.match(draft.currency, {
         onNone: () => Option.some("Selecciona una moneda para validar el monto."),
         onSome: (currency) => moneyInputError({ text: draft.amount, currency }),
       })
     : Option.none();
+
   const hint = Option.match(draft.currency, {
     onNone: () => "Selecciona una moneda para validar el monto.",
     onSome: moneyInputHint,
   });
+
   const reveal = useReviewAmountVisibility(error);
+
   return (
     <div data-review="money-feedback" ref={reveal}>
       <div data-review="money">
@@ -113,6 +121,7 @@ const ReviewMoney = ({ draft, change, locked }: Props): JSX.Element => {
     </div>
   );
 };
+
 const ReviewCounterparty = (props: Props): JSX.Element => (
   <div className="grid content-start gap-2.5">
     <Label htmlFor="review-counterparty">Contraparte (opcional)</Label>
@@ -133,6 +142,7 @@ const ReviewCounterparty = (props: Props): JSX.Element => (
     />
   </div>
 );
+
 const ReviewDirection = ({ draft, change, locked }: Props): JSX.Element => (
   <div className="grid content-start gap-2.5">
     <Label htmlFor="review-direction">
@@ -161,6 +171,7 @@ const ReviewDirection = ({ draft, change, locked }: Props): JSX.Element => (
     />
   </div>
 );
+
 const ReviewCategory = ({ draft, change, locked, categories }: Props): JSX.Element => (
   <div className="grid content-start gap-2.5">
     <Label htmlFor="review-category">Categoría</Label>
@@ -186,6 +197,7 @@ const ReviewCategory = ({ draft, change, locked, categories }: Props): JSX.Eleme
 const ReviewOccurrence = (props: Props): JSX.Element => {
   const local = localOccurrence({ value: props.draft.occurredAt, timeZone: props.timeZone });
   const [date = "", time = ""] = local.split("T");
+
   const change = (value: string): void =>
     props.change(
       editDraft({
@@ -194,6 +206,7 @@ const ReviewOccurrence = (props: Props): JSX.Element => {
         value: { occurredAt: canonicalOccurrence({ value, timeZone: props.timeZone }) },
       })
     );
+
   return (
     <div className="grid content-start gap-2.5">
       <div data-review="occurrence" className="grid grid-cols-2 gap-3">

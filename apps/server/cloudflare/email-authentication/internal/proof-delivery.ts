@@ -1,15 +1,15 @@
 import { OutboundHttpLive, installedProviderFetch } from "../../outbound-http/runtime";
 import { Cause, Context, Effect, Exit, Layer, Redacted } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/http";
+import { FetchHttpClient } from "effect/http";
 import type {
   EmailAddress,
   EmailVerificationCode,
 } from "../../../src/core/email-authentication/contract";
 import {
+  EmailDelivery,
   type EmailDeliveryPortService,
-  makeEmailDelivery,
 } from "../../../src/shell/email-authentication/runtime";
-import { makeResendOutboundHttp } from "../../../src/shell/outbound-http/operations";
+import { OutboundHttp } from "../../../src/shell/outbound-http/operations";
 import {
   cloudflareWorkerTelemetry,
   observeWorkerExecution,
@@ -32,22 +32,22 @@ export const sendClaimedProof = (
   Effect.runPromiseExit(
     Effect.scoped(
       Effect.gen(function* () {
-        const clients = yield* Layer.build(OutboundHttpLive).pipe(
-          Effect.provideService(
-            FetchHttpClient.Fetch,
-            yield* installedProviderFetch({
-              provider: "resend",
-              environment: input.environment,
-              telemetry: cloudflareWorkerTelemetry,
-            })
+        const fetcher = yield* installedProviderFetch({
+          provider: "resend",
+          environment: input.environment,
+          telemetry: cloudflareWorkerTelemetry,
+        });
+
+        const services = yield* Layer.build(
+          EmailDelivery.layer.pipe(
+            Layer.provide(
+              OutboundHttp.resendLayer(Redacted.make(input.environment.RESEND_API_KEY))
+            ),
+            Layer.provide(OutboundHttpLive)
           )
-        );
-        return yield* makeEmailDelivery({
-          outboundHttp: makeResendOutboundHttp({
-            apiKey: Redacted.make(input.environment.RESEND_API_KEY),
-            httpClient: Context.get(clients, HttpClient.HttpClient),
-          }),
-        }).send({
+        ).pipe(Effect.provideService(FetchHttpClient.Fetch, fetcher));
+
+        return yield* Context.get(services, EmailDelivery).send({
           purpose: input.purpose,
           to: input.to,
           combinedCode: input.combinedCode,
@@ -64,6 +64,7 @@ export const sendClaimedProof = (
     )
   ).then((outcome): ProviderCertainty => {
     if (Exit.isSuccess(outcome)) return "accepted";
+
     return outcome.cause.reasons.length > 0 &&
       outcome.cause.reasons.every(
         (reason) => Cause.isFailReason(reason) && reason.error.certainty === "rejected"

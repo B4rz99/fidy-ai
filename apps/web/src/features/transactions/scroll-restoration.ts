@@ -4,10 +4,12 @@ import { useLayoutEffect, useRef, useState } from "react";
 
 export const useTransactionScrollRestoration = (ready: boolean): void => {
   const router = useRouter();
+
   const entry = useElementScrollRestoration({
     getElement: () => window,
     getKey: router.options.getScrollRestorationKey,
   });
+
   const [destination] = useState(() => Option.fromNullishOr(entry));
   const restored = useRef(false);
   useLayoutEffect(() => {

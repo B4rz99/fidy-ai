@@ -7,15 +7,19 @@ import {
 } from "./connections/contract";
 
 export { default } from "./core-worker";
+
 export * from "./core-worker";
 
 const keyCharacters = 43;
+
 const clientId = "10000000-0000-4000-8000-000000000001";
+
 export class ConnectionProviderFixture extends DurableObject {
   private readonly page = Effect.fn({ self: this }, function* () {
     const store = this.ctx.storage;
     const count = yield* Effect.tryPromise(() => store.get<number>("calls"));
     yield* Effect.tryPromise(() => store.put("calls", (count ?? 0) + 1));
+
     const released = yield* Effect.tryPromise(() => store.get<boolean>("release")).pipe(
       Effect.repeat({
         while: (value) => value !== true,
@@ -23,7 +27,9 @@ export class ConnectionProviderFixture extends DurableObject {
       }),
       Effect.timeoutOption("20 seconds")
     );
+
     if (Option.isNone(released)) return new Response(null, { status: 503 });
+
     return Response.json({
       movements: [
         {
@@ -43,15 +49,18 @@ export class ConnectionProviderFixture extends DurableObject {
   private readonly revoke = Effect.fn({ self: this }, function* (request: Request) {
     const store = this.ctx.storage;
     const label = new URL(request.url).searchParams.get("held");
+
     if (
       label === "failed" &&
       (yield* Effect.tryPromise(() => store.get<boolean>("allow-cleanup"))) !== true
     ) {
       return new Response(null, { status: 503 });
     }
+
     yield* Effect.tryPromise(() => store.put("last-revoked", label));
     const count = yield* Effect.tryPromise(() => store.get<number>("revocations"));
     yield* Effect.tryPromise(() => store.put("revocations", (count ?? 0) + 1));
+
     return new Response(null, { status: 204 });
   });
   override fetch(request: Request): Promise<Response> {
@@ -59,18 +68,26 @@ export class ConnectionProviderFixture extends DurableObject {
       Effect.gen({ self: this }, function* () {
         const path = new URL(request.url).pathname;
         const store = this.ctx.storage;
+
         if (path === "/prepare") {
           const state = yield* Effect.tryPromise(() => request.text());
           yield* Effect.tryPromise(() => store.put("state", state));
+
           return new Response(null, { status: 204 });
         }
+
         if (path === "/page") return yield* this.page();
+
         if (path === "/allow-cleanup") {
           yield* Effect.tryPromise(() => store.put("allow-cleanup", true));
+
           return new Response(null, { status: 204 });
         }
+
         if (path === "/revoke") return yield* this.revoke(request);
+
         if (path === "/release") yield* Effect.tryPromise(() => store.put("release", true));
+
         return Response.json({
           lastRevoked: yield* Effect.tryPromise(() => store.get("last-revoked")),
           revocations: (yield* Effect.tryPromise(() => store.get<number>("revocations"))) ?? 0,
@@ -81,6 +98,7 @@ export class ConnectionProviderFixture extends DurableObject {
     );
   }
 }
+
 const fixtureRevocation = (gate: Pick<Fetcher, "fetch">): ConnectionAdapters["cleanup"] =>
   Option.some({
     clientId,
@@ -90,19 +108,24 @@ const fixtureRevocation = (gate: Pick<Fetcher, "fetch">): ConnectionAdapters["cl
           Option.isNone(input.grant.accessToken) ||
           !["test-grant", "failed-grant"].includes(Redacted.value(input.grant.accessToken.value))
         ) {
-          return yield* new ConnectionAuthorizationUnavailable();
+          return yield* new ConnectionAuthorizationUnavailable({ cause: undefined });
         }
+
         if (!input.observedTokens.includes("access_token")) {
           yield* input.recordActive("access_token");
         }
+
         const label =
           Redacted.value(input.grant.accessToken.value) === "test-grant" ? "active" : "failed";
+
         const reply = yield* Effect.tryPromise(() =>
           gate.fetch("https://fixture.invalid/revoke?held=" + label)
         );
-        if (!reply.ok) return yield* new ConnectionAuthorizationUnavailable();
-      }).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable())),
+
+        if (!reply.ok) return yield* new ConnectionAuthorizationUnavailable({ cause: undefined });
+      }).pipe(Effect.mapError((cause) => new ConnectionAuthorizationUnavailable({ cause }))),
   });
+
 export class UserStore extends NativeUser {
   private readonly gate;
   constructor(
@@ -121,12 +144,15 @@ export class UserStore extends NativeUser {
         () => new Response(null, { status: 503 })
       );
     }
+
     return super.fetch(request);
   }
   protected override connectionAdapters(): ConnectionAdapters {
     const gate = this.gate;
     const result = super.connectionAdapters();
+
     if (Option.isNone(result.preparation)) return result;
+
     return {
       preparation: Option.some({
         intent: result.preparation.value.intent,
@@ -136,6 +162,7 @@ export class UserStore extends NativeUser {
             yield* Effect.tryPromise(() =>
               gate.fetch("https://fixture.invalid/prepare", { method: "POST", body: input.state })
             );
+
             return {
               url:
                 "https://auth1-api-open-finance-sandbox.ambientesbc.com/auth?response_type=code&scope=accounts&client_id=" +
@@ -143,7 +170,7 @@ export class UserStore extends NativeUser {
                 "&request_uri=urn:ietf:params:oauth:request_uri:test",
               expiresAtMilliseconds: input.expiresAtMilliseconds,
             };
-          }).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable())),
+          }).pipe(Effect.mapError((cause) => new ConnectionAuthorizationUnavailable({ cause }))),
       }),
       cleanup: fixtureRevocation(gate),
       activation: Option.some({
@@ -156,7 +183,11 @@ export class UserStore extends NativeUser {
               refreshToken: Option.none(),
               expiresAtMilliseconds: input.expiresAtMilliseconds,
             });
-            if (rejected) return yield* new ConnectionAuthorizationUnavailable();
+
+            if (rejected) {
+              return yield* new ConnectionAuthorizationUnavailable({ cause: undefined });
+            }
+
             return ["account-one"];
           }),
       }),
@@ -169,9 +200,13 @@ export class UserStore extends NativeUser {
             const reply = yield* Effect.tryPromise(() =>
               gate.fetch("https://fixture.invalid/page")
             );
-            if (!reply.ok) return yield* new ConnectionAuthorizationUnavailable();
+
+            if (!reply.ok) {
+              return yield* new ConnectionAuthorizationUnavailable({ cause: undefined });
+            }
+
             return yield* Effect.tryPromise(() => reply.json());
-          }).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable())),
+          }).pipe(Effect.mapError((cause) => new ConnectionAuthorizationUnavailable({ cause }))),
       }),
     };
   }

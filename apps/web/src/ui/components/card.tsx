@@ -2,6 +2,7 @@ import * as React from "react";
 import { cn } from "@/ui/class-names";
 
 type DivProps = React.ComponentProps<"div">;
+
 const Card = ({ className, ...props }: DivProps): React.JSX.Element => (
   <div
     data-slot="card"
@@ -13,6 +14,7 @@ const Card = ({ className, ...props }: DivProps): React.JSX.Element => (
     {...props}
   />
 );
+
 const CardHeader = ({ className, ...props }: DivProps): React.JSX.Element => (
   <div
     data-slot="card-header"
@@ -23,6 +25,7 @@ const CardHeader = ({ className, ...props }: DivProps): React.JSX.Element => (
     {...props}
   />
 );
+
 const CardTitle = ({ className, ...props }: DivProps): React.JSX.Element => (
   <div
     data-slot="card-title"
@@ -30,6 +33,7 @@ const CardTitle = ({ className, ...props }: DivProps): React.JSX.Element => (
     {...props}
   />
 );
+
 const CardDescription = ({ className, ...props }: DivProps): React.JSX.Element => (
   <div
     data-slot="card-description"
@@ -37,6 +41,7 @@ const CardDescription = ({ className, ...props }: DivProps): React.JSX.Element =
     {...props}
   />
 );
+
 const CardAction = ({ className, ...props }: DivProps): React.JSX.Element => (
   <div
     data-slot="card-action"
@@ -44,6 +49,7 @@ const CardAction = ({ className, ...props }: DivProps): React.JSX.Element => (
     {...props}
   />
 );
+
 const CardContent = ({ className, ...props }: DivProps): React.JSX.Element => (
   <div
     data-slot="card-content"
@@ -51,6 +57,7 @@ const CardContent = ({ className, ...props }: DivProps): React.JSX.Element => (
     {...props}
   />
 );
+
 const CardFooter = ({ className, ...props }: DivProps): React.JSX.Element => (
   <div
     data-slot="card-footer"
@@ -61,4 +68,5 @@ const CardFooter = ({ className, ...props }: DivProps): React.JSX.Element => (
     {...props}
   />
 );
+
 export { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle };

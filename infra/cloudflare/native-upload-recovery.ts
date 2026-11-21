@@ -6,6 +6,7 @@ const binding = Schema.Struct({
   type: Schema.String,
   text: Schema.optional(Schema.String),
 });
+
 const handlers = Schema.Struct({
   handlers: Schema.Array(Schema.String),
   named_handlers: Schema.optionalKey(
@@ -17,6 +18,7 @@ const handlers = Schema.Struct({
     )
   ),
 });
+
 const version = Schema.Struct({
   success: Schema.Literal(true),
   result: Schema.Struct({
@@ -33,6 +35,7 @@ const receiptScript = (role: "core" | "ingress", script: typeof handlers.Type): 
   role === "ingress"
     ? script.named_handlers === undefined && script.handlers.join(",") === "fetch"
     : script.named_handlers?.some((entry) => entry.name === "UserStore") === true;
+
 const sourceBinding = Schema.is(
   Schema.Tuple([
     Schema.Struct({
@@ -48,6 +51,7 @@ export const requireInterruptedUpload = (versions: { core: unknown; ingress: unk
     const { result } = Schema.decodeUnknownSync(version)(versions[role]);
     const { script, bindings } = result.resources;
     const revisions = bindings.filter((item) => item.name === "RELEASE_GIT_SHA");
+
     if (
       result.id !== upload[role === "core" ? "coreVersion" : "ingressVersion"] ||
       !sourceBinding(revisions) ||

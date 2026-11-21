@@ -23,6 +23,7 @@ const verifyCaptureWake = Effect.fn(function* (
   const users = yield* fromPromise(() =>
     db.runtime.getDurableObjectNamespace("USER_STORE", "core")
   );
+
   const alarm = Effect.fnUntraced(function* () {
     return yield* fromPromise(() =>
       users
@@ -31,6 +32,7 @@ const verifyCaptureWake = Effect.fn(function* (
         .then((response) => response.json())
     ).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ alarm: Schema.Int }))));
   });
+
   const due = yield* Schema.decodeUnknownEffect(
     Schema.NonEmptyArray(Schema.Struct({ facts: Schema.Int, bucket: Schema.Int }))
   )(
@@ -41,6 +43,7 @@ const verifyCaptureWake = Effect.fn(function* (
       )
     )
   );
+
   expect((yield* alarm()).alarm).toBe(due[0].facts);
   expect(due[0].bucket).toBeLessThan(due[0].facts);
   expect(yield* fromPromise(() => db.checkWork(alice.user))).toEqual({
@@ -76,6 +79,7 @@ const historicalPatternJourney = Effect.gen(function* () {
   const db = yield* makeNativeTransactionJourney(undefined, nativePurgePlatform).pipe(
     TestClock.withLive
   );
+
   yield* fromPromise(() =>
     db.exec(
       "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms) VALUES(?,?,'processing_grant',0)",
@@ -83,6 +87,7 @@ const historicalPatternJourney = Effect.gen(function* () {
       alice.user
     )
   );
+
   const request = (path: string, method = "GET", payload?: unknown): Effect.Effect<Response> =>
     TestClock.withLive(Effect.sleep(canonicalRequestProtection.intervalMs)).pipe(
       Effect.andThen(
@@ -96,12 +101,13 @@ const historicalPatternJourney = Effect.gen(function* () {
                 "Fidy-Session-Binding": alice.session,
                 cookie: `__Host-fidy_session=${alice.bearer}`,
               },
-              ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+              body: payload === undefined ? null : JSON.stringify(payload),
             })
           )
         )
       )
     );
+
   const evaluateDue = Effect.fn(function* () {
     yield* fromPromise(() =>
       db.exec(
@@ -116,6 +122,7 @@ const historicalPatternJourney = Effect.gen(function* () {
     yield* TestClock.withLive(
       Effect.gen(function* () {
         expect((yield* fromPromise(() => db.checkWork(alice.user))).status).toBe(204);
+
         return yield* fromPromise(() =>
           db.exec(
             "SELECT 1 AS ready FROM recurring_evaluation_records p JOIN transaction_projection_state f USING(user_id) WHERE p.kind='progress' AND p.phase='complete' AND p.evaluated_revision=f.fact_revision"
@@ -131,30 +138,35 @@ const historicalPatternJourney = Effect.gen(function* () {
       )
     );
   });
+
   const read = (): Effect.Effect<typeof RecurringSeriesPage.Type> =>
     Effect.gen(function* () {
       const response = yield* request("/recurring-series");
       expect(response.status).toBe(200);
+
       return (yield* Schema.decodeUnknownEffect(
         Schema.toCodecJson(Schema.Struct({ data: RecurringSeriesPage }))
       )(yield* fromPromise(() => response.json())).pipe(Effect.orDie)).data;
     });
-  const created: Array<Transaction> = [];
-  for (const month of [1, 2, 3]) {
-    const response = yield* request("/transactions", "POST", {
-      money: { amount: "30000.25", currency: "COP" },
-      counterparty: "Netflix",
-      direction: "outflow",
-      categoryId: "10000000-0000-4000-8000-000000000016",
-      occurredAt: `2026-${String(month).padStart(2, "0")}-15T12:00:00.000Z`,
-    });
-    expect(response.status).toBe(201);
-    created.push(
-      (yield* Schema.decodeUnknownEffect(Schema.toCodecJson(Schema.Struct({ data: Transaction })))(
-        yield* fromPromise(() => response.json())
-      ).pipe(Effect.orDie)).data
-    );
-  }
+
+  const created: Array<Transaction> = yield* Effect.forEach([1, 2, 3], (month) =>
+    Effect.gen(function* () {
+      const response = yield* request("/transactions", "POST", {
+        money: { amount: "30000.25", currency: "COP" },
+        counterparty: "Netflix",
+        direction: "outflow",
+        categoryId: "10000000-0000-4000-8000-000000000016",
+        occurredAt: `2026-${String(month).padStart(2, "0")}-15T12:00:00.000Z`,
+      });
+
+      expect(response.status).toBe(201);
+
+      return (yield* Schema.decodeUnknownEffect(
+        Schema.toCodecJson(Schema.Struct({ data: Transaction }))
+      )(yield* fromPromise(() => response.json())).pipe(Effect.orDie)).data;
+    })
+  );
+
   yield* verifyCaptureWake(db);
   yield* evaluateDue();
   const initial = yield* read();
@@ -162,21 +174,26 @@ const historicalPatternJourney = Effect.gen(function* () {
   expect(initial.series).toHaveLength(1);
   const original = initial.series[0];
   const middle = created[1];
+
   if (original === undefined || middle === undefined) {
     return yield* Effect.die("Missing captured pattern");
   }
+
   const correction = yield* request(`/transactions/${middle.id}`, "PUT", {
     expectedRevision: 0,
     changes: { counterparty: null },
   });
+
   expect(correction.status).toBe(200);
   expect((yield* read()).evaluation.kind).toBe("updating");
   yield* evaluateDue();
   expect((yield* read()).series).toHaveLength(0);
+
   const restored = yield* request(`/transactions/${middle.id}`, "PUT", {
     expectedRevision: 1,
     changes: { counterparty: "Netflix" },
   });
+
   expect(restored.status).toBe(200);
   yield* evaluateDue();
   expect((yield* read()).series).toEqual([original]);
@@ -185,10 +202,12 @@ const historicalPatternJourney = Effect.gen(function* () {
   yield* evaluateDue();
   expect((yield* read()).series).toHaveLength(0);
 });
+
 const pagedSeriesJourney = Effect.gen(function* () {
   const db = yield* makeNativeTransactionJourney(undefined, nativePurgePlatform).pipe(
     TestClock.withLive
   );
+
   const user = alice.user;
   yield* fromPromise(() =>
     db.exec(
@@ -197,11 +216,14 @@ const pagedSeriesJourney = Effect.gen(function* () {
       user
     )
   );
+
   const owner = (yield* fromPromise(() =>
     db.runtime.getDurableObjectNamespace("USER_STORE", "core")
   )).getByName(user);
+
   const fixed = Date.UTC(2026, 9, 20),
     captured = Date.UTC(2025, 10, 1);
+
   const advance = (): Effect.Effect<number> =>
     fromPromise(() =>
       owner.fetch("https://fixture.invalid/user-alarm", {
@@ -209,12 +231,14 @@ const pagedSeriesJourney = Effect.gen(function* () {
         headers: { "fixture-clock": String(fixed) },
       })
     ).pipe(Effect.map((reply) => reply.status));
+
   const progress = (): Effect.Effect<Awaited<ReturnType<typeof db.exec>>> =>
     fromPromise(() =>
       db.exec(
         "SELECT phase,revision,evaluated_revision FROM recurring_evaluation_records WHERE kind='progress'"
       )
     );
+
   const seed = Effect.fn(function* (first: number, last: number) {
     yield* fromPromise(() =>
       db.exec(
@@ -246,29 +270,44 @@ const pagedSeriesJourney = Effect.gen(function* () {
       )
     );
   });
-  const finish = Effect.fn(function* (revision: number) {
-    for (let step = 0; step < revision + 30; step++) {
+
+  const finishStep = (revision: number, step: number): Effect.Effect<number, Schema.SchemaError> =>
+    Effect.gen(function* () {
+      if (step >= revision + 30) {
+        return yield* Effect.die("User alarm did not finish bounded recurring discovery");
+      }
+
       const status = yield* advance();
+
       if (status !== 204) return status;
+
       const [record] = yield* Schema.decodeUnknownEffect(
         Schema.Array(Schema.Struct({ phase: Schema.String, evaluated_revision: Schema.Int }))
       )(yield* progress());
+
       if (record?.phase === "complete" && record.evaluated_revision === revision) return status;
-    }
-    return yield* Effect.die("User alarm did not finish bounded recurring discovery");
-  });
+
+      return yield* finishStep(revision, step + 1);
+    });
+
+  const finish = (revision: number): Effect.Effect<number, Schema.SchemaError> =>
+    finishStep(revision, 0);
+
   yield* seed(1, 33);
   expect(yield* advance()).toBe(204);
   expect(yield* advance()).toBe(204);
   yield* fromPromise(() => db.exec("UPDATE transaction_projection_state SET fact_revision=34"));
   expect(yield* finish(34)).toBe(204);
+
   const read = Effect.fn(function* (path: string) {
     const res = yield* fromPromise(() => db.browser(0, path));
     expect(res.status).toBe(200);
+
     return (yield* Schema.decodeUnknownEffect(
       Schema.toCodecJson(Schema.Struct({ data: RecurringSeriesPage }))
     )(yield* fromPromise(() => res.json()))).data;
   });
+
   const first = yield* read("/recurring-series");
   expect(first.series.length).toBe(32);
   const cursor = Option.getOrThrow(first.cursor);
@@ -290,6 +329,7 @@ const pagedSeriesJourney = Effect.gen(function* () {
   expect(yield* fromPromise(() => db.exec(count))).toEqual([{ n: 128 }]);
   expect((yield* read("/recurring-series")).evaluation.kind).toBe("updating");
 });
+
 it.layer(NodeFileSystem.layer)((nativeTest) => {
   nativeTest.effect(
     "public capture, correction and deletion invalidate and repair the same historical pattern",

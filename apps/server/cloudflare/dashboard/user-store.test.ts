@@ -15,6 +15,7 @@ import {
   Effect,
   type FileSystem,
   Option,
+  Predicate,
   Schema,
   type Scope,
 } from "effect";
@@ -37,6 +38,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       expect(yield* native(() => absent.json())).toMatchObject({
         error: { code: "dashboard_uninitialized" },
       });
+
       const initialized = yield* native(() =>
         owner.send(
           new Request("https://api.fidyapp.com/dashboard/initialize", {
@@ -51,6 +53,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           })
         )
       );
+
       expect(initialized.status).toBe(200);
       expect((yield* native(() => owner.browser(0, "/dashboard/view"))).status).toBe(200);
       expect((yield* native(() => owner.browser(1, "/dashboard/view"))).status).toBe(404);
@@ -59,40 +62,143 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 });
 
 type Journey = Effect.Success<typeof nativeTransactionJourney>;
+
 const runNative = <A, E>(
   work: Effect.Effect<A, E, FileSystem.FileSystem | Scope.Scope>
 ): Promise<A> => Effect.runPromise(work.pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)));
+
 const setup = (): typeof nativeTransactionJourney => nativeTransactionJourney;
-const send = (
-  store: Journey,
-  index: number,
-  call:
-    | string
-    | { path: string; method: "POST" | "PUT"; body: object }
-    | { path: string; method: "DELETE" }
-): Promise<Response> =>
+
+type DashboardCall =
+  | string
+  | Readonly<{ path: string; method: "POST" | "PUT"; body: Schema.Json }>
+  | Readonly<{ path: string; method: "DELETE" }>;
+
+const send = (store: Journey, index: number, call: DashboardCall): Promise<Response> =>
   Bun.sleep(canonicalRequestProtection.intervalMs).then(() => {
-    if (typeof call === "string") return store.browser(index, call);
+    if (Predicate.isString(call)) return store.browser(index, call);
     const subject = index === 0 ? alice : bob;
+
+    const init = {
+      method: call.method,
+      headers: {
+        origin: "https://app.fidyapp.com",
+        "Fidy-Session-Binding": subject.session,
+        cookie: "__Host-fidy_session=" + subject.bearer,
+        "content-type": "application/json",
+      },
+    };
+
     return store.send(
-      new Request("https://api.fidyapp.com" + call.path, {
-        method: call.method,
-        headers: {
-          origin: "https://app.fidyapp.com",
-          "Fidy-Session-Binding": subject.session,
-          cookie: "__Host-fidy_session=" + subject.bearer,
-          "content-type": "application/json",
-        },
-        ...("body" in call ? { body: JSON.stringify(call.body) } : {}),
-      })
+      new Request(
+        "https://api.fidyapp.com" + call.path,
+        "body" in call ? { ...init, body: JSON.stringify(call.body) } : init
+      )
     );
   });
+
+type ScopedCall = (path: string, body?: Schema.Json) => Effect.Effect<Response>;
+
+type DashboardScope = "read" | "write" | "dashboard";
+
+const scopedCall =
+  (owner: Journey, token: string): ScopedCall =>
+  (path, body) => {
+    const headers = {
+      authorization: "Bearer " + token,
+      "cf-connecting-ip": "192.0.2.35",
+      "content-type": "application/json",
+    };
+
+    return native(() =>
+      owner.send(
+        new Request(
+          "https://api.fidyapp.com" + path,
+          body === undefined
+            ? { method: "GET", headers }
+            : { method: "POST", headers, body: JSON.stringify(body) }
+        )
+      )
+    );
+  };
+
+const uninitializedRead = Effect.fn(function* (call: ScopedCall, path: string) {
+  const response = yield* call(path);
+  expect(response.status).toBe(404);
+  expect(yield* native(() => response.json())).toMatchObject({
+    error: { code: "dashboard_uninitialized" },
+  });
+});
+
+const deniedInitialization = Effect.fn(function* (call: ScopedCall, owner: Journey) {
+  expect((yield* call("/dashboard/initialize", {})).status).toBe(403);
+  expect(yield* native(() => owner.exec("SELECT count(*) AS docs FROM user_documents"))).toEqual([
+    { docs: 0 },
+  ]);
+});
+
+const readScopeObservation = Effect.fn(function* (call: ScopedCall, owner: Journey) {
+  yield* Effect.forEach(
+    ["/dashboard", "/dashboard/view"],
+    (path) => uninitializedRead(call, path),
+    {
+      discard: true,
+    }
+  );
+  expect((yield* call("/dashboard/edits", { op: "set-title", title: "Denied" })).status).toBe(403);
+  yield* deniedInitialization(call, owner);
+});
+
+const dashboardScopeObservation = Effect.fn(function* (call: ScopedCall) {
+  expect(
+    (yield* call("/transactions", {
+      money: { currency: "COP", amount: "2" },
+      direction: "outflow",
+      occurredAt: "2025-01-01T00:00:00Z",
+    })).status
+  ).toBe(403);
+  expect((yield* call("/dashboard/initialize", {})).status).toBe(200);
+});
+
+const scopeObservations = {
+  read: readScopeObservation,
+  write: deniedInitialization,
+  dashboard: dashboardScopeObservation,
+};
+
+const verifyDashboardScope = Effect.fn(function* (
+  owner: Journey,
+  scope: DashboardScope,
+  index: number
+) {
+  const token = "fin_dbscope" + index + "_" + "x".repeat(43);
+  yield* seedNativePAT({
+    db: owner,
+    userId: alice.user,
+    token,
+    scopes: [scope],
+    current: DateTime.nowUnsafe().epochMilliseconds,
+  });
+  yield* scopeObservations[scope](scopedCall(owner, token), owner);
+});
+
+const expectReplay = Effect.fn(function* ([retry, response]: readonly [
+  () => Effect.Effect<Response>,
+  Response,
+]) {
+  const replay = yield* retry();
+  expect(replay.status).toBe(200);
+  expect(yield* native(() => replay.text())).toBe(yield* native(() => response.text()));
+});
+
 const initialize = (store: Journey, index = 0): Promise<Response> =>
   send(store, index, { path: "/dashboard/initialize", method: "POST", body: {} });
+
 const initializedSetup = (): typeof nativeTransactionJourney =>
   Effect.gen(function* () {
     const owner = yield* setup();
     expect((yield* native(() => initialize(owner))).status).toBe(200);
+
     return owner;
   });
 
@@ -103,19 +209,24 @@ scenario(
       Effect.gen(function* () {
         const db = yield* setup();
         const documentResponse10 = yield* Effect.tryPromise(() => initialize(db));
+
         const document = (yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
         )(yield* Effect.tryPromise(() => documentResponse10.json()))).data;
+
         const leaves = (
           node: DashboardDocument["layout"]
         ): ReadonlyArray<DashboardDocument["layout"]> =>
           node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
+
         const list = leaves(document.layout).find(
           (node) => node.kind === "leaf" && node.widget.type === "transaction-list"
         );
+
         if (list?.kind !== "leaf" || list.widget.type !== "transaction-list") {
           throw new Error("Missing list");
         }
+
         const edited = yield* Effect.tryPromise(() =>
           send(db, 0, {
             path: "/dashboard/edits",
@@ -126,7 +237,9 @@ scenario(
             },
           })
         );
+
         expect(edited.status).toBe(200);
+
         const created = yield* Effect.tryPromise(() =>
           send(db, 0, {
             path: "/transactions",
@@ -140,22 +253,29 @@ scenario(
             },
           })
         );
+
         expect(created.status).toBe(201);
         const viewResponse11 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+
         const view = (yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
         )(yield* Effect.tryPromise(() => viewResponse11.json()))).data;
+
         const viewLeaves = (
           node: DashboardView["layout"]
         ): ReadonlyArray<DashboardView["layout"]> =>
           node.kind === "leaf" ? [node] : node.children.flatMap((child) => viewLeaves(child.node));
+
         const row = viewLeaves(view.layout).find(
           (node) => node.kind === "leaf" && node.widget.widget.id === list.widget.id
         );
+
         if (row?.kind !== "leaf" || !("transactions" in row.widget.result)) {
           throw new Error("Missing list result");
         }
+
         expect(row.widget.result.transactions).toHaveLength(1);
+
         const accented = yield* Effect.tryPromise(() =>
           send(db, 0, {
             path: "/dashboard/edits",
@@ -163,9 +283,11 @@ scenario(
             body: { op: "update-widget", widget: { ...list.widget, search: "CAFÉ" } },
           })
         );
+
         expect(accented.status).toBe(200);
         const viewResponse12 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
         expect(yield* listIds(viewResponse12, list.widget.id)).toHaveLength(1);
+
         const twoCharacters = yield* Effect.tryPromise(() =>
           send(db, 0, {
             path: "/dashboard/edits",
@@ -173,9 +295,11 @@ scenario(
             body: { op: "update-widget", widget: { ...list.widget, search: "fé" } },
           })
         );
+
         expect(twoCharacters.status).toBe(200);
         const viewResponse13 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
         expect(yield* listIds(viewResponse13, list.widget.id)).toHaveLength(1);
+
         const oneCharacter = yield* Effect.tryPromise(() =>
           send(db, 0, {
             path: "/dashboard/edits",
@@ -183,14 +307,17 @@ scenario(
             body: { op: "update-widget", widget: { ...list.widget, search: "é" } },
           })
         );
+
         expect(oneCharacter.status).toBe(200);
         const viewResponse14 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
         expect(yield* listIds(viewResponse14, list.widget.id)).toHaveLength(1);
+
         const captured = (yield* Schema.decodeUnknownEffect(
           Schema.Struct({
             data: Schema.Struct({ id: Transaction.fields.id }),
           })
         )(yield* Effect.tryPromise(() => created.json()))).data;
+
         expect(
           (yield* Effect.tryPromise(() =>
             send(db, 0, {
@@ -213,6 +340,7 @@ scenario(
     runNative(
       Effect.gen(function* () {
         const db = yield* initializedSetup();
+
         const budget = yield* Effect.tryPromise(() =>
           send(db, 0, {
             path: "/budgets",
@@ -223,7 +351,9 @@ scenario(
             },
           })
         );
+
         expect(budget.status).toBe(201);
+
         const captured = yield* Effect.tryPromise(() =>
           send(db, 0, {
             path: "/transactions",
@@ -236,17 +366,22 @@ scenario(
             },
           })
         );
+
         expect(captured.status).toBe(201);
         const viewResponse = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
         expect(viewResponse.status).toBe(200);
+
         const view = (yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
         )(yield* Effect.tryPromise(() => viewResponse.json()))).data;
+
         const leaves = (node: DashboardView["layout"]): ReadonlyArray<DashboardView["layout"]> =>
           node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
+
         const bar = leaves(view.layout).find(
           (node) => node.kind === "leaf" && node.widget.widget.type === "budget-bar"
         );
+
         if (
           bar?.kind !== "leaf" ||
           !("availability" in bar.widget.result) ||
@@ -254,7 +389,9 @@ scenario(
         ) {
           throw new Error("Missing Budget bar");
         }
+
         expect(BigDecimal.format(bar.widget.result.spent.amount)).toBe("25.02");
+
         if (bar.widget.result.status.type !== "under") throw new Error("Expected remaining Budget");
         expect(BigDecimal.format(bar.widget.result.status.remaining.amount)).toBe("74.98");
       })
@@ -268,6 +405,7 @@ scenario(
     runNative(
       Effect.gen(function* () {
         const db = yield* initializedSetup();
+
         const created = yield* Effect.tryPromise(() =>
           send(db, 0, {
             path: "/transactions",
@@ -280,12 +418,16 @@ scenario(
             },
           })
         );
+
         expect(created.status).toBe(201);
+
         const { data: transaction } = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.Struct({ id: Transaction.fields.id }) })
         )(yield* Effect.tryPromise(() => created.json()));
+
         const before = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
         expect(before.status).toBe(200);
+
         const correction = yield* Effect.tryPromise(() =>
           send(db, 0, {
             path: `/transactions/${transaction.id}`,
@@ -293,21 +435,28 @@ scenario(
             body: { expectedRevision: 0, changes: { money: { amount: "25.02", currency: "COP" } } },
           })
         );
+
         expect(correction.status).toBe(200);
         const after = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
         expect(after.status).toBe(200);
+
         const view = (yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
         )(yield* Effect.tryPromise(() => after.json()))).data;
+
         const leaves = (node: DashboardView["layout"]): ReadonlyArray<DashboardView["layout"]> =>
           node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
+
         const metric = leaves(view.layout).find(
           (node) => node.kind === "leaf" && node.widget.widget.type === "custom-metric"
         );
+
         expect(metric?.kind).toBe("leaf");
+
         if (metric?.kind !== "leaf" || !("moneyGroups" in metric.widget.result)) {
           throw new Error("Expected metric");
         }
+
         expect(
           metric.widget.result.moneyGroups.map((group) => BigDecimal.format(group.outflow.amount))
         ).toEqual(["25.02"]);
@@ -323,6 +472,7 @@ scenario(
       Effect.gen(function* () {
         const db = yield* initializedSetup();
         const now = DateTime.nowUnsafe();
+
         const zones = (yield* Effect.forEach(["Pacific/Kiritimati", "America/Bogota"], (name) =>
           Effect.map(Schema.decodeEffect(IanaTimeZone)(name), (timeZone) => ({
             name,
@@ -330,11 +480,14 @@ scenario(
               .epochMilliseconds,
           }))
         )).sort((left, right) => left.from - right.from);
+
         const earlier = zones[0];
         const later = zones[1];
+
         if (earlier === undefined || later === undefined || earlier.from === later.from) {
           throw new Error("Expected distinct IANA month boundaries");
         }
+
         const occurredAt = DateTime.formatIso(DateTime.makeUnsafe(earlier.from + 60_000));
         expect(
           (yield* Effect.tryPromise(() =>
@@ -358,10 +511,12 @@ scenario(
             yield* Effect.tryPromise(() =>
               db.exec("UPDATE users SET time_zone = ? WHERE id = ?", zone, alice.user)
             );
+
             return yield* metricTotals(
               yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"))
             );
           });
+
         expect(yield* projected(earlier.name)).toEqual(["3.04"]);
         expect(yield* projected(later.name)).toEqual([]);
         expect(yield* projected(earlier.name)).toEqual(["3.04"]);
@@ -376,6 +531,7 @@ scenario(
     runNative(
       Effect.gen(function* () {
         const db = yield* initializedSetup();
+
         const responses = yield* Effect.forEach([0, 1], () =>
           Effect.tryPromise(() =>
             send(db, 0, {
@@ -390,10 +546,13 @@ scenario(
             })
           )
         );
+
         expect(responses.map((response) => response.status)).toEqual([201, 201]);
+
         const bodies = yield* Effect.tryPromise(() =>
           Promise.all(responses.map((response) => response.json()))
         );
+
         const ids = yield* Effect.forEach(bodies, (body) =>
           Effect.map(
             Schema.decodeUnknownEffect(
@@ -402,8 +561,10 @@ scenario(
             (decoded) => decoded.data.id
           )
         );
+
         const first = [...ids].sort()[0];
         const second = [...ids].sort()[1];
+
         if (first === undefined || second === undefined) throw new Error("Missing Transactions");
 
         const total = (): Effect.Effect<string, Cause.UnknownError | Schema.SchemaError> =>
@@ -412,6 +573,7 @@ scenario(
               yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"))
             )).join(",");
           });
+
         expect(yield* total()).toBe("18014398509481986.02");
         const pair = { firstTransactionId: first, secondTransactionId: second };
         expect(
@@ -451,6 +613,7 @@ scenario(
       Effect.gen(function* () {
         const db = yield* initializedSetup();
         const occurredAt = DateTime.formatIso(DateTime.nowUnsafe());
+
         const capture = (index: number, amount: string, currency: string): Promise<Response> =>
           send(db, index, {
             path: "/transactions",
@@ -462,27 +625,33 @@ scenario(
               occurredAt,
             },
           });
+
         expect((yield* Effect.tryPromise(() => capture(0, "1.01", "COP"))).status).toBe(201);
         expect((yield* Effect.tryPromise(() => capture(0, "2.02", "COP"))).status).toBe(201);
         expect((yield* Effect.tryPromise(() => capture(0, "5.50", "USD"))).status).toBe(201);
         expect((yield* Effect.tryPromise(() => capture(1, "999", "COP"))).status).toBe(201);
         const reply = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
         expect(reply.status).toBe(200);
+
         const body = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
         )(yield* Effect.tryPromise(() => reply.json()));
+
         const leaves = (
           node: DashboardView["layout"]
         ): ReadonlyArray<Extract<DashboardView["layout"], { kind: "leaf" }>["widget"]> =>
           node.kind === "leaf"
             ? [node.widget]
             : node.children.flatMap((child) => leaves(child.node));
+
         const metric = leaves(body.data.layout).find(
           (leaf) => leaf.widget.type === "custom-metric"
         );
+
         if (metric === undefined || !("moneyGroups" in metric.result)) {
           throw new Error("Expected a custom metric");
         }
+
         expect(
           metric.result.moneyGroups.map((group) => [
             group.currency,
@@ -501,19 +670,24 @@ const viewWidgets = (
   node: DashboardView["layout"]
 ): ReadonlyArray<Extract<DashboardView["layout"], { kind: "leaf" }>["widget"]> =>
   node.kind === "leaf" ? [node.widget] : node.children.flatMap((child) => viewWidgets(child.node));
+
 const fetchView = Effect.fn(function* (store: Journey, path: string = "/dashboard/view") {
   const response = yield* native(() => send(store, 0, path));
   expect(response.status).toBe(200);
+
   const body = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
   )(yield* native(() => response.json()));
+
   return viewWidgets(body.data.layout);
 });
 
 const metricGroups = (widget: ReturnType<typeof viewWidgets>[number]): MoneyGroups => {
   if (!("moneyGroups" in widget.result)) throw new Error("Missing metric");
+
   return widget.result.moneyGroups;
 };
+
 scenario(
   "reads complete mixed-Currency groups and counts across a page and the exact local month boundary",
   () =>
@@ -522,11 +696,13 @@ scenario(
         const store = yield* setup();
         const restaurants = "10000000-0000-4000-8000-000000000001";
         const groceries = "10000000-0000-4000-8000-000000000012";
+
         const from = resolveDashboardPeriod({
           now: DateTime.nowUnsafe(),
           timeZone: IanaTimeZone.make("America/Bogota"),
           period: "this-month",
         }).from.epochMilliseconds;
+
         const widgets = [
           { type: "spending-chart", period: "this-month", groupBy: "category" },
           {
@@ -539,6 +715,7 @@ scenario(
           { type: "custom-metric", aggregation: "maximum", label: "Máximo", period: "this-month" },
           { type: "transaction-list", limit: 2 },
         ];
+
         const doc = {
           title: "Mes",
           layout: {
@@ -553,6 +730,7 @@ scenario(
             })),
           },
         };
+
         yield* native(() =>
           store.exec(
             "INSERT INTO user_documents VALUES (?,'dashboard',?,1)",
@@ -581,9 +759,11 @@ scenario(
           )
         );
         const [chart, average, maximum, list] = yield* fetchView(store);
+
         if (chart === undefined || !("buckets" in chart.result)) throw new Error("Missing chart");
         const averageGroups = metricGroups(Option.getOrThrow(Option.fromUndefinedOr(average)));
         const maximumGroups = metricGroups(Option.getOrThrow(Option.fromUndefinedOr(maximum)));
+
         if (list === undefined || !("transactions" in list.result)) throw new Error("Missing list");
         expect(
           chart.result.buckets.map((bucket) => [
@@ -623,9 +803,11 @@ scenario(
     runNative(
       Effect.gen(function* () {
         const store = yield* initializedSetup();
+
         const before = yield* native(() =>
           store.exec("SELECT count(*) AS audits FROM audit_entries")
         );
+
         yield* native(() =>
           store.exec(
             "CREATE TRIGGER refuse_dashboard BEFORE INSERT ON audit_entries WHEN NEW.operation='dashboard.getDashboardView' BEGIN SELECT RAISE(IGNORE); END"
@@ -655,57 +837,12 @@ scenario(
     runNative(
       Effect.gen(function* () {
         const owner = yield* setup();
-        for (const [index, scope] of (["read", "write", "dashboard"] as const).entries()) {
-          const token = "fin_dbscope" + index + "_" + "x".repeat(43);
-          yield* seedNativePAT({
-            db: owner,
-            userId: alice.user,
-            token,
-            scopes: [scope],
-            current: DateTime.nowUnsafe().epochMilliseconds,
-          });
-          const call = (path: string, body?: object): Effect.Effect<Response> =>
-            native(() =>
-              owner.send(
-                new Request("https://api.fidyapp.com" + path, {
-                  method: body === undefined ? "GET" : "POST",
-                  headers: {
-                    authorization: "Bearer " + token,
-                    "cf-connecting-ip": "192.0.2.35",
-                    "content-type": "application/json",
-                  },
-                  ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-                })
-              )
-            );
-          if (scope === "read") {
-            for (const path of ["/dashboard", "/dashboard/view"]) {
-              const response = yield* call(path);
-              expect(response.status).toBe(404);
-              expect(yield* native(() => response.json())).toMatchObject({
-                error: { code: "dashboard_uninitialized" },
-              });
-            }
-            expect(
-              (yield* call("/dashboard/edits", { op: "set-title", title: "Denied" })).status
-            ).toBe(403);
-          }
-          if (scope === "dashboard") {
-            expect(
-              (yield* call("/transactions", {
-                money: { currency: "COP", amount: "2" },
-                direction: "outflow",
-                occurredAt: "2025-01-01T00:00:00Z",
-              })).status
-            ).toBe(403);
-            expect((yield* call("/dashboard/initialize", {})).status).toBe(200);
-          } else {
-            expect((yield* call("/dashboard/initialize", {})).status).toBe(403);
-            expect(
-              yield* native(() => owner.exec("SELECT count(*) AS docs FROM user_documents"))
-            ).toEqual([{ docs: 0 }]);
-          }
-        }
+
+        yield* Effect.forEach(
+          ["read", "write", "dashboard"] as const,
+          (scope, index) => verifyDashboardScope(owner, scope, index),
+          { discard: true }
+        );
       })
     ),
   30000
@@ -726,7 +863,8 @@ scenario(
           scopes: ["dashboard"],
           current: DateTime.nowUnsafe().epochMilliseconds,
         });
-        const post = (path: string, key: string, body: object): Effect.Effect<Response> =>
+
+        const post = (path: string, key: string, body: Schema.Json): Effect.Effect<Response> =>
           native(() =>
             store.send(
               new Request("https://api.fidyapp.com" + path, {
@@ -740,22 +878,29 @@ scenario(
               })
             )
           );
+
         const initialize = (): Effect.Effect<Response> =>
           post("/dashboard/initialize", "original-initialize", {});
+
         const edit = (): Effect.Effect<Response> =>
           post("/dashboard/edits", "original-edit", { op: "set-title", title: "Mi tablero" });
+
         const namespace = yield* native(() =>
           store.runtime.getDurableObjectNamespace("USER_STORE", "core")
         );
+
         const readBytes = Effect.fn(function* () {
           const response = yield* native(() =>
             namespace.getByName(alice.user).fetch("https://fixture.invalid/database-size")
           );
+
           expect(response.status).toBe(200);
+
           return yield* Schema.decodeUnknownEffect(Schema.Int)(
             yield* native(() => response.json())
           );
         });
+
         const warning = ceiling * 0.7;
         const restricted = ceiling * 0.8;
         const initialBytes = yield* readBytes();
@@ -769,32 +914,40 @@ scenario(
         const target = Math.ceil(ceiling * 0.85);
         const chunk = 256 * 1024;
         const padding = target - healthyBytes;
-        for (let remaining = padding; remaining > 0; remaining -= chunk) {
-          yield* native(() =>
-            store.exec(
-              "INSERT INTO storage_pressure VALUES(zeroblob(?))",
-              Math.min(chunk, remaining)
-            )
-          );
-        }
+
+        const paddingChunks = Array.from({ length: Math.ceil(padding / chunk) }, (_, index) =>
+          Math.min(chunk, padding - index * chunk)
+        );
+
+        yield* Effect.forEach(
+          paddingChunks,
+          (size) =>
+            native(() => store.exec("INSERT INTO storage_pressure VALUES(zeroblob(?))", size)),
+          { discard: true }
+        );
+
         const pressureBytes = yield* readBytes();
         expect(pressureBytes).toBeGreaterThanOrEqual(restricted);
         expect(pressureBytes).toBeLessThan(ceiling);
+
         const measurement = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
           initialBytes,
           healthyBytes,
           pressureBytes,
           ceilingBytes: ceiling,
         });
+
         process.stdout.write(`DASHBOARD_CAPACITY ${measurement}\n`);
-        for (const [retry, response] of [
-          [initialize, original],
-          [edit, changed],
-        ] as const) {
-          const replay = yield* retry();
-          expect(replay.status).toBe(200);
-          expect(yield* native(() => replay.text())).toBe(yield* native(() => response.text()));
-        }
+
+        yield* Effect.forEach(
+          [
+            [initialize, original],
+            [edit, changed],
+          ] as const,
+          expectReplay,
+          { discard: true }
+        );
+
         expect(
           (yield* post("/dashboard/edits", "new-edit", { op: "set-title", title: "Otra" })).status
         ).toBe(503);
@@ -817,19 +970,24 @@ scenario.each(["/dashboard/view", "/dashboard/view?"])(
       Effect.gen(function* () {
         const store = yield* setup();
         const zone = IanaTimeZone.make("America/Bogota");
+
         const from = resolveDashboardPeriod({
           now: DateTime.nowUnsafe(),
           period: "last-7-days",
           timeZone: zone,
         }).from;
+
         const first = DateTime.add(from, { hours: 1 });
         const second = DateTime.add(first, { days: 1 });
+
         const firstDay = DateTime.formatIsoDate(
           DateTime.setZone(first, DateTime.zoneMakeNamedUnsafe(zone))
         );
+
         const secondDay = DateTime.formatIsoDate(
           DateTime.setZone(second, DateTime.zoneMakeNamedUnsafe(zone))
         );
+
         const doc = {
           title: "Semana",
           layout: {
@@ -842,6 +1000,7 @@ scenario.each(["/dashboard/view", "/dashboard/view?"])(
             },
           },
         };
+
         yield* native(() =>
           store.exec(
             "INSERT INTO user_documents VALUES (?,'dashboard',?,1)",
@@ -849,6 +1008,7 @@ scenario.each(["/dashboard/view", "/dashboard/view?"])(
             JSON.stringify(doc)
           )
         );
+
         const capture = Effect.fn(function* (occurredAt: DateTime.Utc) {
           const response = yield* native(() =>
             send(store, 0, {
@@ -861,22 +1021,29 @@ scenario.each(["/dashboard/view", "/dashboard/view?"])(
               },
             })
           );
+
           expect(response.status).toBe(201);
+
           return (yield* Schema.decodeUnknownEffect(
             Schema.Struct({ data: Schema.Struct({ id: Transaction.fields.id }) })
           )(yield* native(() => response.json()))).data.id;
         });
+
         const chart = Effect.fn(function* () {
           const [widget] = yield* fetchView(store, path);
+
           if (widget === undefined || !("buckets" in widget.result)) {
             throw new Error("Expected day chart");
           }
+
           return widget.result.buckets.map((bucket) => [
             bucket.key.kind === "day" ? bucket.key.date : "",
             BigDecimal.format(bucket.moneyGroups[0]?.outflow.amount ?? BigDecimal.make(0n, 0)),
           ]);
         });
+
         const id = yield* capture(first);
+
         const next = yield* Effect.all(
           [
             chart(),
@@ -890,11 +1057,13 @@ scenario.each(["/dashboard/view", "/dashboard/view?"])(
           ],
           { concurrency: 2 }
         );
+
         expect(next[1].status).toBe(200);
         expect([[[firstDay, "10"]], [[secondDay, "10"]]]).toContainEqual(next[0]);
         expect(yield* chart()).toEqual([[secondDay, "10"]]);
         const freshA = yield* capture(first);
         const freshB = yield* capture(second);
+
         const linked = yield* native(() =>
           send(store, 0, {
             path: "/transactions/link",
@@ -902,11 +1071,15 @@ scenario.each(["/dashboard/view", "/dashboard/view?"])(
             body: { firstTransactionId: freshA, secondTransactionId: freshB },
           })
         );
+
         expect(linked.status).toBe(200);
+
         const visible = (yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.Struct({ id: Transaction.fields.id }) })
         )(yield* native(() => linked.json()))).data.id;
+
         const hidden = visible === freshA ? freshB : freshA;
+
         const before =
           visible === freshA
             ? [
@@ -914,6 +1087,7 @@ scenario.each(["/dashboard/view", "/dashboard/view?"])(
                 [secondDay, "10"],
               ]
             : [[secondDay, "20"]];
+
         const after =
           visible === freshA
             ? [[secondDay, "20"]]
@@ -921,6 +1095,7 @@ scenario.each(["/dashboard/view", "/dashboard/view?"])(
                 [firstDay, "10"],
                 [secondDay, "10"],
               ];
+
         expect(yield* chart()).toEqual(before);
         yield* native(() =>
           store.exec(
@@ -939,19 +1114,24 @@ scenario.each(["/dashboard/view", "/dashboard/view?"])(
 const initializedDocument = Effect.fn(function* (store: Journey) {
   const response = yield* native(() => initialize(store));
   expect(response.status).toBe(200);
+
   return yield* native(() => response.json());
 });
+
 scenario(
   "serializes concurrent initialization and edits without overwriting an established Dashboard",
   () =>
     runNative(
       Effect.gen(function* () {
         const store = yield* setup();
+
         const documents = (): Effect.Effect<ReadonlyArray<unknown>> =>
           Effect.forEach([0, 1], () => initializedDocument(store), { concurrency: 2 });
+
         const first = yield* documents();
         expect(first[0]).toEqual(first[1]);
         expect(first[0]).toMatchObject({ data: { title: "Tablero" } });
+
         const writes = yield* Effect.forEach(
           ["Primero", "Segundo"],
           (title) =>
@@ -964,10 +1144,13 @@ scenario(
             ),
           { concurrency: 2 }
         );
+
         expect(writes.map((response) => response.status)).toEqual([200, 200]);
+
         const before = yield* native(() =>
           store.exec("SELECT revision,document_json FROM user_documents")
         );
+
         expect(before).toMatchObject([{ revision: 3 }]);
         const after = yield* documents();
         expect(after[0]).toEqual(after[1]);
@@ -985,29 +1168,39 @@ scenario(
     runNative(
       Effect.gen(function* () {
         const store = yield* setup();
+
         const document = yield* Schema.decodeUnknownEffect(DashboardDocument)({
           title: "Listas",
           layout: {
             kind: "split",
             axis: "column",
-            children: Array.from({ length: 24 }, (_, index) => ({
-              weight: 1,
-              node: {
-                kind: "leaf",
-                widget: {
-                  id: `33300000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
-                  type: "transaction-list",
-                  limit: index === 23 ? 2 : 50,
-                  ...(index === 21 ? { categories: ["10000000-0000-4000-8000-000000000002"] } : {}),
-                  ...(index === 22 ? { search: "missing" } : {}),
+            children: Array.from({ length: 24 }, (_, index) => {
+              const widget = {
+                id: `33300000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+                type: "transaction-list",
+                limit: index === 23 ? 2 : 50,
+              };
+
+              const categorized =
+                index === 21
+                  ? { ...widget, categories: ["10000000-0000-4000-8000-000000000002"] }
+                  : widget;
+
+              return {
+                weight: 1,
+                node: {
+                  kind: "leaf",
+                  widget: index === 22 ? { ...categorized, search: "missing" } : categorized,
                 },
-              },
-            })),
+              };
+            }),
           },
         });
+
         const encoded = yield* Schema.encodeEffect(
           Schema.fromJsonString(Schema.toCodecJson(DashboardDocument))
         )(document);
+
         yield* native(() =>
           store.exec("INSERT INTO user_documents VALUES (?,'dashboard',?,1)", alice.user, encoded)
         );
@@ -1036,7 +1229,9 @@ scenario(
             assertListSelection({ node: { kind: "leaf", widget }, index, firstId: expected })
           );
         });
+
         yield* check("77700000-0000-4000-8000-000000000249");
+
         const response = yield* native(() =>
           send(store, 0, {
             path: "/transactions",
@@ -1048,10 +1243,13 @@ scenario(
             },
           })
         );
+
         expect(response.status).toBe(201);
+
         const { data } = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.Struct({ id: Transaction.fields.id }) })
         )(yield* native(() => response.json()));
+
         yield* check(data.id);
       })
     ),
@@ -1064,6 +1262,7 @@ scenario(
     runNative(
       Effect.gen(function* () {
         const store = yield* initializedSetup();
+
         const capture = (): Promise<Response> =>
           send(store, 0, {
             path: "/transactions",
@@ -1074,6 +1273,7 @@ scenario(
               occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
             },
           });
+
         yield* native(() =>
           store.exec(
             "CREATE TRIGGER skip_bucket BEFORE INSERT ON transaction_projection_bucket BEGIN SELECT RAISE(IGNORE); END"
@@ -1105,9 +1305,11 @@ scenario("removes a deleted Transaction from exact Dashboard and Budget totals",
       const categoryId = "10000000-0000-4000-8000-000000000016";
       const money = { amount: "9007199254740993.15", currency: "COP" };
       const occurredAt = DateTime.formatIso(yield* DateTime.now);
+
       const month = DateTime.formatIsoDate(
         DateTime.makeZonedUnsafe(occurredAt, { timeZone: "America/Bogota" })
       ).slice(0, 7);
+
       const budget = yield* native(() =>
         send(store, 0, {
           path: "/budgets",
@@ -1115,7 +1317,9 @@ scenario("removes a deleted Transaction from exact Dashboard and Budget totals",
           body: { categoryId, cap: money, month },
         })
       );
+
       expect(budget.status).toBe(201);
+
       const captured = yield* native(() =>
         send(store, 0, {
           path: "/transactions",
@@ -1123,22 +1327,28 @@ scenario("removes a deleted Transaction from exact Dashboard and Budget totals",
           body: { categoryId, money, direction: "outflow", occurredAt },
         })
       );
+
       expect(captured.status).toBe(201);
+
       const { data } = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ data: Schema.Struct({ id: Transaction.fields.id }) })
       )(yield* native(() => captured.json()));
+
       const observe = Effect.fn(function* (expected: ReadonlyArray<string>, spent: string) {
         expect(yield* metricTotals(yield* native(() => send(store, 0, "/dashboard/view")))).toEqual(
           expected
         );
+
         const status = yield* native(() =>
           send(store, 0, "/budget-status?timeZone=America%2FBogota&month=" + month)
         );
+
         expect(status.status).toBe(200);
         expect(yield* native(() => status.json())).toMatchObject({
           data: { statuses: [{ spent: { amount: spent, currency: "COP" } }] },
         });
       });
+
       yield* observe([money.amount], money.amount);
       expect(
         (yield* native(() =>

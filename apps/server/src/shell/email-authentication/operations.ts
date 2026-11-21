@@ -1,3 +1,4 @@
+import { WebSessionAuditCaller } from "~/core/audit/contract";
 import type {
   CanonicalImplementationCaller,
   CanonicalInput,
@@ -14,11 +15,15 @@ import {
   emailReplacementInvalidBody,
 } from "./contract";
 import { emailPairingAllowsUser as compatibleSubject } from "~/shell/email-authentication/internal/pairing-subject";
-import { Context, Effect, Option } from "effect";
+import { Context, Effect, Option, Predicate } from "effect";
 import { UserId } from "~/core/identity/contract";
 import { WebSessionId } from "~/core/web-session/contract";
 import { decideOperationAccess } from "~/shell/canonical-policy/operations";
-import { getOperationPolicy } from "~/shell/canonical-policy/contract";
+import {
+  OperationAccessCaller,
+  OperationAccessDecision,
+  getOperationPolicy,
+} from "~/shell/canonical-policy/contract";
 
 export type { EmailReplacementMutationService } from "./contract";
 
@@ -41,6 +46,7 @@ export const requestEmailReplacement = ({
   Effect.gen(function* () {
     const mutation = yield* EmailReplacementMutation;
     yield* mutation.request(caller.resolved.subjectUserId, input.payload.candidateEmail);
+
     return { data: { status: "pending" }, next: [] } as const;
   });
 
@@ -59,9 +65,11 @@ export const completeEmailReplacement = ({
 > =>
   Effect.gen(function* () {
     const mutation = yield* EmailReplacementMutation;
+
     if (!(yield* mutation.complete(caller.resolved.subjectUserId, input.payload))) {
       return yield* EmailReplacementInvalidApi.make({ error: emailReplacementInvalidBody.error });
     }
+
     return { data: { status: "replaced" }, next: [] } as const;
   });
 
@@ -83,7 +91,7 @@ export const browserReplacementCaller = (session: {
     subjectUserId: UserId.make(session.user_id),
     capabilities: [],
     authorityRoot: "no-verified-whatsapp-authority",
-    auditCaller: { _tag: "WebSession", webSessionId: WebSessionId.make(session.id) },
+    auditCaller: WebSessionAuditCaller.make({ webSessionId: WebSessionId.make(session.id) }),
     fresh: true,
   },
   accessTier: "free",
@@ -94,9 +102,12 @@ type ReplacementOperation = keyof typeof emailReplacementOperations;
 
 export const permitsFreshBrowserReplacement = (operation: ReplacementOperation): boolean => {
   const { access } = getOperationPolicy(emailReplacementOperations[operation]);
+
   return (
-    access._tag === "FreshWebSessionOnly" &&
-    decideOperationAccess(access, { _tag: "WebSession", fresh: true })._tag === "Allowed"
+    Predicate.isTagged(access, "FreshWebSessionOnly") &&
+    OperationAccessDecision.$is("Allowed")(
+      decideOperationAccess(access, OperationAccessCaller.WebSession({ fresh: true }))
+    )
   );
 };
 

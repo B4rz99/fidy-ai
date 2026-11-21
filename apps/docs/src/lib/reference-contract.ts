@@ -6,6 +6,7 @@ export const ReferenceArtifact = Schema.Struct({
   paths: Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.JsonObject)),
   components: Schema.Struct({ schemas: Schema.Record(Schema.String, Schema.JsonObject) }),
 });
+
 export const ReferenceOperation = Schema.Struct({
   operationId: Schema.String.check(
     Schema.isPattern(/^[a-zA-Z][a-zA-Z0-9]*\.[a-zA-Z][a-zA-Z0-9]*$/u)
@@ -28,3 +29,7 @@ export const ReferenceOperation = Schema.Struct({
   "x-fidy-operation-kind": Schema.Literals(["query", "mutation"]),
   "x-fidy-required-tier": Schema.Literals(["free", "pro"]),
 });
+
+export const ReferencePageId = Schema.TemplateLiteral(["reference/", Schema.String]);
+
+export const ReferencePage = Schema.Union([ReferencePageId, Schema.Literal("referencia/esquemas")]);

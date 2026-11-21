@@ -4,7 +4,8 @@ import { Schema } from "effect";
 
 export const nativeResourceInventory = (revision: string): ReadonlyMap<string, string> => {
   if (!/^[a-f0-9]{40}$/u.test(revision)) throw Error("Missing native release revision");
-  const resources: Readonly<Record<string, ReadonlyArray<string>>> = {
+
+  const resources = {
     "Cloudflare.Access.Group": ["RecoveryOperators"],
     "Cloudflare.Access.Application": [
       "SupportRecoveryAccess",
@@ -54,11 +55,14 @@ export const nativeResourceInventory = (revision: string): ReadonlyMap<string, s
     ],
     "Command.Build": ["Build"],
   };
+
   return new Map(
     Object.entries(resources).flatMap(([type, ids]) => ids.map((id) => [id, type] as const))
   );
 };
+
 export type NativeRole = "Core" | "Ingress" | "Web" | "ForwardedEmail" | "Smoke";
+
 const kinds: Readonly<Record<NativeRole, Readonly<Record<string, ReadonlyArray<string>>>>> = {
   Smoke: {
     r2_bucket: ["SMOKE_BUCKET"],
@@ -181,6 +185,7 @@ const kinds: Readonly<Record<NativeRole, Readonly<Record<string, ReadonlyArray<s
     assets: ["ASSETS"],
   },
 };
+
 export const nativeBindingInventory = ({
   role,
   fingerprint,
@@ -193,41 +198,51 @@ export const nativeBindingInventory = ({
       names.map((name) => [name, type] as const)
     )
   );
+
   if (fingerprint !== "" && !/^[a-f0-9]{64}$/u.test(fingerprint)) {
     throw Error("Invalid expected native fixture signer fingerprint");
   }
+
   if (fingerprint !== "" && role === "Core") {
     expected.set("ACCEPTANCE_PROVIDER_REVISION", "plain_text");
     expected.set("NATIVE_FIXTURE_SIGNING_KEY", "secret_text");
     expected.set("NATIVE_FIXTURE_SIGNER_SHA256", "plain_text");
   }
+
   return expected;
 };
 
 const Binding = Schema.StructWithRest(Schema.Struct({ name: Schema.String, type: Schema.String }), [
   Schema.Record(Schema.String, Schema.Unknown),
 ]);
+
 export type NativeBinding = typeof Binding.Type;
+
 export const NativeBindings = Schema.Array(Binding);
+
 const requireClosedRole = (
   role: NativeRole,
   bindings: ReadonlyArray<NativeBinding>,
   fingerprint: string
 ): void => {
-  const text = (name: string): unknown => bindings.find((binding) => binding.name === name)?.text;
+  const textIs = (name: string, expected: string): boolean =>
+    bindings.find((binding) => binding.name === name)?.text === expected;
+
   if (
     fingerprint !== "" &&
     role === "Core" &&
-    (text("ACCEPTANCE_PROVIDER_REVISION") !== retainedProvider.revision ||
-      text("NATIVE_FIXTURE_SIGNER_SHA256") !== fingerprint ||
-      text("BROWSER_ORIGIN") !== installedOrigins.acceptance.browser)
+    (!textIs("ACCEPTANCE_PROVIDER_REVISION", retainedProvider.revision) ||
+      !textIs("NATIVE_FIXTURE_SIGNER_SHA256", fingerprint) ||
+      !textIs("BROWSER_ORIGIN", installedOrigins.acceptance.browser))
   ) {
     throw Error("Actual candidate receipt signer or closed acceptance origin differs");
   }
-  if (text("RECOVERY_ISOLATION") !== "isolated" || text("NATIVE_STORAGE_ADMISSION") !== "closed") {
+
+  if (!textIs("RECOVERY_ISOLATION", "isolated") || !textIs("NATIVE_STORAGE_ADMISSION", "closed")) {
     throw Error("Closed admission is required");
   }
 };
+
 export const requireRoleBindings = ({
   role,
   bindings,
@@ -238,6 +253,7 @@ export const requireRoleBindings = ({
   fingerprint: string;
 }): void => {
   const expected = nativeBindingInventory({ role, fingerprint });
+
   if (
     bindings.length !== expected.size ||
     new Set(bindings.map((binding) => binding.name)).size !== expected.size ||
@@ -245,6 +261,7 @@ export const requireRoleBindings = ({
   ) {
     throw Error("Missing, extra or unexpected native Worker binding for " + role);
   }
+
   if (role === "Ingress" || role === "Core") requireClosedRole(role, bindings, fingerprint);
 };
 
@@ -257,6 +274,7 @@ export const requireSuccessorCoreBindings = ({
 }): void => {
   const members = bindings.filter((binding) => binding.name === "NATIVE_FIXTURE_MEMBER");
   const [member] = members;
+
   if (
     fingerprint === "" ||
     members.length !== 1 ||
@@ -265,34 +283,42 @@ export const requireSuccessorCoreBindings = ({
   ) {
     throw Error("Successor Core must select the second fixture member");
   }
+
   requireRoleBindings({
     role: "Core",
     fingerprint,
     bindings: bindings.filter((binding) => binding.name !== "NATIVE_FIXTURE_MEMBER"),
   });
 };
+
 export const smokeResource = (id: string): boolean =>
   /^(?:ReleaseSmoke(?:Queue|WorkflowV2|Consumer)?)-[0-9a-f]{40}$/u.test(id);
+
 const Planned = Schema.Struct({
   action: Schema.String,
   resourceType: Schema.String,
   logicalId: Schema.String,
 });
+
 const retainedSmoke = (row: typeof Planned.Type, revision: string): boolean => {
   if (row.action !== "delete" || !smokeResource(row.logicalId)) return false;
   const prior = row.logicalId.slice(-revision.length);
+
   return (
     prior !== revision && nativeResourceInventory(prior).get(row.logicalId) === row.resourceType
   );
 };
+
 const validChange = (row: typeof Planned.Type, first: boolean): boolean => {
   if (first) return row.action === "create";
+
   return (
     row.action === "noop" ||
     row.action === "update" ||
     (row.action === "create" && smokeResource(row.logicalId))
   );
 };
+
 export const requireNativeResourcePlan = ({
   plan,
   revision,
@@ -304,13 +330,18 @@ export const requireNativeResourcePlan = ({
 }): void => {
   const expected = new Map(nativeResourceInventory(revision));
   const rows = Schema.decodeUnknownSync(Schema.Array(Planned))(plan.resources);
+
   if (plan.actions.length !== 0) throw Error("Unexpected remote plan action");
+
   for (const row of rows) {
     if (!first && retainedSmoke(row, revision)) continue;
+
     if (row.resourceType !== expected.get(row.logicalId) || !validChange(row, first)) {
       throw Error("Unexpected native resource or lifecycle for " + row.logicalId);
     }
+
     expected.delete(row.logicalId);
   }
+
   if (expected.size !== 0) throw Error("Incomplete native application plan");
 };

@@ -24,20 +24,24 @@ type DateFieldProps = Readonly<{
     | Readonly<{ appearance: "filter"; month: Option.Option<string> }>
     | Readonly<{ appearance: "field" | "review" }>
   );
+
 const localDate = (value: string, timeZone: string): Option.Option<Date> =>
   DateTime.makeZoned(`${value}T00:00:00.000Z`, { timeZone, adjustForTimeZone: true }).pipe(
     Option.map(DateTime.toDateUtc)
   );
+
 const selectedDate = (date: Option.Option<Date>, timeZone: string): string =>
   Option.isNone(date)
     ? ""
     : DateTime.formatIsoDate(
         DateTime.setZone(DateTime.makeUnsafe(date.value), DateTime.zoneMakeNamedUnsafe(timeZone))
       );
+
 const dateLabel = (value: string): string =>
   value === "" ? "Selecciona una fecha" : value.split("-").toReversed().join("-");
 
 const compactDateLabel = makeCompactDateFormatter("es-CO");
+
 const accessibleDateFormat = new Intl.DateTimeFormat("es-CO", {
   day: "numeric",
   month: "long",
@@ -50,20 +54,25 @@ const calendarLabel = ({
   value,
 }: Pick<DateFieldProps, "appearance" | "value">): string => {
   if (appearance === "filter") return value === "" ? "Fecha" : `Fecha: ${compactDateLabel(value)}`;
+
   if (appearance === "review" && value !== "") {
     return compactDateLabel(value);
   }
+
   return dateLabel(value);
 };
 
 const calendarAccessibleLabel = (props: DateFieldProps): string => {
   if (props.appearance === "filter" && props.value === "") return props.label;
+
   if ((props.appearance !== "review" && props.appearance !== "filter") || props.value === "") {
     return `${props.label}: ${calendarLabel(props)}`;
   }
+
   const date = accessibleDateFormat.format(
     DateTime.toEpochMillis(DateTime.makeUnsafe(`${props.value}T12:00:00Z`))
   );
+
   return `${props.label}: ${date}`;
 };
 
@@ -85,6 +94,7 @@ export const CalendarField = (props: DateFieldProps): JSX.Element => {
   const [open, setOpen] = useState(false);
   const visibleLabel = calendarLabel(props);
   const selected = Option.getOrUndefined(localDate(props.value, props.timeZone));
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger

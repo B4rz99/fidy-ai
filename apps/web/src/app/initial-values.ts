@@ -18,6 +18,7 @@ export const initialApplicationValues = ({
   if (Option.isNone(initial.initial)) return [];
   const context = initial.initial.value;
   const values: Array<readonly [Atom.Atom<unknown>, unknown]> = [];
+
   if (context.status === "Granted") {
     values.push(
       workspaceMetadataInitialValue({
@@ -26,6 +27,7 @@ export const initialApplicationValues = ({
         timestamp: initial.receivedAt,
       })
     );
+
     if (Option.isSome(context.transactions)) {
       const page = context.transactions.value;
       values.push(
@@ -37,14 +39,17 @@ export const initialApplicationValues = ({
       );
     }
   }
+
   {
     const status: ProcessingConsentStatus =
       context.status === "Granted" ? { status: "Granted", withdrawal: null } : context;
+
     values.push([
       initialConsentObservation(webAuthClient),
       Option.some(AsyncResult.success(status, { timestamp: initial.receivedAt })),
     ]);
     values.push([initialTransactionConsent, Option.some(initial.receivedAt)]);
   }
+
   return values;
 };

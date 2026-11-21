@@ -4,11 +4,14 @@ import { requestWorkerd } from "./local-workerd-http";
 const microsecondsPerMillisecond = Number("1000");
 
 const InspectorMessage = Schema.Struct({ id: Schema.Finite });
+
 const InspectorTargets = Schema.Array(Schema.Struct({ webSocketDebuggerUrl: Schema.String }));
+
 const HeapUsage = Schema.Struct({
   id: Schema.Finite,
   result: Schema.Struct({ usedSize: Schema.Finite }),
 });
+
 const CpuProfileResponse = Schema.Struct({
   id: Schema.Literal(3),
   result: Schema.Struct({
@@ -37,37 +40,50 @@ const withInspectorDeadline = <A, E, R>(
     Effect.mapError((cause) => new InspectorIoError({ cause }))
   );
 
-const fetchTargets = (port: number): Effect.Effect<unknown, InspectorIoError> =>
+const fetchTargets = (
+  port: number,
+  signal: Option.Option<AbortSignal>
+): Effect.Effect<unknown, InspectorIoError> =>
   Effect.tryPromise({
     try: (requestSignal) =>
-      requestWorkerd({ method: "GET", port, path: "/json", signal: requestSignal }),
+      requestWorkerd({
+        method: "GET",
+        port,
+        path: "/json",
+        signal: AbortSignal.any([requestSignal, ...Option.toArray(signal)]),
+      }),
     catch: (cause) => new InspectorIoError({ cause }),
   }).pipe(
     Effect.flatMap((response) =>
-      Effect.tryPromise({
-        try: () => response.json(),
-        catch: (cause) => new InspectorIoError({ cause }),
-      })
+      response.ok
+        ? Effect.tryPromise({
+            try: () => response.json(),
+            catch: (cause) => new InspectorIoError({ cause }),
+          })
+        : Effect.fail(new InspectorIoError({ cause: response.status }))
     )
   );
 
 export const inspectorTarget = ({
   port,
   signal,
-}: Readonly<{ port: number; signal: Option.Option<AbortSignal> }>): Promise<string> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const targets = yield* Schema.decodeUnknownEffect(InspectorTargets)(
-        yield* fetchTargets(port)
-      );
-      const target = targets[0];
-      if (target === undefined) {
-        return yield* new InspectorIoError({ cause: "Workerd inspector target is unavailable" });
-      }
-      return target.webSocketDebuggerUrl;
-    }).pipe(withInspectorDeadline),
-    { signal: Option.getOrUndefined(signal) }
-  );
+}: Readonly<{ port: number; signal: Option.Option<AbortSignal> }>): Effect.Effect<
+  string,
+  InspectorIoError
+> =>
+  Effect.gen(function* () {
+    const targets = yield* Schema.decodeUnknownEffect(InspectorTargets)(
+      yield* fetchTargets(port, signal)
+    );
+
+    const target = targets[0];
+
+    if (target === undefined) {
+      return yield* new InspectorIoError({ cause: "Workerd inspector target is unavailable" });
+    }
+
+    return target.webSocketDebuggerUrl;
+  }).pipe(withInspectorDeadline);
 
 type InspectorContext<A> = {
   readonly socket: WebSocket;
@@ -94,6 +110,7 @@ const attachSocket = <A>({
 }>): void => {
   socket.addEventListener("open", () => {
     if (context.signal.aborted) return;
+
     try {
       socket.send(options.command);
     } catch (failure) {
@@ -102,6 +119,7 @@ const attachSocket = <A>({
   });
   socket.addEventListener("message", (event) => {
     if (context.signal.aborted) return;
+
     try {
       options.handler(String(event.data), context);
     } catch (failure) {
@@ -120,26 +138,33 @@ const inspectSocket = <A>(
     const controller = new AbortController();
     let socket = Option.none<WebSocket>();
     let settled = false;
+
     const cleanup = (failed: boolean): void => {
       signal?.removeEventListener("abort", abort);
       interrupted.removeEventListener("abort", abort);
+
       if (failed) controller.abort();
+
       if (Option.isSome(socket)) socket.value.close();
     };
+
     const finish = (result: { readonly value: A } | { readonly failure: unknown }): void => {
       if (settled) return;
       settled = true;
       const failed = "failure" in result;
       cleanup(failed);
+
       if (failed) {
         if (Option.isSome(options.onFailure)) options.onFailure.value();
         resume(Effect.fail(new InspectorIoError({ cause: result.failure })));
       } else resume(Effect.succeed(result.value));
     };
+
     const fail = (failure: unknown): void => finish({ failure });
     const abort = (): void => fail(new Error("Worker inspector interrupted"));
     signal?.addEventListener("abort", abort, { once: true });
     interrupted.addEventListener("abort", abort, { once: true });
+
     if (signal?.aborted === true || interrupted.aborted) {
       abort();
     } else {
@@ -160,10 +185,12 @@ const inspectSocket = <A>(
         fail(failure);
       }
     }
+
     return Effect.sync(() => {
       if (!settled) {
         settled = true;
         cleanup(true);
+
         if (Option.isSome(options.onFailure)) options.onFailure.value();
       }
     });
@@ -171,9 +198,11 @@ const inspectSocket = <A>(
 
 const activeCpuMilliseconds = (message: string): number => {
   const result = Schema.decodeSync(Schema.fromJsonString(CpuProfileResponse))(message);
+
   const namesById = new Map(
     result.result.profile.nodes.map((node) => [node.id, node.callFrame.functionName])
   );
+
   const activeMicroseconds = result.result.profile.samples.reduce(
     (total, sample, index) =>
       namesById.get(sample) === "(idle)"
@@ -181,6 +210,7 @@ const activeCpuMilliseconds = (message: string): number => {
         : total + (result.result.profile.timeDeltas[index] ?? 0),
     0
   );
+
   return activeMicroseconds / microsecondsPerMillisecond;
 };
 
@@ -202,16 +232,21 @@ const handleProfileMessage = (
 ): void => {
   const { socket, signal, sendRequest, response, setResponse, succeed, fail } = context;
   const envelope = Schema.decodeOption(Schema.fromJsonString(InspectorMessage))(message);
+
   if (Option.isNone(envelope)) return;
+
   if (envelope.value.id === 1) {
     socket.send(JSON.stringify({ id: 2, method: "Profiler.start" }));
   } else if (envelope.value.id === 2) {
     sendRequest(signal).then((requestResponse) => {
       if (signal.aborted) {
         cancelResponse(requestResponse);
+
         return;
       }
+
       setResponse(requestResponse);
+
       try {
         socket.send(JSON.stringify({ id: 3, method: "Profiler.stop" }));
       } catch (failure) {
@@ -220,6 +255,7 @@ const handleProfileMessage = (
     }, fail);
   } else if (envelope.value.id === 3) {
     const cpuMilliseconds = activeCpuMilliseconds(message);
+
     if (Option.isNone(response)) {
       fail(new Error("Worker CPU profile completed without an HTTP response"));
     } else succeed({ cpuMilliseconds, response: response.value });
@@ -234,47 +270,49 @@ export const profileWorkerRequest = ({
   debuggerUrl: string;
   sendRequest: (signal: AbortSignal) => Promise<Response>;
   signal: Option.Option<AbortSignal>;
-}>): Promise<ProfileResult> => {
+}>): Effect.Effect<ProfileResult, InspectorIoError> => {
   let response = Option.none<Response>();
+
   const releaseResponse = (): void => {
     if (Option.isSome(response)) cancelResponse(response.value);
   };
-  return Effect.runPromise(
-    inspectSocket(
-      {
-        debuggerUrl,
-        command: JSON.stringify({ id: 1, method: "Profiler.enable" }),
-        handler: (message, context) =>
-          handleProfileMessage(message, {
-            ...context,
-            sendRequest,
-            response,
-            setResponse: (value) => {
-              response = Option.some(value);
-            },
-          }),
-        onFailure: Option.some(releaseResponse),
-      },
-      Option.getOrUndefined(signal)
-    )
+
+  return inspectSocket(
+    {
+      debuggerUrl,
+      command: JSON.stringify({ id: 1, method: "Profiler.enable" }),
+      handler: (message, context) =>
+        handleProfileMessage(message, {
+          ...context,
+          sendRequest,
+          response,
+          setResponse: (value) => {
+            response = Option.some(value);
+          },
+        }),
+      onFailure: Option.some(releaseResponse),
+    },
+    Option.getOrUndefined(signal)
   );
 };
 
 export const heapUsage = ({
   debuggerUrl,
   signal,
-}: Readonly<{ debuggerUrl: string; signal: Option.Option<AbortSignal> }>): Promise<number> =>
-  Effect.runPromise(
-    inspectSocket(
-      {
-        debuggerUrl,
-        command: JSON.stringify({ id: 1, method: "Runtime.getHeapUsage" }),
-        onFailure: Option.none(),
-        handler: (message, { succeed }) => {
-          const usage = Schema.decodeOption(Schema.fromJsonString(HeapUsage))(message);
-          if (Option.isSome(usage) && usage.value.id === 1) succeed(usage.value.result.usedSize);
-        },
+}: Readonly<{ debuggerUrl: string; signal: Option.Option<AbortSignal> }>): Effect.Effect<
+  number,
+  InspectorIoError
+> =>
+  inspectSocket(
+    {
+      debuggerUrl,
+      command: JSON.stringify({ id: 1, method: "Runtime.getHeapUsage" }),
+      onFailure: Option.none(),
+      handler: (message, { succeed }) => {
+        const usage = Schema.decodeOption(Schema.fromJsonString(HeapUsage))(message);
+
+        if (Option.isSome(usage) && usage.value.id === 1) succeed(usage.value.result.usedSize);
       },
-      Option.getOrUndefined(signal)
-    )
+    },
+    Option.getOrUndefined(signal)
   );

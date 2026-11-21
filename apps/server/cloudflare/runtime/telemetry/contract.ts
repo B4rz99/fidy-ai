@@ -46,14 +46,17 @@ export const WorkerTelemetryEvent = Schema.Union([
     retryable: Schema.Boolean,
   }),
 ]);
+
 export type WorkerTelemetryEvent = typeof WorkerTelemetryEvent.Type;
 
 export const WorkerTraceContinuation = Schema.Struct({
   parent: Schema.optionalKey(Schema.Unknown),
 });
+
 export type WorkerTraceContinuation = typeof WorkerTraceContinuation.Type;
 
 export const WorkerTraceProjection = Schema.Struct({
   traceContext: Schema.optionalKey(DurableTraceContext),
 });
+
 export type WorkerTraceProjection = typeof WorkerTraceProjection.Type;

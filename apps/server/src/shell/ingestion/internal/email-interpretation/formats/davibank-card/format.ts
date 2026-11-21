@@ -20,6 +20,7 @@ export const format: NotificationEmailFormat = {
     const dateText = findField(document, ["fecha"]);
     const timeText = findField(document, ["hora"]);
     const counterparty = findField(document, ["comercio"]);
+
     return Option.all({ accountHints, amountText, dateText, timeText, counterparty }).pipe(
       Option.flatMap((evidence) =>
         makeInterpretation({

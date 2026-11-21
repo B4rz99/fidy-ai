@@ -5,7 +5,7 @@ import {
   type CanonicalCapability,
   CanonicalOperationId,
 } from "~/core/canonical-operations/contract";
-import { type Brand, type Option, Schema } from "effect";
+import { type Brand, Data, type Option, Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import {
   ActivePATList,
@@ -32,6 +32,7 @@ import {
   NotFound,
   OperationResponse,
   Unavailable,
+  omittedTag,
 } from "~/shell/public-http/contract";
 import {
   freshWebOrVerifiedWhatsAppHosted,
@@ -48,7 +49,7 @@ export class ManualPATReauthenticationRequired
     Brand.Brand<"ManualPATReauthenticationRequired">
   >("ManualPATReauthenticationRequired")(
     {
-      _tag: Schema.tagDefaultOmit("ManualPATReauthenticationRequired"),
+      ...omittedTag("ManualPATReauthenticationRequired"),
       error: Schema.Struct({
         code: Schema.Literal("user_action_required"),
         reason: Schema.Literal("reauthentication_required"),
@@ -71,7 +72,7 @@ export class ManualPATIssuanceConsumed
     "ManualPATIssuanceConsumed"
   )(
     {
-      _tag: Schema.tagDefaultOmit("ManualPATIssuanceConsumed"),
+      ...omittedTag("ManualPATIssuanceConsumed"),
       error: Schema.Struct({
         code: Schema.Literal("user_action_required"),
         message: Schema.Literal(issuanceConsumedMessage),
@@ -93,7 +94,7 @@ export class ManualPATIssuanceRateLimited
     "ManualPATIssuanceRateLimited"
   )(
     {
-      _tag: Schema.tagDefaultOmit("ManualPATIssuanceRateLimited"),
+      ...omittedTag("ManualPATIssuanceRateLimited"),
       error: Schema.Struct({
         code: Schema.Literal("rate_limited"),
         message: Schema.Literal(issuanceLimitedMessage),
@@ -116,7 +117,7 @@ export class ManualPATReviewExpired
     "ManualPATReviewExpired"
   )(
     {
-      _tag: Schema.tagDefaultOmit("ManualPATReviewExpired"),
+      ...omittedTag("ManualPATReviewExpired"),
       error: Schema.Struct({
         code: Schema.Literal("user_action_required"),
         message: Schema.Literal(reviewExpiredMessage),
@@ -175,6 +176,7 @@ export const PATActivity = Schema.Struct({
   pat: PATActivityMetadata,
   ...PATActivityHistory.fields,
 }).annotate({ identifier: "PATActivity" });
+
 export type PATActivity = typeof PATActivity.Type;
 
 export const PATActivityParams = Schema.Struct({ shortId: TokenShortId });
@@ -255,7 +257,9 @@ const createManualPAT = HttpApiEndpoint.post("createManualPAT", "/pats", {
   );
 
 export const patPairingInspectOperation = CanonicalOperationId.make("pats.inspectPATPairing");
+
 export const patPairingApproveOperation = CanonicalOperationId.make("pats.approvePATPairing");
+
 export const patPairingGenericMessage =
   "This PAT pairing is invalid or no longer available. Start a new request." as const;
 
@@ -264,7 +268,7 @@ export class PATPairingReviewRejected
     "PATPairingReviewRejected"
   )(
     {
-      _tag: Schema.tagDefaultOmit("PATPairingReviewRejected"),
+      ...omittedTag("PATPairingReviewRejected"),
       error: Schema.Struct({
         code: Schema.Literal("validation_failed"),
         message: Schema.Literal(patPairingGenericMessage),
@@ -283,7 +287,7 @@ export class PATPairingReviewRateLimited
     "PATPairingReviewRateLimited"
   )(
     {
-      _tag: Schema.tagDefaultOmit("PATPairingReviewRateLimited"),
+      ...omittedTag("PATPairingReviewRateLimited"),
       error: Schema.Struct({
         code: Schema.Literal("rate_limited"),
         message: Schema.Literal(patPairingGenericMessage),
@@ -379,6 +383,7 @@ const unavailableError = {
   code: "rate_limited",
   message: "PAT pairing is temporarily unavailable. Try again later.",
 } as const;
+
 const UnavailableError = Schema.Struct({
   code: Schema.Literal(unavailableError.code),
   message: Schema.Literal(unavailableError.message),
@@ -388,24 +393,29 @@ export class PATPairingRateLimitedApi extends Schema.Error<
   PATPairingRateLimitedApi,
   Brand.Brand<"PATPairingRateLimitedApi">
 >("PATPairingRateLimitedApi")({ error: UnavailableError }, { httpApiStatus: 429 }) {}
+
 export class PATPairingUnavailableApi extends Schema.Error<
   PATPairingUnavailableApi,
   Brand.Brand<"PATPairingUnavailableApi">
 >("PATPairingUnavailableApi")({ error: UnavailableError }, { httpApiStatus: 503 }) {}
+
 export const patPairingUnavailableBody = { error: unavailableError } as const;
 
 const invalidError = {
   code: "pairing_invalid",
   message: "This PAT pairing is no longer valid. Start a new request.",
 } as const;
+
 const InvalidError = Schema.Struct({
   code: Schema.Literal(invalidError.code),
   message: Schema.Literal(invalidError.message),
 });
+
 export class PATPairingInvalidApi extends Schema.Error<
   PATPairingInvalidApi,
   Brand.Brand<"PATPairingInvalidApi">
 >("PATPairingInvalidApi")({ error: InvalidError }, { httpApiStatus: 400 }) {}
+
 export const patPairingInvalidBody = { error: invalidError } as const;
 
 export class PATPairingPollingRateLimitedApi extends Schema.Error<
@@ -422,6 +432,7 @@ export class PATPairingPollingRateLimitedApi extends Schema.Error<
 ) {}
 
 const maximumMalformedClaimValueBytes = 256;
+
 const boundedClaimValue = Schema.Unknown.check(
   Schema.makeFilter<unknown>(
     (value) =>
@@ -434,6 +445,7 @@ export const ClaimPATPairingPayload = Schema.Struct({
   pairingId: Schema.optional(boundedClaimValue),
   privateDeviceCode: Schema.optional(boundedClaimValue),
 });
+
 export type ClaimPATPairingPayload = typeof ClaimPATPairingPayload.Type;
 
 export const PATPairingDirectGroup = HttpApiGroup.make("patPairing")
@@ -467,6 +479,14 @@ export class PATPairingApi extends HttpApi.make("patPairingApi")
   .add(PATPairingDirectGroup)
   .annotate(OpenApi.Title, "fidy-ai PATPairing API") {}
 
-export type PATGrantSelection = Readonly<{ _tag: "PATGrants"; statement: OwnedStatement }>;
+export type PATGrantSelection = Data.TaggedEnum<{
+  PATGrants: { readonly statement: OwnedStatement };
+}>;
 
-export type PairingGrantSelection = Readonly<{ _tag: "PairingGrants"; statement: OwnedStatement }>;
+export const PATGrantSelection = Data.taggedEnum<PATGrantSelection>();
+
+export type PairingGrantSelection = Data.TaggedEnum<{
+  PairingGrants: { readonly statement: OwnedStatement };
+}>;
+
+export const PairingGrantSelection = Data.taggedEnum<PairingGrantSelection>();

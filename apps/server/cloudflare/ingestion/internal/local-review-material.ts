@@ -8,7 +8,9 @@ import { MaterialRow, materialText, unavailable } from "./review-material";
 import { missing, result } from "./local-review-snapshot";
 
 const materialIdPosition = -2;
+
 const cap = 100_000;
+
 const sameRevision = (
   left: typeof MaterialRow.Type & { revision: number; expires: number },
   right: typeof MaterialRow.Type & { revision: number; expires: number }
@@ -16,8 +18,10 @@ const sameRevision = (
   left.revision === right.revision &&
   left.expires === right.expires &&
   Option.getOrNull(left.object_key) === Option.getOrNull(right.object_key);
+
 const selected = Effect.fn(function* (user: UserId, id: string) {
   const sql = yield* SqliteClient;
+
   const [row] =
     yield* sql`SELECT r.evidence_expires_at_ms AS expires,coalesce(r.workspace_revision,0) AS revision,
     CASE WHEN r.source_kind='statement' THEN r.original_evidence WHEN r.source_kind='media' THEN m.caption END AS text,
@@ -25,6 +29,7 @@ const selected = Effect.fn(function* (user: UserId, id: string) {
     LEFT JOIN forwarded_email_receipts e ON e.user_id=r.user_id AND e.id=r.email_receipt_id
     LEFT JOIN media_submissions m ON m.user_id=r.user_id AND m.id=r.media_submission_id
     WHERE r.user_id=${user} AND r.id=${id}`;
+
   return row === undefined
     ? Option.none()
     : Option.some(
@@ -33,6 +38,7 @@ const selected = Effect.fn(function* (user: UserId, id: string) {
         )(row)
       );
 });
+
 export const localReviewMaterial = Effect.fn(function* (unit: {
   request: Request;
   storage: DurableObjectStorage;
@@ -44,16 +50,19 @@ export const localReviewMaterial = Effect.fn(function* (unit: {
   const subject = yield* localPreparationSubject(unit.request, unit.owns, unit.operation);
   const before = Option.isSome(subject) ? yield* selected(subject.value, id) : Option.none();
   const now = yield* Clock.currentTimeMillis;
+
   const text =
     Option.isSome(before) && before.value.expires > now
       ? yield* materialText({ row: before.value, bucket: Option.fromNullishOr(unit.bucket) })
       : Option.none();
+
   return yield* runLocalMutation({
     ...unit,
     input: Effect.succeedSome(id),
     work: (target, user, current) =>
       Effect.gen(function* () {
         const after = yield* selected(user, target);
+
         if (
           Option.isNone(after) ||
           Option.isNone(before) ||
@@ -62,10 +71,13 @@ export const localReviewMaterial = Effect.fn(function* (unit: {
         ) {
           return missing();
         }
+
         if (after.value.expires <= current) return result({ available: false, reason: "expired" });
+
         if (!sameRevision(after.value, before.value)) {
           return result(unavailable);
         }
+
         return result(
           Option.isSome(text)
             ? {

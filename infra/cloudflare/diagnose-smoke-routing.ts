@@ -21,7 +21,9 @@ const RoutingConfig = Schema.Struct({
   SMOKE_PROOF: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
   SMOKE_ROUTING_WINDOW: Schema.optionalKey(Schema.Literals(["early", "settled"])),
 });
+
 type RoutingConfig = typeof RoutingConfig.Type;
+
 export type RoutingObservation = Readonly<{
   round: number;
   pairing: "candidate" | "intermediate";
@@ -33,22 +35,35 @@ export type RoutingObservation = Readonly<{
   coreVersion: string;
   coreSource: "body" | "header" | "equality" | "unavailable";
 }>;
+
 type RoutingSample = Pick<
   RoutingObservation,
   "round" | "pairing" | "method" | "replica" | "window"
 >;
-class RoutingDiagnosticFailed extends Data.TaggedError("RoutingDiagnosticFailed")<{}> {}
+
+class RoutingDiagnosticFailed extends Data.TaggedError("RoutingDiagnosticFailed")<{
+  readonly cause: unknown;
+}> {}
+
 const rounds = 6;
+
 const ordinarySamplesPerRound = 8;
+
 const readyStatus = 200;
+
 const refusedStatus = 503;
+
 const diagnosticProbeId = "00000000000000000000000000000000";
+
 const routingRequest = Effect.fn(function* (config: RoutingConfig, sample: RoutingSample) {
   const publicVersion =
     sample.pairing === "candidate" ? config.PUBLIC_VERSION_ID : config.STABLE_PUBLIC_VERSION_ID;
+
   const headers = smokeHeaders({ config, publicVersion: Option.some(publicVersion) });
   const query = "?readiness=1";
+
   if (sample.method === "GET") return { query, headers, body: Option.none<string>() };
+
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(SmokeRequest))({
     protocolVersion: 1,
     probeId: diagnosticProbeId,
@@ -57,6 +72,7 @@ const routingRequest = Effect.fn(function* (config: RoutingConfig, sample: Routi
     expectedGitRevision: smokeDiagnosticRevision,
     expectedContractDigest: config.CONTRACT_DIGEST,
   });
+
   return { query, headers, body: Option.some(body) };
 });
 
@@ -65,11 +81,13 @@ const observeRouting = Effect.fn(
     const request = yield* routingRequest(config, sample);
     const response = yield* exchangeSmoke(request);
     const observedPublic = response.publicVersion;
+
     const core = observeSmokeCore({
       response,
       method: sample.method,
       stableCore: config.STABLE_CORE_VERSION_ID,
     });
+
     return {
       ...sample,
       status: response.status,
@@ -80,7 +98,7 @@ const observeRouting = Effect.fn(
   },
   Effect.scoped,
   Effect.timeout("8 seconds"),
-  Effect.mapError(() => new RoutingDiagnosticFailed())
+  Effect.mapError((cause) => new RoutingDiagnosticFailed({ cause }))
 );
 
 const routingSamples = (
@@ -88,6 +106,7 @@ const routingSamples = (
   window: RoutingSample["window"]
 ): ReadonlyArray<RoutingSample> => {
   const probes: RoutingSample[] = [];
+
   for (const replica of [1, 2] as const) {
     for (const method of ["GET", "POST"] as const) {
       for (const pairing of ["candidate", "intermediate"] as const) {
@@ -95,6 +114,7 @@ const routingSamples = (
       }
     }
   }
+
   return probes;
 };
 
@@ -115,11 +135,14 @@ export const settledRoutingAccepted = ({
   observations: ReadonlyArray<RoutingObservation>;
 }>): boolean => {
   const decoded = Schema.decodeUnknownOption(RoutingConfig)(env);
+
   if (Option.isNone(decoded)) return false;
   const required = observations.filter((value) => value.window === "settled");
+
   const identities = new Set(
     required.map((value) => `${value.round}:${value.pairing}:${value.method}:${value.replica}`)
   );
+
   return (
     required.length === rounds * ordinarySamplesPerRound &&
     identities.size === rounds * ordinarySamplesPerRound &&
@@ -135,21 +158,31 @@ export const settledRoutingAccepted = ({
 };
 
 export const diagnoseSmokeRouting = Effect.fn(function* (env: unknown) {
-  const decoded = Schema.decodeUnknownOption(RoutingConfig)(env);
-  if (Option.isNone(decoded)) return yield* new RoutingDiagnosticFailed();
-  const window = decoded.value.SMOKE_ROUTING_WINDOW ?? "early";
+  const config = yield* Schema.decodeUnknownEffect(RoutingConfig)(env).pipe(
+    Effect.mapError((cause) => new RoutingDiagnosticFailed({ cause }))
+  );
+
+  const window = config.SMOKE_ROUTING_WINDOW ?? "early";
+
   if (window === "settled") yield* Effect.sleep("60 seconds");
-  const observations: RoutingObservation[] = [];
-  for (let round = 1; round <= rounds; round++) {
-    const samples = yield* Effect.forEach(
-      routingSamples(round, window),
-      (sample) => observeRouting(decoded.value, sample),
-      { concurrency: ordinarySamplesPerRound }
-    );
-    observations.push(...samples);
-    if (round < rounds) yield* Effect.sleep("1500 millis");
-  }
-  const result: ReadonlyArray<RoutingObservation> = observations;
+
+  const observations = yield* Effect.forEach(
+    Array.from({ length: rounds }, (_, index) => index + 1),
+    Effect.fnUntraced(function* (round) {
+      const samples = yield* Effect.forEach(
+        routingSamples(round, window),
+        (sample) => observeRouting(config, sample),
+        { concurrency: ordinarySamplesPerRound }
+      );
+
+      if (round < rounds) yield* Effect.sleep("1500 millis");
+
+      return samples;
+    })
+  );
+
+  const result: ReadonlyArray<RoutingObservation> = observations.flat();
+
   return result;
 }, Effect.timeout("125 seconds"));
 
@@ -158,6 +191,7 @@ if (import.meta.main) {
     Effect.scoped(
       Effect.gen(function* () {
         const services = yield* Layer.build(ReleaseHttpLive);
+
         return yield* diagnoseSmokeRouting(process.env).pipe(
           Effect.provideService(
             HttpClient.HttpClient,
@@ -169,6 +203,7 @@ if (import.meta.main) {
       })
     )
   );
+
   if (Exit.isSuccess(result)) {
     await Bun.write(
       Bun.stdout,
@@ -176,6 +211,7 @@ if (import.meta.main) {
         .map((observation) => `Smoke routing observation: ${JSON.stringify(observation)}\n`)
         .join("")
     );
+
     if (
       result.value.some((value) => value.window === "settled") &&
       !settledRoutingAccepted({ env: process.env, observations: result.value })

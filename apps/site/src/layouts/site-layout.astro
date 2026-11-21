@@ -9,12 +9,19 @@ type Props = {
   description: string;
   variant: "landing" | "detail" | "document" | "draft" | "missing";
 };
+
 const { title, description, variant } = Astro.props;
+
 const legal = ["document", "draft", "missing"].includes(variant);
+
 const noindex = variant === "draft" || variant === "missing";
+
 const detail = variant === "detail";
+
 const pathname = Astro.url.pathname.replace(/\.html$/u, "").replace(/^\/index$/u, "/");
+
 const canonical = new URL(pathname, Astro.site);
+
 const markdownPath = pathname === "/" ? "/index.md" : `${pathname}.md`;
 ---
 

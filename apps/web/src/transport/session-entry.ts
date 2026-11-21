@@ -25,9 +25,11 @@ const observeBindingReply = (
   }));
 
 type BootstrapClient = HttpApiClient.Client<typeof BrowserBootstrapApi.groups.browserSession>;
+
 export type BrowserSessionEntryFailure = Effect.Error<
   ReturnType<BootstrapClient["browserSession"]["binding"]>
 >;
+
 export const loadBrowserSessionEntry = ({
   apiOrigin,
   context: includeContext,
@@ -41,10 +43,12 @@ export const loadBrowserSessionEntry = ({
     const context = yield* Layer.build(
       FetchHttpClient.layer.pipe(browserHttpClientLayer("web-auth", apiOrigin))
     );
+
     const client = yield* HttpApiClient.makeWith(BrowserBootstrapApi, {
       baseUrl: apiOrigin,
       httpClient: Context.get(context, HttpClient.HttpClient),
     });
+
     const result = yield* client.browserSession.binding({
       query: includeContext
         ? {
@@ -54,9 +58,12 @@ export const loadBrowserSessionEntry = ({
           }
         : {},
     });
+
     const entry = yield* observeBindingReply(result);
+
     if (!includeContext || Option.isNone(entry.initial)) return entry;
     const latest = yield* client.browserSession.binding({ query: {} });
+
     return (latest.binding ?? "none") === entry.binding
       ? entry
       : yield* observeBindingReply({ ...latest, initial: Option.none() });

@@ -21,16 +21,26 @@ export const executeSchedule = <E>(
   activities: ReadonlyArray<ScheduledActivity<E>>
 ): Effect.Effect<void, ScheduledWorkFailed> =>
   Effect.gen(function* () {
-    let failed = false;
-    for (const { operation, work } of activities) {
-      const result = yield* Effect.exit(work.pipe(Effect.withSpan(operation)));
-      if (Exit.isFailure(result)) {
-        if (Cause.hasInterrupts(result.cause)) return yield* Effect.interrupt;
-        failed = true;
-        yield* Effect.logWarning({ component: "scheduled-work", operation, outcome: "failed" });
-      }
-    }
-    if (failed) return yield* new ScheduledWorkFailed();
+    const failed = yield* Effect.reduce(
+      activities,
+      () => false,
+      (anyFailed, { operation, work }) =>
+        Effect.exit(work.pipe(Effect.withSpan(operation))).pipe(
+          Effect.flatMap((result) => {
+            if (Exit.isSuccess(result)) return Effect.succeed(anyFailed);
+
+            if (Cause.hasInterrupts(result.cause)) return Effect.interrupt;
+
+            return Effect.logWarning({
+              component: "scheduled-work",
+              operation,
+              outcome: "failed",
+            }).pipe(Effect.as(true));
+          })
+        )
+    );
+
+    if (failed) return yield* new ScheduledWorkFailed({ cause: Option.none() });
   });
 
 export const executeDueSchedule = <E>(
@@ -113,32 +123,42 @@ export const handleLifetimeRegistration = Effect.fn(function* (
   erasure: Option.Option<ErasureRegistryNamespace>
 ) {
   const userId = request.headers.get("fidy-user-id");
+
   if (!Schema.is(UserId)(userId)) return new Response(null, { status: 400 });
   const sql = yield* SqliteClient;
+
   if (request.url === registerLifetimeUrl) {
     return yield* withStoreAdmission((admitGrowth) =>
       Effect.gen(function* () {
         const issuedAt = Number(request.headers.get("fidy-registration-issued-ms"));
         const age = (yield* Clock.currentTimeMillis) - issuedAt;
+
         if (!Number.isSafeInteger(issuedAt) || age < 0 || age >= maximumRegistrationAgeMs) {
           return acknowledgement(false);
         }
+
         const [entry] =
           yield* sql`SELECT erasure_reference IS NULL AS live FROM lifetime_registry WHERE user_id=${userId}`;
+
         if (entry !== undefined) {
           const state = yield* Schema.decodeUnknownEffect(
             Schema.Struct({ live: Schema.Literals([0, 1]) })
           )(entry);
+
           return acknowledgement(state.live === 1);
         }
+
         yield* admitGrowth;
         yield* sql`INSERT INTO lifetime_registry(user_id,registered_ms) VALUES(${userId},${issuedAt})`;
+
         return acknowledgement(true);
       })
     );
   }
+
   return yield* changeLifetime(request, userId, erasure);
 });
+
 const changeLifetime = Effect.fn(function* (
   request: Request,
   userId: string,
@@ -146,8 +166,11 @@ const changeLifetime = Effect.fn(function* (
 ) {
   const sql = yield* SqliteClient;
   const reference = request.headers.get("fidy-erasure-reference");
+
   if (!Schema.is(ErasureReference)(reference)) return new Response(null, { status: 400 });
+
   if (Option.isNone(erasure)) return acknowledgement(false);
+
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
     userId,
     reference,
@@ -157,26 +180,31 @@ const changeLifetime = Effect.fn(function* (
       [expireLifetimeUrl]: "expire",
     }[request.url],
   });
+
   const verified = yield* Effect.tryPromise((signal) =>
     erasure.value
       .getByName(erasureRegistryName)
       .fetch(confirmLifetimeCaseUrl, { method: "POST", body, signal })
   ).pipe(Effect.timeout("5 seconds"));
+
   if (verified.status !== registrationAcceptedStatus) return acknowledgement(false);
 
   return yield* withStoreAdmission(() =>
     Effect.gen(function* () {
       if (request.url === expireLifetimeUrl) {
         yield* sql`DELETE FROM lifetime_registry WHERE user_id=${userId} AND erasure_reference=${reference} AND retired=1`;
+
         return acknowledgement(
           (yield* sql`SELECT 1 FROM lifetime_registry WHERE user_id=${userId}`).length === 0
         );
       }
+
       const matched =
         request.url === fenceLifetimeUrl
           ? yield* sql`UPDATE lifetime_registry SET erasure_reference=${reference} WHERE user_id=${userId}
           AND (erasure_reference IS NULL OR erasure_reference=${reference}) RETURNING user_id`
           : yield* sql`UPDATE lifetime_registry SET retired=1 WHERE user_id=${userId} AND erasure_reference=${reference} RETURNING user_id`;
+
       return acknowledgement(matched.length === 1);
     })
   );

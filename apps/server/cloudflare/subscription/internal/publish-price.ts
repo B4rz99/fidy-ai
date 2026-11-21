@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from "effect";
+import { Data, Effect, Option, Schema } from "effect";
 import type { OutboundHttpService } from "../../../src/shell/outbound-http/operations";
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
@@ -15,6 +15,8 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
   deadlineMilliseconds: 5000,
 });
 
+class PricingOwnerUnbound extends Data.TaggedError("PricingOwnerUnbound") {}
+
 const validRequest = (request: Request): boolean =>
   request.method === "POST" && !request.headers.has("origin") && new URL(request.url).search === "";
 
@@ -23,10 +25,13 @@ export const publishPrice = (
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const { request, environment } = input;
+
     if (!validRequest(request)) {
       return new Response(null, { status: 403 });
     }
+
     const issuer = environment.CLOUDFLARE_ACCESS_ISSUER;
+
     const operator = yield* authenticateOperator({
       request,
       configuration: {
@@ -42,11 +47,15 @@ export const publishPrice = (
       },
       http: input.http,
     });
+
     if (Option.isNone(operator)) return new Response(null, { status: 401 });
     const body = yield* boundedJsonBody({ request, policy, schema: PricePublication });
+
     if (Option.isNone(body)) return new Response(null, { status: 400 });
     const owner = environment.PRICING;
-    if (owner === undefined) return new Response(null, { status: 503 });
+
+    if (owner === undefined) return yield* new PricingOwnerUnbound();
+
     const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(AdmittedPricePublication))({
       ...body.value,
       authority: {
@@ -55,6 +64,7 @@ export const publishPrice = (
         expiresAtMs: operator.value.expiresAtMs,
       },
     });
+
     return yield* Effect.tryPromise(() =>
       owner.getByName(pricingName).fetch("https://pricing.internal/publish", {
         method: "POST",
@@ -63,4 +73,7 @@ export const publishPrice = (
         signal: request.signal,
       })
     );
-  }).pipe(Effect.orElseSucceed(() => new Response(null, { status: 503 })));
+  }).pipe(
+    Effect.tapError(Effect.logDebug),
+    Effect.orElseSucceed(() => new Response(null, { status: 503 }))
+  );

@@ -73,22 +73,22 @@ const failedProjection = (
   ) {
     return Option.none();
   }
+
   return Option.some({
     ...base,
     completedAt: stored.completedAt.value,
     failureReason: stored.failureReason.value,
-    ...(Option.isSome(stored.inputRows) &&
-    Option.isSome(stored.acceptedRows) &&
-    Option.isSome(stored.needsReviewRows)
-      ? {
-          accounting: {
-            inputRows: stored.inputRows.value,
-            acceptedRows: stored.acceptedRows.value,
-            needsReviewRows: stored.needsReviewRows.value,
-            ...decisionAccounting(stored),
-          },
-        }
-      : {}),
+    ...Option.match(
+      Option.all({
+        inputRows: stored.inputRows,
+        acceptedRows: stored.acceptedRows,
+        needsReviewRows: stored.needsReviewRows,
+      }),
+      {
+        onNone: () => ({}),
+        onSome: (rows) => ({ accounting: { ...rows, ...decisionAccounting(stored) } }),
+      }
+    ),
     startedAt: stored.startedAt.value,
     status: "failed",
   });
@@ -97,8 +97,14 @@ const failedProjection = (
 const decisionAccounting = (
   stored: StoredStatementSubmission
 ): Pick<StatementAccounting, "skippedRows" | "abandonedRows"> => ({
-  ...(stored.skippedRows > 0 ? { skippedRows: stored.skippedRows } : {}),
-  ...(stored.abandonedRows > 0 ? { abandonedRows: stored.abandonedRows } : {}),
+  ...Option.match(
+    Option.liftPredicate(stored.skippedRows, (rows) => rows > 0),
+    { onNone: () => ({}), onSome: (skippedRows) => ({ skippedRows }) }
+  ),
+  ...Option.match(
+    Option.liftPredicate(stored.abandonedRows, (rows) => rows > 0),
+    { onNone: () => ({}), onSome: (abandonedRows) => ({ abandonedRows }) }
+  ),
 });
 
 const completedProjection = (
@@ -114,6 +120,7 @@ const completedProjection = (
   ) {
     return Option.none();
   }
+
   const settled = {
     ...base,
     accounting: {
@@ -124,9 +131,11 @@ const completedProjection = (
     },
     startedAt: stored.startedAt.value,
   };
+
   if (stored.status === "awaiting-clarification") {
     return Option.some({ ...settled, status: "awaiting-clarification" });
   }
+
   return Option.some({
     ...settled,
     completedAt: stored.completedAt.value,
@@ -138,8 +147,11 @@ export const submissionProjection = (
   stored: StoredStatementSubmission
 ): Option.Option<StatementSubmission> => {
   const base = submissionBase(stored);
+
   if (stored.status === "queued") return Option.some({ ...base, status: "queued" });
+
   if (stored.status === "failed") return failedProjection(base, stored);
+
   if (
     stored.status === "completed" ||
     stored.status === "awaiting-clarification" ||
@@ -147,6 +159,7 @@ export const submissionProjection = (
   ) {
     return completedProjection(base, stored);
   }
+
   return Option.map(stored.startedAt, (startedAt) => ({
     ...base,
     startedAt,
@@ -165,6 +178,7 @@ export const ownedSubmissionSelection = `SELECT s.id, s.source_format, s.parser_
            (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'abandoned') AS abandoned_rows
          FROM statement_submission_context s
          WHERE s.id = ? AND s.user_id = ?`;
+
 export const decodeOwnedSubmission = (
   value: unknown
 ): Effect.Effect<Option.Option<StoredStatementSubmission>, StatementStagingUnavailable> =>
@@ -185,7 +199,9 @@ export const decodeOwnedSubmission = (
         status: row.status,
         submittedAt: row.submitted_at_ms,
       };
+
       const projection = submissionProjection(stored);
+
       return Option.isNone(projection)
         ? Effect.fail(unavailable())
         : Schema.decodeEffect(Schema.toType(StatementSubmission))(projection.value).pipe(

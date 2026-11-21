@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Array as Arr, Effect, FileSystem } from "effect";
 import { expect } from "vitest";
 import { Miniflare } from "miniflare";
 import { native } from "../user-store.test-fixture";
@@ -8,6 +8,7 @@ import { native } from "../user-store.test-fixture";
 const platform = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* fs.makeTempDirectoryScoped({ prefix: "fidy-cancellation-" });
+
   const built = yield* native(() =>
     Bun.build({
       entrypoints: [new URL("./cancellation-recovery.test-fixture.ts", import.meta.url).pathname],
@@ -15,11 +16,15 @@ const platform = Effect.gen(function* () {
       external: ["cloudflare:workers", "node:*"],
     })
   );
+
   const output = built.outputs[0];
+
   if (output === undefined) {
     return yield* Effect.die(new Error("Cancellation fixture bundle missing"));
   }
+
   const contents = yield* native(() => output.text());
+
   const create = (): Miniflare =>
     new Miniflare({
       resourcePersistencePath: path,
@@ -46,8 +51,10 @@ const platform = Effect.gen(function* () {
         },
       ],
     });
+
   let runtime = create();
   yield* Effect.addFinalizer(() => native(() => runtime.dispose()));
+
   const request = (action: string, owner = "user"): Effect.Effect<unknown> =>
     native(() =>
       runtime
@@ -55,6 +62,7 @@ const platform = Effect.gen(function* () {
         .then((namespace) => namespace.getByName(owner).fetch("https://owner.internal/" + action))
         .then((response) => response.json())
     );
+
   const restart = native(() => runtime.dispose()).pipe(
     Effect.tap(() =>
       Effect.sync(() => {
@@ -62,8 +70,10 @@ const platform = Effect.gen(function* () {
       })
     )
   );
+
   return { request, restart };
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "commits a paid cancellation and its recovery alarm together and preserves an earlier wake across reconstruction",
@@ -74,6 +84,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* request("fail")).toEqual({ rows: [], alarm: null });
         yield* restart;
         expect(yield* request("inspect")).toEqual({ rows: [], alarm: null });
+
         const rows = [
           {
             state: "void-pending",
@@ -81,6 +92,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             paid_attempt_id: "22370000-0000-4000-8000-000000000004",
           },
         ];
+
         expect(yield* request("accept")).toEqual({ rows, alarm: 2_000_000_000_000 });
         yield* request("earlier");
         yield* restart;
@@ -185,9 +197,18 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         yield* request("seed");
         yield* request("accept");
         yield* request("poison");
-        for (let attempt = 0; attempt < 7; attempt++) {
-          expect(yield* request("native-retry")).toMatchObject({ failedFamilies: 1, attempted: 0 });
-        }
+
+        yield* Effect.forEach(
+          Arr.range(1, 7),
+          Effect.fnUntraced(function* () {
+            expect(yield* request("native-retry")).toMatchObject({
+              failedFamilies: 1,
+              attempted: 0,
+            });
+          }),
+          { discard: true }
+        );
+
         yield* request("exhausted");
         yield* restart;
         expect(yield* request("inspect")).toMatchObject({ alarm: null });

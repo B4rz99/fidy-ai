@@ -34,21 +34,25 @@ export const validationFailed: typeof validation = (message) => validation(messa
 
 export const dispatchLocalForwarding: typeof dispatchLocalForwardingOwned = (...args) =>
   dispatchLocalForwardingOwned(...args);
+
 export const isLocalForwardingOperation = (id: string): boolean =>
   isLocalForwardingOperationOwned(id);
 
 export const dispatchLocalReview: typeof localReview = (unit) => localReview(unit);
+
 export const isLocalReviewOperation: typeof localReviewOperation = (id) => localReviewOperation(id);
 
 export const prepareLocalReviewEdit: typeof localEdit = (...args) => localEdit(...args);
 
 export const prepareLocalStatementDecision: typeof localDecision = (...args) =>
   localDecision(...args);
+
 export const prepareLocalStatementAbandonment: typeof localAbandon = (...args) =>
   localAbandon(...args);
 
 export const reserveBatchForwarding: typeof reserveBatchAddress = (...args) =>
   reserveBatchAddress(...args);
+
 export const prepareLocalForwardingEnable: typeof prepareAddress = (...args) =>
   prepareAddress(...args);
 
@@ -56,12 +60,16 @@ export const retainLocalStatementDocumentOrigin: typeof retainOrigin = (input) =
   retainOrigin(input);
 
 export const localHostedStatementOrigin: typeof resolveOrigin = (...args) => resolveOrigin(...args);
+
 export const readLocalSubmission: typeof localSubmission = (...args) => localSubmission(...args);
+
 export const readLocalReviewPage: typeof localReviewPage = (...args) => localReviewPage(...args);
 
 export const readLocalReviewItem: typeof readReviewItem = (...args) => readReviewItem(...args);
+
 export const readLocalReviewWorkspace: typeof reviewWorkspace = (...args) =>
   reviewWorkspace(...args);
+
 export const readLocalForwarding: typeof readForwarding = (...args) => readForwarding(...args);
 
 export const readLocalDocumentPublication: typeof observeDocumentPublication = (...args) =>

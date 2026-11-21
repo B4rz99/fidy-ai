@@ -3,7 +3,7 @@ import type { AuthenticationProvider } from "../../../src/shell/provider-authent
 import type { NativeAcceptanceSettings } from "../../release-isolation/contract";
 import { Effect, Schema } from "effect";
 
-const created = Schema.is(Schema.Struct({ status: Schema.Literal("created") }));
+const Created = Schema.Struct({ status: Schema.Literal("created") });
 
 export const observeCanonicalSignup = Effect.fn(function* ({
   environment,
@@ -24,13 +24,17 @@ export const observeCanonicalSignup = Effect.fn(function* ({
   ) {
     return;
   }
-  const payload = yield* Effect.tryPromise(() => response.clone().json()).pipe(
-    Effect.orElseSucceed(() => undefined)
+
+  yield* Effect.tryPromise(() => response.clone().json()).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(Created)),
+    Effect.flatMap(() =>
+      Effect.logInfo({
+        message:
+          "fidy.operational component=canonical-signup operation=" + provider + " state=created",
+      })
+    ),
+    Effect.catch(() =>
+      Effect.logDebug({ component: "canonical-signup", operation: provider, state: "unobserved" })
+    )
   );
-  if (created(payload)) {
-    yield* Effect.logInfo({
-      message:
-        "fidy.operational component=canonical-signup operation=" + provider + " state=created",
-    });
-  }
 });

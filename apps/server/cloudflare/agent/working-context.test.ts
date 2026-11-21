@@ -1,30 +1,41 @@
 import {
   HostedAgentSessionId,
   ProactiveInsightTranscriptEntry,
-  TranscriptEntry,
+  type TranscriptEntry,
+  TranscriptEntryId,
+  TranscriptText,
   TranscriptTurnId,
+  UserTranscriptEntry,
 } from "../../src/core/agent/contract";
-import { expect, it } from "@effect/vitest";
-import { DateTime, Option, Schema } from "effect";
+import { assert, expect, it } from "@effect/vitest";
+import { DateTime, Option, Predicate } from "effect";
 import { IanaTimeZone } from "../../src/core/_shared/context";
 import { UserId } from "../../src/core/identity/contract";
+import { InsightEventId } from "../../src/core/insights/contract";
 import { type SessionTranscriptEntry, assembleWorkingContext } from "./internal/working-context";
 
 const userA = UserId.make("f1d1a000-0000-4000-8000-000000000281");
+
 const userB = UserId.make("f1d1a000-0000-4000-8000-000000000282");
+
 const oldTurn = TranscriptTurnId.make("f1d1a000-0000-4000-8000-000000000283");
+
 const activeTurn = TranscriptTurnId.make("f1d1a000-0000-4000-8000-000000000284");
+
 const sessionA = HostedAgentSessionId.make("f1d1a000-0000-4000-8000-000000000285");
+
 const sessionOld = HostedAgentSessionId.make("f1d1a000-0000-4000-8000-000000000286");
+
 const now = DateTime.makeUnsafe("2026-09-25T12:00:00Z");
+
 const entry = (text: string, turnId = oldTurn): TranscriptEntry =>
-  Schema.decodeSync(TranscriptEntry)({
-    _tag: "UserTranscriptEntry",
-    id: "f1d1a000-0000-4000-8000-000000000287",
+  UserTranscriptEntry.make({
+    id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000287"),
     turnId,
-    occurredAt: "2026-09-25T12:00:00Z",
-    text,
+    occurredAt: now,
+    text: TranscriptText.make(text),
   });
+
 const retained = (
   text: string,
   sequence: bigint,
@@ -65,7 +76,9 @@ it("orders exact current-session evidence while excluding prior sessions, anothe
     ],
     activeRequest: "active text",
   });
-  expect(result.activeRequest).toEqual({ _tag: "Present", text: "active text" });
+
+  assert(Predicate.isTagged(result.activeRequest, "Present"));
+  expect(result.activeRequest.text).toBe("active text");
   expect(result.sections.map((section) => section._tag)).toEqual([
     "AssistantPolicy",
     "TurnStarted",
@@ -78,7 +91,8 @@ it("orders exact current-session evidence while excluding prior sessions, anothe
   ]);
   expect(
     result.sections.flatMap((section) =>
-      section._tag === "Transcript" && section.entry._tag === "UserTranscriptEntry"
+      Predicate.isTagged(section, "Transcript") &&
+      Predicate.isTagged(section.entry, "UserTranscriptEntry")
         ? [section.entry.text]
         : []
     )
@@ -102,6 +116,7 @@ it("does not load an old or foreign CompactedConversation into a new session", (
     transcript: [],
     activeRequest: "hola",
   };
+
   for (const scope of [
     { userId: userA, sessionId: sessionOld },
     { userId: userB, sessionId: sessionA },
@@ -110,18 +125,19 @@ it("does not load an old or foreign CompactedConversation into a new session", (
       ...base,
       compactedConversation: Option.some({ ...scope, text: "private" }),
     });
-    expect(result.sections.some((section) => section._tag === "CompactedConversation")).toBe(false);
+
+    expect(result.sections.some(Predicate.isTagged("CompactedConversation"))).toBe(false);
   }
 });
 
 it("a contextual proactive message remains same-User data, without inventing a requested Turn or prior session", () => {
-  const proactive = Schema.decodeSync(ProactiveInsightTranscriptEntry)({
-    _tag: "ProactiveInsightTranscriptEntry",
-    id: "f1d1a000-0000-4000-8000-000000000288",
-    insightEventId: "f1d1a000-0000-4000-8000-000000000289",
-    occurredAt: "2026-09-25T12:00:00Z",
-    text: "Tu resumen semanal: 12 COP.",
+  const proactive = ProactiveInsightTranscriptEntry.make({
+    id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000288"),
+    insightEventId: InsightEventId.make("f1d1a000-0000-4000-8000-000000000289"),
+    occurredAt: now,
+    text: TranscriptText.make("Tu resumen semanal: 12 COP."),
   });
+
   for (const owner of [userA, userB]) {
     const context = assembleWorkingContext({
       sessionId: sessionA,
@@ -136,9 +152,12 @@ it("a contextual proactive message remains same-User data, without inventing a r
       proactiveReply: Option.some({ userId: owner, entry: proactive }),
       activeRequest: "¿Qué significa este resumen?",
     });
-    expect(context.sections.filter((section) => section._tag === "ProactiveReply")).toEqual(
-      owner === userA ? [{ _tag: "ProactiveReply", entry: proactive }] : []
-    );
-    expect(context.sections.some((section) => section._tag === "Transcript")).toBe(false);
+
+    expect(
+      context.sections.flatMap((section) =>
+        Predicate.isTagged(section, "ProactiveReply") ? [section.entry] : []
+      )
+    ).toEqual(owner === userA ? [proactive] : []);
+    expect(context.sections.some(Predicate.isTagged("Transcript"))).toBe(false);
   }
 });

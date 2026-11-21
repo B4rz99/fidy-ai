@@ -16,7 +16,7 @@ through `--group mutation`.
 
 | Test location                                                 | Command from repository root                                          |
 | ------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `apps/server/src/core/`                                       | `bun run --cwd apps/server test:core <path> --coverage.enabled=false` |
+| `apps/server/test/core/`                                      | `bun run --cwd apps/server test:core <path> --coverage.enabled=false` |
 | `apps/server/src/shell/` (including canonical catalog/policy) | `bun run --cwd apps/server test <path> --coverage.enabled=false`      |
 | `apps/server/src/shell/channels/whatsapp/`                    | `bun run --cwd apps/server test:whatsapp <path>`                      |
 | `apps/server/src/shell/ingestion/`                            | `bun run --cwd apps/server test:email-interpretation <path>`          |
@@ -27,9 +27,9 @@ through `--group mutation`.
 | `infra/cloudflare/`                                           | `bun run --cwd infra/cloudflare test <path>`                          |
 
 ```sh
-bun run --cwd apps/server test:core src/core/_shared/money.test.ts --coverage.enabled=false
-bun run --cwd apps/server test src/shell/canonical-catalog/contract.test.ts --coverage.enabled=false
-bun run --cwd apps/web test src/transport/client.test.ts
+bun run --cwd apps/server test:core test/core/_shared/money.test.ts --coverage.enabled=false
+bun run --cwd apps/server test test/shell/canonical-catalog/contract.test.ts --coverage.enabled=false
+bun run --cwd apps/web test test/transport/client.node.test.ts
 ```
 
 `test:core` only includes core tests. Server `test:contracts` covers artifact-checker tests in
@@ -81,7 +81,7 @@ restore environment/configuration in teardown.
 
 Register cleanup before assertions or interruptible work. Acquire an explicit test Scope with
 `Effect.acquireRelease` when an early close is itself under test, so failure still closes it;
-see [the clipboard tests](../apps/web/src/browser/clipboard.test.ts). Coordinate races with
+see [the clipboard tests](../apps/web/test/browser/clipboard.test.ts). Coordinate races with
 Deferreds or controlled transport settlement, then assert both the result and owner disposal.
 An abort test must abort the real request while the competing operation is blocked.
 

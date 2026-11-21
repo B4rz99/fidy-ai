@@ -1,11 +1,14 @@
 import * as XLSX from "xlsx/xlsx.mjs";
 import { statementParserLimits } from "../../src/shell/ingestion/contract";
 import { it } from "@effect/vitest";
-import { Data, Effect } from "effect";
+import { Data, Effect, Schema } from "effect";
 import { describe, expect, vi } from "vitest";
 import documentParsingWorker from "./document-parsing-worker";
 
+const isArrayBuffer = Schema.is(Schema.instanceOf(ArrayBuffer));
+
 class FixtureReadFailure extends Data.TaggedError("FixtureReadFailure") {}
+
 const readFixture = (path: string): Effect.Effect<Uint8Array> =>
   Effect.tryPromise({
     try: () => Bun.file(new URL(path, import.meta.url)).arrayBuffer(),
@@ -29,19 +32,24 @@ describe("Document parsing Worker proof", () => {
   it.effect("requires the isolated hosted proof key before reading a statement", () =>
     Effect.gen(function* () {
       const env = { XLSX_PROOF_KEY: "synthetic-proof-key" };
+
       const request = (key: string): Request =>
         new Request("https://document-parser.internal/statement", {
           method: "POST",
           body: "Date,Amount\n2026-01-01,1000",
           headers: { "X-Xlsx-Proof-Key": key },
         });
+
       const refused = yield* Effect.tryPromise(() =>
         documentParsingWorker.fetch(request("wrong"), env)
       );
+
       expect(refused.status).toBe(404);
+
       const accepted = yield* Effect.tryPromise(() =>
         documentParsingWorker.fetch(request(env.XLSX_PROOF_KEY), env)
       );
+
       expect(accepted.status).toBe(200);
       expect(yield* Effect.tryPromise(() => accepted.json())).toMatchObject({
         outcome: "parsed",
@@ -69,16 +77,19 @@ describe("Document parsing Worker proof", () => {
     Effect.gen(function* () {
       const outboundFetch = vi.spyOn(globalThis, "fetch");
       const workbook = XLSX.utils.book_new();
+
       const sheet = XLSX.utils.aoa_to_sheet([
         ["Date", "Amount", "Description"],
         ["2026-01-01", 1000, "Synthetic coffee"],
         ["2026-01-02", 2000, "Synthetic fare"],
       ]);
+
       sheet.B3 = { t: "n", v: 2000, f: "1000*2" };
       sheet["!rows"] = [{}, {}, { hidden: true }];
       XLSX.utils.book_append_sheet(workbook, sheet, "Statement");
       const bytes: unknown = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
-      if (!(bytes instanceof ArrayBuffer)) return yield* Effect.die("Expected XLSX ArrayBuffer");
+
+      if (!isArrayBuffer(bytes)) return yield* Effect.die("Expected XLSX ArrayBuffer");
       const response = yield* Effect.tryPromise(() => parse(new Uint8Array(bytes)));
 
       expect(response.status).toBe(200);
@@ -139,6 +150,7 @@ describe("Document parsing Worker proof", () => {
       let cancelled = false;
       const chunk = new Uint8Array(statementParserLimits.maximumDecodedBytes / 5);
       let emittedChunks = 0;
+
       const body = new ReadableStream<Uint8Array>({
         cancel: (): void => {
           cancelled = true;
@@ -163,8 +175,10 @@ describe("Document parsing Worker proof", () => {
 
   it.effect("interrupts body collection when the request is cancelled in flight", () => {
     const abort = new AbortController();
+
     return Effect.gen(function* () {
       let cancelled = false;
+
       const body = new ReadableStream<Uint8Array>({
         cancel: (): void => {
           cancelled = true;
@@ -174,6 +188,7 @@ describe("Document parsing Worker proof", () => {
           abort.abort();
         },
       });
+
       const response = yield* Effect.tryPromise(() => parse(body, {}, abort.signal));
 
       expect(response.status).toBe(499);

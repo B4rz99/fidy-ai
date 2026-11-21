@@ -12,6 +12,7 @@ const verifyGroups = [
   "cloudflare-infra",
   "mutation",
 ] as const;
+
 type VerifyGroup = (typeof verifyGroups)[number];
 
 type Check = {
@@ -35,12 +36,15 @@ const parseGroup = (): Option.Option<VerifyGroup> => {
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = Option.fromUndefinedOr(args[index]);
+
     if (Option.isNone(argument)) continue;
 
     let value: Option.Option<string> = Option.none();
+
     if (argument.value === "--group") {
       index += 1;
       value = Option.fromUndefinedOr(args[index]);
+
       if (Option.isNone(value)) usageError("--group requires a value");
     } else if (argument.value.startsWith("--group=")) {
       value = Option.some(argument.value.slice("--group=".length));
@@ -49,13 +53,16 @@ const parseGroup = (): Option.Option<VerifyGroup> => {
     }
 
     if (Option.isSome(group)) usageError("--group may be provided only once");
-    const valueText = Option.getOrThrow(value);
+    const valueText = Option.getOrElse(value, () => usageError("--group requires a value"));
+
     const candidate = Option.fromUndefinedOr(
       verifyGroups.find((verifyGroup) => verifyGroup === valueText)
     );
+
     if (Option.isNone(candidate)) {
       usageError(`Unknown verification group: ${valueText}`);
     }
+
     group = candidate;
   }
 
@@ -63,8 +70,10 @@ const parseGroup = (): Option.Option<VerifyGroup> => {
 };
 
 const requestedGroup = parseGroup();
+
 const groupIsSelected = (group: VerifyGroup): boolean =>
   Option.isSome(requestedGroup) ? requestedGroup.value === group : group !== "mutation";
+
 const rootCheck = (group: VerifyGroup, label: string, command: ReadonlyArray<string>): Check => ({
   group,
   label,
@@ -76,6 +85,14 @@ const rootCheck = (group: VerifyGroup, label: string, command: ReadonlyArray<str
 const gitRevision = new TextDecoder()
   .decode(Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: workspaceRoot }).stdout)
   .trim();
+
+const cloudflareShardArguments = (): ReadonlyArray<string> =>
+  Bun.env.CLOUDFLARE_TEST_SHARD === undefined ? [] : [`--shard=${Bun.env.CLOUDFLARE_TEST_SHARD}`];
+
+const cloudflareReportArguments = (report: string): ReadonlyArray<string> =>
+  Bun.env.CLOUDFLARE_TEST_REPORT === "true"
+    ? ["--reporter=default", "--reporter=json", `--outputFile=test-results/${report}.json`]
+    : [];
 
 const checks: Array<Check> = [
   {
@@ -135,16 +152,8 @@ const checks: Array<Check> = [
     "--cwd",
     "apps/server",
     "test:cloudflare",
-    ...(Bun.env.CLOUDFLARE_TEST_SHARD !== undefined
-      ? [`--shard=${Bun.env.CLOUDFLARE_TEST_SHARD}`]
-      : []),
-    ...(Bun.env.CLOUDFLARE_TEST_REPORT === "true"
-      ? [
-          "--reporter=default",
-          "--reporter=json",
-          "--outputFile=test-results/cloudflare-adapters.json",
-        ]
-      : []),
+    ...cloudflareShardArguments(),
+    ...cloudflareReportArguments("cloudflare-adapters"),
   ]),
   rootCheck("cloudflare-infra", "Cloudflare infrastructure tests", [
     "bun",
@@ -152,9 +161,7 @@ const checks: Array<Check> = [
     "--cwd",
     "infra/cloudflare",
     "test",
-    ...(Bun.env.CLOUDFLARE_TEST_REPORT === "true"
-      ? ["--reporter=default", "--reporter=json", "--outputFile=test-results/cloudflare-infra.json"]
-      : []),
+    ...cloudflareReportArguments("cloudflare-infra"),
   ]),
   rootCheck("unit", "WhatsApp provider boundary tests", [
     "bun",
@@ -170,14 +177,14 @@ const checks: Array<Check> = [
     "apps/server",
     "test",
     "--",
-    "src/shell/canonical-catalog",
-    "src/shell/canonical-policy",
-    "src/shell/canonical-operations",
-    "src/shell/operations",
-    "src/shell/public-http",
-    "src/shell/observability/registry.test.ts",
-    "src/shell/partial-input/contract.test.ts",
-    "src/shell/agent/tool-confirmation-model.test.ts",
+    "test/shell/canonical-catalog",
+    "test/shell/canonical-policy",
+    "test/shell/canonical-operations",
+    "test/shell/operations",
+    "test/shell/public-http",
+    "test/shell/observability/registry.test.ts",
+    "test/shell/partial-input/contract.test.ts",
+    "test/shell/agent/tool-confirmation-model.test.ts",
     "--coverage.enabled=false",
   ]),
   rootCheck("unit", "Notification-email interpretation tests", [
@@ -224,20 +231,26 @@ if (Bun.env.PR_TITLE !== undefined && groupIsSelected("static")) {
 }
 
 const selectedChecks = checks.filter(({ group }) => groupIsSelected(group));
+
 if (Option.isSome(requestedGroup)) {
   process.stdout.write(`Verification group: ${requestedGroup.value}\n`);
 }
 
 const verificationStarted = performance.now();
+
 const timings: Array<{ label: string; elapsedMilliseconds: number; exitCode: number }> = [];
+
 const failed: Array<string> = [];
+
 class VerificationProcessFailure extends Data.TaggedError("VerificationProcessFailure")<{
   readonly label: string;
 }> {}
+
 const runCheck = (check: Check): Effect.Effect<void> =>
   Effect.gen(function* () {
     process.stdout.write(`\n=== ${check.label} ===\n`);
     const started = performance.now();
+
     const child = Bun.spawn([...check.command], {
       cwd: check.cwd,
       env: check.env,
@@ -245,25 +258,37 @@ const runCheck = (check: Check): Effect.Effect<void> =>
       stdout: "inherit",
       stderr: "inherit",
     });
+
     const exitCode = yield* Effect.tryPromise({
       try: () => child.exited,
       catch: () => new VerificationProcessFailure({ label: check.label }),
-    }).pipe(Effect.orElseSucceed(() => 1));
+    }).pipe(
+      Effect.tapError((error) =>
+        Effect.sync(() => process.stderr.write(`Verification process failed: ${error.label}\n`))
+      ),
+      Effect.orElseSucceed(() => 1)
+    );
+
     const elapsedMilliseconds = Math.round(performance.now() - started);
     timings.push({ label: check.label, elapsedMilliseconds, exitCode });
     process.stdout.write(`Timing: ${check.label}: ${elapsedMilliseconds}ms\n`);
+
     if (exitCode !== 0) failed.push(check.label);
   });
+
 await Effect.runPromise(
   Effect.forEach(verifyGroups, (group) => {
     const groupChecks = selectedChecks.filter((check) => check.group === group);
+
     if (group === "static") {
       const bootstrap = groupChecks.filter(
         (check) =>
           check.label === "Install dependency graph analyzer" ||
           check.label === "Lint rule regressions"
       );
+
       const validation = groupChecks.filter((check) => !bootstrap.includes(check));
+
       return Effect.gen(function* () {
         yield* Effect.forEach(bootstrap, (check) => runCheck(check), { discard: true });
         yield* Effect.forEach(validation, (check) => runCheck(check), {
@@ -272,14 +297,18 @@ await Effect.runPromise(
         });
       });
     }
+
     return Effect.forEach(groupChecks, (check) => runCheck(check), {
       concurrency: group === "unit" ? 2 : 1,
       discard: true,
     });
   })
 );
+
 const elapsedMilliseconds = Math.round(performance.now() - verificationStarted);
+
 process.stdout.write(`Verification elapsed: ${elapsedMilliseconds}ms (excludes job setup)\n`);
+
 if (Bun.env.VERIFY_TIMING_REPORT !== undefined) {
   await Bun.write(
     Bun.env.VERIFY_TIMING_REPORT,
@@ -307,4 +336,5 @@ if (failed.length > 0) {
   );
   process.exit(1);
 }
+
 process.stdout.write("\nRepository verification passed.\n");

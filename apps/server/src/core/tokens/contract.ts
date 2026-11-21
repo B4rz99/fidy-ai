@@ -1,4 +1,12 @@
-import { type DateTime, Duration, Effect, type Option, Schema, SchemaTransformation } from "effect";
+import {
+  Data,
+  type DateTime,
+  Duration,
+  Effect,
+  Option,
+  Schema,
+  SchemaTransformation,
+} from "effect";
 import { UserId } from "~/core/identity/contract";
 import { CanonicalCapability } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
@@ -6,14 +14,17 @@ import { UtcTimestamp } from "~/core/_shared/time";
 export const PATId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("PATId"))
   .annotate({ identifier: "PATId" });
+
 export type PATId = typeof PATId.Type;
 
 export const PATScope = CanonicalCapability.annotate({
   identifier: "PATScope",
 });
+
 export type PATScope = typeof PATScope.Type;
 
 export const PATScopes = Schema.UniqueArray(PATScope).check(Schema.isNonEmpty());
+
 export type PATScopes = typeof PATScopes.Type;
 
 export const recipientLabelLimit = 80;
@@ -34,6 +45,7 @@ export const PATRecipientLabel = Schema.NonEmptyString.check(
 )
   .pipe(Schema.brand("PATRecipientLabel"))
   .annotate({ identifier: "PATRecipientLabel" });
+
 export type PATRecipientLabel = typeof PATRecipientLabel.Type;
 
 export const PATRecipientLabelInput = Schema.String.annotate({
@@ -49,11 +61,15 @@ export const PATRecipientLabelInput = Schema.String.annotate({
     })
   )
 );
+
 export type PATRecipientLabelInput = typeof PATRecipientLabelInput.Type;
 
 const oneWeekInDays = 7;
+
 const oneMonthInDays = 30;
+
 const threeMonthsInDays = 90;
+
 const oneYearInDays = 365;
 
 export const patLifetimeDayOptions = [
@@ -68,6 +84,7 @@ export const defaultPATLifetimeDays = threeMonthsInDays;
 export const PATLifetimeDays = Schema.Literals(patLifetimeDayOptions).annotate({
   identifier: "PATLifetimeDays",
 });
+
 export type PATLifetimeDays = typeof PATLifetimeDays.Type;
 
 export const ManualPATGrantInput = Schema.Struct({
@@ -78,6 +95,7 @@ export const ManualPATGrantInput = Schema.Struct({
   ),
   reviewExpiresAt: UtcTimestamp,
 }).annotate({ identifier: "ManualPATGrantInput" });
+
 export type ManualPATGrantInput = typeof ManualPATGrantInput.Type;
 
 export const ManualPATRequestId = Schema.String.check(Schema.isUUID(4))
@@ -85,19 +103,24 @@ export const ManualPATRequestId = Schema.String.check(Schema.isUUID(4))
   .annotate({
     identifier: "ManualPATRequestId",
   });
+
 export type ManualPATRequestId = typeof ManualPATRequestId.Type;
 
 export const CreateManualPATPayload = Schema.Struct({
   requestId: ManualPATRequestId,
   grant: ManualPATGrantInput,
 }).annotate({ identifier: "CreateManualPATPayload" });
+
 export type CreateManualPATPayload = typeof CreateManualPATPayload.Type;
 
 export const patBearerPrefix = "fin_";
 
 export const patShortIdLength = 8;
+
 const patShortIdPattern = `[a-z0-9]{${patShortIdLength}}`;
+
 const bearerSecretPattern = "[A-Za-z0-9_-]{32,}";
+
 export const TokenBearerFormat = `${patBearerPrefix}<short-id>_<secret>`;
 
 export const bearerSecretBytes = 32;
@@ -107,6 +130,7 @@ export const TokenShortId = Schema.String.check(
 )
   .pipe(Schema.brand("TokenShortId"))
   .annotate({ identifier: "TokenShortId" });
+
 export type TokenShortId = typeof TokenShortId.Type;
 
 export const TokenSecret = Schema.String.check(
@@ -114,6 +138,7 @@ export const TokenSecret = Schema.String.check(
 )
   .pipe(Schema.brand("TokenSecret"))
   .annotate({ identifier: "TokenSecret" });
+
 export type TokenSecret = typeof TokenSecret.Type;
 
 export const TokenBearer = Schema.String.check(
@@ -123,41 +148,46 @@ export const TokenBearer = Schema.String.check(
 )
   .pipe(Schema.brand("TokenBearer"))
   .annotate({ identifier: "TokenBearer" });
+
 export type TokenBearer = typeof TokenBearer.Type;
 
 type TokenInstant = Readonly<{ epochMilliseconds: number }>;
-type OptionalTokenInstant =
-  | Readonly<{ _tag: "None" }>
-  | Readonly<{ _tag: "Some"; value: TokenInstant }>;
 
 export const PATLifecycleCheck = Schema.makeFilter<
   Readonly<{
     lifetimeDays: PATLifetimeDays;
-    lastUsedAt: OptionalTokenInstant;
+    lastUsedAt: Option.Option<TokenInstant>;
     expiresAt: TokenInstant;
-    revokedAt: OptionalTokenInstant;
+    revokedAt: Option.Option<TokenInstant>;
     createdAt: TokenInstant;
   }>
 >((token) => {
   const createdAt = token.createdAt.epochMilliseconds;
   const expiresAt = token.expiresAt.epochMilliseconds;
   const expectedExpiresAt = createdAt + Duration.toMillis(Duration.days(token.lifetimeDays));
+
   if (expiresAt <= createdAt || expiresAt > expectedExpiresAt) {
     return {
       path: ["expiresAt"],
       issue: "PAT expiration must be positive and no later than its fixed lifetime after creation",
     };
   }
-  const lastUsedAt =
-    token.lastUsedAt._tag === "Some" ? token.lastUsedAt.value.epochMilliseconds : createdAt;
+
+  const lastUsedAt = Option.match(token.lastUsedAt, {
+    onNone: () => createdAt,
+    onSome: (instant) => instant.epochMilliseconds,
+  });
+
   if (lastUsedAt < createdAt || lastUsedAt >= expiresAt) {
     return {
       path: ["lastUsedAt"],
       issue: "PAT use must be at or after creation and before fixed expiration",
     };
   }
-  if (token.revokedAt._tag === "Some") {
+
+  if (Option.isSome(token.revokedAt)) {
     const revokedAt = token.revokedAt.value.epochMilliseconds;
+
     if (revokedAt < lastUsedAt) {
       return {
         path: ["revokedAt"],
@@ -165,6 +195,7 @@ export const PATLifecycleCheck = Schema.makeFilter<
       };
     }
   }
+
   return undefined;
 });
 
@@ -185,6 +216,7 @@ export const PAT = Schema.TaggedStruct("PAT", {
 })
   .check(PATLifecycleCheck)
   .annotate({ identifier: "PAT" });
+
 export type PAT = typeof PAT.Type;
 
 export const ActivePATMetadata = Schema.Struct({
@@ -195,16 +227,19 @@ export const ActivePATMetadata = Schema.Struct({
   lastUsedAt: Schema.OptionFromNullOr(UtcTimestamp),
   expiresAt: UtcTimestamp,
 }).annotate({ identifier: "ActivePATMetadata" });
+
 export type ActivePATMetadata = typeof ActivePATMetadata.Type;
 
 export const ActivePATList = Schema.Struct({
   pats: Schema.Array(ActivePATMetadata),
 }).annotate({ identifier: "ActivePATList" });
+
 export type ActivePATList = typeof ActivePATList.Type;
 
 export const RevokedPAT = Schema.Struct({ shortId: TokenShortId }).annotate({
   identifier: "RevokedPAT",
 });
+
 export type RevokedPAT = typeof RevokedPAT.Type;
 
 export const RevokedPATCount = Schema.Struct({
@@ -212,15 +247,18 @@ export const RevokedPATCount = Schema.Struct({
 }).annotate({
   identifier: "RevokedPATCount",
 });
+
 export type RevokedPATCount = typeof RevokedPATCount.Type;
 
 export const IssuedPAT = Schema.Struct({
   pat: PAT,
   bearer: Schema.RedactedFromValue(TokenBearer),
 }).annotate({ identifier: "IssuedPAT" });
+
 export type IssuedPAT = typeof IssuedPAT.Type;
 
 export const TokenGrant = PAT;
+
 export type TokenGrant = PAT;
 
 export const ResolvedToken = Schema.Struct({
@@ -229,28 +267,34 @@ export const ResolvedToken = Schema.Struct({
   scopes: PATScopes,
   lastUsedAt: UtcTimestamp,
 });
+
 export type ResolvedToken = typeof ResolvedToken.Type;
 
 export const PATPairingId = Schema.String.check(Schema.isUUID(4))
   .pipe(Schema.brand("PATPairingId"))
   .annotate({ identifier: "PATPairingId" });
+
 export type PATPairingId = typeof PATPairingId.Type;
 
 export const PATPairingDeviceCode = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/u))
   .pipe(Schema.brand("PATPairingDeviceCode"))
   .annotate({ identifier: "PATPairingDeviceCode" });
+
 export type PATPairingDeviceCode = typeof PATPairingDeviceCode.Type;
 
 const publicCodePattern = /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/u;
+
 const publicCodeSymbolsPattern = /^[BCDFGHJKLMNPQRSTVWXZ]{8}$/u;
 
 export const PATPairingPublicCode = Schema.String.check(Schema.isPattern(publicCodePattern))
   .pipe(Schema.brand("PATPairingPublicCode"))
   .annotate({ identifier: "PATPairingPublicCode" });
+
 export type PATPairingPublicCode = typeof PATPairingPublicCode.Type;
 
 const normalizePublicCode = (input: string): string => {
   const upper = input.replace(/^[\t\n\r ]+|[\t\n\r ]+$/gu, "").toUpperCase();
+
   return publicCodeSymbolsPattern.test(upper) ? `${upper.slice(0, 4)}-${upper.slice(4)}` : upper;
 };
 
@@ -275,6 +319,7 @@ export const StartPATPairingPayload = Schema.Struct({
     Schema.withDecodingDefaultKey(Effect.succeed(defaultPATLifetimeDays))
   ),
 }).annotate({ identifier: "StartPATPairingPayload" });
+
 export type StartPATPairingPayload = typeof StartPATPairingPayload.Type;
 
 export const StartedPATPairing = Schema.Struct({
@@ -284,6 +329,7 @@ export const StartedPATPairing = Schema.Struct({
   expiresAt: UtcTimestamp,
   pollingIntervalSeconds: Schema.Literal(patPairingPollingIntervalSeconds),
 }).annotate({ identifier: "StartedPATPairing" });
+
 export type StartedPATPairing = typeof StartedPATPairing.Type;
 
 export const PendingPATPairingClaim = Schema.Struct({
@@ -293,6 +339,7 @@ export const PendingPATPairingClaim = Schema.Struct({
     Schema.isGreaterThanOrEqualTo(patPairingPollingIntervalSeconds)
   ),
 }).annotate({ identifier: "PendingPATPairingClaim", httpApiStatus: 202 });
+
 export type PendingPATPairingClaim = typeof PendingPATPairingClaim.Type;
 
 export const ClaimedPATPairing = IssuedPAT.annotate({
@@ -307,11 +354,13 @@ export const PATPairingReview = Schema.Struct({
   lifetimeDays: PATLifetimeDays,
   claimBy: UtcTimestamp,
 }).annotate({ identifier: "PATPairingReview" });
+
 export type PATPairingReview = typeof PATPairingReview.Type;
 
 export const ApprovePATPairingPayload = Schema.Struct({
   pairingId: PATPairingId,
 }).annotate({ identifier: "ApprovePATPairingPayload" });
+
 export type ApprovePATPairingPayload = typeof ApprovePATPairingPayload.Type;
 
 export const ApprovedPATPairing = Schema.Struct({
@@ -319,6 +368,7 @@ export const ApprovedPATPairing = Schema.Struct({
   patExpiresAt: UtcTimestamp,
   claimBy: UtcTimestamp,
 }).annotate({ identifier: "ApprovedPATPairing" });
+
 export type ApprovedPATPairing = typeof ApprovedPATPairing.Type;
 
 export const PATPairingLifecycle = Schema.Literals([
@@ -328,6 +378,7 @@ export const PATPairingLifecycle = Schema.Literals([
   "expired_unapproved",
   "revoked_unclaimed",
 ]);
+
 export type PATPairingLifecycle = typeof PATPairingLifecycle.Type;
 
 export type PATPairingClaimInput = Readonly<{
@@ -340,25 +391,21 @@ export type PATPairingClaimInput = Readonly<{
   attemptedAt: DateTime.Utc;
 }>;
 
-export type PATPairingClaimDecision =
-  | Readonly<{
-      _tag: "Pending";
-      acceptedAt: DateTime.Utc;
-      minimumPollIntervalSeconds: number;
-    }>
-  | Readonly<{ _tag: "Claim" }>
-  | Readonly<{ _tag: "WrongProof"; wrongProofAttempts: number }>
-  | Readonly<{
-      _tag: "SlowDown";
-      minimumPollIntervalSeconds: number;
-      retryAfterSeconds: number;
-    }>
-  | Readonly<{ _tag: "ExpireUnapproved" }>
-  | Readonly<{ _tag: "RevokeUnclaimed" }>
-  | Readonly<{ _tag: "Invalid" }>;
+export type PATPairingClaimDecision = Data.TaggedEnum<{
+  Pending: { readonly acceptedAt: DateTime.Utc; readonly minimumPollIntervalSeconds: number };
+  Claim: {};
+  WrongProof: { readonly wrongProofAttempts: number };
+  SlowDown: { readonly minimumPollIntervalSeconds: number; readonly retryAfterSeconds: number };
+  ExpireUnapproved: {};
+  RevokeUnclaimed: {};
+  Invalid: {};
+}>;
+
+export const PATPairingClaimDecision = Data.taggedEnum<PATPairingClaimDecision>();
 
 export const PATActivityMetadata = Schema.Struct({
   ...ActivePATMetadata.fields,
   revokedAt: Schema.OptionFromNullOr(UtcTimestamp),
 }).annotate({ identifier: "PATActivityMetadata" });
+
 export type PATActivityMetadata = typeof PATActivityMetadata.Type;

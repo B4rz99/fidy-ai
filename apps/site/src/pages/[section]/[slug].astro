@@ -72,8 +72,11 @@ export const getStaticPaths = ((): FeaturePage[] => [
     },
   },
 ]) satisfies GetStaticPaths;
+
 const { title, description, Detail } = Astro.props;
+
 const { slug } = Astro.params;
+
 const featureNames = new Map([
   ["transacciones", "transactions"],
   ["presupuestos", "budgets"],
@@ -82,6 +85,7 @@ const featureNames = new Map([
   ["insights", "insights"],
   ["agentes", "agents"],
 ]);
+
 const features = [
   ["transacciones", "Transacciones"],
   ["presupuestos", "Presupuestos"],
@@ -101,7 +105,7 @@ const features = [
       ← Todas las funciones
     </a>
     <div class="navend">
-      <LaunchButton dark={false} arrow={false} />
+      <LaunchButton surface="light" mark="none" />
       <ThemeToggle />
     </div>
   </header>
@@ -127,7 +131,7 @@ const features = [
         Con la ayuda que tú eliges.
       </h2>
       <p>Conversa con Fidy, explora la web o trabaja con tu propio agente.</p>
-      <LaunchButton dark arrow />
+      <LaunchButton surface="dark" mark="arrow" />
     </section>
     <Footer />
   </main>

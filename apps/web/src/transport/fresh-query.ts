@@ -1,10 +1,13 @@
 import { queryLifetime } from "./query-lifetime";
-import { Deferred, Effect, Exit, Option } from "effect";
+import { Deferred, Effect, Exit, Option, Predicate } from "effect";
 import { type AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 
 type Query<A, E> = Atom.Atom<AsyncResult.AsyncResult<A, E>>;
+
 type Request = { claimed: boolean; retired: boolean; completion: Deferred.Deferred<boolean> };
+
 type FreshRead = (registry: AtomRegistry.AtomRegistry) => Effect.Effect<boolean>;
+
 const freshReads = new WeakMap<object, FreshRead>();
 
 type FreshOptions<R, ER, A, E> = Readonly<{
@@ -26,27 +29,34 @@ const observeFreshRead =
   (registry) =>
     Effect.gen(function* () {
       const lifetime = queryLifetime(registry);
+
       if (!lifetime.active()) return false;
       const completion = yield* Deferred.make<boolean>();
+
       const releaseLifetime = lifetime.observe(() =>
         Deferred.doneUnsafe(completion, Effect.succeed(false))
       );
+
       const previous = registry.get(requested);
+
       if (Option.isSome(previous)) {
         Deferred.doneUnsafe(previous.value.completion, Effect.succeed(false));
       }
+
       const request = { claimed: false, retired: false, completion };
       registry.set(requested, Option.some(request));
       const unmount = registry.mount(query);
+
       const unsubscribe = registry.subscribe(
         runtime,
         (result) => {
-          if (result._tag === "Failure" && !result.waiting) {
+          if (Predicate.isTagged(result, "Failure") && !result.waiting) {
             Deferred.doneUnsafe(completion, Effect.succeed(false));
           }
         },
         { immediate: true }
       );
+
       return yield* Deferred.await(completion).pipe(
         Effect.flatMap((success) =>
           success
@@ -69,11 +79,10 @@ const observeFreshRead =
       );
     });
 
-export const makeFreshQuery = <R, ER, A, E>(
-  options: FreshOptions<R, ER, A, E>
-): Query<A, E | ER> => {
+export const freshQuery = <R, ER, A, E>(options: FreshOptions<R, ER, A, E>): Query<A, E | ER> => {
   const { runtime, load } = options;
   const requested = Atom.make<Option.Option<Request>>(Option.none());
+
   const source = runtime.atom((get) => {
     queryLifetime(get.registry);
     const request = get(requested);
@@ -83,9 +92,11 @@ export const makeFreshQuery = <R, ER, A, E>(
         Deferred.doneUnsafe(request.value.completion, Effect.succeed(false));
       }
     });
+
     return Effect.suspend(() => {
       if (Option.isNone(request) || request.value.claimed) return load;
       request.value.claimed = true;
+
       return load.pipe(
         Effect.onExit((result) =>
           Deferred.succeed(request.value.completion, Exit.isSuccess(result)).pipe(Effect.asVoid)
@@ -93,8 +104,10 @@ export const makeFreshQuery = <R, ER, A, E>(
       );
     });
   });
+
   const query = "decorate" in options ? options.decorate(source) : source;
   freshReads.set(query, observeFreshRead({ runtime, query, requested }));
+
   return query;
 };
 
@@ -111,12 +124,14 @@ export const forwardFreshQuery = <A, E>(
   freshReads.set(query, (registry) =>
     Effect.suspend(() => {
       if ("before" in options) options.before(registry);
-      const currentSources = typeof sources === "function" ? sources(registry) : sources;
+      const currentSources = Predicate.isFunction(sources) ? sources(registry) : sources;
+
       return Effect.forEach(currentSources, (query) => readFreshQuery({ registry, query })).pipe(
         Effect.map((results) => results.every(Boolean))
       );
     })
   );
+
   return query;
 };
 

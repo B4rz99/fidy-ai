@@ -16,9 +16,11 @@ const readWompiScope = Effect.fn(function* (runtime: Miniflare, reference: strin
   const { FIXTURE_PROVIDER: signer } = yield* native(() =>
     runtime.getBindings<{ FIXTURE_PROVIDER: Fetcher }>("core")
   );
+
   const token = yield* native(() =>
     signer.fetch("https://fixture.invalid/erasure-assertion").then((res) => res.text())
   );
+
   return yield* native(() =>
     runtime.dispatchFetch("https://api.fidyapp.com/internal/titular-erasure", {
       method: "POST",
@@ -33,6 +35,7 @@ const readWompiScope = Effect.fn(function* (runtime: Miniflare, reference: strin
     })
   );
 });
+
 const privateCaseAction = Effect.fnUntraced(function* (
   runtime: Miniflare,
   reference: string,
@@ -41,9 +44,11 @@ const privateCaseAction = Effect.fnUntraced(function* (
   const { FIXTURE_PROVIDER: signer } = yield* native(() =>
     runtime.getBindings<{ FIXTURE_PROVIDER: Fetcher }>("core")
   );
+
   const token = yield* native(() =>
     signer.fetch("https://fixture.invalid/erasure-assertion").then((res) => res.text())
   );
+
   return yield* native(() =>
     runtime.dispatchFetch("https://api.fidyapp.com/internal/titular-erasure", {
       method: "POST",
@@ -52,10 +57,12 @@ const privateCaseAction = Effect.fnUntraced(function* (
     })
   );
 });
+
 const custodyJourney = Effect.fn(function* () {
   const runtime = yield* (yield* nativeCustodyPlatform)(undefined, [], {
     ERASURE_SUPPORT_AUDIENCE: "fixture-erasure",
   });
+
   const old = yield* seed(runtime, alice);
   yield* seed(runtime, bob);
   const mail = "22520000-0000-4000-8000-000000000022";
@@ -84,9 +91,11 @@ const custodyJourney = Effect.fn(function* () {
       "original-reservation"
     )
   );
+
   const directory = (yield* native(() =>
     runtime.getDurableObjectNamespace("DIRECTORY", "core")
   )).getByName(directoryName);
+
   const oldRoute = {
     kind: "wompi",
     endpoint: "sandbox",
@@ -95,6 +104,7 @@ const custodyJourney = Effect.fn(function* () {
     operationId: "22520000-0000-4000-8000-000000000099",
     family: "billing",
   };
+
   const reserve = (now = old.now): ReturnType<typeof history> =>
     native(() =>
       directory.fetch(externalReserveUrl, {
@@ -106,20 +116,26 @@ const custodyJourney = Effect.fn(function* () {
         body: JSON.stringify(oldRoute),
       })
     );
+
   expect((yield* reserve()).status).toBe(204);
   const driver = yield* caseDriver(runtime);
   const erased = yield* admitPurge(runtime);
+
   const { reference } = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ reference: Schema.String })
   )(yield* native(() => erased.json()));
-  for (let step = 0; step < 8; step++) {
-    if ((yield* driver.step()) === "ExternalPending") break;
-  }
+
+  yield* driver
+    .step()
+    .pipe(Effect.repeat({ until: (phase) => phase === "ExternalPending", times: 7 }));
+
   const owner = (yield* native(() =>
     runtime.getDurableObjectNamespace("ERASURE", "core")
   )).getByName(erasureRegistryName);
-  const submit = Effect.fn(function* (path: string, data: object, instant?: number) {
+
+  const submit = Effect.fn(function* (path: string, data: Submission, instant?: number) {
     const now = instant ?? (yield* Clock.currentTimeMillis);
+
     return yield* native(() =>
       owner.fetch("https://coordinator.internal/erasure-" + path, {
         method: "POST",
@@ -138,6 +154,7 @@ const custodyJourney = Effect.fn(function* () {
       })
     );
   });
+
   const tick = Effect.fn(function* (instant: number) {
     yield* native(() => driver.storage.exec("UPDATE erasure_cases SET next_check_ms=1"));
     yield* native(() =>
@@ -147,23 +164,28 @@ const custodyJourney = Effect.fn(function* () {
       })
     );
   });
+
   const proof = Effect.fn(function* (
     custodian: string,
     outcome: readonly [string, number],
     now: number
   ) {
     const [status, suffix] = outcome;
+
     const value = {
       reference,
       custodian,
       outcome: { status },
       evidenceRef: "22520000-0000-4000-8000-" + String(suffix).padStart(12, "0"),
     };
+
     return (yield* submit("custody-evidence", { evidence: value }, now)).status;
   });
+
   const maintenance = (yield* native(() =>
     runtime.getDurableObjectNamespace("MAINTENANCE", "core")
   )).getByName(maintenanceName);
+
   const retire = (user: string): ReturnType<typeof history> =>
     native(() =>
       maintenance.fetch(retireLifetimeUrl, {
@@ -171,6 +193,7 @@ const custodyJourney = Effect.fn(function* () {
         headers: { "fidy-user-id": user, "fidy-erasure-reference": reference },
       })
     );
+
   return {
     runtime,
     old,
@@ -187,6 +210,7 @@ const custodyJourney = Effect.fn(function* () {
     reserve,
   };
 });
+
 const verifyRelease = Effect.fn(function* (
   journey: Effect.Success<ReturnType<typeof custodyJourney>>,
   boundary: number
@@ -204,6 +228,7 @@ const verifyRelease = Effect.fn(function* (
     reserve,
     directory,
   } = journey;
+
   yield* native(() =>
     driver.storage.exec(
       "CREATE TRIGGER lose_release BEFORE UPDATE OF identity_released ON erasure_cases BEGIN SELECT RAISE(ABORT,'test lost release reply'); END"
@@ -214,12 +239,14 @@ const verifyRelease = Effect.fn(function* (
   expect((yield* browserClient.post("/web/providers/google/complete", fresh.proof)).status).toBe(
     200
   );
+
   const newRoute = yield* native(() =>
     old.directory.exec(
       "SELECT user_id FROM provider_routes WHERE issuer='https://accounts.google.com' AND subject=?",
       testSubject
     )
   );
+
   const newUser = yield* Schema.decodeUnknownEffect(Schema.String)(newRoute[0]?.user_id);
   expect(newUser).not.toBe(alice.user);
   yield* native(() => driver.storage.exec("DROP TRIGGER lose_release"));
@@ -243,17 +270,21 @@ const verifyRelease = Effect.fn(function* (
   expect((yield* submit("receipt", {}, limit)).status).toBe(409);
   expect((yield* retire(alice.user)).ok).toBe(false);
   expect((yield* reserve(limit)).ok).toBe(false);
+
   const callback = yield* native(() =>
     directory.fetch(externalLookupUrl, { method: "POST", body: JSON.stringify(oldRoute) })
   );
+
   expect(callback.status).toBe(404);
   expect((yield* browserClient.post("/web/pairings/redeem", fresh.proof)).status).toBe(200);
   expect(yield* receivedStatus(history(runtime, bob))).toBe(200);
   yield* native(() => runtime.unsafeEvictDurableObject("core", "UserStore", { name: alice.user }));
   expect(yield* receivedStatus(history(runtime, alice))).toBe(401);
+
   const users = (yield* native(() =>
     runtime.getDurableObjectNamespace("USER_STORE", "core")
   )).getByName(alice.user);
+
   const stale = yield* native(() =>
     users.fetch("https://user.invalid/bootstrap/complete", {
       method: "POST",
@@ -264,33 +295,57 @@ const verifyRelease = Effect.fn(function* (
       }),
     })
   );
+
   expect(stale.ok).toBe(false);
   expect(yield* old.exec("SELECT id FROM users")).toEqual([]);
 });
+
+const caseActionStatus = Effect.fn(function* (
+  runtime: Miniflare,
+  reference: string,
+  [action, status]: readonly [Parameters<typeof privateCaseAction>[2], number]
+) {
+  expect((yield* privateCaseAction(runtime, reference, action)).status).toBe(status);
+});
+
+type Submission =
+  | Readonly<{}>
+  | Readonly<{ evidence: Schema.Json }>
+  | Readonly<{ userId: string }>
+  | Readonly<{ custodian: string; after: number }>
+  | Readonly<{ custodian: string; after: number; deadlineMs: number }>;
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("an unresolved custodian remains pending beyond the platform recovery horizon", () =>
     Effect.gen(function* () {
       const { submit, reference, tick, runtime } = yield* custodyJourney();
-      for (const [action, status] of [
-        ["Receipt", 200],
-        ["Continue", 202],
-        ["Receipt", 200],
-      ] as const) {
-        expect((yield* privateCaseAction(runtime, reference, action)).status).toBe(status);
-      }
+
+      yield* Effect.forEach(
+        [
+          ["Receipt", 200],
+          ["Continue", 202],
+          ["Receipt", 200],
+        ] as const,
+        (expected) => caseActionStatus(runtime, reference, expected),
+        { discard: true }
+      );
+
       const unresolved = {
         reference,
         custodian: "Resend",
         evidenceRef: "22520000-0000-4000-8000-000000000023",
         outcome: { status: "Unresolved", reason: "retention-conflict" },
       };
+
       expect((yield* submit("custody-evidence", { evidence: unresolved })).status).toBe(202);
       const later = (yield* Clock.currentTimeMillis) + 2_592_000_001;
       yield* tick(later);
       const pending = yield* submit("receipt", {}, later);
+
       const receipt = yield* Schema.decodeUnknownEffect(ErasureOperatorReceipt)(
         yield* native(() => pending.json())
       );
+
       expect(receipt.state).toBe("ExternalPending");
       expect(receipt.custodians).toContainEqual({
         custodian: "Resend",
@@ -305,6 +360,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         ERASURE_SUPPORT_AUDIENCE: "fixture-erasure",
         SAMPLE_REVIEW_AUDIENCE: "fixture-erasure",
       });
+
       const response = yield* readWompiScope(runtime, "22520000-0000-4000-8000-000000000001");
       expect(response.status).toBe(401);
     })
@@ -318,12 +374,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       expect(
         (yield* submit("custody-scope", { custodian: "Wompi", after: 0, deadlineMs: 1 })).status
       ).toBe(409);
+
       const evidence = {
         reference,
         custodian: "Kapso",
         evidenceRef: "22520000-0000-4000-8000-000000000001",
         outcome: { status: "Accepted" },
       };
+
       expect((yield* submit("custody-evidence", { evidence })).status).toBe(202);
       expect((yield* submit("custody-evidence", { evidence })).status).toBe(202);
       expect(
@@ -332,9 +390,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         })).status
       ).toBe(409);
       const receipt = yield* submit("receipt", {});
+
       const current = yield* Schema.decodeUnknownEffect(ErasureOperatorReceipt)(
         yield* native(() => receipt.json())
       );
+
       expect(current.custodians).toContainEqual({ custodian: "Kapso", status: "Accepted" });
       expect(current.state).toBe("ExternalPending");
       const firstSignup = yield* browserClient.verified(testSubject);
@@ -360,11 +420,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       expect(yield* proof("Resend", ["Verified", 6], before)).toBe(202);
       expect(yield* proof("Wompi", ["Verified", 7], before)).toBe(202);
       expect((yield* submit("custody-scope", { custodian: "Wompi", after: 0 })).ok).toBe(false);
-      for (let step = 0; step < 8; step++) yield* tick(before);
+
+      yield* tick(before).pipe(Effect.repeat({ times: 7 }));
       const updated = yield* submit("receipt", {}, before);
+
       const cleaned = yield* Schema.decodeUnknownEffect(ErasureOperatorReceipt)(
         yield* native(() => updated.json())
       );
+
       expect(cleaned.completed).toContain("billing");
       expect(cleaned.completed).not.toContain("identity");
       expect(cleaned.recoveryUntilMs).toBeGreaterThan(current.recoveryUntilMs ?? 0);

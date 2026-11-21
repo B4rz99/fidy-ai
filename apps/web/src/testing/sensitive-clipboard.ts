@@ -9,10 +9,12 @@ export type SensitiveClipboardSpy = Readonly<{
 
 export const makeSensitiveClipboardSpy = (copySucceeded = true): SensitiveClipboardSpy => {
   const release = vi.fn();
+
   return {
     reveal: vi.fn(),
     copy: vi.fn((_value: string, onCopied?: () => void) => {
       if (copySucceeded) onCopied?.();
+
       return { release };
     }),
     release,

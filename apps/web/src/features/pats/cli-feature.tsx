@@ -2,7 +2,7 @@ import { PendingRead } from "@/ui/components/pending-read";
 
 import { useAtomValue } from "@effect/atom-react";
 import { Link, useRouter, useSearch } from "@tanstack/react-router";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Predicate, Schema } from "effect";
 import { type JSX, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { PATPairingPublicCode, type PATPairingReview } from "@/transport/client";
@@ -20,12 +20,14 @@ const PairingTask = ({
 }>): JSX.Element => {
   const apiClient = useRouter().options.context.apiClient;
   const { state, actions, lifecycleRef } = usePATPairing({ apiClient, initialReview, publicCode });
+
   return (
     <section ref={lifecycleRef}>
       <PATPairingView state={state} actions={actions} />
     </section>
   );
 };
+
 const CLIApproval = ({
   code,
 }: Readonly<{ code: Option.Option<PATPairingPublicCode> }>): JSX.Element =>
@@ -34,12 +36,14 @@ const CLIApproval = ({
   ) : (
     <PairingTask initialReview={Option.none()} publicCode={Option.none()} />
   );
+
 const PreselectedApproval = ({
   code,
 }: Readonly<{
   code: PATPairingPublicCode;
 }>): JSX.Element => {
   const client = useRouter().options.context.apiClient;
+
   const [request] = useState(() =>
     client.runtime.atom(
       client.pipe(
@@ -47,9 +51,12 @@ const PreselectedApproval = ({
       )
     )
   );
+
   const result = useAtomValue(request).pipe(presentCanonicalQuery);
-  if (result._tag === "Initial") return <PendingRead label="Cargando solicitud" />;
-  if (result._tag === "Failure") {
+
+  if (Predicate.isTagged(result, "Initial")) return <PendingRead label="Cargando solicitud" />;
+
+  if (Predicate.isTagged(result, "Failure")) {
     return (
       <div className="flex flex-col gap-4">
         <p role="alert">
@@ -62,6 +69,7 @@ const PreselectedApproval = ({
       </div>
     );
   }
+
   return (
     <PairingTask
       key={code}
@@ -70,10 +78,12 @@ const PreselectedApproval = ({
     />
   );
 };
+
 export const CLIConnectionFeature = (): JSX.Element => {
   const search = useSearch({ strict: false });
   const { sessionBinding } = useRouter().options.context;
   const code = Schema.decodeUnknownOption(PATPairingPublicCode)(search.cliCode);
+
   return (
     <main className="signed-in-theme flex min-h-svh justify-center bg-background px-5 py-10">
       <section className="flex w-full max-w-xl flex-col gap-6">

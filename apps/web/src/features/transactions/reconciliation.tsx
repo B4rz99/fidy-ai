@@ -16,6 +16,7 @@ import {
 } from "./presentation";
 
 type Recovery = CanonicalSuccess<"transactions.getTransaction">["data"];
+
 type Command =
   | Readonly<{
       kind: "unlink";
@@ -30,17 +31,22 @@ type Command =
       missing: () => void;
       failed: () => void;
     }>;
+
 const missingFailure = (error: unknown): boolean => Predicate.isTagged(error, "NotFound");
+
 const refusedFailure = (error: unknown): boolean =>
   Predicate.isTagged(error, "ValidationFailed") ||
   missingFailure(error) ||
   Predicate.isTagged(error, "ResourceLimited");
+
 const projectionKeys = ["budgets", "dashboard", "recurring-plans"];
+
 const makeCommand = (apiClient: FidyClient): Atom.AtomResultFn<Command, void, never> =>
   apiClient.runtime.fn<Command>()(
     (command) =>
       Effect.gen(function* () {
         const client = yield* apiClient;
+
         if (command.kind === "unlink") {
           const response = yield* client.transactions.unlinkTransactions({
             payload: {
@@ -48,12 +54,14 @@ const makeCommand = (apiClient: FidyClient): Atom.AtomResultFn<Command, void, ne
               secondTransactionId: command.pair.secondTransaction.id,
             },
           });
+
           yield* Reactivity.invalidate(projectionKeys);
           command.completed(response.data);
         } else {
           const response = yield* client.transactions.getTransaction({
             params: { id: command.id },
           });
+
           yield* Reactivity.invalidate(projectionKeys);
           command.completed(response.data);
         }
@@ -61,12 +69,16 @@ const makeCommand = (apiClient: FidyClient): Atom.AtomResultFn<Command, void, ne
         Effect.catchCause((cause) =>
           Effect.gen(function* () {
             const failure = Cause.findErrorOption(cause);
+
             if (command.kind === "recover") {
               if (Option.exists(failure, missingFailure)) command.missing();
               else command.failed();
+
               return;
             }
+
             const refused = Option.exists(failure, refusedFailure);
+
             if (!refused) yield* Reactivity.invalidate(projectionKeys);
             command.failed(refused ? "rejected" : "uncertain");
           })
@@ -88,18 +100,22 @@ type Props = Readonly<{
   onDelete: (transaction: Transaction) => void;
   selectedId: Transaction["id"];
 }>;
+
 const captureLabels: Readonly<Record<CaptureSources[number]["kinds"][number], string>> = {
   manual: "Registro manual",
   "connection-movement": "Movimiento bancario",
   "notification-email": "Correo de notificación",
   "statement-line": "Línea de extracto",
 };
+
 const captureLabel = (sources: CaptureSources, id: Transaction["id"]): string => {
   const source = sources.find((capture) => capture.transactionId === id);
+
   return source === undefined || source.kinds.length === 0
     ? "Información de captura no disponible"
     : source.kinds.map((kind) => captureLabels[kind]).join(" · ");
 };
+
 const Original = ({
   transaction,
   categories,
@@ -116,6 +132,7 @@ const Original = ({
     timeZone,
     counterpartyFallback: "Contraparte no identificada",
   })[0];
+
   return (
     <section aria-label={`Original ${number}`} className="border-b border-border py-4">
       <div className="flex flex-wrap justify-between gap-2">
@@ -146,6 +163,7 @@ const Original = ({
     </section>
   );
 };
+
 const feedback = {
   review: [
     "Volverán a contar por separado",
@@ -177,13 +195,15 @@ const feedback = {
     "Actualiza el historial para revisar los registros actuales.",
   ],
 } as const;
-const useReconciliationActions = (
-  props: Props
-): Readonly<{ recover: () => void; confirm: () => void }> => {
+
+type ReconciliationCommands = Readonly<{ recover: () => void; confirm: () => void }>;
+
+const useReconciliationActions = (props: Props): ReconciliationCommands => {
   const [command] = useState(() => makeCommand(props.apiClient));
   const submit = useAtomSet(command);
   const admission = useRef(false);
   const { mode } = props;
+
   const recover = (): void => {
     if (admission.current) return;
     admission.current = true;
@@ -196,7 +216,7 @@ const useReconciliationActions = (
         props.onMode(
           data.reconciliation.kind === "linked"
             ? { ...mode, pair: data.reconciliation, sources: data.sources, status: "review" }
-            : { ...mode, status: "separate", original: data }
+            : { ...mode, status: "separate", separated: Option.some(data) }
         );
       },
       missing: () => {
@@ -209,6 +229,7 @@ const useReconciliationActions = (
       },
     });
   };
+
   const confirm = (): void => {
     if (admission.current || mode.status !== "review" || !props.editable) return;
     admission.current = true;
@@ -226,14 +247,18 @@ const useReconciliationActions = (
       },
     });
   };
+
   return { recover, confirm };
 };
+
 const busyStatus = (status: ReconciliationMode["status"]): boolean =>
   status === "saving" || status === "recovering";
+
 const ReconciliationActions = (
   props: Props & Readonly<{ recover: () => void; confirm: () => void }>
 ): JSX.Element => {
   const { mode } = props;
+
   if (mode.status === "review") {
     return (
       <div className="flex flex-wrap gap-3">
@@ -246,7 +271,9 @@ const ReconciliationActions = (
       </div>
     );
   }
+
   if (mode.status === "success" || mode.status === "separate") return <SuccessActions {...props} />;
+
   if (mode.status === "missing") {
     return (
       <Button variant="outline" onClick={props.onHistory}>
@@ -254,20 +281,24 @@ const ReconciliationActions = (
       </Button>
     );
   }
+
   const busy = busyStatus(mode.status);
+
   return (
     <Button variant="outline" disabled={busy} onClick={props.recover}>
       {busy ? feedback[mode.status][0] : "Actualizar estado"}
     </Button>
   );
 };
+
 const SuccessActions = (props: Props): JSX.Element => {
   const original =
     props.mode.status === "separate"
-      ? props.mode.original
+      ? Option.getOrUndefined(props.mode.separated)
       : [props.mode.pair.firstTransaction, props.mode.pair.secondTransaction].find(
           (transaction) => transaction.id === props.selectedId
         );
+
   return (
     <div className="flex flex-wrap gap-3">
       <Button variant="outline" onClick={props.onHistory}>
@@ -281,17 +312,22 @@ const SuccessActions = (props: Props): JSX.Element => {
     </div>
   );
 };
+
 const feedbackVariant = (
   status: ReconciliationMode["status"]
 ): "warning" | "success" | "information" | "destructive" => {
   if (status === "rejected") return "destructive";
+
   if (status === "review") return "warning";
+
   return status === "success" ? "success" : "information";
 };
+
 export const TransactionReconciliation = (props: Props): JSX.Element => {
   const actions = useReconciliationActions(props);
   const { mode } = props;
   const [title, description] = feedback[mode.status];
+
   return (
     <section
       aria-label="Revisar vínculo"

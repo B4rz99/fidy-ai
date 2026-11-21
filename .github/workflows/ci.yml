@@ -8,6 +8,8 @@ on:
       - refactor/596-websession-owner-operations
       - feat/publish-categories
       - "stack/580/**"
+      - feat/anti-slop
+      - feat/anti-slop-jev
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -71,10 +73,11 @@ jobs:
             /*
             !/.repos/
           sparse-checkout-cone-mode: false
+          fetch-depth: 0
       - name: Fetch base branch tip
         env:
           BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
-        run: git fetch --no-tags --depth=1 origin "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
+        run: git fetch --no-tags origin "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
       - uses: ./.github/actions/bun-install
       - name: Restore every declared upstream reference
         run: |
@@ -101,6 +104,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-typegraph-v1-${{ hashFiles('bun.lock', 'tsconfig*.json', 'apps/*/tsconfig*.json', 'infra/*/tsconfig*.json', 'tools/astro/tsconfig.json', 'tools/astro/bun.lock') }}-
             ${{ runner.os }}-typegraph-v1-
+      - name: Allow oxlint plugins to fork git for Jev changed lines
+        run: sudo sysctl -w vm.overcommit_memory=1
       - name: Static repository validation
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
@@ -108,6 +113,8 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           GH_TOKEN: ${{ github.token }}
           VERIFY_TIMING_REPORT: test-results/verify-static.json
+          ANTI_SLOP_BASE: origin/${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
+          JEV_CHANGED_BASE: origin/${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
         run: |
           if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then unset PR_TITLE; fi
           /usr/bin/time -p bun run verify -- --group static

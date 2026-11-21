@@ -1,6 +1,6 @@
 import { sanitizeWorkTrace, workTraceHeaders } from "../../runtime/telemetry/operations";
 import type { WorkflowStepConfig } from "cloudflare:workers";
-import { Cause, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Data, Effect, Exit, Layer, ManagedRuntime, Option, Ref, Schema } from "effect";
 import {
   StatementCoordinatorActivity,
   StatementDeliveryUnavailable,
@@ -10,8 +10,14 @@ import {
 } from "../contract";
 import { maximumStatementChunkActivities } from "./statement-processing-limits";
 
+const boundaryRuntime = ManagedRuntime.make(Layer.empty);
+
 const Work = StatementWork;
+
 const CoordinatorWork = StatementCoordinatorActivity;
+
+const coordinatorActivity = Data.taggedEnum<typeof CoordinatorWork.Type>();
+
 const WorkflowState = Schema.Struct({
   status: Schema.Literals([
     "queued",
@@ -37,25 +43,34 @@ export const isStatementExtractionWork = (body: unknown): boolean =>
   Option.isSome(Schema.decodeUnknownOption(Work)(body));
 
 const missingWorkStatus = 404;
+
 type MessagePage = ReadonlyArray<Readonly<{ body: unknown; ack: () => void }>>;
+
 const handoffStatements = (input: {
   workflow: StatementWorkflow;
   messages: MessagePage;
   pending: (work: typeof Work.Type) => Effect.Effect<boolean, StatementDeliveryUnavailable>;
   reconcile: (work: typeof Work.Type) => Effect.Effect<void, StatementDeliveryUnavailable>;
 }): Effect.Effect<void, StatementDeliveryUnavailable> =>
-  Effect.gen(function* () {
-    for (const message of input.messages) {
+  Effect.forEach(
+    input.messages,
+    Effect.fnUntraced(function* (message) {
       const work = Schema.decodeUnknownOption(Work)(message.body);
+
       if (Option.isNone(work)) {
         message.ack();
-        continue;
+
+        return;
       }
+
       if (!(yield* input.pending(work.value))) {
         message.ack();
-        continue;
+
+        return;
       }
+
       const params = yield* sanitizeWorkTrace(work.value);
+
       const started = yield* Effect.exit(
         attempt(() =>
           input.workflow.create({
@@ -65,13 +80,16 @@ const handoffStatements = (input: {
           })
         )
       );
+
       if (Exit.isFailure(started)) {
         if (Cause.hasInterrupts(started.cause)) return yield* Effect.failCause(started.cause);
         yield* input.reconcile(work.value);
       }
+
       message.ack();
-    }
-  }).pipe(Effect.withSpan("ingestion.statementReceive"));
+    }),
+    { discard: true }
+  ).pipe(Effect.withSpan("ingestion.statementReceive"));
 
 export const receiveNativeStatementExtraction = (input: {
   environment: {
@@ -81,6 +99,7 @@ export const receiveNativeStatementExtraction = (input: {
   messages: MessagePage;
 }): Effect.Effect<void, StatementDeliveryUnavailable> => {
   const { USER_STORE: users, STATEMENT_EXTRACTION_WORKFLOW: workflow } = input.environment;
+
   return handoffStatements({
     messages: input.messages,
     workflow,
@@ -89,20 +108,25 @@ export const receiveNativeStatementExtraction = (input: {
         const body = yield* Schema.encodeEffect(Schema.fromJsonString(Work))(work).pipe(
           Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))
         );
+
         const response = yield* attempt(() =>
           users
             .getByName(work.userId)
             .fetch("https://user.invalid/ingestion/statement/pending", { method: "POST", body })
         );
+
         if (response.status === missingWorkStatus) return false;
+
         if (!response.ok) {
           return yield* new StatementDeliveryUnavailable({ cause: "statement_owner" });
         }
+
         return true;
       }),
     reconcile: (work) =>
       Effect.gen(function* () {
         const state = yield* workflowState(workflow, work.submissionId);
+
         if (["errored", "terminated", "complete"].includes(state.status)) {
           const owner = users;
           yield* attempt(() => coordinatedStatementStep(owner, work, "StatementFailed"));
@@ -121,18 +145,10 @@ const workflowState = (
 ): Effect.Effect<typeof WorkflowState.Type, StatementDeliveryUnavailable> =>
   Effect.gen(function* () {
     const instance = yield* attempt(() => workflow.get(id));
-    const statusMethod =
-      typeof instance === "object" && instance !== null && "status" in instance
-        ? instance.status
-        : undefined;
-    if (typeof statusMethod !== "function") {
-      return yield* new StatementDeliveryUnavailable({ cause: "Workflow status unavailable" });
-    }
-    const status = yield* attempt(() => {
-      const result: unknown = statusMethod.call(instance);
-      return Promise.resolve(result);
-    });
-    return yield* Schema.decodeUnknownEffect(WorkflowState)(status).pipe(
+
+    const status = yield* attempt(() => instance.status());
+
+    return yield* Schema.decodeEffect(WorkflowState)(status).pipe(
       Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))
     );
   });
@@ -142,7 +158,9 @@ type Activity = <A extends boolean>(
   options: WorkflowStepConfig,
   run: () => Promise<A>
 ) => Promise<A>;
+
 const HTTP_OK = 200;
+
 const HTTP_ACCEPTED = 202;
 
 const coordinatedStatementStep = (
@@ -150,14 +168,15 @@ const coordinatedStatementStep = (
   work: typeof Work.Type,
   kind: "StatementWork" | "StatementFailed"
 ): Promise<boolean> =>
-  Effect.runPromise(
+  boundaryRuntime.runPromise(
     Effect.gen(function* () {
       const safeWork = yield* sanitizeWorkTrace(work);
       const traceHeaders = yield* workTraceHeaders(safeWork);
-      const body = yield* Schema.encodeEffect(Schema.fromJsonString(CoordinatorWork))({
-        _tag: kind,
-        ...safeWork,
-      }).pipe(Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause })));
+
+      const body = yield* Schema.encodeEffect(Schema.fromJsonString(CoordinatorWork))(
+        coordinatorActivity[kind](safeWork)
+      ).pipe(Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause })));
+
       const result = yield* Effect.tryPromise({
         try: () =>
           coordinator.getByName(work.userId).fetch(
@@ -169,12 +188,14 @@ const coordinatedStatementStep = (
           ),
         catch: (cause) => new StatementDeliveryUnavailable({ cause }),
       });
+
       if (
         result.status !== HTTP_OK &&
         !(kind === "StatementWork" && result.status === HTTP_ACCEPTED)
       ) {
         return yield* new StatementDeliveryUnavailable({ cause: "coordinator_unavailable" });
       }
+
       return result.status === HTTP_ACCEPTED;
     })
   );
@@ -187,11 +208,16 @@ export const runStatementExtractionWorkflow = (
   }>
 ): Promise<void> => {
   const work = Schema.decodeUnknownOption(Work)(input.payload);
+
   if (Option.isNone(work)) return Promise.resolve();
-  return Effect.runPromise(
+
+  return boundaryRuntime.runPromise(
     Effect.gen(function* () {
-      let finished = false;
-      for (let index = 0; index < maximumStatementChunkActivities; index += 1) {
+      const nextIndex = yield* Ref.make(0);
+
+      const finalizeChunk = Effect.gen(function* () {
+        const index = yield* Ref.getAndUpdate(nextIndex, (current) => current + 1);
+
         const outcome = yield* Effect.exit(
           Effect.tryPromise({
             try: () =>
@@ -203,16 +229,21 @@ export const runStatementExtractionWorkflow = (
             catch: (cause) => new StatementDeliveryUnavailable({ cause }),
           })
         );
+
         if (Exit.isFailure(outcome)) {
           if (Cause.hasInterrupts(outcome.cause)) return yield* Effect.failCause(outcome.cause);
-          break;
+
+          return Option.some(false);
         }
-        if (!outcome.value) {
-          finished = true;
-          break;
-        }
-      }
-      if (finished) return;
+
+        return outcome.value ? Option.none<boolean>() : Option.some(true);
+      });
+
+      const finished = yield* finalizeChunk.pipe(
+        Effect.repeat({ while: Option.isNone, times: maximumStatementChunkActivities - 1 })
+      );
+
+      if (Option.getOrElse(finished, () => false)) return;
       yield* Effect.tryPromise({
         try: () =>
           input.activity(

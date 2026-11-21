@@ -4,15 +4,20 @@ import type { ReadonlyMoney } from "~/core/_shared/money";
 import type { Announcement, RecurringFact, RecurringProposal } from "./contract";
 
 const monthsPerYear = 12;
+
 const maximumDayDrift = 3;
+
 const percentScale = BigDecimal.make(100n, 0);
+
 const tolerancePercent = BigDecimal.make(5n, 0);
+
 export const normalizeCounterparty = (text: string): string =>
   text
     .normalize("NFKC")
     .replaceAll(/\p{White_Space}+/gu, " ")
     .trim()
     .toLowerCase();
+
 export const comparableMoney = ({
   candidate,
   reference,
@@ -26,68 +31,95 @@ export const comparableMoney = ({
     BigDecimal.multiply(reference.amount, tolerancePercent)
   ) <= 0;
 
+type RecurringCounterparty = Option.Option.Value<RecurringFact["counterparty"]>;
+
 type DatedFact = Readonly<{
   fact: RecurringFact;
+  counterparty: RecurringCounterparty;
   key: string;
   month: number;
   day: number;
   lastDay: number;
 }>;
-const dated = (fact: RecurringFact, timeZone: IanaTimeZone): DatedFact => {
+
+const dated = (
+  fact: RecurringFact,
+  counterparty: RecurringCounterparty,
+  timeZone: IanaTimeZone
+): DatedFact => {
   const parts = DateTime.toParts(DateTime.makeZonedUnsafe(fact.occurredAt, { timeZone }));
+
   const lastDay = DateTime.toPartsUtc(
     DateTime.makeUnsafe({ year: parts.year, month: parts.month, day: 1 }).pipe(
       DateTime.add({ months: 1 }),
       DateTime.subtract({ days: 1 })
     )
   ).day;
+
   return {
     fact,
-    key: normalizeCounterparty(Option.getOrThrow(fact.counterparty)),
+    counterparty,
+    key: normalizeCounterparty(counterparty),
     month: parts.year * monthsPerYear + parts.month,
     day: parts.day,
     lastDay,
   };
 };
+
 const dateMatches = (anchor: DatedFact, candidate: DatedFact): boolean =>
   Math.abs(candidate.day - Math.min(anchor.day, candidate.lastDay)) <= maximumDayDrift;
+
 const related = (anchor: DatedFact, candidate: DatedFact): boolean =>
   anchor.key === candidate.key &&
   comparableMoney({ candidate: candidate.fact.money, reference: anchor.fact.money }) &&
   dateMatches(anchor, candidate);
+
 type Triple = readonly [DatedFact, DatedFact, DatedFact];
+
 const tripleAt = (
   first: DatedFact,
   factsForMonth: (month: number) => ReadonlyArray<DatedFact>
 ): Option.Option<Triple> => {
   const firstMonth = factsForMonth(first.month);
+
   const months = [first.month, first.month + 1, first.month + 2].map((month) =>
     factsForMonth(month).filter((candidate) => related(first, candidate))
   );
+
   if (months.some((month: ReadonlyArray<DatedFact>) => month.length !== 1)) return Option.none();
   const second = months[1]?.[0];
   const third = months[2]?.[0];
+
   if (second === undefined || third === undefined) return Option.none();
+
   const competing = firstMonth.some(
     (candidate) =>
       candidate.fact.id !== first.fact.id && related(candidate, second) && related(candidate, third)
   );
+
   return competing ? Option.none() : Option.some([first, second, third]);
 };
+
 const unambiguousTriples = (facts: ReadonlyArray<DatedFact>): ReadonlyArray<Triple> => {
   const factsByMonth = new Map<number, DatedFact[]>();
+
   for (const fact of facts) {
     const month = factsByMonth.get(fact.month);
+
     if (month === undefined) factsByMonth.set(fact.month, [fact]);
     else month.push(fact);
   }
+
   const triples = facts.flatMap((first) =>
     Option.toArray(tripleAt(first, (month) => factsByMonth.get(month) ?? []))
   );
+
   const ambiguous = new Set<string>();
+
   for (const [index, left] of triples.entries()) {
     for (const right of triples.slice(index + 1)) {
       if (related(left[0], right[0]) && related(right[0], left[0])) continue;
+
       for (const { fact } of left.filter(({ fact }) =>
         right.some((candidate) => candidate.fact.id === fact.id)
       )) {
@@ -95,8 +127,10 @@ const unambiguousTriples = (facts: ReadonlyArray<DatedFact>): ReadonlyArray<Trip
       }
     }
   }
+
   return triples.filter((triple) => !triple.some(({ fact }) => ambiguous.has(fact.id)));
 };
+
 const belongsTo = ({
   proposal,
   first,
@@ -111,9 +145,13 @@ const belongsTo = ({
   normalizeCounterparty(proposal.counterparty) === first.key &&
   comparableMoney({ candidate: first.fact.money, reference: proposal.referenceMoney }) &&
   comparableMoney({ candidate: last.fact.money, reference: proposal.referenceMoney }) &&
-  dateMatches(dated({ ...first.fact, occurredAt: proposal.firstOccurredAt }, timeZone), last);
+  dateMatches(
+    dated({ ...first.fact, occurredAt: proposal.firstOccurredAt }, first.counterparty, timeZone),
+    last
+  );
+
 const proposalFrom = ([first, second, last]: Triple): RecurringProposal => ({
-  counterparty: Option.getOrThrow(last.fact.counterparty),
+  counterparty: last.counterparty,
   money: last.fact.money,
   referenceMoney: first.fact.money,
   firstOccurredAt: first.fact.occurredAt,
@@ -122,6 +160,7 @@ const proposalFrom = ([first, second, last]: Triple): RecurringProposal => ({
   latestTransactionId: last.fact.id,
   backfill: first.fact.backfill || second.fact.backfill || last.fact.backfill,
 });
+
 const applyTriple = ({
   proposals,
   triple,
@@ -134,20 +173,25 @@ const applyTriple = ({
   timeZone: IanaTimeZone;
 }>): Option.Option<Readonly<{ index: number; proposal: RecurringProposal }>> => {
   const [first, , last] = triple;
+
   const matching = proposals
     .map((proposal, index) => ({ proposal, index }))
     .filter(({ proposal }: Readonly<{ proposal: RecurringProposal }>) =>
       belongsTo({ proposal, first, last, timeZone })
     );
+
   if (matching.length > 1) return Option.none();
   const index = matching[0]?.index ?? proposals.length;
+
   if (
     triple.some(({ fact }) => Option.exists(assignments(fact.id), (assigned) => assigned !== index))
   ) {
     return Option.none();
   }
+
   const fresh = proposalFrom(triple);
   const retained = proposals[index];
+
   const proposal =
     retained === undefined
       ? fresh
@@ -158,20 +202,28 @@ const applyTriple = ({
           backfill: retained.backfill,
           supportingTransactionIds: retained.supportingTransactionIds,
         };
+
   return Option.some({ index, proposal });
 };
+
 const canExtend = (
   proposal: RecurringProposal,
   fact: DatedFact,
   timeZone: IanaTimeZone
 ): boolean => {
-  const anchor = dated({ ...fact.fact, occurredAt: proposal.firstOccurredAt }, timeZone);
+  const anchor = dated(
+    { ...fact.fact, occurredAt: proposal.firstOccurredAt },
+    fact.counterparty,
+    timeZone
+  );
+
   return (
     normalizeCounterparty(proposal.counterparty) === fact.key &&
     comparableMoney({ candidate: fact.fact.money, reference: proposal.referenceMoney }) &&
     dateMatches(anchor, fact)
   );
 };
+
 const extendProposal = ({
   proposal,
   proposals,
@@ -185,29 +237,35 @@ const extendProposal = ({
 }>): RecurringProposal => {
   const candidates = facts.filter((fact) => canExtend(proposal, fact, timeZone));
   const monthCounts = new Map<number, number>();
+
   for (const candidate of candidates) {
     monthCounts.set(candidate.month, (monthCounts.get(candidate.month) ?? 0) + 1);
   }
+
   const unique = candidates.filter(
     (fact) =>
       monthCounts.get(fact.month) === 1 &&
       proposals.filter((other) => canExtend(other, fact, timeZone)).length === 1
   );
+
   const last = unique.at(-1);
+
   if (
     last === undefined ||
     last.fact.occurredAt.epochMilliseconds <= proposal.lastOccurredAt.epochMilliseconds
   ) {
     return proposal;
   }
+
   return {
     ...proposal,
     money: last.fact.money,
-    counterparty: Option.getOrThrow(last.fact.counterparty),
+    counterparty: last.counterparty,
     lastOccurredAt: last.fact.occurredAt,
     latestTransactionId: last.fact.id,
   };
 };
+
 export const detectMonthlySeries = ({
   facts,
   timeZone,
@@ -216,16 +274,23 @@ export const detectMonthlySeries = ({
   timeZone: IanaTimeZone;
 }>): ReadonlyArray<RecurringProposal> => {
   const unique = new Map(facts.map((fact) => [fact.id, fact]));
+
   const ordered = [...unique.values()]
-    .filter((fact) => Option.isSome(fact.counterparty))
-    .map((fact) => dated(fact, timeZone))
+    .flatMap((fact) =>
+      Option.match(fact.counterparty, {
+        onNone: () => [],
+        onSome: (counterparty) => [dated(fact, counterparty, timeZone)],
+      })
+    )
     .sort(
       (left, right) =>
         left.fact.occurredAt.epochMilliseconds - right.fact.occurredAt.epochMilliseconds ||
         left.fact.id.localeCompare(right.fact.id)
     );
+
   const proposals: RecurringProposal[] = [];
   const assignments = new Map<string, number>();
+
   for (const triple of unambiguousTriples(ordered)) {
     const applied = applyTriple({
       proposals,
@@ -233,25 +298,32 @@ export const detectMonthlySeries = ({
       assignments: (id) => Option.fromUndefinedOr(assignments.get(id)),
       timeZone,
     });
+
     if (Option.isNone(applied)) continue;
     proposals[applied.value.index] = applied.value.proposal;
+
     for (const { fact } of triple) assignments.set(fact.id, applied.value.index);
   }
+
   return proposals.map((proposal) =>
     extendProposal({ proposal, proposals, facts: ordered, timeZone })
   );
 };
 
 const coldStartDays = 30;
+
 const millisecondsPerDay = 86_400_000;
+
 export const decideAnnouncement = ({
   backfill,
   firstCapturedAt,
   confirmedAt,
 }: Readonly<{ backfill: boolean; firstCapturedAt: number; confirmedAt: number }>): Announcement => {
   if (backfill) return { kind: "suppressed", reason: "backfill" };
+
   if (confirmedAt < firstCapturedAt + coldStartDays * millisecondsPerDay) {
     return { kind: "suppressed", reason: "cold-start" };
   }
+
   return { kind: "eligible" };
 };

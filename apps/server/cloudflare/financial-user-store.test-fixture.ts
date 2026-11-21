@@ -4,33 +4,45 @@ import { Clock, Effect } from "effect";
 import { expect } from "vitest";
 import type { Miniflare } from "miniflare";
 import { browserOrigins, productionTopology } from "./runtime/contract";
-import { native, nativeUserPlatform } from "./user-store.test-fixture";
+import { native, nativeHostedPlatform, nativeUserPlatform } from "./user-store.test-fixture";
 
 const bearerLength = 43;
+
 const sessionLifetimeMs = 7776000000;
+
 const freshSessionMs = 600000;
+
 const idleSessionMs = 3600000;
+
 const unauthorizedStatus = 401;
+
 export const alice = {
   user: "10000000-0000-4000-8000-000000000051",
   session: "10000000-0000-4000-8000-000000000061",
   bearer: "1".repeat(bearerLength),
 };
+
 export const bob = {
   user: "10000000-0000-4000-8000-000000000052",
   session: "10000000-0000-4000-8000-000000000062",
   bearer: "2".repeat(bearerLength),
 };
+
 export const category = "10000000-0000-4000-8000-000000000016";
+
 export const transaction = "10000000-0000-4000-8000-000000000088";
+
 export const second = "10000000-0000-4000-8000-000000000089";
+
 export const instant = 1_700_000_000_000;
+
 type ServiceResponse = ReturnType<Awaited<ReturnType<Miniflare["getWorker"]>>["fetch"]>;
 
 export const nativeIngress =
   (runtime: Miniflare) =>
   (url: string, init: RequestInit): ServiceResponse => {
     const request = new Request(url, init);
+
     return Promise.all([
       runtime.getWorker("financial-client"),
       request.body === null ? null : request.text(),
@@ -62,11 +74,14 @@ export const history = Effect.fn(function* (
     })
   );
 });
+
 export const receivedStatus = Effect.fn(function* (call: ReturnType<typeof history>) {
   const response = yield* call;
   yield* native(() => response.arrayBuffer());
+
   return response.status;
 });
+
 export const seed = Effect.fn(function* (
   runtime: Miniflare,
   subject: typeof alice,
@@ -75,16 +90,21 @@ export const seed = Effect.fn(function* (
   const directory = yield* native(() =>
     runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
   );
+
   const local = yield* native(() =>
     runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: subject.user })
   );
+
   const digest = yield* native(() =>
     crypto.subtle.digest("SHA-256", new TextEncoder().encode(subject.bearer))
   );
+
   const now = yield* Clock.currentTimeMillis;
+
   const exec = (
     ...args: Parameters<typeof local.exec>
   ): Effect.Effect<Awaited<ReturnType<typeof local.exec>>> => native(() => local.exec(...args));
+
   expect(yield* receivedStatus(history(runtime, subject))).toBe(unauthorizedStatus);
   yield* native(() =>
     directory.exec(
@@ -114,6 +134,7 @@ export const seed = Effect.fn(function* (
     now + sessionLifetimeMs
   );
   yield* exec("INSERT INTO categories VALUES (?,'Otros',1)", category);
+
   if (initialTransaction) {
     yield* exec(
       "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms) VALUES (?,?,'9007199254740993.15','USD','outflow',?,?,?)",
@@ -124,6 +145,7 @@ export const seed = Effect.fn(function* (
       instant
     );
   }
+
   return { exec, digest, directory, now, local };
 });
 
@@ -138,9 +160,11 @@ const nativeWorkCheck = (
       status: response.status,
       repaired: response.headers.get("fidy-alarm-repaired") ?? "unreported",
     }));
+
 const sendNativeRequest = (runtime: Miniflare, request: Request): Promise<Response> => {
   const headers = new Headers(request.headers);
   headers.set("cf-connecting-ip", "192.0.2.35");
+
   return (request.body === null ? Promise.resolve({}) : request.text().then((body) => ({ body })))
     .then((body) =>
       runtime.dispatchFetch(request.url, {
@@ -175,15 +199,20 @@ export const makeNativeTransactionJourney = Effect.fn(function* (
 
   const owner = (id: string): typeof first.local => {
     if (id === alice.user) return first.local;
+
     if (id === bob.user) return other.local;
     throw new Error("Unknown test User");
   };
+
   const exec = (
     ...args: Parameters<typeof first.local.exec>
   ): ReturnType<typeof first.local.exec> => first.local.exec(...args);
+
   const send = (request: Request): Promise<Response> => sendNativeRequest(runtime, request);
+
   const browser = (index: number, path = "/transactions"): Promise<Response> => {
     const subject = index === 0 ? alice : bob;
+
     return send(
       new Request(`https://${productionTopology.ingress.hostname}${path}`, {
         headers: {
@@ -194,6 +223,7 @@ export const makeNativeTransactionJourney = Effect.fn(function* (
       })
     );
   };
+
   return {
     runtime,
     owner,
@@ -207,9 +237,17 @@ export const makeNativeTransactionJourney = Effect.fn(function* (
 
 export const nativeTransactionJourney = makeNativeTransactionJourney();
 
+export const nativeHostedTransactionJourney = makeNativeTransactionJourney(
+  undefined,
+  nativeHostedPlatform
+);
+
 const patPrefixLength = 4;
+
 const shortIdLength = 8;
+
 const patLifetime = 604800000;
+
 export const seedNativePAT = Effect.fn(function* ({
   db,
   userId,
@@ -225,9 +263,11 @@ export const seedNativePAT = Effect.fn(function* ({
 }>) {
   const id = newId();
   const shortId = token.slice(patPrefixLength, patPrefixLength + shortIdLength);
+
   const digestBytes = yield* native(() =>
     crypto.subtle.digest("SHA-256", new TextEncoder().encode(token))
   );
+
   yield* native(() =>
     db
       .owner(userId)
@@ -261,18 +301,23 @@ export const nativeBrowserWrite =
   (
     user: typeof alice,
     input: { path: string; method: string } & ({} | { body: unknown })
-  ): Effect.Effect<Response> =>
-    native(() =>
+  ): Effect.Effect<Response> => {
+    const init = {
+      method: input.method,
+      headers: {
+        origin: browserOrigins.production,
+        cookie: "__Host-fidy_session=" + user.bearer,
+        "Fidy-Session-Binding": user.session,
+        "content-type": "application/json",
+      },
+    };
+
+    return native(() =>
       db.send(
-        new Request("https://api.fidyapp.com" + input.path, {
-          method: input.method,
-          headers: {
-            origin: browserOrigins.production,
-            cookie: "__Host-fidy_session=" + user.bearer,
-            "Fidy-Session-Binding": user.session,
-            "content-type": "application/json",
-          },
-          ...("body" in input ? { body: JSON.stringify(input.body) } : {}),
-        })
+        new Request(
+          "https://api.fidyapp.com" + input.path,
+          "body" in input ? { ...init, body: JSON.stringify(input.body) } : init
+        )
       )
     );
+  };

@@ -7,12 +7,15 @@ import { CategoryId } from "~/core/categories/contract";
 export const BudgetId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("BudgetId"))
   .annotate({ identifier: "BudgetId" });
+
 export type BudgetId = typeof BudgetId.Type;
 
 const maximumBudgetGroupNameLength = 64;
+
 const maximumBudgetGroupCategories = 128;
 
 export const BudgetMonth = Schema.String.check(Schema.isPattern(/^[2-9]\d{3}-(0[1-9]|1[0-2])$/));
+
 export const BudgetGroupName = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(maximumBudgetGroupNameLength),
@@ -20,6 +23,7 @@ export const BudgetGroupName = Schema.String.check(
 );
 
 const zero = BigDecimal.make(0n, 0);
+
 const positiveBudgetCap = Schema.makeFilter<{
   readonly cap: { readonly amount: Readonly<BigDecimal.BigDecimal> };
 }>((budget) =>
@@ -41,6 +45,7 @@ export const Budget = Schema.Struct({
 })
   .check(positiveBudgetCap)
   .annotate({ identifier: "Budget" });
+
 export type Budget = typeof Budget.Type;
 
 export const CreateBudgetInput = Schema.Struct({
@@ -49,6 +54,7 @@ export const CreateBudgetInput = Schema.Struct({
 })
   .check(positiveBudgetCap)
   .annotate({ identifier: "CreateBudgetInput" });
+
 export type CreateBudgetInput = typeof CreateBudgetInput.Type;
 
 const UpdateBudgetFields = Schema.Struct({
@@ -62,6 +68,7 @@ const UpdateBudgetFields = Schema.Struct({
     )
   ),
 });
+
 type GroupSettings = {
   readonly [
     Key in keyof Omit<typeof UpdateBudgetFields.Type, "cap">
@@ -85,6 +92,7 @@ export const UpdateBudgetInput = UpdateBudgetFields.check(
       : "A group rename requires groupName"
   )
 ).annotate({ identifier: "UpdateBudgetInput" });
+
 export type UpdateBudgetInput = typeof UpdateBudgetInput.Type;
 
 const calendarMonth = Schema.makeFilter<{
@@ -96,6 +104,7 @@ const calendarMonth = Schema.makeFilter<{
   const monthStart = DateTime.startOf(zonedFrom, "month");
   const expectedFrom = DateTime.toUtc(monthStart);
   const expectedTo = DateTime.toUtc(DateTime.add(monthStart, { months: 1 }));
+
   return from.epochMilliseconds === expectedFrom.epochMilliseconds &&
     to.epochMilliseconds === expectedTo.epochMilliseconds
     ? undefined
@@ -112,6 +121,7 @@ export const AppliedBudgetMonth = Schema.Struct({
 })
   .check(calendarMonth)
   .annotate({ identifier: "AppliedBudgetMonth" });
+
 export type AppliedBudgetMonth = typeof AppliedBudgetMonth.Type;
 
 const budgetThreshold80 = 80;
@@ -140,10 +150,12 @@ export const BudgetCrossing = Schema.Struct({
         if (crossing.cap.currency !== crossing.spent.currency) {
           return "Crossing Currency must match the Budget";
         }
+
         const boundary =
           crossing.threshold === budgetThreshold80
             ? BigDecimal.multiply(crossing.cap.amount, BigDecimal.make(8n, 1))
             : crossing.cap.amount;
+
         return BigDecimal.Order(crossing.spent.amount, boundary) >= 0
           ? undefined
           : "Crossing must reach its threshold";
@@ -151,6 +163,7 @@ export const BudgetCrossing = Schema.Struct({
     )
   )
   .annotate({ identifier: "BudgetCrossing" });
+
 export type BudgetCrossing = typeof BudgetCrossing.Type;
 
 const BudgetStatusCommon = {
@@ -164,10 +177,12 @@ export const UnderBudget = Schema.Struct({
   type: Schema.Literal("under"),
   remaining: Money,
 });
+
 export const ReachedBudget = Schema.Struct({
   ...BudgetStatusCommon,
   type: Schema.Literal("reached"),
 });
+
 export const OverBudget = Schema.Struct({
   ...BudgetStatusCommon,
   type: Schema.Literal("over"),
@@ -241,7 +256,9 @@ const hasExactBudgetProgress = ({ cap, spent, status }: BudgetProgressFact): boo
   ) {
     return false;
   }
+
   if (BigDecimal.Order(cap.amount, zero) !== 1) return false;
+
   return hasExactBudgetStatus(cap, spent, status);
 };
 
@@ -257,24 +274,28 @@ export const BudgetProgress = Schema.Struct({
 
 const sameStatusCurrency = Schema.makeFilter<StatusCurrencyView>((status) => {
   const currency = status.budget.cap.currency;
+
   if (status.spent.currency !== currency) {
     return {
       path: ["spent", "currency"],
       issue: "Spent Currency must match the Budget cap",
     };
   }
+
   if (status.type === "under" && status.remaining.currency !== currency) {
     return {
       path: ["remaining", "currency"],
       issue: "Remaining Currency must match the Budget cap",
     };
   }
+
   if (status.type === "over" && status.overBy.currency !== currency) {
     return {
       path: ["overBy", "currency"],
       issue: "Overage Currency must match the Budget cap",
     };
   }
+
   return undefined;
 });
 
@@ -297,6 +318,7 @@ const exactStatusAmounts = Schema.makeFilter<StatusCurrencyView>((status) =>
 export const BudgetStatus = Schema.Union([UnderBudget, ReachedBudget, OverBudget])
   .check(sameStatusCurrency, exactStatusAmounts)
   .annotate({ identifier: "BudgetStatus" });
+
 export type BudgetStatus = typeof BudgetStatus.Type;
 
 export const BudgetStatusReport = Schema.Struct({
@@ -306,6 +328,7 @@ export const BudgetStatusReport = Schema.Struct({
   cashFlow: Schema.Struct({ income: Schema.Array(Money), expenses: Schema.Array(Money) }),
   initialized: Schema.optionalKey(Schema.Boolean),
 }).annotate({ identifier: "BudgetStatusReport" });
+
 export type BudgetStatusReport = typeof BudgetStatusReport.Type;
 
 export const BudgetWorkspace = Schema.Struct({
@@ -331,6 +354,7 @@ export const BudgetStatusQuery = Schema.Struct({
   currency: Schema.Option(BudgetStatusQueryValues.fields.currency),
   timeZone: BudgetStatusQueryValues.fields.timeZone,
 }).annotate({ identifier: "BudgetStatusQuery" });
+
 export type BudgetStatusQuery = typeof BudgetStatusQuery.Type;
 
 export const BudgetMonthLatch = Schema.Struct({
@@ -338,6 +362,7 @@ export const BudgetMonthLatch = Schema.Struct({
   period: AppliedBudgetMonth,
   highestReached: Schema.Literals([0, budgetThreshold80, 100]),
 }).annotate({ identifier: "BudgetMonthLatch" });
+
 export type BudgetMonthLatch = typeof BudgetMonthLatch.Type;
 
 export class BudgetNotFound extends Data.TaggedError("BudgetNotFound")<{

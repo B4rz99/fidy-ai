@@ -11,8 +11,10 @@ export const messages: Readonly<Record<PublicOutput["_tag"], string>> = {
   LoggedOut:
     "Acceso local eliminado. El PAT NO fue revocado; revócalo en https://app.fidyapp.com/settings/access si lo necesitas.",
 };
+
 const recovery =
   "Comprueba el acceso local con fidy status. Si no hay acceso local utilizable, revisa y revoca el permiso en https://app.fidyapp.com/settings/access; después usa fidy logout e inicia una nueva vinculación. No se repite una consulta privada consumida.";
+
 export const failures: Readonly<Record<CliFailure["reason"], string>> = {
   Cancelled: "Proceso interrumpido localmente. Si aprobaste un permiso, " + recovery,
   LoginSaveInterrupted:

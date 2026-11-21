@@ -1,6 +1,7 @@
 import { UserStore as NativeUser } from "../core-worker";
 
 export { default } from "../core-worker";
+
 export * from "../core-worker";
 
 export class UserStore extends NativeUser {
@@ -21,6 +22,7 @@ export class UserStore extends NativeUser {
           throw new Error("Synthetic response lost after owner commit");
         });
       }
+
       return response;
     });
   }

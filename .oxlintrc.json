@@ -4,7 +4,39 @@
   "jsPlugins": [
     "./scripts/oxlint/effect-guards.js",
     "./scripts/oxlint/test-guards.js",
-    "./scripts/oxlint/effect-recovery.js"
+    "./scripts/oxlint/effect-recovery.js",
+    {
+      "name": "anti-slop",
+      "specifier": "./tools/oxlint/anti-slop/index.ts"
+    },
+    {
+      "name": "anti-slop-effect",
+      "specifier": "./tools/oxlint/anti-slop/effect/index.ts"
+    },
+    {
+      "name": "landmines",
+      "specifier": "./tools/oxlint/anti-slop/plugins/landmines.ts"
+    },
+    {
+      "name": "ai-guard",
+      "specifier": "./tools/oxlint/anti-slop/plugins/ai-guard.ts"
+    },
+    {
+      "name": "enfect",
+      "specifier": "./tools/oxlint/anti-slop/plugins/enfect.ts"
+    },
+    {
+      "name": "effect",
+      "specifier": "./tools/oxlint/anti-slop/plugins/effect.ts"
+    },
+    {
+      "name": "anti-slop-effect-jev",
+      "specifier": "./tools/oxlint/anti-slop/jev/plugin.ts"
+    },
+    {
+      "name": "anti-slop-martinfowler-jev",
+      "specifier": "./tools/oxlint/anti-slop/martinfowler/jev-plugin.ts"
+    }
   ],
   "extends": ["./.oxlintrc.ui.json"],
   "ignorePatterns": [
@@ -12,7 +44,11 @@
     "**/dist/**",
     "**/build/**",
     "**/coverage/**",
-    "**/.repos/**"
+    "**/.repos/**",
+    ".agents/skills/install-anti-slop/**",
+    ".claude/skills/install-anti-slop/**",
+    "tools/oxlint/anti-slop/**",
+    "tools/oxlint/oxlint-plugin-jev/**"
   ],
   "rules": {
     "test-guards/no-module-mocks": "error",
@@ -20,7 +56,12 @@
     "test-guards/no-react-test-tools": "error",
     "array-callback-return": "error",
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["error", { "allowConstantExport": true }],
+    "react/only-export-components": [
+      "error",
+      {
+        "allowConstantExport": true
+      }
+    ],
     "jsx-a11y/alt-text": "error",
     "jsx-a11y/anchor-has-content": "error",
     "jsx-a11y/aria-props": "error",
@@ -49,14 +90,36 @@
         "ignorePattern": "^react-doctor-disable(?:-next-line)?\\b"
       }
     ],
-    "complexity": ["error", { "max": 8 }],
+    "complexity": [
+      "error",
+      {
+        "max": 8
+      }
+    ],
     "effect-guards/no-nullable-type": "error",
-    "id-length": ["error", { "exceptions": ["_", "A", "E", "R"], "properties": "never" }],
+    "id-length": [
+      "error",
+      {
+        "exceptions": ["_", "A", "E", "R"],
+        "properties": "never"
+      }
+    ],
     "import/exports-last": "off",
     "import/group-exports": "off",
     "import/newline-after-import": "error",
-    "max-lines-per-function": ["error", { "max": 60 }],
-    "max-statements": ["error", { "max": 70 }],
+    "max-lines-per-function": [
+      "error",
+      {
+        "max": 60,
+        "skipBlankLines": true
+      }
+    ],
+    "max-statements": [
+      "error",
+      {
+        "max": 70
+      }
+    ],
     "no-magic-numbers": [
       "error",
       {
@@ -65,7 +128,12 @@
         "ignoreDefaultValues": true
       }
     ],
-    "sort-imports": ["error", { "ignoreDeclarationSort": true }],
+    "sort-imports": [
+      "error",
+      {
+        "ignoreDeclarationSort": true
+      }
+    ],
     "typescript/explicit-function-return-type": "error",
     "import/extensions": [
       "error",
@@ -84,13 +152,24 @@
     "no-void": "error",
     "curly": ["error", "multi-line"],
     "default-case-last": "error",
-    "eqeqeq": ["error", "always", { "null": "ignore" }],
+    "eqeqeq": [
+      "error",
+      "always",
+      {
+        "null": "ignore"
+      }
+    ],
     "func-style": ["error", "expression"],
     "import/first": "error",
     "import/no-cycle": "error",
     "import/no-default-export": "error",
     "import/no-self-import": "error",
-    "jsdoc/check-tag-names": ["error", { "definedTags": ["effect-expect-leaking"] }],
+    "jsdoc/check-tag-names": [
+      "error",
+      {
+        "definedTags": ["effect-expect-leaking"]
+      }
+    ],
     "jsdoc/empty-tags": "error",
     "jsdoc/require-param-description": "error",
     "jsdoc/require-param-type": "off",
@@ -101,7 +180,12 @@
     "no-await-in-loop": "error",
     "no-console": "error",
     "no-constant-binary-expression": "error",
-    "no-duplicate-imports": ["error", { "allowSeparateTypeImports": true }],
+    "no-duplicate-imports": [
+      "error",
+      {
+        "allowSeparateTypeImports": true
+      }
+    ],
     "no-else-return": "error",
     "no-fallthrough": "error",
     "no-implicit-coercion": "error",
@@ -126,13 +210,25 @@
     "typescript/await-thenable": "error",
     "typescript/ban-ts-comment": [
       "error",
-      { "ts-expect-error": true, "ts-ignore": true, "ts-nocheck": true }
+      {
+        "ts-expect-error": true,
+        "ts-ignore": true,
+        "ts-nocheck": true
+      }
     ],
-    "typescript/consistent-type-assertions": ["error", { "assertionStyle": "never" }],
+    "typescript/consistent-type-assertions": [
+      "error",
+      {
+        "assertionStyle": "never"
+      }
+    ],
     "effect-guards/no-ordinary-interface": "error",
     "typescript/consistent-type-imports": [
       "error",
-      { "prefer": "type-imports", "fixStyle": "inline-type-imports" }
+      {
+        "prefer": "type-imports",
+        "fixStyle": "inline-type-imports"
+      }
     ],
     "typescript/no-explicit-any": "error",
     "typescript/no-floating-promises": "error",
@@ -154,13 +250,178 @@
     "typescript/prefer-optional-chain": "error",
     "typescript/restrict-template-expressions": "error",
     "typescript/switch-exhaustiveness-check": "error",
-    "yoda": "error"
+    "yoda": "error",
+    "anti-slop/max-ternary-depth": [
+      "error",
+      {
+        "maxDepth": 2
+      }
+    ],
+    "oxc/no-accumulating-spread": "error",
+    "anti-slop/no-array-filter-map": "error",
+    "anti-slop/no-reduce-accumulator-copy": "error",
+    "anti-slop/no-chained-type-assertions": "error",
+    "anti-slop/no-conditional-spread": "error",
+    "anti-slop/no-dev-env-branch": "error",
+    "anti-slop/no-disabled-type-assertion-rules": "error",
+    "anti-slop/no-instanceof": "error",
+    "anti-slop/no-known-value-widening": "error",
+    "anti-slop/no-module-mocking": "error",
+    "anti-slop/no-object-parameters": "error",
+    "anti-slop/no-reflect-apply": "error",
+    "anti-slop/no-reflect-get": "error",
+    "anti-slop/no-reprovide-ambient-service": "error",
+    "anti-slop/no-runtime-typeof": "error",
+    "anti-slop/no-shape-in-symbol-names": "error",
+    "anti-slop/no-unknown-returns": "error",
+    "anti-slop/no-unknown-type-aliases": "error",
+    "anti-slop/no-unsafe-dictionary-type": "error",
+    "anti-slop/no-widen-then-assert": "error",
+    "anti-slop/require-readable-spacing": "error",
+    "anti-slop/require-safety-comment-for-type-assertion": "error",
+    "landmines/strict-msw": "error",
+    "landmines/no-fixed-sleep": "error",
+    "landmines/no-unsignaled-poll": "error",
+    "landmines/no-flake-masking": "error",
+    "ai-guard/no-placeholder-implementation": "error",
+    "ai-guard/no-test-env-branch": "error",
+    "ai-guard/no-tautological-assertion": "error",
+    "ai-guard/no-assertionless-test": "error",
+    "ai-guard/no-undeclared-import": "error",
+    "ai-guard/no-silent-fallback": "error",
+    "anti-slop-effect/no-manual-effect-error-tag": "error",
+    "anti-slop-effect/no-manual-tag-comparison": "error",
+    "anti-slop-effect/no-manual-tagged-construction": "error",
+    "anti-slop-effect/no-manual-tagged-type": "error",
+    "anti-slop-effect/no-ordie-in-service-construction": "error",
+    "anti-slop-effect/no-service-constructor-imports": "error",
+    "anti-slop-effect/no-service-parameters": "error",
+    "anti-slop-effect/no-static-effect-service-forwarders": "error",
+    "anti-slop-effect/no-test-code-in-src": "error",
+    "anti-slop-effect/no-unbounded-retry": "error",
+    "anti-slop-effect/prefer-effect-match": "error",
+    "anti-slop-effect/prefer-tagged-error-handling": "error",
+    "anti-slop-effect/prefer-yield-service": "error",
+    "anti-slop-effect/require-cause-when-narrowing": "error",
+    "anti-slop-effect/require-operation-span": "error",
+    "anti-slop-effect/require-service-make-layer": "error",
+    "anti-slop-effect/stream-large-files": "error",
+    "anti-slop-effect/throw-in-effect-gen": "error",
+    "effect/noAliasTestLayer": "error",
+    "effect/noEagerAcquire": "error",
+    "effect/noManagedRuntimeInEffect": "error",
+    "effect/noPerCallCacheConstruction": "error",
+    "effect/noPointFreeLog": "error",
+    "effect/noRunCollectOnUnboundedStream": "error",
+    "effect/noSilentCatchAll": "error",
+    "effect/noUnboundedConcurrency": "error",
+    "effect/requireSuppressionReason": "error",
+    "effect/requireForceKillAfter": "error",
+    "enfect/effect-promise-vs-trypromise": "error",
+    "enfect/prefer-redacted-config": "error",
+    "enfect/avoid-option-getorthrow": "error",
+    "enfect/effect-run-in-body": "error",
+    "enfect/no-cause-in-http-response": "error",
+    "enfect/no-effect-ignore-then-as": "error",
+    "enfect/avoid-expect-in-if": "error",
+    "enfect/prefer-duration-constructors": "error",
+    "enfect/avoid-mutable-state": "error",
+    "enfect/prefer-option-over-null": "error",
+    "enfect/yield-in-for-loop": "warn",
+    "anti-slop-effect-jev/cache-in-method": [
+      "error",
+      {
+        "mode": "changed"
+      }
+    ],
+    "anti-slop-effect-jev/decode-after-status": [
+      "error",
+      {
+        "mode": "changed"
+      }
+    ],
+    "anti-slop-effect-jev/error-as-value": [
+      "error",
+      {
+        "mode": "changed"
+      }
+    ],
+    "anti-slop-effect-jev/network-call-in-transaction": [
+      "error",
+      {
+        "mode": "changed"
+      }
+    ],
+    "anti-slop-effect-jev/read-then-write-race": [
+      "error",
+      {
+        "mode": "changed"
+      }
+    ],
+    "anti-slop-effect-jev/shallow-service": "off",
+    "anti-slop-effect-jev/single-use-abstraction": "off",
+    "anti-slop-effect-jev/swallow-without-capture": [
+      "error",
+      {
+        "mode": "changed"
+      }
+    ],
+    "anti-slop-effect-jev/unbounded-fanout": [
+      "error",
+      {
+        "mode": "changed"
+      }
+    ],
+    "anti-slop-effect-jev/unbounded-retry": [
+      "error",
+      {
+        "mode": "changed"
+      }
+    ],
+    "anti-slop-effect-jev/test-cannot-fail": "off",
+    "anti-slop-martinfowler-jev/comments": "off",
+    "anti-slop-martinfowler-jev/data-class": "off",
+    "anti-slop-martinfowler-jev/data-clumps": "off",
+    "anti-slop-martinfowler-jev/feature-envy": "off",
+    "anti-slop-martinfowler-jev/insider-trading": "off",
+    "anti-slop-martinfowler-jev/lazy-element": "off",
+    "anti-slop-martinfowler-jev/middle-man": "off",
+    "anti-slop-martinfowler-jev/mysterious-name": "off",
+    "anti-slop-martinfowler-jev/primitive-obsession": "off",
+    "anti-slop-martinfowler-jev/repeated-switches": "off",
+    "anti-slop-martinfowler-jev/speculative-generality": "off",
+    "anti-slop-martinfowler-jev/temporary-field": "off"
   },
   "overrides": [
     {
+      "files": ["**/*.test.*", "**/*.spec.*", "**/test/**", "**/tests/**"],
+      "rules": {
+        "anti-slop-effect-jev/cache-in-method": "off",
+        "anti-slop-effect-jev/decode-after-status": "off",
+        "anti-slop-effect-jev/error-as-value": "off",
+        "anti-slop-effect-jev/network-call-in-transaction": "off",
+        "anti-slop-effect-jev/read-then-write-race": "off",
+        "anti-slop-effect-jev/swallow-without-capture": "off",
+        "anti-slop-effect-jev/unbounded-fanout": "off",
+        "anti-slop-effect-jev/unbounded-retry": "off",
+        "anti-slop-effect-jev/test-cannot-fail": [
+          "error",
+          {
+            "mode": "changed"
+          }
+        ]
+      }
+    },
+    {
       "files": ["scripts/comment-syntax.ts"],
       "rules": {
-        "import/extensions": ["error", "never", { "ignorePackages": true }]
+        "import/extensions": [
+          "error",
+          "never",
+          {
+            "ignorePackages": true
+          }
+        ]
       }
     },
     {
@@ -188,15 +449,21 @@
     },
     {
       "files": ["apps/web/src/features/agent/visible-reply.tsx"],
-      "rules": { "effect-guards/no-react-use-effect": "off" }
+      "rules": {
+        "effect-guards/no-react-use-effect": "off"
+      }
     },
     {
       "files": ["apps/web/src/features/transactions/scroll-restoration.ts"],
-      "rules": { "effect-guards/no-react-use-effect": "off" }
+      "rules": {
+        "effect-guards/no-react-use-effect": "off"
+      }
     },
     {
       "files": ["apps/web/src/features/budgets/write-lifetime.ts"],
-      "rules": { "effect-guards/no-react-use-effect": "off" }
+      "rules": {
+        "effect-guards/no-react-use-effect": "off"
+      }
     },
     {
       "files": [
@@ -211,15 +478,21 @@
         "apps/web/src/features/transactions/ledger.tsx",
         "apps/web/src/features/needs-review/workspace.tsx"
       ],
-      "rules": { "import/extensions": "off" }
+      "rules": {
+        "import/extensions": "off"
+      }
     },
     {
       "files": ["apps/web/src/features/transactions/ledger.tsx"],
-      "rules": { "react/incompatible-library": "off" }
+      "rules": {
+        "react/incompatible-library": "off"
+      }
     },
     {
       "files": ["apps/cli/vitest.config.ts"],
-      "rules": { "import/no-default-export": "off" }
+      "rules": {
+        "import/no-default-export": "off"
+      }
     },
     {
       "files": ["infra/**/*.ts"],
@@ -380,13 +653,29 @@
     {
       "files": ["tools/depcruise/*.mjs"],
       "rules": {
-        "import/extensions": ["error", "never", { "pattern": { "js": "always" } }]
+        "import/extensions": [
+          "error",
+          "never",
+          {
+            "pattern": {
+              "js": "always"
+            }
+          }
+        ]
       }
     },
     {
       "files": ["scripts/oxlint/*.js"],
       "rules": {
-        "import/extensions": ["error", "never", { "pattern": { "js": "always" } }]
+        "import/extensions": [
+          "error",
+          "never",
+          {
+            "pattern": {
+              "js": "always"
+            }
+          }
+        ]
       }
     },
     {
@@ -397,7 +686,9 @@
     },
     {
       "files": ["tools/depcruise/*.mjs"],
-      "rules": { "import/extensions": "off" }
+      "rules": {
+        "import/extensions": "off"
+      }
     },
     {
       "files": ["apps/server/src/core/**"],
@@ -408,7 +699,12 @@
         "effect-guards/no-unknown-parameters": "error",
         "effect-guards/no-unsafe-dictionary-type": "error",
         "effect-guards/scalar-brand-only": "error",
-        "no-param-reassign": ["error", { "props": true }],
+        "no-param-reassign": [
+          "error",
+          {
+            "props": true
+          }
+        ],
         "no-restricted-globals": [
           "error",
           {
@@ -442,23 +738,43 @@
           },
           {
             "object": "Console",
-            "message": "core may not log. Return what happened and let the shell decide whether to print it — Console is an Effect default service, so it does not appear in the requirements channel and nothing else will catch this."
+            "message": "core may not log. Return what happened and let the shell decide whether to print it \u2014 Console is an Effect default service, so it does not appear in the requirements channel and nothing else will catch this."
           },
           {
             "object": "performance",
             "property": "now",
-            "message": "core may not read the clock. `performance.now()` is a clock like any other — a monotonic one — so a core function using it depends on when it runs."
+            "message": "core may not read the clock. `performance.now()` is a clock like any other \u2014 a monotonic one \u2014 so a core function using it depends on when it runs."
           }
         ],
         "typescript/prefer-readonly-parameter-types": [
           "error",
           {
             "allow": [
-              { "from": "package", "package": "effect", "name": "Utc" },
-              { "from": "package", "package": "effect", "name": "Brand" },
-              { "from": "package", "package": "effect", "name": "Option" },
-              { "from": "package", "package": "effect", "name": "Json" },
-              { "from": "package", "package": "effect", "name": "SchemaError" }
+              {
+                "from": "package",
+                "package": "effect",
+                "name": "Utc"
+              },
+              {
+                "from": "package",
+                "package": "effect",
+                "name": "Brand"
+              },
+              {
+                "from": "package",
+                "package": "effect",
+                "name": "Option"
+              },
+              {
+                "from": "package",
+                "package": "effect",
+                "name": "Json"
+              },
+              {
+                "from": "package",
+                "package": "effect",
+                "name": "SchemaError"
+              }
             ]
           }
         ],
@@ -468,11 +784,11 @@
             "patterns": [
               {
                 "group": ["~/shell", "~/shell/**", "**/shell", "**/shell/**"],
-                "message": "core may not import shell. Shell may import core; the arrow only points one way (ARCHITECTURE.md §1). Take what you need as a plain parameter and let the shell supply it."
+                "message": "core may not import shell. Shell may import core; the arrow only points one way (ARCHITECTURE.md \u00a71). Take what you need as a plain parameter and let the shell supply it."
               },
               {
                 "group": ["effect/http-api", "effect/http-api/**", "effect/http", "effect/http/**"],
-                "message": "core may not import the HTTP modules. A canonical operation's declaration — path, status code, required scope, cost class — is a delivery concern and belongs in the slice's shell contract; core holds the canonical schema and has no knowledge it is served over HTTP (ARCHITECTURE.md §4)."
+                "message": "core may not import the HTTP modules. A canonical operation's declaration \u2014 path, status code, required scope, cost class \u2014 is a delivery concern and belongs in the slice's shell contract; core holds the canonical schema and has no knowledge it is served over HTTP (ARCHITECTURE.md \u00a74)."
               }
             ]
           }
@@ -528,6 +844,57 @@
       ],
       "rules": {
         "import/no-default-export": "off"
+      }
+    },
+    {
+      "files": [
+        "**/*.test.*",
+        "**/*.spec.*",
+        "**/*.test-fixture.*",
+        "**/*.fixture.*",
+        "**/test/**",
+        "**/tests/**",
+        "**/__tests__/**"
+      ],
+      "rules": {
+        "anti-slop-effect/throw-in-effect-gen": "off",
+        "effect/noUnboundedConcurrency": "off",
+        "enfect/effect-promise-vs-trypromise": "off",
+        "enfect/avoid-option-getorthrow": "off",
+        "enfect/effect-run-in-body": "off"
+      }
+    },
+    {
+      "files": [
+        "apps/cli/src/main.ts",
+        "apps/web/src/main.tsx",
+        "apps/site/cloudflare/worker.ts",
+        "apps/server/cloudflare/*-worker.ts",
+        "apps/server/cloudflare/ai/*-worker.ts",
+        "apps/server/cloudflare/documents/*-worker.ts",
+        "apps/server/cloudflare/ingestion/email-worker.ts",
+        "apps/server/scripts/*.ts",
+        "apps/server/tools/*/generate*.ts",
+        "apps/server/tools/contracts/digest-artifacts.ts",
+        "apps/docs/scripts/*.ts",
+        "apps/site/scripts/*.ts",
+        "apps/web/scripts/*.ts",
+        "infra/cloudflare/alchemy*.ts",
+        "infra/cloudflare/verify-edge-policy.ts",
+        "infra/cloudflare/scripts/*.ts",
+        "scripts/check-*.ts",
+        "scripts/ci-changes.ts",
+        "scripts/dev-browser.ts",
+        "scripts/partition-source-scan.ts",
+        "scripts/verify.ts",
+        "scripts/document-parsing/check.ts",
+        "scripts/document-parsing/xlsx-work.ts",
+        "scripts/pro/main.ts",
+        "scripts/titular-requests/main.ts",
+        "tools/astro/check.ts"
+      ],
+      "rules": {
+        "enfect/effect-run-in-body": "off"
       }
     }
   ]

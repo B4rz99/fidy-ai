@@ -16,27 +16,40 @@ export const format: NotificationEmailFormat = {
   interpret: (document, context) => {
     if (!document.text.includes("realizaste una compra con tu rappicard")) return Option.none();
     const suffix = findField(document, ["método de pago"]);
+
     if (Option.isNone(suffix)) return Option.none();
     const suffixMatch = /^\*([0-9]{4})$/u.exec(suffix.value);
+
     if (suffixMatch === null) return Option.none();
+
     const accountHints = decodeAccountHints({
       cardLastFour: suffixMatch[1],
       instrumentLabel: "rappicard",
     });
+
     const amountText = findField(document, ["monto"]);
     const occurredText = findField(document, ["fecha de la transacción"]);
     const authorization = findField(document, ["no. de autorización"]);
     const counterparty = findField(document, ["comercio"]);
+
     if (Option.isNone(occurredText)) return Option.none();
     const occurredMatch = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})$/u.exec(occurredText.value);
+
     if (occurredMatch === null) return Option.none();
+
+    const [, dateText, timeText] = occurredMatch;
+
+    if (dateText === undefined || timeText === undefined) {
+      throw new Error("RappiCard occurrence pattern captures date and time");
+    }
+
     return Option.all({ accountHints, amountText, authorization, counterparty }).pipe(
       Option.flatMap((evidence) =>
         makeInterpretation({
           ...evidence,
           document,
-          dateText: Option.getOrThrow(Option.fromNullishOr(occurredMatch[1])),
-          timeText: Option.getOrThrow(Option.fromNullishOr(occurredMatch[2])),
+          dateText,
+          timeText,
           amountStyle: "dot-grouped",
           dateStyle: "dash",
           context,

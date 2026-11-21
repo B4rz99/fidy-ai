@@ -8,6 +8,7 @@ import { native } from "../user-store.test-fixture";
 const issuedFixture = Effect.gen(function* () {
   const db = yield* nativeTransactionJourney;
   const current = yield* Clock.currentTimeMillis;
+
   const init = {
     method: "POST",
     headers: {
@@ -27,10 +28,13 @@ const issuedFixture = Effect.gen(function* () {
       },
     }),
   };
+
   const issue = (): Effect.Effect<Response> =>
     native(() => db.send(new Request("https://api.fidyapp.com/pats", init)));
+
   const issued = yield* issue();
   expect(issued.status).toBe(200);
+
   const { data } = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       data: Schema.Struct({
@@ -39,23 +43,27 @@ const issuedFixture = Effect.gen(function* () {
       }),
     })
   )(yield* native(() => issued.json()));
+
   const call = (path: string, body?: unknown): Effect.Effect<Response> =>
     native(() =>
       db.send(
         new Request("https://api.fidyapp.com" + path, {
           method: body === undefined ? "GET" : "POST",
           headers: { authorization: "Bearer " + data.bearer, "content-type": "application/json" },
-          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          body: body === undefined ? null : JSON.stringify(body),
         })
       )
     );
+
   return { db, call, shortId: data.pat.shortId, bearer: data.bearer, issue };
 });
+
 const capture = {
   money: { amount: "23.50", currency: "COP" },
   direction: "outflow",
   occurredAt: "2026-09-01T12:00:00.000Z",
 };
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("returns the manual bearer once and retains no replayable secret", () =>
     Effect.gen(function* () {
@@ -64,11 +72,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       expect(repeated.status).toBe(409);
       expect(yield* native(() => repeated.text())).not.toContain(bearer);
       expect(yield* native(() => db.exec("SELECT count(*) AS n FROM pats"))).toEqual([{ n: 1 }]);
+
       const receipts = yield* native(() =>
         db.exec(
           "SELECT body FROM canonical_request_receipts WHERE operation='pats.createManualPAT' AND body IS NOT NULL"
         )
       );
+
       expect(receipts).toEqual([]);
       expect(
         yield* native(() =>
@@ -82,16 +92,21 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const { db, call, shortId } = yield* issuedFixture;
+
         const denied = yield* call("/categories"),
           invalid = yield* call("/transactions", { not: "a transaction" });
+
         expect([denied.status, invalid.status]).toEqual([403, 400]);
+
         for (const response of [denied, invalid]) {
           expect(response.headers.get("Fidy-Canonical-Remaining")).toBe("50");
         }
+
         const inspect = (): Effect.Effect<Awaited<ReturnType<typeof db.exec>>> =>
           native(() =>
             db.exec("SELECT expires_at_ms,last_used_at_ms FROM pats WHERE short_id=?", shortId)
           );
+
         const [before] = yield* inspect();
         expect(before).toMatchObject({ last_used_at_ms: null });
         yield* native(() =>
@@ -109,8 +124,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const usage = yield* inspect();
         expect(usage).toHaveLength(1);
         expect(usage[0]?.expires_at_ms).toBe(before?.expires_at_ms);
-        expect(typeof usage[0]?.last_used_at_ms).toBe("number");
+        expect(usage[0]?.last_used_at_ms).toEqual(expect.any(Number));
         const listing = yield* native(() => db.browser(0, "/pats"));
+
         const listed = yield* Schema.decodeUnknownEffect(
           Schema.Struct({
             data: Schema.Struct({
@@ -120,6 +136,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }),
           })
         )(yield* native(() => listing.json()));
+
         expect(listed.data.pats[0].shortId).toBe(shortId);
       })
   );
@@ -132,9 +149,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           "CREATE TRIGGER change_scope BEFORE UPDATE OF last_used_at_ms ON pats BEGIN UPDATE pats SET scopes_json='[\"dashboard\"]' WHERE id=OLD.id; END"
         )
       );
-      for (const path of ["/categories", "/transactions"]) {
-        expect((yield* call(path)).status).toBe(503);
-      }
+
+      yield* Effect.forEach(
+        ["/categories", "/transactions"],
+        Effect.fnUntraced(function* (path) {
+          expect((yield* call(path)).status).toBe(503);
+        }),
+        { discard: true }
+      );
+
       expect(
         yield* native(() =>
           db.exec(

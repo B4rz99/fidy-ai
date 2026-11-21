@@ -6,39 +6,43 @@ import {
 } from "./core-worker";
 
 export { default } from "./core-worker";
+
 export * from "./core-worker";
 
 type UserEnvironment = ConstructorParameters<typeof NativeUser>[1];
+
 const marker = "private-fixture";
 
-const heldBucket = (bucket: R2Bucket, storage: DurableObjectStorage): R2Bucket =>
-  new Proxy(bucket, {
-    get(target, property) {
-      if (property === "put") {
-        return (...args: Parameters<R2Bucket["put"]>) =>
-          Effect.runPromise(
-            Effect.gen(function* () {
-              const released = yield* Effect.tryPromise(() =>
-                storage.get<boolean>(
-                  args[0].startsWith("samples/") ? "hold-sample" : "fixture-hold"
-                )
-              ).pipe(
-                Effect.repeat({
-                  while: (value) => value === true,
-                  schedule: Schedule.spaced("20 millis"),
-                }),
-                Effect.timeoutOption("30 seconds")
-              );
-              if (Option.isNone(released)) return yield* Effect.die("Fixture release timed out");
-              return yield* Effect.tryPromise(() => target.put(...args));
-            })
-          );
-      }
-      const value: unknown = Reflect.get(target, property);
-      const bound: unknown = typeof value === "function" ? value.bind(target) : value;
-      return bound;
-    },
-  });
+const heldPut =
+  (bucket: R2Bucket, storage: DurableObjectStorage): R2Bucket["put"] =>
+  (...args) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const released = yield* Effect.tryPromise(() =>
+          storage.get<boolean>(args[0].startsWith("samples/") ? "hold-sample" : "fixture-hold")
+        ).pipe(
+          Effect.repeat({
+            while: (value) => value === true,
+            schedule: Schedule.spaced("20 millis"),
+          }),
+          Effect.timeoutOption("30 seconds")
+        );
+
+        if (Option.isNone(released)) return yield* Effect.die("Fixture release timed out");
+
+        return yield* Effect.tryPromise(() => bucket.put(...args));
+      })
+    );
+
+const heldBucket = (bucket: R2Bucket, storage: DurableObjectStorage): R2Bucket => ({
+  head: bucket.head.bind(bucket),
+  get: bucket.get.bind(bucket),
+  put: heldPut(bucket, storage),
+  createMultipartUpload: bucket.createMultipartUpload.bind(bucket),
+  resumeMultipartUpload: bucket.resumeMultipartUpload.bind(bucket),
+  delete: bucket.delete.bind(bucket),
+  list: bucket.list.bind(bucket),
+});
 
 export class UserStore extends NativeUser {
   constructor(state: DurableObjectState, env: UserEnvironment) {
@@ -50,11 +54,14 @@ export class UserStore extends NativeUser {
   }
   override fetch(request: Request): Promise<Response> {
     const store = this.ctx.storage;
+
     switch (request.url) {
       case "https://fixture.invalid/user-alarm": {
         const original = Date.now;
         const instant = request.headers.get("fixture-clock");
+
         if (instant !== null) Date.now = (): number => Number(instant);
+
         return super
           .alarm()
           .then(
@@ -65,6 +72,7 @@ export class UserStore extends NativeUser {
             Date.now = original;
           });
       }
+
       case "https://fixture.invalid/hold-sample":
         return store.put("hold-sample", true).then(() => new Response(null, { status: 204 }));
       case "https://fixture.invalid/release-sample":
@@ -88,9 +96,11 @@ export class UserStore extends NativeUser {
 export class Erasure extends NativeErasure {
   override fetch(request: Request): Promise<Response> {
     const instant = request.headers.get("fixture-erasure-clock");
+
     if (instant === null) return super.fetch(request);
     const original = Date.now;
     Date.now = (): number => Number(instant);
+
     return (
       request.url === "https://fixture.invalid/case-alarm"
         ? super.alarm().then(() => new Response(null, { status: 204 }))
@@ -104,9 +114,11 @@ export class Erasure extends NativeErasure {
 export class Directory extends NativeDirectory {
   override fetch(request: Request): Promise<Response> {
     const instant = request.headers.get("fixture-erasure-clock");
+
     if (instant === null) return super.fetch(request);
     const original = Date.now;
     Date.now = (): number => Number(instant);
+
     return (
       request.url === "https://fixture.invalid/directory-alarm"
         ? super.alarm().then(() => new Response(null, { status: 204 }))

@@ -9,6 +9,7 @@ export const getStaticPaths = (): Array<{
   { params: { document: "politica" }, props: { Document: PrivacyPolicy } },
   { params: { document: "terminos" }, props: { Document: Terms } },
 ];
+
 const { Document } = Astro.props;
 ---
 

@@ -22,6 +22,7 @@ export const TransactionCaptureRecovery = ({
   onHistory,
 }: Props): JSX.Element => {
   const [discarding, setDiscarding] = useState(false);
+
   return (
     <section className="flex min-w-0 flex-col gap-5" aria-label="Borrador por revisar">
       <Alert variant="warning">

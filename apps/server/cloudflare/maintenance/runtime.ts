@@ -16,6 +16,7 @@ type MaintenanceEnvironment = AcceptanceWindowBindings &
   StoreReleaseEnvironment &
   SharedBindings &
   Partial<Readonly<{ RECOVERY_ISOLATION: string }>>;
+
 export class Maintenance extends DurableObject<MaintenanceEnvironment> {
   private readonly runtime;
   private sweeping = false;
@@ -27,6 +28,7 @@ export class Maintenance extends DurableObject<MaintenanceEnvironment> {
       owner: maintenanceStoreHistory.owner,
       ceilingBytes: env.SQLITE_STORE_CAPACITY_BYTES,
     });
+
     if (state.id.name === maintenanceName) {
       state.waitUntil(
         state.blockConcurrencyWhile(() =>
@@ -39,6 +41,7 @@ export class Maintenance extends DurableObject<MaintenanceEnvironment> {
   }
   private watchdog(request: Request): Promise<Response> {
     return runInstalledBackgroundRequest({
+      runtime: this.runtime,
       settings: this.env,
       run: () => this.watchdogTick(request),
     });
@@ -46,12 +49,16 @@ export class Maintenance extends DurableObject<MaintenanceEnvironment> {
   private watchdogTick(request: Request): Promise<Response> {
     const raw = request.headers.get("x-maintenance-scheduled-at");
     const scheduled = Number(raw);
+
     if (raw === null || !Number.isSafeInteger(scheduled) || scheduled <= 0) {
       return Promise.resolve(new Response(null, { status: 400 }));
     }
+
     if (this.sweeping) return Promise.resolve(new Response(null, { status: 204 }));
+
     if (this.pending.size > 0) return Promise.resolve(new Response(null, { status: 503 }));
     this.sweeping = true;
+
     return this.runtime
       .runPromise(
         runWatchdog(this.env, scheduled, this.pending).pipe(
@@ -77,20 +84,26 @@ export class Maintenance extends DurableObject<MaintenanceEnvironment> {
     if (this.ctx.id.name !== maintenanceName) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
+
     if (request.method === "POST" && request.url === betaRegistryUrl) {
       return this.runtime.runPromise(readBetaRegistry(request));
     }
+
     if (watchdogRequest(request)) return this.watchdog(request);
+
     if (lifetimeRequest(request)) {
       return this.runtime.runPromise(
         handleLifetimeRegistration(request, Option.fromUndefinedOr(this.env.ERASURE)).pipe(
+          Effect.tapCause(Effect.logDebug),
           Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
         )
       );
     }
+
     if (request.method !== "GET" || request.url !== storeReadinessUrl) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
+
     return this.runtime.runPromise(
       storeReadiness({ history: maintenanceStoreHistory, release: this.env.CF_VERSION_METADATA.id })
     );

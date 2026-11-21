@@ -6,6 +6,7 @@ import { entryPreload } from "./entry-preload.ts";
 
 const publicDirectory = (mode: string): string | false => {
   if (mode === "production") return "cloudflare/production";
+
   return false;
 };
 
@@ -18,8 +19,10 @@ const bootstrapModules = [
   "/apps/web/src/session/initial-request.ts",
   "/apps/web/src/session/authentication-channel.ts",
 ];
+
 const bootstrapCodeModule = (id: string): boolean => {
   const path = id.replaceAll("\\", "/").replace(/\?.*$/u, "");
+
   return (
     bootstrapModules.some((suffix) => path.endsWith(suffix)) ||
     /\/apps\/web\/src\/(?:main\.tsx|app\/(?:mount|entry-code|agent-code|provider-return)\.tsx?|features\/[^/]+\/code\.ts)$/u.test(
@@ -27,9 +30,12 @@ const bootstrapCodeModule = (id: string): boolean => {
     )
   );
 };
+
 const sharedRuntimeModule = (id: string): boolean => {
   const path = id.replaceAll("\\", "/").replace(/\?.*$/u, "");
+
   if (bootstrapModules.some((suffix) => path.endsWith(suffix))) return false;
+
   return /\/apps\/server\/src\/|node_modules\/(?:effect|@effect|react|react-dom|scheduler|use-sync-external-store|@tanstack\/(?:react-router|router-core|history|react-store|store))\//u.test(
     path
   );
@@ -37,6 +43,7 @@ const sharedRuntimeModule = (id: string): boolean => {
 
 const sharedPresentationModule = (id: string): boolean => {
   const path = id.replaceAll("\\", "/").replace(/\?.*$/u, "");
+
   if (
     bootstrapModules.some((suffix) => path.endsWith(suffix)) ||
     /node_modules\/@base-ui\/react\/combobox\//u.test(path) ||
@@ -47,6 +54,7 @@ const sharedPresentationModule = (id: string): boolean => {
   ) {
     return false;
   }
+
   return (
     /node_modules\/(?:@base-ui|@floating-ui|@hugeicons|clsx|class-variance-authority|tailwind-merge)\//u.test(
       path

@@ -8,7 +8,7 @@ import {
 
 import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import type { OAuthAuthority } from "~/shell/oauth-agents/contract";
-import type { OwnedStatement } from "~/shell/owner-write/contract";
+import type { OwnedStatement, PreparedRead } from "~/shell/owner-write/contract";
 import {
   type AuditCredentialOperation,
   AuditUnavailable,
@@ -26,12 +26,7 @@ export { utcDayMilliseconds } from "./contract";
 
 export const prepareOAuthActivityPage = (
   input: Readonly<{ connections: OwnedStatement; guard: OwnedStatement }>
-): Readonly<{
-  statement: OwnedStatement;
-  decode: (
-    rows: unknown
-  ) => Effect.Effect<ReadonlyMap<string, OAuthRecentActivity>, AuditUnavailable>;
-}> => ({
+): PreparedRead<ReadonlyMap<string, OAuthRecentActivity>, AuditUnavailable> => ({
   statement: {
     sql: `SELECT connections.id AS connectionId,
       (SELECT json_group_array(json_object('id',id,'operation',operation,'outcome',outcome,'occurred_at_ms',occurred_at_ms))
@@ -61,6 +56,7 @@ export const prepareOAuthActivityPage = (
           })
         )
       )(raw);
+
       const entries = yield* Effect.forEach(rows, (row) =>
         Schema.decodeUnknownEffect(Schema.toType(OAuthRecentActivity))(
           row.activity.map((entry) => ({
@@ -76,8 +72,9 @@ export const prepareOAuthActivityPage = (
           ])
         )
       );
+
       return new Map(entries);
-    }).pipe(Effect.catchCause(() => Effect.fail(new AuditUnavailable()))),
+    }).pipe(Effect.catchCause((cause) => Effect.fail(new AuditUnavailable({ cause })))),
 });
 
 export const recordOAuthCall = (
@@ -121,13 +118,16 @@ export const recordClaimedPAT: typeof patEvidence.recordClaimedPAT = (input) =>
 
 export const recordPATList: typeof patEvidence.recordPATList = (input) =>
   patEvidence.recordPATList(input);
+
 export const recordOnePATRevocation: typeof patEvidence.recordOnePATRevocation = (input) =>
   patEvidence.recordOnePATRevocation(input);
 
 export const recordAllPATRevocations: typeof patEvidence.recordAllPATRevocations = (input) =>
   patEvidence.recordAllPATRevocations(input);
+
 export const recordCanonicalPATWork: typeof patEvidence.recordCanonicalPATWork = (input) =>
   patEvidence.recordCanonicalPATWork(input);
+
 export const recordRejectedPATWork: typeof patEvidence.recordRejectedPATWork = (input) =>
   patEvidence.recordRejectedPATWork(input);
 
@@ -144,11 +144,9 @@ export const preparePATActivity = (
     current: number;
     authority: PATActivityAuthority;
   }>
-): Readonly<{
-  statement: OwnedStatement;
-  decode: (rows: unknown) => Effect.Effect<PATActivityHistory, AuditUnavailable>;
-}> => {
+): PreparedRead<PATActivityHistory, AuditUnavailable> => {
   const cutoff = input.current - auditRetentionDays * utcDayMilliseconds;
+
   return {
     statement: {
       sql: `SELECT operation,outcome,occurred_at_ms AS occurredAt FROM audit_entries WHERE record_type='credential_call' AND user_id = ? AND pat_id = (${input.grant.sql})
@@ -162,6 +160,7 @@ export const preparePATActivity = (
         const rows = yield* Schema.decodeUnknownEffect(
           Schema.Array(ActivityRow).check(Schema.isMaxLength(maximumPATActivityEntries + 1))
         )(raw);
+
         return yield* Schema.decodeUnknownEffect(Schema.toType(PATActivityHistory))({
           entries: rows.slice(0, maximumPATActivityEntries).map((row) => ({
             ...row,
@@ -170,7 +169,7 @@ export const preparePATActivity = (
           hasMore: rows.length > maximumPATActivityEntries,
           retainedSince: DateTime.makeUnsafe(cutoff),
         });
-      }).pipe(Effect.mapError(() => new AuditUnavailable())),
+      }).pipe(Effect.mapError((cause) => new AuditUnavailable({ cause }))),
   };
 };
 

@@ -12,8 +12,11 @@ export const canonicalDomains = [
     native: installationNames.Web,
   },
 ] as const;
+
 export type CanonicalDomain = (typeof canonicalDomains)[number];
+
 type DomainState =
   | Readonly<{ vacant: true }>
   | Readonly<{ vacant: false; id: string; service: string }>;
+
 export type ReadCanonicalDomain = (domain: CanonicalDomain) => Effect.Effect<DomainState, Error>;

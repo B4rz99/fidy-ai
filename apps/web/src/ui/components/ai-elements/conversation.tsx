@@ -1,3 +1,4 @@
+import { Predicate } from "effect";
 // Copyright 2023 Vercel, Inc. Licensed under Apache-2.0; see ./LICENSE.
 // Adapted from the AI Elements conversation registry; Fidy primitives and instant scrolling.
 import { Button } from "@/ui/components/button";
@@ -46,7 +47,8 @@ export const ConversationScrollButton = ({
 
   const handleScrollToBottom = useCallback(() => {
     const scrolling = scrollToBottom();
-    if (typeof scrolling !== "boolean") scrolling.catch(() => undefined);
+
+    if (!Predicate.isBoolean(scrolling)) scrolling.catch(() => undefined);
   }, [scrollToBottom]);
 
   return (

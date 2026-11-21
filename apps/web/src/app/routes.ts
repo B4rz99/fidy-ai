@@ -1,3 +1,5 @@
+import { browserRuntime } from "@/transport/browser-runtime";
+import { reportBrowserDefect } from "@/transport/browser-defects";
 import { TransactionCaptureFeature, TransactionSearch } from "@/features/transactions/feature";
 import { Effect, Option, Schema } from "effect";
 import { BudgetRoute, RecurringRoute } from "./destination-components";
@@ -27,72 +29,90 @@ type WebRouterOptions = WebRouterContext &
   Readonly<{
     history: Option.Option<RouterHistory>;
   }>;
+
 const ProviderReturnFeature = lazyRouteComponent(
   () => import("@/features/provider-authentication/feature"),
   "ProviderReturnFeature"
 );
+
 const RecurringDigestFeature = lazyRouteComponent(
   () => import("@/features/recurring-digest/feature"),
   "RecurringDigestFeature"
 );
+
 const ConnectionContinuationFeature = lazyRouteComponent(
   () => import("@/features/connections/feature"),
   "ConnectionContinuationFeature"
 );
+
 const OAuthReviewFeature = lazyRouteComponent(
   () => import("@/features/oauth-connections/feature"),
   "OAuthReviewFeature"
 );
+
 const CLIConnectionFeature = lazyRouteComponent(
   () => import("@/features/pats/feature"),
   "CLIConnectionFeature"
 );
+
 const AccessManagementPage = lazyRouteComponent(
   () => import("./access-page"),
   "AccessManagementPage"
 );
+
 const SubscriptionOffersFeature = lazyRouteComponent(
   () => import("@/features/subscription/feature"),
   "SubscriptionOffersFeature"
 );
+
 const TransactionListFeature = lazyRouteComponent(
   () => import("./transactions-page"),
   "TransactionsPage"
 );
+
 const DashboardRoute = lazyRouteComponent(() => import("./dashboard-page"), "DashboardPage");
+
 const ApplicationFrame = lazyRouteComponent(
   () => import("./application-frame"),
   "ApplicationFrame"
 );
+
 const PageNotFound = lazyRouteComponent(() => import("./not-found"), "PageNotFound");
+
 const rootRoute = createRootRouteWithContext<WebRouterContext>()({
   component: ApplicationFrame,
   notFoundComponent: PageNotFound,
 });
+
 const AuthenticatedRoute = lazyRouteComponent(
   () => import("./authenticated-route"),
   "AuthenticatedRoute"
 );
+
 const authenticatedRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "authenticated",
   component: AuthenticatedRoute,
 });
+
 const signedInRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/app",
   notFoundComponent: PageNotFound,
 });
+
 const signedInIndexRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/",
   beforeLoad: () => redirect({ to: "/app/dashboard" }),
 });
+
 const dashboardRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/dashboard",
   component: DashboardRoute,
 });
+
 const budgetsRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/budgets",
@@ -108,11 +128,12 @@ const budgetsRoute = createRoute({
     )(search),
   loaderDeps: ({ search }) => ({ month: search.month }),
   loader: ({ context, deps, preload, abortController }) =>
-    Effect.runPromise(
+    browserRuntime.runPromise(
       Effect.gen(function* () {
         const { BudgetsFeature } = yield* Effect.tryPromise(
           () => import("@/features/budgets/feature")
         );
+
         yield* Effect.tryPromise(() =>
           Promise.all([
             BudgetsFeature.preload(),
@@ -130,6 +151,7 @@ const budgetsRoute = createRoute({
     ),
   component: BudgetRoute,
 });
+
 const needsReviewRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/needs-review",
@@ -149,7 +171,7 @@ const needsReviewRoute = createRoute({
   loader: {
     staleReloadMode: "background",
     handler: ({ context, deps, preload, abortController }) =>
-      Effect.runPromise(
+      browserRuntime.runPromise(
         Effect.gen(function* () {
           if (!preload) {
             retainPreparedWorkspaceMetadata({
@@ -157,6 +179,7 @@ const needsReviewRoute = createRoute({
               registry: context.registry,
             });
           }
+
           const preparation = preload
             ? Promise.resolve()
             : ReviewWorkspace.preloadData({
@@ -165,14 +188,17 @@ const needsReviewRoute = createRoute({
                 filter: deps.filter,
                 page: deps.page,
                 signal: abortController.signal,
-              }).catch(() => undefined);
+              }).catch(() => reportBrowserDefect("preparation_failed"));
+
           yield* Effect.tryPromise(() => ReviewWorkspace.preload());
+
           return { preparation };
         })
       ),
   },
   component: NeedsReviewRoute,
 });
+
 const recurringPlansRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/recurring",
@@ -189,33 +215,36 @@ const recurringPlansRoute = createRoute({
   loaderDeps: ({ search }) => ({ month: search.month }),
   preloadStaleTime: 0,
   loader: ({ context, deps, preload, abortController }) =>
-    Effect.runPromise(
+    browserRuntime.runPromise(
       Effect.gen(function* () {
         yield* Effect.tryPromise(() =>
           Promise.all([RecurringWorkspace.preload?.(), TransactionCaptureFeature.preload()])
         );
+
         if (preload) return;
+
         const { RecurringRoute } = yield* Effect.tryPromise(
           () => import("@/features/recurring/feature")
         );
-        yield* Effect.tryPromise(() =>
-          RecurringRoute.preloadData({
-            apiClient: context.apiClient,
-            registry: context.registry,
-            month: Option.fromUndefinedOr(deps.month),
-            signal: abortController.signal,
-            intent: false,
-          })
-        );
+
+        yield* RecurringRoute.preloadData({
+          apiClient: context.apiClient,
+          registry: context.registry,
+          month: Option.fromUndefinedOr(deps.month),
+          signal: abortController.signal,
+          intent: false,
+        });
       })
     ),
   component: RecurringRoute,
 });
+
 const recurringDigestRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/insights/recurring/$id",
   component: RecurringDigestFeature,
 });
+
 const cliConnectionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/connect/cli",
@@ -223,6 +252,7 @@ const cliConnectionRoute = createRoute({
     Schema.decodeSync(Schema.Struct({ cliCode: Schema.optionalKey(PATPairingPublicCode) }))(search),
   component: CLIConnectionFeature,
 });
+
 const accessManagementRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/settings/access",
@@ -235,10 +265,12 @@ const accessManagementRoute = createRoute({
     )(search),
   component: AccessManagementPage,
 });
+
 const independentApplicationRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "independent-application",
 });
+
 const transactionsRoute = createRoute({
   getParentRoute: () => independentApplicationRoute,
   path: "/app/transactions",
@@ -267,21 +299,25 @@ const transactionsRoute = createRoute({
   },
   component: TransactionListFeature,
 });
+
 const privacyRoute = createRoute({
   getParentRoute: () => independentApplicationRoute,
   path: "/settings/privacy",
   component: lazyRouteComponent(() => import("@/features/privacy/feature"), "PrivacyFeature"),
 });
+
 const subscriptionOffersRoute = createRoute({
   getParentRoute: () => independentApplicationRoute,
   path: "/upgrade",
   component: SubscriptionOffersFeature,
 });
+
 const oauthReviewRoute = createRoute({
   getParentRoute: () => independentApplicationRoute,
   path: "/oauth/review/$requestId",
   component: OAuthReviewFeature,
 });
+
 const connectionContinuationRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/connections/continue",
@@ -289,6 +325,7 @@ const connectionContinuationRoute = createRoute({
     Schema.decodeSync(Schema.Struct({ attempt: Schema.optionalKey(Schema.Unknown) }))(search),
   component: ConnectionContinuationFeature,
 });
+
 const connectionResultRoute = createRoute({
   getParentRoute: () => independentApplicationRoute,
   path: "/connections/result",
@@ -297,32 +334,38 @@ const connectionResultRoute = createRoute({
     "ConnectionResultFeature"
   ),
 });
+
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
   validateSearch: (search) => Schema.decodeSync(LoginSearch)(search),
   component: lazyRouteComponent(() => import("./login-page"), "LoginPage"),
 });
+
 const accountRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/settings/account",
   component: lazyRouteComponent(() => import("./account-page"), "AccountPage"),
 });
+
 const googleReturnRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/auth/google-return",
   component: ProviderReturnFeature,
 });
+
 const microsoftReturnRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/auth/microsoft-return",
   component: ProviderReturnFeature,
 });
+
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   beforeLoad: () => redirect({ to: "/app/dashboard" }),
 });
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
@@ -350,6 +393,7 @@ const routeTree = rootRoute.addChildren([
     recurringDigestRoute,
   ]),
 ]);
+
 export const createWebRouter = (options: WebRouterOptions) =>
   createRouter({
     scrollRestoration: ({ location }) => location.pathname === "/app/transactions",
@@ -369,6 +413,7 @@ export const createWebRouter = (options: WebRouterOptions) =>
     },
     history: Option.getOrUndefined(options.history),
   });
+
 declare module "@tanstack/react-router" {
   interface Register {
     router: ReturnType<typeof createWebRouter>;

@@ -10,6 +10,7 @@ export const preservedDates = ({
   from: string;
 }>): ReadonlyArray<string> => {
   const exceptions = document.exceptions.filter((entry) => entry.planId === planId);
+
   return [
     ...new Set([
       ...exceptions.flatMap((entry) =>
@@ -40,6 +41,7 @@ export const preservesOccurrence = ({
   const exception = document.exceptions.find(
     (entry) => entry.planId === item.planId && entry.date === item.date
   );
+
   return exception === undefined
     ? hasOccurrenceTracking({ document, item })
     : exception.replacement !== undefined || exception.skipped;

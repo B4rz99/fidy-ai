@@ -28,12 +28,17 @@ import { SubscriptionReference } from "./subscription-reference";
 import "./reference.css";
 
 const themes = ["light", "dark", "system"] as const;
+
 type Theme = (typeof themes)[number];
+
 const themeLabels: Record<Theme, string> = { light: "Claro", dark: "Oscuro", system: "Sistema" };
+
 const systemDark = (): boolean => window.matchMedia("(prefers-color-scheme: dark)").matches;
+
 const subscribeToTheme = (notify: () => void): (() => void) => {
   const preference = window.matchMedia("(prefers-color-scheme: dark)");
   preference.addEventListener("change", notify);
+
   return () => preference.removeEventListener("change", notify);
 };
 
@@ -77,6 +82,7 @@ const palette = [
   { name: "Información", fill: "bg-info-subtle", ink: "text-info-foreground" },
   { name: "Por revisar", fill: "bg-pending", ink: "text-on-pastel" },
 ];
+
 const PaletteReference = (): JSX.Element => (
   <section aria-labelledby="palette-heading" className="flex flex-col gap-4">
     <h2 id="palette-heading" className="text-2xl font-semibold tracking-tight">
@@ -205,6 +211,7 @@ const feedback = [
     description: "Hace falta confirmar los datos antes de registrarla.",
   },
 ] as const;
+
 const FeedbackReference = (): JSX.Element => (
   <section aria-labelledby="feedback-heading" className="flex flex-col gap-4">
     <h2 id="feedback-heading" className="text-2xl font-semibold tracking-tight">
@@ -300,18 +307,21 @@ export const UIReference = (): JSX.Element => {
   const [theme, setTheme] = useState<Theme>("dark");
   const prefersDark = useSyncExternalStore(subscribeToTheme, systemDark);
   const dark = theme === "dark" || (theme === "system" && prefersDark);
+
   const themeScope = useCallback<RefCallback<HTMLDivElement>>(
     (element) => {
       if (element === null) return;
       const root = element.ownerDocument.documentElement;
       const previous = root.classList.contains("dark");
       root.classList.toggle("dark", dark);
+
       return (): void => {
         root.classList.toggle("dark", previous);
       };
     },
     [dark]
   );
+
   return (
     <div ref={themeScope} className="ui-reference min-h-svh bg-background text-foreground">
       <main className="mx-auto flex max-w-6xl flex-col gap-10 px-5 py-8 sm:px-6 lg:px-12">

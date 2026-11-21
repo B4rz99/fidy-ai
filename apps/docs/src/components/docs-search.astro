@@ -5,10 +5,14 @@ import "../styles/controls.css";
 
 const documentSection = (id: string): string => {
   if (id.startsWith("reference")) return "Referencia";
+
   if (id.startsWith("conectar")) return "Conectar mi agente";
+
   if (id.startsWith("transacciones") || id.startsWith("consultar")) return "Tus transacciones";
+
   return "Guías de Fidy";
 };
+
 const documents = (await getCollection("docs", ({ data }) => !data.draft)).map((entry) => ({
   href: entry.id === "index" ? "/" : `/${entry.id}`,
   title: entry.data.title,
@@ -88,16 +92,22 @@ const documents = (await getCollection("docs", ({ data }) => !data.draft)).map((
 <script>
   import { Option, Schema } from "effect";
 
+  const SearchDocument = Schema.Struct({ url: Schema.String });
+
   type PagefindResult = {
-    data: () => Promise<unknown>;
+    data: () => Promise<typeof SearchDocument.Encoded>;
   };
+
   type PagefindClient = {
     options: (options: { noWorker: boolean }) => Promise<void>;
     search: (term: string) => Promise<{ results: ReadonlyArray<PagefindResult> }>;
   };
-  const SearchDocument = Schema.Struct({ url: Schema.String });
+
   const decodeDocument = Schema.decodeUnknownSync(SearchDocument);
-  const mountDocsSearch = (searchRoot: Element): { dispose(): void } => {
+
+  type DocsSearch = { dispose(): void };
+
+  const mountDocsSearch = (searchRoot: Element): DocsSearch => {
     const dialog = searchRoot?.querySelector("dialog");
     const openButton = searchRoot?.querySelector<HTMLButtonElement>(".docs-search-trigger");
     const input = dialog?.querySelector("input");
@@ -107,14 +117,17 @@ const documents = (await getCollection("docs", ({ data }) => !data.draft)).map((
     const empty = dialog?.querySelector<HTMLElement>(".docs-search-empty");
     const status = dialog?.querySelector<HTMLElement>(".docs-search-status");
     const termLabel = dialog?.querySelector<HTMLElement>("[data-search-term]");
+
     const resultItems = new Map(
       Array.from(results?.querySelectorAll("li") ?? [], (item) => [
         item.querySelector("a")?.getAttribute("href"),
         item,
       ])
     );
+
     const closeButton = dialog?.querySelector<HTMLButtonElement>(".docs-search-close");
     const clearButton = dialog?.querySelector<HTMLButtonElement>(".docs-search-clear");
+
     if (
       !dialog ||
       !openButton ||
@@ -130,6 +143,7 @@ const documents = (await getCollection("docs", ({ data }) => !data.draft)).map((
     ) {
       throw new Error("Incomplete docs search markup");
     }
+
     const listeners = new AbortController();
     const listenerOptions = { signal: listeners.signal };
     let disposed = false;
@@ -141,23 +155,30 @@ const documents = (await getCollection("docs", ({ data }) => !data.draft)).map((
     const loadSearch = async (): Promise<PagefindClient> => {
       if (Option.isSome(client)) return client.value;
       const path = "/pagefind/pagefind.js";
+
       const pending = import(/* @vite-ignore */ path).then(async (loaded: PagefindClient) => {
         await loaded.options({ noWorker: true });
+
         return loaded;
       });
+
       client = Option.some(pending);
+
       return pending.catch((error: unknown) => {
         if (Option.isSome(client) && client.value === pending) client = Option.none();
         throw error;
       });
     };
+
     const cancelDebounce = (): void => {
       if (Option.isSome(debounceTimer)) clearTimeout(debounceTimer.value);
       debounceTimer = Option.none();
     };
+
     const setStatus = (message: string): void => {
       status.textContent = message;
     };
+
     const searchIsCurrent = (version: number): boolean =>
       !disposed && version === searchVersion && dialog.open;
 
@@ -174,10 +195,13 @@ const documents = (await getCollection("docs", ({ data }) => !data.draft)).map((
 
     const resolveResult = (path: string): Option.Option<HTMLLIElement> => {
       const target = new URL(path, window.location.origin);
+
       if (target.origin !== window.location.origin) return Option.none();
       const item = resultItems.get(target.pathname.replace(/\/$/u, "") || "/");
+
       return Option.fromUndefinedOr(item);
     };
+
     const showResults = (paths: ReadonlyArray<string>, term: string): void => {
       const accepted = paths.map(resolveResult);
       resetResults();
@@ -199,11 +223,14 @@ const documents = (await getCollection("docs", ({ data }) => !data.draft)).map((
       try {
         if (!searchIsCurrent(version)) return;
         const search = await loadSearch();
+
         if (!searchIsCurrent(version)) return;
         const response = await search.search(term);
+
         const pages = await Promise.all(
           response.results.map(async (result) => decodeDocument(await result.data()).url)
         );
+
         if (!searchIsCurrent(version)) return;
         showResults(pages, term);
       } catch {
@@ -220,6 +247,7 @@ const documents = (await getCollection("docs", ({ data }) => !data.draft)).map((
       resetResults();
       const term = input.value.trim();
       idle.hidden = term.length > 0;
+
       if (!term) return;
       status.textContent = "Buscando…";
       const version = searchVersion;
@@ -237,11 +265,13 @@ const documents = (await getCollection("docs", ({ data }) => !data.draft)).map((
     const focusResult = (links: ReadonlyArray<HTMLAnchorElement>, direction: number): void => {
       const focused = links.findIndex((link) => link === document.activeElement);
       let next = (focused + direction + links.length) % links.length;
+
       if (focused === -1) next = direction === 1 ? 0 : links.length - 1;
       resultItems.forEach((item) => item.removeAttribute("data-selected"));
       links[next]?.closest("li")?.setAttribute("data-selected", "");
       links[next]?.focus();
     };
+
     const openFirstResult = (
       event: KeyboardEvent,
       links: ReadonlyArray<HTMLAnchorElement>
@@ -250,13 +280,18 @@ const documents = (await getCollection("docs", ({ data }) => !data.draft)).map((
       event.preventDefault();
       links[0]?.click();
     };
+
     const navigateResults = (event: KeyboardEvent): void => {
       const links = Array.from(results.querySelectorAll<HTMLAnchorElement>("li:not([hidden]) a"));
+
       if (links.length === 0) return;
+
       if (event.key === "Enter") {
         openFirstResult(event, links);
+
         return;
       }
+
       if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
       event.preventDefault();
       focusResult(links, event.key === "ArrowDown" ? 1 : -1);
@@ -267,9 +302,12 @@ const documents = (await getCollection("docs", ({ data }) => !data.draft)).map((
       cancelDebounce();
       resetResults();
       document.documentElement.removeAttribute("data-docs-search-open");
+
       if (dialog.open) dialog.close();
+
       if (openButton.isConnected) openButton.focus();
     };
+
     const dispose = (): void => {
       if (disposed) return;
       disposed = true;
@@ -318,6 +356,7 @@ const documents = (await getCollection("docs", ({ data }) => !data.draft)).map((
       (event) => {
         if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "k") return;
         event.preventDefault();
+
         if (dialog.open) retireSearch();
         else openSearch();
       },
@@ -331,8 +370,11 @@ const documents = (await getCollection("docs", ({ data }) => !data.draft)).map((
       listenerOptions
     );
     openButton.disabled = false;
+
     return { dispose };
   };
+
   const searchRoot = document.querySelector(".docs-search");
+
   if (searchRoot) mountDocsSearch(searchRoot);
 </script>

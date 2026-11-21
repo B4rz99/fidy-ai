@@ -4,9 +4,11 @@ import type { ProactivityOptInKind } from "~/shell/consent/contract";
 import { currentDisclosureFacts } from "./current-disclosure";
 
 const reminderText = `¿Quieres recibir gratis recordatorios de Fidy por WhatsApp para registrar tus movimientos? Por defecto se programan todos los días a las 18:00 en America/Bogota, incluso si ya registraste movimientos. Puedes cambiar la frecuencia o la hora. Si ignoras tres recordatorios entregados, preguntamos si quieres continuar; si ignoras dos más, pausamos los recordatorios. Autorizas el uso de tu identidad de WhatsApp y de tus preferencias para enviar estos recordatorios mediante Kapso y Meta. Puedes rechazar sin afectar tu acceso a Fidy o revocar esta autorización cuando quieras. Esta autorización es independiente de los resúmenes semanales y las alertas de presupuesto. Política: https://app.fidyapp.com/politica Elige únicamente la opción explícita de aceptar, rechazar o revocar correspondiente a esta solicitud. Ninguna otra respuesta concede autorización.`;
+
 const budgetText = `¿Quieres recibir gratis alertas de presupuesto de Fidy por WhatsApp? Avisamos cuando las salidas registradas de la misma categoría y moneda alcanzan el 80% o el 100% de un presupuesto mensual. Cada umbral se avisa una vez al mes. No convertimos monedas ni enviamos alertas de umbrales anteriores a tu autorización. No es asesoría financiera. Autorizas el uso de tus datos financieros registrados para generar y enviar estas alertas mediante Kapso y Meta. Puedes rechazar sin afectar tu acceso a Fidy o revocar esta autorización cuando quieras. Esta autorización es independiente de los resúmenes semanales y los recordatorios. Política: https://app.fidyapp.com/politica Elige únicamente la opción explícita de aceptar, rechazar o revocar correspondiente a esta solicitud. Ninguna otra respuesta concede autorización.`;
 
 const recurringText = `¿Quieres avisos gratis por WhatsApp de nuevos patrones históricos de cargos recurrentes? Agrupamos las confirmaciones elegibles del día y avisamos a las 09:00 del día siguiente, en la zona capturada. No indican cargos activos. Conservamos cada moneda. Excluimos confirmaciones suprimidas y días anteriores a tu autorización. Si la lista no cabe, enviamos la cantidad y un enlace al informe completo que requiere iniciar sesión. Autorizas usar tus datos financieros registrados y tu identidad de WhatsApp para estos avisos mediante Kapso y Meta. Puedes rechazar o revocar cuando quieras sin afectar tu acceso a Fidy. Es independiente de presupuestos, recordatorios y resúmenes semanales. No es asesoría financiera. Política: https://app.fidyapp.com/politica Solo la opción explícita Aceptar autoriza estos avisos.`;
+
 const disclosures = {
   "manual-entry-reminder": {
     text: reminderText,
@@ -37,6 +39,7 @@ const disclosures = {
     ],
   },
 };
+
 export const proactivityDisclosure = (kind: ProactivityOptInKind): DisclosureSnapshot =>
   Schema.decodeSync(DisclosureSnapshot)({
     ...currentDisclosureFacts,

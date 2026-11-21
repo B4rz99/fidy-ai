@@ -30,12 +30,8 @@ import {
   type SubscriptionOfferPresentation,
   paymentMethodCopy,
 } from "./presentation";
+import { StandingViewState } from "./view-state";
 import "@/ui/components/subscription.css";
-
-export type StandingViewState =
-  | Readonly<{ _tag: "Initial" }>
-  | Readonly<{ _tag: "Failure" }>
-  | Readonly<{ _tag: "Ready"; standing: SubscriptionStatus }>;
 
 export const SubscriptionWorkspace = ({
   children,
@@ -66,6 +62,7 @@ export const OfferSelection = ({
     <div className="subscription-offers" aria-label="Ofertas de suscripción">
       {presented.map((offer) => {
         const selected = Option.contains(selectedId, offer.id);
+
         return (
           <div className="subscription-offer" key={offer.id}>
             <Button
@@ -225,6 +222,7 @@ const statusIcons = {
   unavailable: Refresh04Icon,
   uncertain: HelpCircleIcon,
 } as const;
+
 export const PaymentFeedback = ({
   tone,
   title,
@@ -249,11 +247,14 @@ const standingDateFormatter = new Intl.DateTimeFormat("es-CO", {
   dateStyle: "long",
   timeZone: "America/Bogota",
 });
+
 const attemptDateFormatter = new Intl.DateTimeFormat("es-CO", {
   dateStyle: "medium",
   timeZone: "America/Bogota",
 });
+
 const periodLabels = { weekly: "Semanal", monthly: "Mensual", yearly: "Anual" } as const;
+
 const attemptLabels = { pending: "Pendiente", succeeded: "Aprobado", failed: "Fallido" } as const;
 
 const RecentAttempts = ({
@@ -306,26 +307,27 @@ const RecentAttempts = ({
 export const SubscriptionStandingView = ({
   state,
   onRetry,
-}: Readonly<{ state: StandingViewState; onRetry: () => void }>): JSX.Element => {
-  if (state._tag === "Initial") return <PendingRead label="Cargando suscripción" />;
-  if (state._tag === "Failure") {
-    return (
+}: Readonly<{ state: StandingViewState; onRetry: () => void }>): JSX.Element =>
+  StandingViewState.$match(state, {
+    Initial: () => <PendingRead label="Cargando suscripción" />,
+    Failure: () => (
       <PaymentFeedback tone="unavailable" title="Estado no disponible">
         <p>No pudimos consultar tu suscripción. Tus datos siguen disponibles.</p>
         <Button contentLayout="wrap" type="button" variant="outline" onClick={onRetry}>
           Reintentar
         </Button>
       </PaymentFeedback>
-    );
-  }
-  return <ReadyStanding standing={state.standing} onRetry={onRetry} />;
-};
+    ),
+    Ready: ({ standing }) => <ReadyStanding standing={standing} onRetry={onRetry} />,
+  });
 
 const StandingAccessPeriod = ({
   standing,
 }: Readonly<{ standing: SubscriptionStatus }>): JSX.Element => {
   const { accessTier, trialPeriod, paidSubscription } = standing;
+
   if (standing.hasProGrant && Option.isNone(paidSubscription)) return <></>;
+
   return Option.match(paidSubscription, {
     onNone: () =>
       accessTier === "pro" ? (
@@ -353,6 +355,7 @@ const ReadyStanding = ({
   onRetry,
 }: Readonly<{ standing: SubscriptionStatus; onRetry: () => void }>): JSX.Element => {
   const { accessTier, recentAttempts } = standing;
+
   return (
     <>
       <section className="subscription-standing" aria-label="Estado de la suscripción">

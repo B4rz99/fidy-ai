@@ -34,7 +34,9 @@ export type OAuthAuthority = Readonly<{
 }>;
 
 export const oauthIssuer = "https://api.fidyapp.com";
+
 export const oauthResource = `${oauthIssuer}/mcp`;
+
 export const oauthPaths = {
   resource: "/.well-known/oauth-protected-resource/mcp",
   issuer: "/.well-known/oauth-authorization-server",
@@ -49,15 +51,23 @@ export const oauthPaths = {
   revoke: "/web/oauth/revoke",
   revokeAll: "/web/oauth/revoke-all",
 } as const;
+
 export const OAuthSource = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
+
 export const OAuthRequestId = Schema.String.check(Schema.isUUID());
+
 const maximumUrlLength = 2048;
+
 const maximumRedirects = 8;
+
 const maximumScopeLength = 64;
+
 const UrlClaim = Schema.NonEmptyString.check(Schema.isMaxLength(maximumUrlLength));
+
 const nativeCallback = (value: string): boolean => {
   try {
     const url = new URL(value);
+
     return (
       url.href === value &&
       url.username === "" &&
@@ -70,6 +80,7 @@ const nativeCallback = (value: string): boolean => {
     return false;
   }
 };
+
 export const OAuthRedirect = UrlClaim.check(Schema.makeFilter(nativeCallback));
 
 export const OAuthRegistration = Schema.Struct({
@@ -97,7 +108,9 @@ export const OAuthRegistration = Schema.Struct({
     )
   ),
 });
+
 export type OAuthRegistration = typeof OAuthRegistration.Type;
+
 export const OAuthAuthorization = Schema.Struct({
   client_id: OAuthClientId,
   response_type: Schema.Literal("code"),
@@ -108,7 +121,9 @@ export const OAuthAuthorization = Schema.Struct({
   state: Schema.optionalKey(Schema.NonEmptyString.check(Schema.isMaxLength(maximumUrlLength))),
   scope: Schema.optionalKey(Schema.NonEmptyString.check(Schema.isMaxLength(maximumScopeLength))),
 });
+
 export type OAuthAuthorization = typeof OAuthAuthorization.Type;
+
 export const OAuthReview = Schema.Struct({
   requestId: OAuthRequestId,
   claimedClientName: OAuthRegistration.fields.client_name,
@@ -120,7 +135,9 @@ export const OAuthReview = Schema.Struct({
   reviewedAt: Schema.DateTimeUtcFromString,
   connectAvailable: Schema.Literal(true),
 });
+
 export type OAuthReview = typeof OAuthReview.Type;
+
 export const OAuthReviewChoice = Schema.Struct({
   requestId: OAuthRequestId,
   scopes: PATScopes,
@@ -128,34 +145,46 @@ export const OAuthReviewChoice = Schema.Struct({
   reviewedAt: Schema.DateTimeUtcFromString,
   expiresAt: Schema.DateTimeUtcFromString,
 });
+
 export type OAuthReviewChoice = typeof OAuthReviewChoice.Type;
 
 export const OAuthConnected = Schema.Struct({
   connectionId: OAuthConnectionId,
   callback: OAuthRedirect,
 });
+
 const invalidStatus = 400;
+
 const unauthorizedStatus = 401;
+
 const forbiddenStatus = 403;
+
 const rateLimitedStatus = 429;
+
 const unavailableStatus = 503;
+
 const OAuthInvalid = Schema.Struct({ error: Schema.Literal("invalid_request") }).annotate({
   httpApiStatus: invalidStatus,
 });
+
 export const OAuthUnauthenticated = Schema.Struct({
   error: Schema.Literal("unauthenticated"),
 }).annotate({
   httpApiStatus: unauthorizedStatus,
 });
+
 const OAuthForbidden = Schema.Struct({ error: Schema.Literal("forbidden_origin") }).annotate({
   httpApiStatus: forbiddenStatus,
 });
+
 export const OAuthReauthenticationRequired = Schema.Struct({
   error: Schema.Literal("reauthentication_required"),
 }).annotate({ httpApiStatus: forbiddenStatus });
+
 const OAuthRateLimited = Schema.Struct({ error: Schema.Literal("slow_down") }).annotate({
   httpApiStatus: rateLimitedStatus,
 });
+
 const OAuthUnavailable = Schema.Struct({
   error: Schema.Literal("temporarily_unavailable"),
 }).annotate({ httpApiStatus: unavailableStatus });
@@ -169,20 +198,28 @@ export const OAuthConnectionMetadata = Schema.Struct({
   state: Schema.Literals(["active", "expired", "revoked"]),
   recentActivity: OAuthRecentActivity,
 });
+
 export type OAuthConnectionMetadata = typeof OAuthConnectionMetadata.Type;
+
 export const oauthConnectionPageSize = 25;
+
 export const OAuthConnectionList = Schema.Struct({
   connections: Schema.Array(OAuthConnectionMetadata).check(
     Schema.isMaxLength(oauthConnectionPageSize)
   ),
   nextCursor: Schema.OptionFromNullOr(OAuthConnectionId),
 });
+
 export type OAuthConnectionList = typeof OAuthConnectionList.Type;
+
 export const OAuthConnectionListQuery = Schema.Struct({
   after: Schema.OptionFromOptionalKey(OAuthConnectionId),
 });
+
 export const OAuthConnectionRevoke = Schema.Struct({ connectionId: OAuthConnectionId });
+
 export const OAuthConnectionRevokeAll = Schema.Struct({});
+
 const managementErrors = [
   OAuthInvalid,
   OAuthUnauthenticated,

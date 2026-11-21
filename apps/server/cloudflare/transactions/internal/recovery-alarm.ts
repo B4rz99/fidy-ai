@@ -1,39 +1,46 @@
-import { Data, Effect } from "effect";
+import { Data, Effect, Layer, ManagedRuntime } from "effect";
+
+const boundaryRuntime = ManagedRuntime.make(Layer.empty);
 
 type Storage = Pick<DurableObjectStorage, "getAlarm" | "setAlarm" | "deleteAlarm">;
 
-type AlarmAbsent = Readonly<{ _tag: "AlarmAbsent" }>;
-type ClearUnconfirmed = Readonly<{ _tag: "ClearUnconfirmed" }>;
+export type RecoveryAlarmClear = Data.TaggedEnum<{ AlarmAbsent: {}; ClearUnconfirmed: {} }>;
 
-class RecoveryAlarmUnavailable extends Data.TaggedError("RecoveryAlarmUnavailable") {}
+export const RecoveryAlarmClear = Data.taggedEnum<RecoveryAlarmClear>();
+
+export class RecoveryAlarmUnavailable extends Data.TaggedError("RecoveryAlarmUnavailable") {}
 
 const nativeAlarm = <A>(run: () => Promise<A>): Effect.Effect<A, RecoveryAlarmUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new RecoveryAlarmUnavailable() });
 
-export const makeUserRecoveryAlarm = (
-  storage: Storage
-): Readonly<{
+type UserRecoveryAlarm = Readonly<{
   schedule: (dueAtMs: number) => Promise<void>;
-  retireAndClear: () => Promise<AlarmAbsent | ClearUnconfirmed>;
-}> => {
+  retireAndClear: () => Promise<RecoveryAlarmClear>;
+}>;
+
+export const makeUserRecoveryAlarm = (storage: Storage): UserRecoveryAlarm => {
   let pending: Promise<void> = Promise.resolve();
   let retired = false;
   const isRetired = (): boolean => retired;
+
   const enqueue = <A>(run: () => Promise<A>): Promise<A> => {
     const result = pending.then(run);
     pending = result.then(
       () => undefined,
       () => undefined
     );
+
     return result;
   };
+
   return {
     schedule: (dueAtMs) =>
       enqueue(() =>
-        Effect.runPromise(
+        boundaryRuntime.runPromise(
           Effect.gen(function* () {
             if (isRetired()) return;
             const existing = yield* nativeAlarm(() => storage.getAlarm());
+
             if (!isRetired() && (existing === null || dueAtMs < existing)) {
               yield* nativeAlarm(() => storage.setAlarm(dueAtMs));
             }
@@ -42,14 +49,17 @@ export const makeUserRecoveryAlarm = (
       ),
     retireAndClear: () => {
       retired = true;
+
       return enqueue(() =>
-        Effect.runPromise(
+        boundaryRuntime.runPromise(
           Effect.gen(function* () {
             yield* nativeAlarm(() => storage.deleteAlarm());
-            const result: AlarmAbsent | ClearUnconfirmed =
+
+            const result =
               (yield* nativeAlarm(() => storage.getAlarm())) === null
-                ? { _tag: "AlarmAbsent" }
-                : { _tag: "ClearUnconfirmed" };
+                ? RecoveryAlarmClear.AlarmAbsent()
+                : RecoveryAlarmClear.ClearUnconfirmed();
+
             return result;
           })
         )

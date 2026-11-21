@@ -8,11 +8,14 @@ import { type JSX, Suspense, useState } from "react";
 
 export const RetainedReviewWorkspace = (): JSX.Element => {
   const { authentication } = useSession();
+
   const privacy = useRouterState({
     select: (state) => state.location.pathname === "/settings/privacy",
   });
+
   return privacy || authentication === "expired" ? <></> : <VisitedReviewWorkspace />;
 };
+
 const VisitedReviewWorkspace = (): JSX.Element => {
   const search = Option.fromUndefinedOr(
     useMatch({
@@ -21,9 +24,12 @@ const VisitedReviewWorkspace = (): JSX.Element => {
       select: (match) => (match.status === "success" ? match.search : undefined),
     })
   );
+
   const [previous, setPrevious] = useState(search);
+
   if (Option.isSome(search)) {
     const next = search.value;
+
     if (
       !Option.exists(
         previous,
@@ -33,9 +39,12 @@ const VisitedReviewWorkspace = (): JSX.Element => {
       setPrevious(search);
     }
   }
+
   const current = Option.orElse(search, () => previous);
   const active = Option.isSome(search);
+
   if (Option.isNone(current)) return <></>;
+
   return (
     <div hidden={!active} inert={!active}>
       <Suspense fallback={<PendingRead label="Cargando elementos" />}>

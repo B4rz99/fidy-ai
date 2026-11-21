@@ -7,6 +7,7 @@ import { test } from "node:test";
 
 await test("explicit generation publishes agent operations and their reachable schemas, excluding browser authority", async () => {
   const directory = await mkdtemp(join(tmpdir(), "fidy-docs-reference-"));
+
   try {
     const source = join(directory, "source.json");
     await writeFile(
@@ -69,27 +70,33 @@ await test("explicit generation publishes agent operations and their reachable s
         },
       })
     );
+
     const result = spawnSync(
       "bun",
       ["apps/docs/scripts/generate-reference.ts", "--source", source, "--destination", directory],
       { encoding: "utf8" }
     );
+
     assert.equal(result.status, 0, result.stderr);
     const published = await readFile(join(directory, "public/reference/openapi.json"), "utf8");
     assert.match(published, /transactions.listTransactions/u);
     assert.doesNotMatch(published, /tokens.createPAT|"Private"|"\/private"/u);
+
     const page = await readFile(
       join(directory, "src/content/docs/reference/transactions.listTransactions.md"),
       "utf8"
     );
+
     assert.match(page, /read/u);
     assert.match(page, /200/u);
     assert.match(page, /Result/u);
+
     const again = spawnSync(
       "bun",
       ["apps/docs/scripts/generate-reference.ts", "--source", source, "--destination", directory],
       { encoding: "utf8" }
     );
+
     assert.equal(again.status, 0, again.stderr);
     assert.equal(
       await readFile(
@@ -105,6 +112,7 @@ await test("explicit generation publishes agent operations and their reachable s
 
 await test("rejects operation-level access without a capability before replacing the published reference", async () => {
   const directory = await mkdtemp(join(tmpdir(), "fidy-docs-invalid-scope-"));
+
   try {
     const source = join(directory, "source.json");
     const prior = join(directory, "public/reference/openapi.json");
@@ -135,11 +143,13 @@ await test("rejects operation-level access without a capability before replacing
         },
       })
     );
+
     const result = spawnSync(
       "bun",
       ["apps/docs/scripts/generate-reference.ts", "--source", source, "--destination", directory],
       { encoding: "utf8" }
     );
+
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /capability/u);
     assert.equal(await readFile(prior, "utf8"), "previous reviewed contract");

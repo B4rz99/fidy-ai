@@ -1,4 +1,7 @@
+import { Data } from "effect";
 import type { ErasureProjection } from "../../erasure-store/contract";
+
+const Quiescence = Data.taggedEnum<ErasureProjection["quiescence"]>();
 
 const recordProjections: ReadonlyArray<ErasureProjection> = [
   {
@@ -153,15 +156,17 @@ const recordProjections: ReadonlyArray<ErasureProjection> = [
   },
 ].map((definition): ErasureProjection => {
   const { id, table, source, predicate, readPredicate, dependencies } = definition;
+
   const removal =
     definition.clearFields !== undefined
       ? `UPDATE ${table} AS r SET ${definition.clearFields.map((field) => `${field}=NULL`).join(",")}`
       : `DELETE FROM ${table} AS r`;
+
   return {
     id,
     dataClass: "schedules",
     dependencies,
-    quiescence: { _tag: "Synchronous" },
+    quiescence: Quiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: `SELECT CAST(r.rowid AS TEXT) AS rowRef FROM ${source} r WHERE ${readPredicate} AND r.user_id=?`,
@@ -189,7 +194,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "reminder_control_receipts",
     dataClass: "schedules",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: Quiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: `SELECT ${controlReceiptRef} AS rowRef FROM proactive_messages r WHERE r.control_message_id IS NOT NULL AND r.user_id=?`,
@@ -211,7 +216,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "budget_alert_occurrences",
     dataClass: "schedules",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: Quiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,user_id,budget_delivery_group_id AS delivery_group_id,budget_threshold AS threshold,id AS insight_event_id,budget_crossing_json AS crossing_json FROM insight_events WHERE budget_delivery_group_id IS NOT NULL) r WHERE r.user_id=?",
@@ -232,7 +237,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "insight_delivery_attempts",
     dataClass: "schedules",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: Quiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM insight_events r WHERE r.delivery_receipt_id IS NOT NULL AND r.user_id=?",
@@ -254,7 +259,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "proactivity_message_events",
     dataClass: "schedules",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: Quiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,user_id AS user_id,message_kind,message_id AS delivery_id,id AS insight_event_id FROM insight_events WHERE message_id IS NOT NULL) r WHERE r.user_id=?",
@@ -276,7 +281,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "recurring_digest_consumption",
     dataClass: "schedules",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: Quiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,user_id,confirmation_id,disposition FROM recurring_digest_items WHERE disposition IS NOT NULL) r WHERE r.user_id=?",
@@ -302,7 +307,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "recurring_digest_opportunities",
     dataClass: "schedules",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: Quiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,user_id,id AS request_id FROM (SELECT rowid,id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_message_id AS delivery_id,current_recurring_opportunity FROM insight_offer_requests) WHERE current_recurring_opportunity=1) r WHERE r.user_id=?",
@@ -324,7 +329,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "recurring_digest_staging",
     dataClass: "schedules",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: Quiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,user_id,confirmation_id,confirmed_at_ms,context_json,item_json,eligible FROM recurring_digest_items WHERE confirmed_at_ms IS NOT NULL) r WHERE r.user_id=?",

@@ -5,7 +5,8 @@ import { mountPreview } from "./demo-motion";
 
 export const FeatureTabs = (): React.JSX.Element => {
   const [selected, setSelected] = useState(0);
-  const [animate, setAnimate] = useState(true);
+  const [motion, setMotion] = useState<"animated" | "instant">("animated");
+
   return (
     <section className="section wrap product-features" id="funciones">
       {heading}
@@ -25,18 +26,21 @@ export const FeatureTabs = (): React.JSX.Element => {
             tabIndex={selected === index ? 0 : -1}
             onClick={(event) => {
               moveIndicator({ tab: event.currentTarget, instant: event.detail === 0 });
-              setAnimate(event.detail !== 0);
+              setMotion(event.detail === 0 ? "instant" : "animated");
               setSelected(index);
             }}
             onKeyDown={(event) => {
-              const next = nextFeature(event.key, index);
-              if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return;
+              const next = featureNavigation.get(event.key)?.(index);
+
+              if (next === undefined) return;
               event.preventDefault();
-              setAnimate(false);
+              setMotion("instant");
               setSelected(next);
+
               const target = event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(
                 `#feature-tab-${next}`
               );
+
               if (target != null) {
                 moveIndicator({ tab: target, instant: true });
                 target.focus();
@@ -51,12 +55,12 @@ export const FeatureTabs = (): React.JSX.Element => {
       <div
         id="feature-panel"
         className="feature-panel"
-        data-animate={animate}
+        data-animate={motion === "animated"}
         role="tabpanel"
         aria-labelledby={`feature-tab-${selected}`}
         tabIndex={0}
         key={selected}
-        ref={animate ? mountPreview : undefined}
+        ref={motion === "animated" ? mountPreview : undefined}
       >
         {features[selected]?.content}
       </div>
@@ -64,13 +68,12 @@ export const FeatureTabs = (): React.JSX.Element => {
   );
 };
 
-const nextFeature = (key: string, index: number): number => {
-  if (key === "ArrowRight") return (index + 1) % features.length;
-  if (key === "ArrowLeft") return (index + features.length - 1) % features.length;
-  if (key === "Home") return 0;
-  if (key === "End") return features.length - 1;
-  return index;
-};
+const featureNavigation = new Map<string, (index: number) => number>([
+  ["ArrowRight", (index): number => (index + 1) % features.length],
+  ["ArrowLeft", (index): number => (index + features.length - 1) % features.length],
+  ["Home", (): number => 0],
+  ["End", (): number => features.length - 1],
+]);
 
 const heading = (
   <div className="section-head">

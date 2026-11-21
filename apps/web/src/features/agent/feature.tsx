@@ -16,6 +16,7 @@ type AgentState = Readonly<{
   text: string;
   setText: (text: string) => void;
 }>;
+
 const AgentContext = createContext<Option.Option<AgentState>>(Option.none());
 
 export const HostedAgentProvider = ({
@@ -25,6 +26,7 @@ export const HostedAgentProvider = ({
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const conversation = useHostedConversation({ client, clearAcceptedDraft: () => setText("") });
+
   return (
     <AgentContext.Provider value={Option.some({ conversation, open, setOpen, text, setText })}>
       {children}
@@ -34,8 +36,10 @@ export const HostedAgentProvider = ({
 
 export const HostedAgentFeature = (): JSX.Element => {
   const state = useContext(AgentContext);
+
   if (Option.isNone(state)) throw new Error("HostedAgentFeature requires HostedAgentProvider");
   const { conversation, open, setOpen, text, setText } = state.value;
+
   return (
     <ChatWindow
       open={open}

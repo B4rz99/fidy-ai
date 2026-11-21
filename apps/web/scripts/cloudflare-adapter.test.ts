@@ -22,6 +22,7 @@ describe("Cloudflare static artifact policy", () => {
         const acceptance = headers
           .split("https://storage-web-acceptance.fidyapp.com/*\n")[1]
           ?.split("\n\n")[0];
+
         expect(acceptance).toContain("connect-src https://storage-acceptance.fidyapp.com;");
         expect(acceptance).toContain("Link: <https://storage-acceptance.fidyapp.com>");
         expect(acceptance).not.toContain("wompi.co");

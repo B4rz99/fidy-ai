@@ -11,6 +11,7 @@ const row = {
   created_at_ms: 0,
   updated_at_ms: 0,
 };
+
 it.each([null, "Casa", undefined])(
   "decodes exact cap and native timestamps with group %s",
   (group) =>
@@ -26,6 +27,7 @@ it.each([null, "Casa", undefined])(
       })
     )
 );
+
 it.each([-62135596800000, 253402300799999])(
   "retains the supported timestamp boundary %i",
   (milliseconds) =>
@@ -36,6 +38,7 @@ it.each([-62135596800000, 253402300799999])(
       })
     )
 );
+
 it.each([
   { cap: "0" },
   { cap: "-1" },

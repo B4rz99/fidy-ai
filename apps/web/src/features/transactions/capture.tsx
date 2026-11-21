@@ -20,7 +20,7 @@ import type { CanonicalSuccess, FidyClient } from "@/transport/client";
 import {
   type CaptureRetention,
   type TransactionCaptureTask,
-  makeCaptureRetention,
+  captureRetention,
 } from "./capture-task";
 import { currencyChoices } from "@/ui/currency-choices";
 
@@ -34,6 +34,7 @@ type CaptureInputsProps = Readonly<{
   disabled: boolean;
   revealErrors: boolean;
 }>;
+
 const CaptureInputs = ({
   amount,
   counterparty,
@@ -60,6 +61,7 @@ const CaptureInputs = ({
               width="full"
               onChange={(value) => {
                 const selected = Schema.decodeUnknownOption(Currency)(value);
+
                 if (Option.isSome(selected)) change(selected.value);
               }}
             />
@@ -138,6 +140,7 @@ const CaptureNotes = ({
     />
   </div>
 );
+
 const CaptureClassification = ({
   categories,
   categoryId,
@@ -191,6 +194,7 @@ const CaptureClassification = ({
     <CaptureNotes notes={notes} setNotes={setNotes} />
   </>
 );
+
 type CaptureProps = Readonly<{
   intentId: string;
   categories: ReadonlyArray<Category>;
@@ -209,13 +213,17 @@ type CaptureProps = Readonly<{
   direction: Option.Option<CaptureDraft["direction"]>;
   disabled: boolean;
 }>;
+
 type EditorProps = Omit<CaptureProps, "intentId" | "renderForm"> &
   Readonly<{ newAttempt: boolean; task: TransactionCaptureTask }>;
+
 const captureLocked = (props: EditorProps): boolean => props.disabled || props.task.locked;
+
 const captureCurrencyChange = (
   fixed: CaptureProps["currency"],
   change: (currency: CaptureDraft["currency"]) => void
 ): CaptureInputsProps["onCurrency"] => (Option.isSome(fixed) ? Option.none() : Option.some(change));
+
 const CaptureForm = ({
   props,
   draft,
@@ -278,8 +286,10 @@ const CaptureForm = ({
 
 const captureSubmitLabel = (props: EditorProps): string => {
   if (props.task.saving) return "Guardando…";
+
   return props.newAttempt ? "Registrar como nueva transacción" : "Registrar";
 };
+
 const CaptureActions = ({ props }: Readonly<{ props: EditorProps }>): JSX.Element => (
   <div data-transaction-slot="transaction-form-actions">
     {Option.isNone(props.onCancel) ? null : (
@@ -301,6 +311,7 @@ const CaptureActions = ({ props }: Readonly<{ props: EditorProps }>): JSX.Elemen
 const CaptureEditor = ({ props }: Readonly<{ props: EditorProps }>): JSX.Element => {
   const [attempted, setAttempted] = useState(false);
   const [presentation] = useState(() => ({ active: false }));
+
   const [mounted] = useState<RefCallback<HTMLFormElement>>(
     () =>
       (
@@ -308,21 +319,28 @@ const CaptureEditor = ({ props }: Readonly<{ props: EditorProps }>): JSX.Element
       ): ReturnType<RefCallback<HTMLFormElement>> => {
         if (node === null) return;
         presentation.active = true;
+
         return (): void => {
           presentation.active = false;
         };
       }
   );
+
   const draft = props.task.draft;
   const currency = draft.currency;
+
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     setAttempted(true);
+
     if (captureLocked(props)) return;
+
     if (Option.isNone(parseMoneyInput({ text: draft.amount, currency }))) {
       event.currentTarget.querySelector<HTMLInputElement>("#transaction-amount")?.focus();
+
       return;
     }
+
     if (!event.currentTarget.reportValidity()) return;
     props.task.submit({
       categories: props.categories,
@@ -334,6 +352,7 @@ const CaptureEditor = ({ props }: Readonly<{ props: EditorProps }>): JSX.Element
       },
     });
   };
+
   return (
     <CaptureForm
       mounted={mounted}
@@ -345,10 +364,13 @@ const CaptureEditor = ({ props }: Readonly<{ props: EditorProps }>): JSX.Element
     />
   );
 };
+
 class CaptureIdentity extends Data.Class<Readonly<{ client: FidyClient; intentId: string }>> {}
+
 const retainedCaptures = Atom.family((_identity: CaptureIdentity) =>
-  makeCaptureRetention().pipe(Atom.keepAlive)
+  captureRetention().pipe(Atom.keepAlive)
 );
+
 const captureMeaning = (props: CaptureProps): string =>
   JSON.stringify([
     props.timeZone,
@@ -362,6 +384,7 @@ const captureMeaning = (props: CaptureProps): string =>
     props.initial.notes ?? "",
     props.initial.categoryId ?? "",
   ]);
+
 const CaptureAttachment = ({
   props,
   retention,
@@ -390,12 +413,14 @@ const CaptureAttachment = ({
               captureMeaning(props)
             )
   );
+
   return (
     <div className="contents" ref={mounted}>
       {children}
     </div>
   );
 };
+
 const RetainedCapture = ({
   props,
   intentId,
@@ -403,6 +428,7 @@ const RetainedCapture = ({
   const identity = new CaptureIdentity({ client: props.apiClient, intentId });
   const retentionResource = retainedCaptures(identity);
   const retention = useAtomValue(retentionResource);
+
   return Option.match(retention.resource, {
     onNone: () => (
       <CaptureAttachment props={props} retention={retention}>
@@ -414,6 +440,7 @@ const RetainedCapture = ({
     ),
   });
 };
+
 const RetainedCaptureEditor = ({
   props,
   resource,
@@ -424,9 +451,11 @@ const RetainedCaptureEditor = ({
   retention: CaptureRetention;
 }>): JSX.Element => {
   const task = useAtomValue(resource);
+
   const identity = task.locked
     ? Option.getOrElse(retention.identity, () => captureMeaning(props))
     : captureMeaning(props);
+
   return (
     <CaptureAttachment key={identity} props={props} retention={retention}>
       {props.renderForm(<RetainedCaptureForm {...props} />, {
@@ -436,25 +465,31 @@ const RetainedCaptureEditor = ({
     </CaptureAttachment>
   );
 };
+
 const RetainedCaptureForm = (props: CaptureProps): JSX.Element => {
   const identity = new CaptureIdentity({ client: props.apiClient, intentId: props.intentId });
   const retentionResource = retainedCaptures(identity);
   const retention = useAtomValue(retentionResource);
+
   return Option.match(retention.resource, {
     onNone: () => <></>,
     onSome: (resource) => <CaptureTaskForm props={props} resource={resource} />,
   });
 };
+
 const CaptureTaskForm = ({
   props,
   resource,
 }: Readonly<{ props: CaptureProps; resource: Atom.Atom<TransactionCaptureTask> }>): JSX.Element => {
   const task = useAtomValue(resource);
+
   return <CaptureEditor props={{ ...props, task, newAttempt: false }} />;
 };
+
 export const TransactionCapture = (props: CaptureProps): JSX.Element => (
   <RetainedCapture key={props.intentId} props={props} intentId={props.intentId} />
 );
+
 export const ControlledTransactionCapture = (props: EditorProps): JSX.Element => (
   <CaptureEditor props={props} />
 );

@@ -3,17 +3,20 @@ import { Schema } from "effect";
 export const GitRevision = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/u))
   .pipe(Schema.brand("GitRevision"))
   .annotate({ identifier: "GitRevision" });
+
 export type GitRevision = typeof GitRevision.Type;
 
 export const ContractDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u))
   .pipe(Schema.brand("ContractDigest"))
   .annotate({ identifier: "ContractDigest" });
+
 export type ContractDigest = typeof ContractDigest.Type;
 
 export const ReleaseMetadata = Schema.Struct({
   contractDigest: ContractDigest,
   gitRevision: GitRevision,
 }).annotate({ identifier: "ReleaseMetadata" });
+
 export type ReleaseMetadata = typeof ReleaseMetadata.Type;
 
 const decodeIdentity = <Identity>(

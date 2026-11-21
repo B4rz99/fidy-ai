@@ -3,6 +3,7 @@ import { cn } from "@/ui/class-names";
 import "./financial-summary-card.css";
 
 const characterWidth = 1.6;
+
 export const FinancialSummaryCard = ({
   amount,
   label,

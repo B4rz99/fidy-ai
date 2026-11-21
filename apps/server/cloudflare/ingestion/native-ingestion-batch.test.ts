@@ -6,6 +6,19 @@ import { alice, nativeTransactionJourney } from "../financial-user-store.test-fi
 import { native } from "../user-store.test-fixture";
 import { batchCallId } from "./statement-batch.test-fixture";
 
+type CreationCall = Readonly<{
+  callId: string;
+  operation: "transactions.createTransaction";
+  input: Readonly<{
+    payload: Readonly<{
+      direction: "outflow";
+      money: Readonly<{ amount: string; currency: string }>;
+      occurredAt: string;
+      notes: string;
+    }>;
+  }>;
+}>;
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "registers forwarding before batch disclosure and rejects oversized children, envelopes and browser publication without partial effects",
@@ -20,6 +33,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             now
           )
         );
+
         const api = (path: string, data: unknown): Effect.Effect<Response> =>
           native(() =>
             journey.send(
@@ -35,15 +49,19 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               })
             )
           );
+
         const batch = (calls: unknown[]): Effect.Effect<Response> =>
           api("/operations/atomic-batch", { calls });
+
         const enable = {
           callId: batchCallId(1),
           operation: "ingestion.enableEmailForwarding",
           input: {},
         };
+
         const registered = yield* batch([enable]);
         expect(registered.status).toBe(200);
+
         const result = yield* Schema.decodeUnknownEffect(
           Schema.Struct({
             data: Schema.Struct({
@@ -56,9 +74,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }),
           })
         )(yield* native(() => registered.json()));
+
         expect(result.data.results.map((item) => item.output.data.address)).toHaveLength(1);
         expect(result.data.results[0]?.output.data.address).toMatch(/@fidyapp\.com$/u);
-        const call = (suffix: number, notes: string): object => ({
+
+        const call = (suffix: number, notes: string): CreationCall => ({
           callId: batchCallId(suffix),
           operation: "transactions.createTransaction",
           input: {
@@ -70,6 +90,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             },
           },
         });
+
         const childFailure = yield* batch([call(1, "x".repeat(5000)), call(2, "small")]);
         expect(childFailure.status).toBe(400);
         expect(yield* native(() => childFailure.json())).toMatchObject({
@@ -81,18 +102,22 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               "This child's input exceeds the size an individual call of this operation accepts.",
           },
         });
+
         const oversized = Array.from({ length: 12 }, (_, index) =>
           call(index + 1, "x".repeat(3900))
         );
+
         const envelopeFailure = yield* batch(oversized);
         expect(envelopeFailure.status).toBe(400);
         expect(yield* native(() => envelopeFailure.json())).toMatchObject({
           error: { code: "validation_failed", message: "Invalid atomic batch input." },
         });
+
         const payload = {
           idempotencyKey: batchCallId(2),
           reference: { stagingId: batchCallId(3), sha256: "a".repeat(64), byteLength: 32 },
         };
+
         expect((yield* api("/ingestion/statements/bytes", payload)).status).toBe(403);
         expect((yield* api("/ingestion/statements", payload)).status).toBe(403);
         expect(

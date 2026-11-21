@@ -1,5 +1,5 @@
-import { browserSecureRandom } from "@/browser/crypto";
-import { Effect, Option } from "effect";
+import { SecureRandom } from "effect/crypto";
+import { Option } from "effect";
 import { type JSX, use, useState } from "react";
 import { RecurringPlanId } from "@/transport/client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
@@ -21,6 +21,7 @@ type CreationDraft = Readonly<{
   seriesId: Option.Option<string>;
   restored: boolean;
 }>;
+
 type Props = CreationDraft &
   Readonly<{
     categories: ReadonlyArray<Category>;
@@ -28,27 +29,32 @@ type Props = CreationDraft &
     save: Save;
     created: (receipt: CreationReceipt) => void;
   }>;
+
 export const CreatePlan = (props: Props): JSX.Element => {
   const { initial, seriesId, restored, categories, disabled, save, created } = props;
   const { track, discard } = use(CreationDraftContext);
   const [draft, setDraft] = useState({ initial, transactionId: Option.none<string>() });
+
   const submit = (plan: PlanInput): void => {
-    const id = RecurringPlanId.make(
-      Effect.runSync(browserSecureRandom.uuidV4().pipe(Effect.orDie))
-    );
+    const id = RecurringPlanId.make(SecureRandom.uuidV4Unsafe());
+
     const source = draft.transactionId;
     save(
       {
         kind: "create",
         id,
         plan,
-        ...(Option.isSome(seriesId) ? { seriesId: seriesId.value } : {}),
+        ...Option.match(seriesId, {
+          onNone: () => ({}),
+          onSome: (series) => ({ seriesId: series }),
+        }),
       },
       Option.isSome(source)
         ? (): void => created({ planId: id, date: plan.firstDate, transactionId: source.value })
         : undefined
     );
   };
+
   return (
     <>
       {restored ? <RestoredDraft discard={discard} /> : null}
@@ -84,6 +90,7 @@ export const CreatePlan = (props: Props): JSX.Element => {
     </>
   );
 };
+
 const RestoredDraft = ({ discard }: Readonly<{ discard: () => void }>): JSX.Element => (
   <Alert variant="information" className="mb-5">
     <AlertTitle>Borrador sin guardar</AlertTitle>

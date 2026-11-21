@@ -19,10 +19,15 @@ import {
 
 const uuid = (index: number): string =>
   String(index).padStart(8, "0") + "-1111-4111-8111-111111111111";
+
 const revision = "a".repeat(40);
+
 const stableRevision = "b".repeat(40);
+
 const core = "fidy-native-storage-core";
+
 const ingress = "fidy-native-storage-ingress";
+
 const stage: FallbackStage = {
   revision,
   stableRevision,
@@ -50,11 +55,14 @@ const stage: FallbackStage = {
     publicVersionId: uuid(8),
   },
 };
-const harness = (): {
+
+type RecoveryHarness = {
   port: FallbackRepairPort;
   deployments: (name: string) => Deployment[];
   writes: string[];
-} => {
+};
+
+const harness = (): RecoveryHarness => {
   const history = new Map<string, Deployment[]>([
     [
       core,
@@ -81,18 +89,25 @@ const harness = (): {
       ],
     ],
   ]);
+
   const deployments = (name: string): Deployment[] => {
     const rows = history.get(name);
+
     if (rows === undefined) throw Error("Unknown Worker");
+
     return rows;
   };
+
   const writes: string[] = [];
+
   const port: FallbackRepairPort = {
     trunk: () => Effect.succeed(revision),
     current: (name) =>
       Effect.gen(function* () {
         const [current] = deployments(name);
+
         if (current === undefined) return yield* Effect.fail(Error("Missing Worker deployment"));
+
         return structuredClone(current);
       }),
     recentDeployments: (name) => Effect.sync(() => structuredClone(deployments(name))),
@@ -101,16 +116,20 @@ const harness = (): {
         const result = { id: name === core ? uuid(9) : uuid(10), versions };
         deployments(name).unshift(result);
         writes.push(name);
+
         return result;
       }),
   };
+
   return { port, deployments, writes };
 };
+
 const verify = (): Effect.Effect<void, Error> => Effect.void;
 
 it.effect("requires the exact five deployment entries after a verified dormant restoration", () =>
   Effect.gen(function* () {
     const { port, deployments, writes } = harness();
+
     const release = {
       snapshot: { ...stage.release.snapshot, stableRevision: revision },
       coreVersionId: uuid(21),
@@ -118,9 +137,11 @@ it.effect("requires the exact five deployment entries after a verified dormant r
       coreDeploymentId: uuid(23),
       publicDeploymentId: uuid(24),
     };
+
     const promoted = { coreDeploymentId: uuid(25), publicDeploymentId: uuid(26) };
     const restored = { coreDeploymentId: uuid(27), publicDeploymentId: uuid(28) };
     const snapshot = { ...release.snapshot };
+
     for (const [role, name] of [
       ["core", core],
       ["public", ingress],
@@ -147,6 +168,7 @@ it.effect("requires the exact five deployment entries after a verified dormant r
         { id: release.snapshot[role].deploymentId, versions: [{ id: stableId, percentage: 100 }] }
       );
     }
+
     const source = { receipt: { release, promoted }, restored };
     const check = requireRestoredDormantSource({ port, snapshot, sealed: stage.release, source });
     yield* check;
@@ -163,6 +185,7 @@ it.effect(
       const { port, deployments, writes } = harness();
       const promoted = { coreDeploymentId: uuid(21), publicDeploymentId: uuid(22) };
       const ingressDeploymentId = uuid(23);
+
       for (const [role, name] of [
         ["core", core],
         ["public", ingress],
@@ -172,16 +195,20 @@ it.effect(
           versions: [{ id: stage.release[`${role}VersionId`], percentage: 100 }],
         });
       }
+
       const restoredIngress = {
         id: ingressDeploymentId,
         versions: [{ id: stage.release.snapshot.public.stableVersionId, percentage: 100 }],
       };
+
       deployments(ingress).unshift(restoredIngress);
+
       const input = {
         port: { ...port, deployable: (): Effect.Effect<boolean> => Effect.succeed(true) },
         receipt: { release: stage.release, promoted },
         ingressDeploymentId,
       };
+
       expect(
         yield* resumePairingRollback({ ...input, ingressDeploymentId: uuid(24) }).pipe(
           Effect.isFailure
@@ -201,10 +228,12 @@ it.effect("finishes the exact staged dormant pair and verifies a repeat without 
   Effect.gen(function* () {
     const { port, writes } = harness();
     const phases: string[] = [];
+
     const check = (_stage: FallbackStage, phase: "before" | "after"): Effect.Effect<void> =>
       Effect.sync(() => {
         phases.push(phase);
       });
+
     const expected = { coreDeploymentId: uuid(9), publicDeploymentId: uuid(10) };
     expect(yield* recoverFixtureFallback(port, stage, check)).toEqual(expected);
     expect(yield* recoverFixtureFallback(port, stage, check)).toEqual(expected);
@@ -263,19 +292,27 @@ it.effect(
         "superseded"
       );
       const other = { ...stage.release.snapshot.core, name: "another-core" };
+
       const foreign = {
         ...stage,
         release: { ...stage.release, snapshot: { ...stage.release.snapshot, core: other } },
       };
+
       const alias = {
         ...stage,
         namespaces: { ...stage.namespaces, user: stage.namespaces.directory },
       };
-      for (const invalid of [foreign, alias]) {
-        expect(
-          (yield* Effect.flip(recoverFixtureFallback(port, invalid, verify))).message
-        ).toContain("Inconsistent");
-      }
+
+      yield* Effect.forEach(
+        [foreign, alias],
+        Effect.fnUntraced(function* (invalid) {
+          expect(
+            (yield* Effect.flip(recoverFixtureFallback(port, invalid, verify))).message
+          ).toContain("Inconsistent");
+        }),
+        { discard: true }
+      );
+
       expect(writes).toEqual([]);
     })
 );
@@ -283,10 +320,12 @@ it.effect(
 it.effect("requires the same deployment IDs after the closed preflight", () =>
   Effect.gen(function* () {
     const { port, writes, deployments } = harness();
+
     const raced = (): Effect.Effect<void> =>
       Effect.sync(() => {
         deployments(core).unshift({ id: uuid(9), versions: [{ id: uuid(7), percentage: 100 }] });
       });
+
     expect((yield* Effect.flip(recoverFixtureFallback(port, stage, raced))).message).toContain(
       "changed during verification"
     );
@@ -297,6 +336,7 @@ it.effect("requires the same deployment IDs after the closed preflight", () =>
 it.effect("reseals only the same zero-traffic pair on its exact original deployment history", () =>
   Effect.gen(function* () {
     const { port, deployments, writes } = harness();
+
     for (const role of ["core", "public"] as const) {
       const capture = stage.release.snapshot[role];
       deployments(capture.name).push({
@@ -304,10 +344,12 @@ it.effect("reseals only the same zero-traffic pair on its exact original deploym
         versions: [{ id: capture.stableVersionId, percentage: 100 }],
       });
     }
+
     let checks = 0;
     const verify = Effect.sync(() => ++checks);
     expect(yield* verifyUnpromotedFallback({ port, release: stage.release, verify })).toBe(1);
     const original = deployments(ingress)[1];
+
     if (original === undefined) throw Error("Missing original test deployment");
     deployments(ingress)[1] = { ...original, id: uuid(199) };
     expect(
@@ -317,12 +359,14 @@ it.effect("reseals only the same zero-traffic pair on its exact original deploym
     ).toBe(true);
     expect(checks).toBe(1);
     deployments(ingress)[1] = original;
+
     const swap = Effect.sync(() => {
       deployments(core)[0] = {
         id: uuid(200),
         versions: [{ id: stage.release.coreVersionId, percentage: 100 }],
       };
     });
+
     expect(
       yield* verifyUnpromotedFallback({ port, release: stage.release, verify: swap }).pipe(
         Effect.isFailure
@@ -342,6 +386,7 @@ it.effect("replaces only the archived zero-traffic pair over the captured stable
   Effect.gen(function* () {
     const { port, deployments, writes } = harness();
     const snapshot = { ...stage.release.snapshot };
+
     for (const role of ["core", "public"] as const) {
       const capture = snapshot[role];
       snapshot[role] = {
@@ -357,8 +402,10 @@ it.effect("replaces only the archived zero-traffic pair over the captured stable
         ],
       };
     }
+
     yield* requireDormantReplacementSource(port, snapshot);
     const active = deployments(core)[0];
+
     if (active === undefined) throw Error("Missing staged Core");
     deployments(core)[0] = {
       ...active,
@@ -372,6 +419,7 @@ it.effect("replaces only the archived zero-traffic pair over the captured stable
 it.effect("qualifies only the exact interrupted pairing deployment and retained snapshot", () =>
   Effect.gen(function* () {
     const { port, deployments, writes } = harness();
+
     const prior = {
       snapshot: { ...stage.release.snapshot, revision: uploadedPair.revision },
       coreDeploymentId: uploadedPair.failedStage.coreDeploymentId,
@@ -379,7 +427,9 @@ it.effect("qualifies only the exact interrupted pairing deployment and retained 
       coreVersionId: uploadedPair.coreVersionId,
       publicVersionId: uploadedPair.publicVersionId,
     };
+
     const snapshot = { ...stage.release.snapshot };
+
     for (const role of ["core", "public"] as const) {
       snapshot[role] = {
         ...snapshot[role],
@@ -398,6 +448,7 @@ it.effect("qualifies only the exact interrupted pairing deployment and retained 
         ],
       };
     }
+
     expect(matchesReplacementPredecessor({ prior, snapshot })).toBe(true);
     expect(
       matchesReplacementPredecessor({ prior: { ...prior, coreVersionId: uuid(250) }, snapshot })
@@ -412,6 +463,7 @@ it.effect("qualifies only the exact interrupted pairing deployment and retained 
     const release = yield* releaseController.stageRelease(port, snapshot, stage.release);
     yield* verifyUnpromotedFallback({ port, release, verify: Effect.void });
     const predecessor = deployments(core)[1];
+
     if (predecessor === undefined) throw Error("Missing staged predecessor");
     deployments(core)[1] = {
       ...predecessor,
@@ -433,6 +485,7 @@ it.effect(
     Effect.gen(function* () {
       const { port, deployments } = harness();
       const promoted = yield* recoverFixtureFallback(port, stage, verify);
+
       const snapshot = {
         ...stage.release.snapshot,
         stableRevision: stage.revision,
@@ -447,6 +500,7 @@ it.effect(
           stableVersionId: stage.release.publicVersionId,
         },
       };
+
       yield* requirePromotedDormantSource(port, snapshot, stage.release);
       deployments(core).splice(1, 1, {
         id: uuid(35),
@@ -463,11 +517,14 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { port: base, deployments, writes } = harness();
+
       const port: FallbackRepairPort = {
         ...base,
         trunk: () => Effect.succeed(uploadedPair.revision),
       };
+
       const snapshot = { ...stage.release.snapshot, revision: uploadedPair.revision };
+
       for (const role of ["core", "public"] as const) {
         snapshot[role] = {
           ...snapshot[role],
@@ -482,6 +539,7 @@ it.effect(
           ],
         });
       }
+
       expect(
         yield* stageUploadedPair(port, snapshot, Effect.fail(Error("missing receipt"))).pipe(
           Effect.isFailure

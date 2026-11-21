@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Clock, Effect, Fiber, Option } from "effect";
+import { Clock, Effect, Fiber, Option, Predicate, type Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { expect } from "vitest";
 import { verifyIndependentErasure } from "./native-erasure";
@@ -11,6 +11,7 @@ it.effect("pins the only new stored User and requires its own storage to disappe
       ["one", true],
       ["two", true],
     ]);
+
     const active = new Map([...before, ["third", true]] as const);
     expect(newStoredUser({ before, current: active })).toEqual(Option.some("third"));
     expect(newStoredUser({ before, current: before })).toEqual(Option.none());
@@ -39,27 +40,32 @@ it.effect(
     Effect.gen(function* () {
       const id = "a".repeat(64);
       const next = "b".repeat(64);
-      const page = (cursor: string, id: string): unknown => ({
+
+      const page = (cursor: string, id: string): Schema.Json => ({
         success: true,
         result: [{ id, hasStoredData: true }],
         result_info: { cursors: { after: cursor } },
       });
-      const lookup = (path: string): Effect.Effect<unknown> =>
+
+      const lookup = (path: string): Effect.Effect<Schema.Json> =>
         Effect.succeed(path.includes("cursor=next") ? page("", next) : page("next", id));
+
       expect(yield* readUserObjects(lookup, "c".repeat(32))).toEqual(
         new Map([
           [id, true],
           [next, true],
         ])
       );
-      for (const bad of [
-        page("repeat", id),
-        { success: true, result: [{ id }], result_info: {} },
-      ]) {
-        expect(
-          yield* Effect.isFailure(readUserObjects(() => Effect.succeed(bad), "c".repeat(32)))
-        ).toBe(true);
-      }
+
+      yield* Effect.forEach(
+        [page("repeat", id), { success: true, result: [{ id }], result_info: {} }],
+        Effect.fnUntraced(function* (bad) {
+          expect(
+            yield* Effect.isFailure(readUserObjects(() => Effect.succeed(bad), "c".repeat(32)))
+          ).toBe(true);
+        }),
+        { discard: true }
+      );
     })
 );
 
@@ -72,9 +78,11 @@ it.effect(
         ["one", true],
         ["two", true],
       ]);
+
       const third = { id: "third", outcome: "created", headers: {} };
       let signedUp = false;
       let admitted = 0;
+
       const check = yield* Effect.exit(
         verifyIndependentErasure({
           record: () => Effect.void,
@@ -85,18 +93,21 @@ it.effect(
           signup: () =>
             Effect.sync(() => {
               signedUp = true;
+
               return third;
             }),
           survivors: () => Effect.succeed(["one", "two"]),
           admit: () =>
             Effect.sync(() => {
               admitted++;
+
               return "receipt";
             }),
           renew: () => Effect.void,
           denied: () => Effect.void,
         })
       );
+
       expect(check._tag).toBe("Failure");
       expect(admitted).toBe(0);
       expect(
@@ -118,23 +129,28 @@ it.effect(
         ["one", true],
         ["two", true],
       ]);
+
       const checkpoints: string[] = [];
       const subject = { id: "third", outcome: "created", headers: {} };
+
       const result = yield* verifyIndependentErasure({
         inventory: () => Effect.sync(() => new Map(stored)),
         signup: () =>
           Effect.sync(() => {
             stored.set("physical-third", true);
+
             return subject;
           }),
         admit: (user) =>
           Effect.sync(() => {
             expect(user.id).toBe("third");
+
             return "original-reference";
           }),
         record: (checkpoint) =>
           Effect.sync(() => {
             checkpoints.push(checkpoint.stage);
+
             if (checkpoint.stage === "admitted") stored.set("physical-third", false);
           }),
         survivors: () => Effect.succeed(["one", "two"]),
@@ -144,6 +160,7 @@ it.effect(
           }),
         renew: () => Effect.void,
       });
+
       expect(result).toMatchObject({
         admissionReplay: "same-reference",
         physicalObject: "physical-third",
@@ -169,27 +186,34 @@ it.effect(
     Effect.gen(function* () {
       const start = yield* Clock.currentTimeMillis;
       const minute = 60_000;
+
       const retained = new Map([
         ["probe", true],
         ["one", true],
         ["two", true],
       ]);
+
       const fresh = new Map([...retained, ["physical-third", true]] as const);
       const stages: string[] = [];
+
       let signedUp = 0,
         admitted = 0;
+
       const runner = yield* verifyIndependentErasure({
         inventory: () =>
           Clock.currentTimeMillis.pipe(
             Effect.map((now) => {
               const elapsed = now - start;
+
               if (elapsed < 8 * minute) {
                 return new Map([
                   ["one", true],
                   ["two", true],
                 ]);
               }
+
               if (elapsed < 16 * minute || elapsed >= 24 * minute) return retained;
+
               return fresh;
             })
           ),
@@ -201,17 +225,20 @@ it.effect(
           Effect.sync(() => {
             expect(stages.at(-1)).toBe("signup-started");
             signedUp++;
+
             return { id: "third", outcome: "created", headers: {} };
           }),
         admit: () =>
           Effect.sync(() => {
             admitted++;
+
             return "receipt";
           }),
         survivors: () => Effect.succeed(["one", "two"]),
         renew: () => Effect.void,
         denied: () => Effect.void,
       }).pipe(Effect.forkChild);
+
       yield* TestClock.adjust("7 minutes");
       expect(signedUp).toBe(0);
       yield* TestClock.adjust("7 minutes");
@@ -237,10 +264,13 @@ it.effect(
         ["one", true],
         ["two", true],
       ]);
+
       const after = new Map([...before, ["subject", true]] as const);
       const stages: string[] = [];
+
       let signups = 0,
         admissions = 0;
+
       const result = yield* verifyIndependentErasure({
         inventory: () => Effect.sync(() => (signups === 0 ? before : after)),
         record: (checkpoint) =>
@@ -252,17 +282,20 @@ it.effect(
         signup: () =>
           Effect.sync(() => {
             signups++;
+
             return { id: "disposable", outcome: "created", headers: {} };
           }),
         admit: () =>
           Effect.sync(() => {
             admissions++;
+
             return "same-reference";
           }),
         denied: () => Effect.die("Physical erasure has not been observed"),
       }).pipe(Effect.flip, Effect.forkChild);
+
       yield* TestClock.adjust("21 minutes");
-      expect(yield* Fiber.join(result)).toMatchObject({ _tag: "TimeoutError" });
+      expect(Predicate.isTagged(yield* Fiber.join(result), "TimeoutError")).toBe(true);
       expect(signups).toBe(1);
       expect(admissions).toBe(2);
       expect(stages.at(-1)).toBe("waiting-physical-erasure");

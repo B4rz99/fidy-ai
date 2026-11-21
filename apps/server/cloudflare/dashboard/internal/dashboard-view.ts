@@ -22,16 +22,21 @@ import { readLocalBudgetCaps } from "../../budgets/operations";
 import { readLocalDashboardTransactions } from "../../transactions/operations";
 
 type LayoutWidgets = ReturnType<typeof collectLayoutWidgets>;
+
 type RangePlan = Readonly<{
   plans: ReadonlyArray<Readonly<{ id: string; ranges: ReadonlyArray<DashboardProjectionRange> }>>;
   unique: ReadonlyMap<string, Readonly<{ from: number; toExclusive: number }>>;
 }>;
+
 type ListQueries = ReadonlyArray<DashboardTransactionList>;
+
 type ListPlan = Readonly<{
   queries: ListQueries;
   widgets: ReadonlyArray<Readonly<{ id: string; query: number }>>;
 }>;
+
 type FinancialSnapshot = DashboardTransactionSnapshot<ReadonlyArray<Budget>>;
+
 const monthLabelLength = 7;
 
 const planRanges = (widgets: LayoutWidgets, now: DateTime.Utc, context: UserContext): RangePlan => {
@@ -41,10 +46,13 @@ const planRanges = (widgets: LayoutWidgets, now: DateTime.Utc, context: UserCont
       id: widget.id,
       ranges: dashboardProjectionRanges(widget, now, context.timeZone),
     }));
+
   const unique = new Map<string, Readonly<{ from: number; toExclusive: number }>>();
+
   for (const plan of plans) {
     for (const range of plan.ranges) unique.set(`${range.from}:${range.toExclusive}`, range);
   }
+
   return { plans, unique };
 };
 
@@ -52,11 +60,13 @@ const planLists = (widgets: LayoutWidgets): ListPlan => {
   const queries: Array<ListQueries[number]> = [];
   const selected: Array<Readonly<{ id: string; query: number }>> = [];
   const positions = new Map<string, number>();
+
   for (const widget of widgets) {
     if (widget.type !== "transaction-list") continue;
     const categories = widget.categories ?? [];
     const key = `${widget.limit}:${categories.join(",")}:${widget.search ?? ""}`;
     let query = positions.get(key);
+
     if (query === undefined) {
       query = queries.length;
       positions.set(key, query);
@@ -66,8 +76,10 @@ const planLists = (widgets: LayoutWidgets): ListPlan => {
         limit: widget.limit,
       });
     }
+
     selected.push({ id: widget.id, query });
   }
+
   return { queries, widgets: selected };
 };
 
@@ -78,15 +90,20 @@ const restoreGroups = (
   if (selected.ranges.length !== plan.unique.size) return Option.none();
   const facts = new Map([...plan.unique.keys()].map((key, index) => [key, selected.ranges[index]]));
   const groups = new Map<string, ReadonlyArray<ProjectedRange>>();
+
   for (const widget of plan.plans) {
     const buckets: Array<ProjectedRange> = [];
+
     for (const range of widget.ranges) {
       const contributions = facts.get(`${range.from}:${range.toExclusive}`);
+
       if (contributions === undefined) return Option.none();
       buckets.push({ key: range.key, contributions });
     }
+
     groups.set(widget.id, buckets);
   }
+
   return Option.some(groups);
 };
 
@@ -104,6 +121,7 @@ const assembleDashboardFacts = ({
   selected: FinancialSnapshot;
 }>): Option.Option<DashboardFacts> => {
   const groups = restoreGroups(plan, selected);
+
   const listFacts = Option.all(
     lists.widgets.map((widget) =>
       Option.map(
@@ -112,7 +130,9 @@ const assembleDashboardFacts = ({
       )
     )
   );
+
   if (Option.isNone(groups) || Option.isNone(listFacts)) return Option.none();
+
   return Option.some({
     context,
     categories: new Map(categories.map((category) => [category.id, category])),
@@ -128,22 +148,28 @@ export const localDashboardFacts = Effect.fn(function* (
   now: DateTime.Utc
 ) {
   const sql = yield* SqliteClient;
+
   const [row] =
     yield* sql`SELECT service_market AS serviceMarket,locale,time_zone AS timeZone FROM users WHERE id=${user}`;
+
   const context = yield* Schema.decodeUnknownEffect(UserContext)(row);
   const categories = listLaunchCategories();
   const widgets = collectLayoutWidgets(document.layout);
   const plan = planRanges(widgets, now, context);
   const lists = planLists(widgets);
+
   const financial = yield* readLocalDashboardTransactions(user, {
     categories,
     lists: lists.queries,
     ranges: [...plan.unique.values()],
   });
+
   const month = DateTime.formatIsoDate(
     DateTime.setZone(now, DateTime.zoneMakeNamedUnsafe(context.timeZone))
   ).slice(0, monthLabelLength);
+
   const snapshot = yield* readLocalBudgetCaps(user, month);
+
   return yield* Effect.fromOption(
     assembleDashboardFacts({
       context,
@@ -152,6 +178,6 @@ export const localDashboardFacts = Effect.fn(function* (
       lists,
       selected: { ...financial, snapshot },
     }),
-    () => new DashboardUnavailable()
+    () => new DashboardUnavailable({ cause: undefined })
   );
 });

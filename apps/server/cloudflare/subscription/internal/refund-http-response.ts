@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, Predicate, Schema } from "effect";
 import { RefundAttempt, type RefundStartFailure } from "../../../src/core/subscription/contract";
 
 const statuses: Readonly<Record<RefundStartFailure, number>> = {
@@ -10,9 +10,12 @@ const statuses: Readonly<Record<RefundStartFailure, number>> = {
   limited: 429,
   unavailable: 503,
 };
+
 const headers = { "cache-control": "no-store" };
+
 export const refundFailureResponse = (failure: RefundStartFailure): Response =>
   Response.json({ error: { code: failure } }, { status: statuses[failure], headers });
+
 export const refundResultResponse = <R>(
   input: Readonly<{
     result: Effect.Effect<RefundAttempt, RefundStartFailure, R>;
@@ -22,7 +25,8 @@ export const refundResultResponse = <R>(
   input.result.pipe(
     Effect.flatMap(Schema.encodeEffect(Schema.toCodecJson(RefundAttempt))),
     Effect.map((data) => Response.json({ data }, { status: input.status, headers })),
+    Effect.tapError(Effect.logDebug),
     Effect.catch((error) =>
-      Effect.succeed(refundFailureResponse(typeof error === "string" ? error : "unavailable"))
+      Effect.succeed(refundFailureResponse(Predicate.isString(error) ? error : "unavailable"))
     )
   );

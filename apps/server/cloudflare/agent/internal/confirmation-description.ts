@@ -1,3 +1,4 @@
+import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { UpdateTransactionsInput } from "../../../src/shell/transactions/contract";
 import { RecurringSeriesPage } from "../../../src/core/recurring/contract";
 import { ApproveBrowserLoginPairingPayload } from "../../../src/shell/browser-login/contract";
@@ -24,7 +25,7 @@ import {
 } from "../../../src/core/ingestion/contract";
 import { ResolveNeedsReviewItemInput } from "../../../src/shell/ingestion/contract";
 import { CanonicalToolEvidence } from "../../../src/core/agent/contract";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { type Data, DateTime, Effect, Option, Predicate, Schema } from "effect";
 import { CanonicalOperationId } from "../../../src/core/canonical-operations/contract";
 import { Budget, CreateBudgetInput, UpdateBudgetInput } from "../../../src/core/budgets/contract";
 import { CreateKeywordRuleInput, KeywordRule } from "../../../src/core/categories/contract";
@@ -46,41 +47,66 @@ import {
 export type ConfirmationRead = (
   operation: CanonicalOperationId,
   input: Schema.Json
-) => Effect.Effect<Option.Option<Schema.Json>>;
+) => Effect.Effect<Option.Option<Schema.Json>, never, SqliteClient>;
+
 type Context = Readonly<{ read: ConfirmationRead; timeZone: string }>;
+
+const allPresent = <Item, Value>(
+  items: Iterable<Item>,
+  present: (item: Item) => Effect.Effect<Option.Option<Value>, never, SqliteClient>
+): Effect.Effect<Option.Option<ReadonlyArray<Value>>, never, SqliteClient> =>
+  Effect.reduce(
+    items,
+    () => Option.some<ReadonlyArray<Value>>([]),
+    (collected, item) =>
+      Option.match(collected, {
+        onNone: () => Effect.succeedNone,
+        onSome: (prior) => present(item).pipe(Effect.map(Option.map((value) => [...prior, value]))),
+      })
+  );
+
 const addressed = Schema.Struct({ params: Schema.Struct({ id: Schema.String }) });
+
 const quote = (text: string): string => `«${text}»`;
+
 const decode = <A>(schema: Schema.Decoder<A>, input: unknown): Option.Option<A> =>
   Schema.decodeUnknownOption(schema)(input);
+
 const load =
   (context: Context) =>
   <A>(
     operation: string,
     input: Schema.Json,
     schema: Schema.Codec<A, Schema.Json>
-  ): Effect.Effect<Option.Option<A>> =>
+  ): Effect.Effect<Option.Option<A>, never, SqliteClient> =>
     context
       .read(CanonicalOperationId.make(operation), input)
       .pipe(Effect.map(Option.flatMap(Schema.decodeUnknownOption(schema))));
+
 const budgetName = (budget: Budget): Option.Option<string> =>
   Option.map(
     categoryText(budget.categoryId),
     (name) =>
       `${name}, de ${moneyText(budget.cap)}${budget.groupName === undefined ? "" : `, grupo ${quote(budget.groupName)}`}`
   );
+
 const budgetChange = (budget: CreateBudgetInput | UpdateBudgetInput): Option.Option<string> =>
   Option.gen(function* () {
     const name = yield* categoryText(budget.categoryId);
+
     const groups =
       "groupCategoryIds" in budget && budget.groupCategoryIds !== undefined
         ? yield* Option.all(budget.groupCategoryIds.map(categoryText))
         : [];
+
     return `${name}: ${moneyText(budget.cap)}${budget.month === undefined ? "" : ` para ${dateText(`${budget.month}-01`).replace(/^1 de /u, "")}`}${budget.groupName === undefined ? "" : `, grupo ${quote(budget.groupName)}`}${groups.length === 0 ? "" : `. El grupo incluye ${groups.join(", ")}`}${"groupCurrency" in budget && budget.groupCurrency !== undefined ? `. La moneda del grupo será ${budget.groupCurrency}; se conservan los importes sin conversión` : ""}`;
   });
+
 const transactionName = (transaction: Transaction, timeZone: string): Option.Option<string> =>
   Option.gen(function* () {
     const date = yield* localDateText({ date: transaction.occurredAt, timeZone });
     const category = yield* categoryText(transaction.categoryId);
+
     return `${transaction.direction === "inflow" ? "ingreso" : "gasto"} de ${moneyText(transaction.money)} en ${category}, del ${date}${Option.isSome(transaction.counterparty) ? `, con ${quote(transaction.counterparty.value)}` : ""}${Option.isSome(transaction.notes) ? `, nota ${quote(transaction.notes.value)}` : ""}`;
   });
 
@@ -88,7 +114,7 @@ const describeBudgetCreation = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.sync(() =>
     Option.flatMap(
       decode(Schema.Struct({ payload: Schema.toCodecJson(CreateBudgetInput) }), input),
@@ -96,28 +122,36 @@ const describeBudgetCreation = (
         Option.map(budgetChange(payload), (text) => `Crear el presupuesto de ${text}.`)
     )
   );
+
 const describeBudgetChange = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const target = decode(addressed, input);
+
     if (Option.isNone(target)) return Option.none();
+
     const found = yield* load(context)(
       "budgets.getBudget",
       { params: target.value.params },
       Schema.Struct({ data: Schema.toCodecJson(Budget) })
     );
+
     if (Option.isNone(found)) return Option.none();
     const current = budgetName(found.value.data);
+
     if (Option.isNone(current)) return Option.none();
+
     if (operation === "budgets.deleteBudget") {
       return Option.some(
         `Eliminar el presupuesto de ${current.value}. Se borrará definitivamente.`
       );
     }
+
     const change = decode(Schema.Struct({ payload: Schema.toCodecJson(UpdateBudgetInput) }), input);
+
     return Option.flatMap(change, ({ payload }) =>
       Option.map(
         budgetChange(payload),
@@ -125,64 +159,79 @@ const describeBudgetChange = (
       )
     );
   });
+
 const describeRemember = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.sync(() =>
     Option.map(
       decode(Schema.Struct({ payload: RememberInput }), input),
       ({ payload }) => `Recordar ${quote(payload.text)}.`
     )
   );
+
 const describeMemoryChange = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const target = decode(addressed, input);
+
     if (Option.isNone(target)) return Option.none();
+
     const found = yield* load(context)(
       "memory.recall",
       {},
       Schema.Struct({ data: Schema.Array(Schema.toCodecJson(Memory)) })
     );
+
     const memory = Option.flatMap(found, ({ data }) =>
       Option.fromUndefinedOr(data.find(({ id }) => id === target.value.params.id))
     );
+
     if (Option.isNone(memory)) return Option.none();
+
     if (operation === "memory.forget") {
       return Option.some(
         `Olvidar el recuerdo ${quote(memory.value.text)}. Se borrará definitivamente.`
       );
     }
+
     return Option.map(
       decode(Schema.Struct({ payload: ReviseInput }), input),
       ({ payload }) => `Cambiar el recuerdo ${quote(memory.value.text)} por ${quote(payload.text)}.`
     );
   });
+
 const describeKeywordChange = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     let previous = Option.none<KeywordRule>();
+
     if (operation !== "categories.createKeywordRule") {
       const target = decode(addressed, input);
+
       if (Option.isNone(target)) return Option.none();
+
       const found = yield* load(context)(
         "categories.listKeywordRules",
         {},
         Schema.Struct({ data: Schema.Array(Schema.toCodecJson(KeywordRule)) })
       );
+
       previous = Option.flatMap(found, ({ data }) =>
         Option.fromUndefinedOr(data.find(({ id }) => id === target.value.params.id))
       );
+
       if (Option.isNone(previous)) return Option.none();
     }
+
     if (operation === "categories.deleteKeywordRule") {
       return Option.map(
         previous,
@@ -190,10 +239,12 @@ const describeKeywordChange = (
           `Eliminar la regla de clasificación para ${quote(rule.keyword)}. Los gastos ya guardados se conservan.`
       );
     }
+
     const change = decode(
       Schema.Struct({ payload: Schema.toCodecJson(CreateKeywordRuleInput) }),
       input
     );
+
     return Option.flatMap(change, ({ payload }) =>
       Option.map(
         categoryText(payload.categoryId),
@@ -202,28 +253,33 @@ const describeKeywordChange = (
       )
     );
   });
+
 const describeTransactionCreation = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.sync(() => {
     const value = decode(
       Schema.Struct({ payload: Schema.toCodecJson(CreateTransactionInput) }),
       input
     );
+
     return Option.flatMap(value, ({ payload }) =>
       Option.gen(function* () {
         const date = yield* localDateText({
           date: payload.occurredAt,
           timeZone: context.timeZone,
         });
+
         return `Registrar ${payload.direction === "inflow" ? "un ingreso" : "un gasto"} de ${moneyText(payload.money)}, del ${date}${Option.isSome(payload.counterparty) ? `, con ${quote(payload.counterparty.value)}` : ""}${Option.isSome(payload.notes) ? `, nota ${quote(payload.notes.value)}` : ""}${Option.isNone(payload.categoryId) ? "" : `, en ${yield* categoryText(payload.categoryId.value)}`}.`;
       })
     );
   });
+
 const transactionTextChanges = (changes: UpdateTransactionInput["changes"]): Array<string> => {
   const fields: Array<string> = [];
+
   if (changes.counterparty !== undefined) {
     fields.push(
       changes.counterparty === null
@@ -231,11 +287,14 @@ const transactionTextChanges = (changes: UpdateTransactionInput["changes"]): Arr
         : "persona o negocio: " + quote(changes.counterparty)
     );
   }
+
   if (changes.notes !== undefined) {
     fields.push(changes.notes === null ? "quitar la nota" : "nota: " + quote(changes.notes));
   }
+
   return fields;
 };
+
 const transactionChanges = ({
   changes,
   timeZone,
@@ -244,103 +303,128 @@ const transactionChanges = ({
 > =>
   Option.gen(function* () {
     const fields: Array<string> = [];
+
     if (changes.money !== undefined) fields.push(`importe: ${moneyText(changes.money)}`);
+
     if (changes.categoryId !== undefined) {
       fields.push(`categoría: ${yield* categoryText(changes.categoryId)}`);
     }
+
     if (changes.direction !== undefined) {
       fields.push(changes.direction === "inflow" ? "será un ingreso" : "será un gasto");
     }
+
     if (changes.occurredAt !== undefined) {
       fields.push(`fecha: ${yield* localDateText({ date: changes.occurredAt, timeZone })}`);
     }
+
     fields.push(...transactionTextChanges(changes));
+
     return fields;
   });
+
 const describeGroupCorrection = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.sync(() =>
     Option.gen(function* () {
       const { payload } = yield* decode(
         Schema.Struct({ payload: Schema.toCodecJson(UpdateTransactionsInput) }),
         input
       );
+
       const fields = yield* transactionChanges({
         changes: payload.changes,
         timeZone: context.timeZone,
       });
+
       const targets = payload.transactions
         .map((record) => `${record.id} (revisión ${record.expectedRevision})`)
         .join("; ");
+
       return `Corregir juntas ${payload.transactions.length} transacciones. Selección exacta: ${targets}. Cambios: ${fields.join("; ")}. Se guardan todas o ninguna.`;
     })
   );
+
 const describeTransactionChange = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const target = decode(addressed, input);
+
     if (Option.isNone(target)) return Option.none();
+
     const found = yield* load(context)(
       "transactions.getTransaction",
       { params: target.value.params },
       Schema.Struct({ data: Schema.toCodecJson(Transaction) })
     );
+
     if (Option.isNone(found)) return Option.none();
     const current = transactionName(found.value.data, context.timeZone);
+
     if (Option.isNone(current)) return Option.none();
+
     if (operation === "transactions.deleteTransaction") {
       return Option.some(
         `Eliminar el ${current.value}. Se borrará definitivamente de tu historial.`
       );
     }
+
     const change = decode(
       Schema.Struct({ payload: Schema.toCodecJson(UpdateTransactionInput) }),
       input
     );
+
     return Option.flatMap(change, ({ payload }) =>
       Option.gen(function* () {
         const fields = yield* transactionChanges({
           changes: payload.changes,
           timeZone: context.timeZone,
         });
+
         return `Corregir el ${current.value}. Cambios: ${fields.join("; ")}.`;
       })
     );
   });
-const recordDescriptions: Readonly<
-  Record<
-    string,
-    (context: Context, operation: string, input: unknown) => Effect.Effect<Option.Option<string>>
-  >
-> = {
-  "budgets.createBudget": describeBudgetCreation,
-  "budgets.updateBudget": describeBudgetChange,
-  "budgets.deleteBudget": describeBudgetChange,
-  "memory.remember": describeRemember,
-  "memory.forget": describeMemoryChange,
-  "memory.revise": describeMemoryChange,
-  "categories.createKeywordRule": describeKeywordChange,
-  "categories.updateKeywordRule": describeKeywordChange,
-  "categories.deleteKeywordRule": describeKeywordChange,
-  "transactions.createTransaction": describeTransactionCreation,
-  "transactions.updateTransaction": describeTransactionChange,
-  "transactions.updateTransactions": describeGroupCorrection,
-  "transactions.deleteTransaction": describeTransactionChange,
-};
+
+type RecordDescription = (
+  context: Context,
+  operation: string,
+  input: unknown
+) => Effect.Effect<Option.Option<string>, never, SqliteClient>;
+
+const recordDescriptions = new Map<string, RecordDescription>(
+  Object.entries({
+    "budgets.createBudget": describeBudgetCreation,
+    "budgets.updateBudget": describeBudgetChange,
+    "budgets.deleteBudget": describeBudgetChange,
+    "memory.remember": describeRemember,
+    "memory.forget": describeMemoryChange,
+    "memory.revise": describeMemoryChange,
+    "categories.createKeywordRule": describeKeywordChange,
+    "categories.updateKeywordRule": describeKeywordChange,
+    "categories.deleteKeywordRule": describeKeywordChange,
+    "transactions.createTransaction": describeTransactionCreation,
+    "transactions.updateTransaction": describeTransactionChange,
+    "transactions.updateTransactions": describeGroupCorrection,
+    "transactions.deleteTransaction": describeTransactionChange,
+  })
+);
+
 const describeRecord = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> => {
-  const describe = recordDescriptions[operation];
-  return describe === undefined ? Effect.succeedNone : describe(context, operation, input);
-};
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
+  Option.match(Option.fromUndefinedOr(recordDescriptions.get(operation)), {
+    onNone: () => Effect.succeedNone,
+    onSome: (description) => description(context, operation, input),
+  });
 
 const periods = {
   "this-week": "esta semana",
@@ -350,17 +434,21 @@ const periods = {
   "last-7-days": "los últimos siete días",
   "last-30-days": "los últimos treinta días",
 };
+
 const widgetCategories = (widget: Widget): Option.Option<string> => {
   if (!("categories" in widget) || widget.categories === undefined) return Option.some("");
+
   return Option.map(
     Option.all(widget.categories.map(categoryText)),
     (names) => `, categorías ${names.join(", ")}`
   );
 };
+
 const widgetText = (widget: Widget): Option.Option<string> =>
   Option.gen(function* () {
     const categories = yield* widgetCategories(widget);
     const title = widget.title === undefined ? "" : ` ${quote(widget.title)}`;
+
     switch (widget.type) {
       case "budget-bar":
         return `presupuesto${title} de ${yield* categoryText(widget.categoryId)} en ${widget.currency}`;
@@ -372,6 +460,7 @@ const widgetText = (widget: Widget): Option.Option<string> =>
         return `indicador${title} ${quote(widget.label)}: ${{ sum: "total", average: "promedio", maximum: "máximo" }[widget.aggregation]} de ${periods[widget.period]}${categories}`;
     }
   });
+
 const planText = (plan: RecurringPlanInput): Option.Option<string> =>
   plan.accountId !== undefined
     ? Option.none()
@@ -385,26 +474,33 @@ const planText = (plan: RecurringPlanInput): Option.Option<string> =>
           "half-yearly": "cada seis meses",
           yearly: "cada año",
         };
+
         return `${quote(plan.name)}: ${{ income: "ingreso", expense: "gasto", transfer: "transferencia" }[plan.kind]}, ${plan.money === undefined ? `importe por definir en ${plan.currency}` : `${plan.amountMode === "estimated" ? "aproximadamente " : ""}${moneyText(plan.money)}`}, ${frequency[plan.frequency]}, hora de ${timeZoneName(plan.timeZone)}, desde el ${dateText(plan.firstDate)}${plan.endDate === undefined ? "" : ` hasta el ${dateText(plan.endDate)}`}${plan.monthDays === undefined ? "" : `, los días ${plan.monthDays.map((day) => (day === "last" ? "último" : day)).join(" y ")}`}${plan.categoryId === undefined ? "" : `, en ${yield* categoryText(plan.categoryId)}`}${plan.counterparty === undefined ? "" : `, con ${quote(plan.counterparty)}`}${plan.cardPayment === true ? ", pago de tarjeta" : ""}`;
       });
+
 const describeDashboardChange = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const decoded = decode(Schema.Struct({ payload: Schema.toCodecJson(DashboardEdit) }), input);
+
     if (Option.isNone(decoded)) return Option.none();
     const edit = decoded.value.payload;
+
     if (edit.op === "set-title") {
       return Option.some(`Cambiar el nombre de tu tablero a ${quote(edit.title)}.`);
     }
+
     const observed = yield* load(context)(
       "dashboard.getDashboard",
       {},
       Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
     );
+
     if (Option.isNone(observed)) return Option.none();
+
     const name = (id: string): Option.Option<string> =>
       Option.flatMap(
         Option.fromUndefinedOr(
@@ -412,16 +508,18 @@ const describeDashboardChange = (
         ),
         widgetText
       );
+
     const placement = (
       at: Extract<DashboardEdit, { op: "move-widget" }>["at"]
     ): Option.Option<string> =>
-      typeof at === "string"
+      Predicate.isString(at)
         ? Option.some(at === "top" ? "al principio del tablero" : "al final del tablero")
         : Option.map(
             name(at.besideWidget),
             (target) =>
               `${at.side === "before" ? "antes" : "después"} de ${target}, ${at.axis === "row" ? "en la misma fila" : "en la misma columna"}`
           );
+
     return Option.gen(function* () {
       switch (edit.op) {
         case "add-widget":
@@ -439,9 +537,12 @@ const describeDashboardChange = (
       }
     });
   });
+
 const skipAction = (skipped: boolean): string => (skipped ? "Omitir" : "Restablecer");
+
 const fulfillmentState = (settled: boolean): string =>
   settled ? ", como completado" : ", como parcial";
+
 const recurringEditText = ({
   edit,
   document,
@@ -460,6 +561,7 @@ const recurringEditText = ({
         (revision) => quote(revision.plan.name)
       )
     );
+
   return Option.gen(function* () {
     switch (edit.kind) {
       case "edit":
@@ -472,84 +574,110 @@ const recurringEditText = ({
         const fulfillment = yield* Option.fromUndefinedOr(
           document.fulfillments.find((value) => value.id === edit.fulfillmentId)
         );
+
         return `Quitar el seguimiento de ${moneyText(fulfillment.money)} en ${yield* name(fulfillment.planId, fulfillment.date)}, del ${dateText(fulfillment.date)}. Los gastos guardados se conservan.`;
       }
+
       case "suggestion":
         return `${{ dismiss: "Ocultar", restore: "Restablecer", link: "Vincular" }[edit.action]} la sugerencia de ${yield* suggestionName}${edit.planId === undefined ? "" : ` con ${yield* name(edit.planId, `${month}-01`)}`}. No cancela servicios ni hace pagos.`;
     }
   });
 };
-const recurringSeriesName = (context: Context, id: string): Effect.Effect<Option.Option<string>> =>
+
+const recurringSeriesName = (
+  context: Context,
+  id: string
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const observed = yield* load(context)(
       "recurring.listRecurringSeries",
       { query: {} },
       Schema.Struct({ data: Schema.toCodecJson(RecurringSeriesPage) })
     );
+
     if (Option.isNone(observed)) return Option.none();
     const found = observed.value.data.series.find((series) => series.id === id);
+
     if (found === undefined) return Option.none();
+
     return Option.map(
       localDateText({ date: found.lastOccurredAt, timeZone: context.timeZone }),
       (date) =>
         `${quote(found.counterparty)}, por ${moneyText(found.money)} al mes, observado hasta el ${date}`
     );
   });
+
 const describeRecurringCreation = (
   context: Context,
   edit: Extract<RecurringCommand["edit"], { kind: "create" }>
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const plan = planText(edit.plan);
+
     if (Option.isNone(plan)) return Option.none();
+
     if (edit.seriesId === undefined) {
       return Option.some(`Crear el compromiso recurrente ${plan.value}. No hará pagos por ti.`);
     }
+
     const series = yield* recurringSeriesName(context, edit.seriesId);
+
     return Option.map(
       series,
       (name) =>
         `Crear el compromiso recurrente ${plan.value}, a partir de la sugerencia de ${name}. No hará pagos por ti.`
     );
   });
+
 const recurringSuggestionName = (
   context: Context,
   edit: RecurringCommand["edit"]
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   edit.kind === "suggestion" ? recurringSeriesName(context, edit.seriesId) : Effect.succeedNone;
+
 const describeRecurringChange = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const decoded = decode(Schema.Struct({ payload: Schema.toCodecJson(RecurringCommand) }), input);
+
     if (Option.isNone(decoded)) return Option.none();
     const command = decoded.value.payload;
     const edit = command.edit;
+
     if (edit.kind === "create") {
       return yield* describeRecurringCreation(context, edit);
     }
+
     if (edit.kind === "lifecycle") {
       return Option.none();
     }
+
     const today = yield* DateTime.now;
     let date = DateTime.formatIsoDate(DateTime.setZoneNamedUnsafe(today, context.timeZone));
+
     if ("date" in edit) date = edit.date;
+
     if ("fulfillment" in edit) date = edit.fulfillment.date;
     const month = date.slice(0, "YYYY-MM".length);
+
     const observed = yield* load(context)(
       "recurringPlans.getRecurringWorkspace",
       { query: { month } },
       Schema.Struct({ data: Schema.toCodecJson(RecurringWorkspace) })
     );
+
     if (
       Option.isNone(observed) ||
       observed.value.data.document.revision !== command.expectedRevision
     ) {
       return Option.none();
     }
+
     const suggestionName = yield* recurringSuggestionName(context, edit);
+
     return recurringEditText({
       edit,
       document: observed.value.data.document,
@@ -557,6 +685,7 @@ const describeRecurringChange = (
       suggestionName,
     });
   });
+
 const reminderCadence = (cadence: ReminderScheduleEdit["cadence"]): string => {
   switch (cadence.kind) {
     case "every-three-days":
@@ -569,7 +698,9 @@ const reminderCadence = (cadence: ReminderScheduleEdit["cadence"]): string => {
       return "cada día";
   }
 };
+
 const timeZoneName = (zone: string): string => zone.split("/").at(-1)?.replaceAll("_", " ") ?? zone;
+
 const describeInsightChange = (operation: string, input: unknown): Option.Option<string> =>
   operation === "insights.updateReminderSchedule"
     ? Option.map(
@@ -578,119 +709,148 @@ const describeInsightChange = (operation: string, input: unknown): Option.Option
           `Cambiar tus recordatorios para recibirlos ${reminderCadence(payload.cadence)} a las ${String(payload.timing.hour).padStart(2, "0")}:${String(payload.timing.minute).padStart(2, "0")}, hora de ${timeZoneName(payload.timeZone)}.`
       )
     : Option.none();
+
 const reviewSource = (item: NeedsReviewItem): string => {
   if ("recordNumber" in item) return `de la fila ${item.recordNumber} del extracto`;
+
   return item.sourceChannel === "forwarded-email" ? "del correo" : "del archivo";
 };
+
 const heldReviewName = (item: NeedsReviewItem): Option.Option<string> =>
   Option.map(
     localDateText({ date: item.createdAt, timeZone: item.timeZone }),
     (date) =>
       `registro pendiente ${reviewSource(item)}, recibido el ${date}${"knownMoney" in item && Option.isSome(item.knownMoney) ? `, por ${moneyText(item.knownMoney.value)}` : ""}`
   );
+
 const previewText = (preview: ReviewDetail["item"]["preview"]): string =>
   Option.match(preview, {
     onNone: () => "",
     onSome: (value) =>
       `, con importe ${quote(value.amount)}${Option.isSome(value.currency) ? ` ${value.currency.value}` : ""}${value.counterparty === "" ? "" : `, de ${quote(value.counterparty)}`}`,
   });
-const reviewName = (context: Context, id: string): Effect.Effect<Option.Option<string>> =>
+
+const reviewName = (
+  context: Context,
+  id: string
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const observed = yield* load(context)(
       "ingestion.getReviewItem",
       { params: { id } },
       Schema.Struct({ data: Schema.toCodecJson(ReviewDetail) })
     );
+
     if (Option.isSome(observed)) {
       const { item } = observed.value.data;
+
       return Option.map(
         localDateText({ date: item.createdAt, timeZone: item.timeZone }),
         (date) =>
           `registro pendiente de ${{ statement: "un extracto", email: "un correo", media: "un archivo" }[item.source]}, recibido el ${date}${previewText(item.preview)}`
       );
     }
+
     const rows = yield* load(context)(
       "ingestion.listNeedsReviewItems",
       { query: { status: "pending", limit: 100 } },
       Schema.Struct({ data: Schema.Array(Schema.toCodecJson(NeedsReviewItem)) })
     );
+
     if (Option.isNone(rows)) return Option.none();
     const item = Option.fromUndefinedOr(rows.value.data.find((item) => item.id === id));
+
     return Option.flatMap(item, heldReviewName);
   });
+
 const describeReviewSelection = (
   context: Context,
-  edit: Extract<ReviewCommand, { _tag: "Skip" | "Restore" }>
-): Effect.Effect<Option.Option<string>> =>
-  Effect.gen(function* () {
-    const rows: Array<string> = [];
-    for (const item of edit.items) {
-      const name = yield* reviewName(context, item.id);
-      if (Option.isNone(name)) return Option.none();
-      rows.push(name.value);
-    }
-    return Option.some(`${edit._tag === "Skip" ? "Omitir" : "Restablecer"} estos registros:
-${rows.map((name) => `- ${name}`).join("\n")}.`);
-  });
+  edit: Data.TaggedEnum.Value<ReviewCommand, "Skip" | "Restore">
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
+  allPresent(edit.items, (item) => reviewName(context, item.id)).pipe(
+    Effect.map(
+      Option.map(
+        (rows) => `${Predicate.isTagged(edit, "Skip") ? "Omitir" : "Restablecer"} estos registros:
+${rows.map((name) => `- ${name}`).join("\n")}.`
+      )
+    )
+  );
+
 const describeReviewEdit = (
   context: Context,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const decoded = decode(Schema.Struct({ payload: Schema.toCodecJson(ReviewCommand) }), input);
+
     if (Option.isNone(decoded)) return Option.none();
     const edit = decoded.value.payload;
-    if (edit._tag === "Skip" || edit._tag === "Restore") {
+
+    if (Predicate.isTagged(edit, "Skip") || Predicate.isTagged(edit, "Restore")) {
       return yield* describeReviewSelection(context, edit);
     }
+
     const name = yield* reviewName(context, edit.id);
+
     if (Option.isNone(name)) return Option.none();
-    if (edit._tag === "Create") {
+
+    if (Predicate.isTagged(edit, "Create")) {
       return Option.map(
         localDateText({ date: edit.extraction.occurredAt, timeZone: context.timeZone }),
         (date) =>
           `Guardar el ${name.value} como ${edit.extraction.direction === "inflow" ? "ingreso" : "gasto"} de ${moneyText(edit.extraction.money)}, del ${date}${Option.isSome(edit.extraction.counterparty) ? `, con ${quote(edit.extraction.counterparty.value)}` : ""}${Option.isSome(edit.categoryId) ? `, en ${Option.getOrElse(categoryText(edit.categoryId.value), () => "la categoría elegida")}` : ""}.`
       );
     }
+
     return Option.some(
       `Guardar un borrador para el ${name.value}: importe ${quote(edit.draft.amount)}, moneda ${Option.getOrElse(edit.draft.currency, () => "por definir")}, ${Option.match(edit.draft.direction, { onNone: () => "tipo por definir", onSome: (direction) => (direction === "inflow" ? "ingreso" : "gasto") })}, persona o negocio ${quote(edit.draft.counterparty)}, fecha ${quote(edit.draft.occurredAt)}${Option.isSome(edit.draft.categoryId) ? `, categoría ${Option.getOrElse(categoryText(edit.draft.categoryId.value), () => "por definir")}` : ""}. Todavía no se registra como gasto o ingreso.`
     );
   });
+
 const describeReviewChange = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     if (operation === "ingestion.applyReviewEdit") {
       return yield* describeReviewEdit(context, input);
     }
+
     const target = decode(addressed, input);
+
     if (Option.isNone(target)) return Option.none();
+
     if (operation === "ingestion.abandonStatementSubmission") {
       const found = yield* load(context)(
         "ingestion.getStatementSubmission",
         { params: target.value.params },
         Schema.Struct({ data: Schema.toCodecJson(StatementSubmission) })
       );
+
       return Option.map(
         found,
         ({ data }) =>
           `Dejar de procesar el extracto recibido el ${Option.getOrElse(localDateText({ date: data.submittedAt, timeZone: context.timeZone }), () => "día indicado")}. Los gastos e ingresos ya registrados se conservan.`
       );
     }
+
     const name = yield* reviewName(context, target.value.params.id);
+
     if (Option.isNone(name)) return Option.none();
+
     if (operation === "ingestion.skipNeedsReviewItem") {
       return Option.some(
         `Omitir el ${name.value}. Se eliminará la información pendiente de esa fila; los gastos ya registrados se conservan.`
       );
     }
+
     if (operation === "ingestion.resolveNeedsReviewItem") {
       const value = decode(
         Schema.Struct({ payload: Schema.toCodecJson(ResolveNeedsReviewItemInput) }),
         input
       );
+
       return Option.flatMap(value, ({ payload }) =>
         Option.map(
           localDateText({ date: payload.extraction.occurredAt, timeZone: context.timeZone }),
@@ -699,55 +859,67 @@ const describeReviewChange = (
         )
       );
     }
+
     return Option.none();
   });
+
 const describeFeature = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     if (operation === "dashboard.applyDashboardEdit") {
       return yield* describeDashboardChange(context, operation, input);
     }
+
     if (operation === "recurringPlans.applyRecurringEdit") {
       return yield* describeRecurringChange(context, operation, input);
     }
+
     if (operation.startsWith("insights.")) {
       return describeInsightChange(operation, input);
     }
+
     if (operation.startsWith("ingestion.")) {
       return yield* describeReviewChange(context, operation, input);
     }
+
     return Option.none();
   });
+
+const transactionNameFor = Effect.fnUntraced(function* (context: Context, id: string) {
+  const found = yield* load(context)(
+    "transactions.getTransaction",
+    { params: { id } },
+    Schema.Struct({ data: Schema.toCodecJson(Transaction) })
+  );
+
+  return Option.flatMap(found, ({ data }) => transactionName(data, context.timeZone));
+});
+
 const describeTransactionPair = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const decoded = decode(Schema.Struct({ payload: TransactionPairInput }), input);
+
     if (Option.isNone(decoded)) return Option.none();
-    const names: Array<string> = [];
-    for (const id of [
-      decoded.value.payload.firstTransactionId,
-      decoded.value.payload.secondTransactionId,
-    ]) {
-      const found = yield* load(context)(
-        "transactions.getTransaction",
-        { params: { id } },
-        Schema.Struct({ data: Schema.toCodecJson(Transaction) })
-      );
-      if (Option.isNone(found)) return Option.none();
-      const name = transactionName(found.value.data, context.timeZone);
-      if (Option.isNone(name)) return Option.none();
-      names.push(name.value);
-    }
+
+    const names = yield* allPresent(
+      [decoded.value.payload.firstTransactionId, decoded.value.payload.secondTransactionId],
+      (id) => transactionNameFor(context, id)
+    );
+
+    if (Option.isNone(names)) return Option.none();
+
     return Option.some(
-      `${operation === "transactions.linkTransactions" ? "Vincular" : "Separar"} estos dos registros: ${names.join("; ")}. Los importes guardados se conservan.`
+      `${operation === "transactions.linkTransactions" ? "Vincular" : "Separar"} estos dos registros: ${names.value.join("; ")}. Los importes guardados se conservan.`
     );
   });
+
 const describeAdditionalChange = (operation: string, input: unknown): Option.Option<string> => {
   if (operation === "connections.connectInstitution") {
     return Option.map(
@@ -756,11 +928,13 @@ const describeAdditionalChange = (operation: string, input: unknown): Option.Opt
         `Iniciar la conexión con ${quote(payload.institutionId)} para que autorices el acceso en tu navegador.`
     );
   }
+
   if (operation === "subscription.cancelSubscription") {
     return Option.some(
       "Cancelar los próximos cobros de tu suscripción de Fidy. Esto no incluye un reembolso."
     );
   }
+
   if (operation === "ingestion.submitForExtraction") {
     return Option.map(
       decode(Schema.Struct({ payload: SubmitForExtractionInput }), input),
@@ -768,13 +942,15 @@ const describeAdditionalChange = (operation: string, input: unknown): Option.Opt
         "Procesar el extracto que adjuntaste a esta conversación. Guardaré los gastos e ingresos que pueda leer y dejaré los demás para que los revises."
     );
   }
+
   return Option.none();
 };
+
 const describeOtherChange = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     if (operation === "browserLogin.approvePairing") {
       return Option.map(
@@ -783,9 +959,11 @@ const describeOtherChange = (
           `Permitir el acceso a tu cuenta de Fidy en el navegador que muestra el código ${quote(payload.publicCode)}. Confirma solo si es tu navegador.`
       );
     }
+
     if (operation === "dashboard.initializeDashboard") {
       return Option.some("Preparar tu tablero inicial. Si ya tienes uno, conservará tus cambios.");
     }
+
     if (operation === "identity.updateUserPreferences") {
       return Option.map(
         decode(Schema.Struct({ payload: UserPreferences }), input),
@@ -793,28 +971,34 @@ const describeOtherChange = (
           `Usar español de Colombia y cambiar tu horario al de ${timeZoneName(payload.timeZone)}.`
       );
     }
+
     if (operation === "ingestion.enableEmailForwarding") {
       return Option.some(
         "Activar tu dirección de correo de Fidy para recibir los comprobantes que reenvíes."
       );
     }
+
     if (
       operation === "transactions.linkTransactions" ||
       operation === "transactions.unlinkTransactions"
     ) {
       return yield* describeTransactionPair(context, operation, input);
     }
+
     return describeAdditionalChange(operation, input);
   });
+
 const describeSingle = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> =>
+): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
   Effect.gen(function* () {
     const description = yield* describeRecord(context, operation, input);
+
     if (Option.isSome(description)) return description;
     const feature = yield* describeFeature(context, operation, input);
+
     return Option.isSome(feature) ? feature : yield* describeOtherChange(context, operation, input);
   });
 
@@ -823,26 +1007,32 @@ export const describeConfirmation = ({
   operation,
   input,
 }: Readonly<{ context: Context; operation: string; input: unknown }>): Effect.Effect<
-  Option.Option<string>
+  Option.Option<string>,
+  never,
+  SqliteClient
 > =>
   Effect.gen(function* () {
     if (operation === "operations.executeAtomicBatch") {
       const batch = decode(AtomicBatchAdmission, input);
+
       if (Option.isNone(batch)) return Option.none();
-      const descriptions: Array<string> = [];
-      for (const raw of batch.value.payload.calls) {
-        const call = decode(
-          Schema.Struct({ operation: Schema.String, input: CanonicalToolEvidence }),
-          raw
-        );
-        if (Option.isNone(call)) return Option.none();
-        const description = yield* describeSingle(context, call.value.operation, call.value.input);
-        if (Option.isNone(description)) return Option.none();
-        descriptions.push(`${descriptions.length + 1}. ${description.value}`);
-      }
-      return Option.some(
-        `Revisa estos cambios. Se aplicarán todos juntos:\n${descriptions.join("\n")}`
+
+      const descriptions = yield* allPresent(batch.value.payload.calls, (raw) =>
+        Option.match(
+          decode(Schema.Struct({ operation: Schema.String, input: CanonicalToolEvidence }), raw),
+          {
+            onNone: () => Effect.succeedNone,
+            onSome: (call) => describeSingle(context, call.operation, call.input),
+          }
+        )
+      );
+
+      return Option.map(
+        descriptions,
+        (described) =>
+          `Revisa estos cambios. Se aplicarán todos juntos:\n${described.map((description, index) => `${index + 1}. ${description}`).join("\n")}`
       );
     }
+
     return yield* describeSingle(context, operation, input);
   });

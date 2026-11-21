@@ -13,12 +13,14 @@ export const TransactionLocationNotice = ({
   onRetry: () => void;
 }>): JSX.Element => {
   if (history.location === "None" || history.location === "Located") return <></>;
+
   return (
     <output className="flex flex-wrap items-center gap-3 px-4 py-3">
       <LocationProgress location={history.location} onMore={onMore} onRetry={onRetry} />
     </output>
   );
 };
+
 const LocationProgress = ({
   location,
   onMore,

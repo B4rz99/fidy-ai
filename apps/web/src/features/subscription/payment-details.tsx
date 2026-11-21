@@ -3,7 +3,7 @@ import { SubscriptionIntroduction } from "@/ui/components/subscription-introduct
 import { SubscriptionInputDecoration } from "@/ui/components/subscription-input-decoration";
 import { Input } from "@/ui/components/input";
 import { Button } from "@/ui/components/button";
-import { DateTime, Option, Redacted, Schema } from "effect";
+import { DateTime, Option, Predicate, Redacted, Schema } from "effect";
 import { type PaymentFlowView, type PaymentSubmissionView } from "./interaction";
 import { DaviplataEnrollmentForm } from "./daviplata-form";
 import { BillingEmailField, EnrollmentConsent } from "./enrollment-controls";
@@ -57,13 +57,17 @@ const CardField = ({
     <SubscriptionInputDecoration icon={icon}>{input}</SubscriptionInputDecoration>
   </label>
 );
+
 const digitsOnly = (value: string): string => value.replace(/\D/gu, "");
+
 const nameCharactersOnly = (value: string): string => value.replace(/[^\p{L} ]/gu, "");
+
 type CardFieldsControlProps = Readonly<{
   disabled: boolean;
   fields: CardFields;
   setFields: (fields: CardFields) => void;
 }>;
+
 const CardNumberField = ({ disabled, fields, setFields }: CardFieldsControlProps): JSX.Element => (
   <CardField
     icon={CreditCardIcon}
@@ -90,12 +94,15 @@ const CardNumberField = ({ disabled, fields, setFields }: CardFieldsControlProps
     }
   />
 );
+
 const expirationDigitCount = 6;
+
 const ExpirationField = ({ disabled, fields, setFields }: CardFieldsControlProps): JSX.Element => {
   const expiration =
     fields.expirationYear.length > 0
       ? `${fields.expirationMonth}/${fields.expirationYear}`
       : fields.expirationMonth;
+
   const setExpiration = (value: string): void => {
     const digits = digitsOnly(value).slice(0, expirationDigitCount);
     setFields({
@@ -104,6 +111,7 @@ const ExpirationField = ({ disabled, fields, setFields }: CardFieldsControlProps
       expirationYear: digits.slice(2),
     });
   };
+
   return (
     <CardField
       icon={Calendar03Icon}
@@ -127,6 +135,7 @@ const ExpirationField = ({ disabled, fields, setFields }: CardFieldsControlProps
     />
   );
 };
+
 const CvcField = ({ disabled, fields, setFields }: CardFieldsControlProps): JSX.Element => (
   <CardField
     icon={SquareLock02Icon}
@@ -153,6 +162,7 @@ const CvcField = ({ disabled, fields, setFields }: CardFieldsControlProps): JSX.
     }
   />
 );
+
 const CardholderNameField = ({
   disabled,
   fields,
@@ -181,6 +191,7 @@ const CardholderNameField = ({
     }
   />
 );
+
 const CardFieldsForm = ({ disabled, fields, setFields }: CardFieldsControlProps): JSX.Element => (
   <fieldset className="subscription-card-fields">
     <legend className="sr-only">Datos de pago</legend>
@@ -190,6 +201,7 @@ const CardFieldsForm = ({ disabled, fields, setFields }: CardFieldsControlProps)
     <CardholderNameField disabled={disabled} fields={fields} setFields={setFields} />
   </fieldset>
 );
+
 const emptyCardFields: CardFields = {
   number: "",
   cvc: "",
@@ -197,16 +209,21 @@ const emptyCardFields: CardFields = {
   expirationYear: "",
   cardholderName: "",
 };
+
 const enrollmentSubmitLabel = (busy: boolean): string => (busy ? "Activando Pro…" : "Activar Pro");
+
 const nequiSubmitLabel = (busy: boolean, awaitingApproval: boolean): string => {
   if (!busy) return "Autorizar con Nequi";
+
   return awaitingApproval ? "Esperando autorización…" : "Procesando…";
 };
+
 type DaviplataFormActions = Readonly<{
   gateway: Option.Option<EnrollmentGateway>;
   onDaviplataSubmitted: (email: string, submission: PaymentSubmission) => void;
   onDaviplataUncertain: () => void;
 }>;
+
 type EnrollmentFormProps = DaviplataFormActions &
   Readonly<{
     enrollment: PreparedEnrollment;
@@ -214,6 +231,7 @@ type EnrollmentFormProps = DaviplataFormActions &
     busy: boolean;
     submit: (billingEmail: string, fields?: PaymentFields) => void;
   }>;
+
 const NequiNumberField = (
   props: Readonly<{
     disabled: boolean;
@@ -238,21 +256,27 @@ const NequiNumberField = (
     />
   </label>
 );
+
 const noPendingAuthorization: Option.Option<AbortController> = Option.none();
+
 const NequiEnrollmentForm = ({ enrollment, busy, submit }: EnrollmentFormProps): JSX.Element => {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [billingEmail, setBillingEmail] = useState<string>(enrollment.billingEmail);
   const [awaitingApproval, setAwaitingApproval] = useState(false);
   const [decisions, setDecisions] = useState<EnrollmentDecisions>(emptyDecisions);
   const authorization = useRef(noPendingAuthorization);
+
   const abort = (): void => {
     Option.map(authorization.current, (controller) => controller.abort());
   };
+
   const [formLifetimeRef] = useState<RefCallback<HTMLFormElement>>(
     () => (): ReturnType<RefCallback<HTMLFormElement>> => abort
   );
+
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
+
     if (!allDecisionsAccepted(decisions) || busy || !event.currentTarget.checkValidity()) return;
     abort();
     const controller = new AbortController();
@@ -268,6 +292,7 @@ const NequiEnrollmentForm = ({ enrollment, busy, submit }: EnrollmentFormProps):
       },
     });
   };
+
   return (
     <NequiFormContents
       enrollment={enrollment}
@@ -287,6 +312,7 @@ const NequiEnrollmentForm = ({ enrollment, busy, submit }: EnrollmentFormProps):
     />
   );
 };
+
 const NequiAwaiting = (): JSX.Element => (
   <div className="subscription-nequi-waiting">
     <h3>Esperando autorización</h3>
@@ -296,6 +322,7 @@ const NequiAwaiting = (): JSX.Element => (
     </output>
   </div>
 );
+
 const NequiFormContents = ({
   enrollment,
   busy,
@@ -352,44 +379,52 @@ const NequiFormContents = ({
     </Button>
   </form>
 );
-const useCardAuthorizationLifetime = (
-  clear: () => void
-): Readonly<{
+
+type CardAuthorizationLifetime = Readonly<{
   admit: () => Option.Option<AbortSignal>;
   formLifetimeRef: RefCallback<HTMLFormElement>;
-}> => {
+}>;
+
+const useCardAuthorizationLifetime = (clear: () => void): CardAuthorizationLifetime => {
   const authorization = useRef(noPendingAuthorization);
   const mounted = useRef(false);
+
   const [formLifetimeRef] = useState<RefCallback<HTMLFormElement>>(() => () => {
     mounted.current = true;
+
     return (): void => {
       mounted.current = false;
       Option.map(authorization.current, (controller) => controller.abort());
       clear();
     };
   });
+
   return {
     formLifetimeRef,
     admit: () => {
       if (!mounted.current || Option.isSome(authorization.current)) {
         return Option.none();
       }
+
       const controller = new AbortController();
       authorization.current = Option.some(controller);
+
       return Option.some(controller.signal);
     },
   };
 };
-const useBillingEmailDraft = (
-  initial: string
-): Readonly<{
+
+type BillingEmailDraft = Readonly<{
   binding: Pick<ComponentProps<typeof BillingEmailField>, "email" | "invalid" | "setEmail">;
   validate: () => Option.Option<string>;
-}> => {
+}>;
+
+const useBillingEmailDraft = (initial: string): BillingEmailDraft => {
   const [email, setEmail] = useState(initial);
   const [attempted, setAttempted] = useState(false);
   const normalized = email.trim().toLowerCase();
   const valid = Schema.is(BillingEmail)(normalized);
+
   return {
     binding: {
       email,
@@ -401,10 +436,12 @@ const useBillingEmailDraft = (
     },
     validate: () => {
       setAttempted(true);
+
       return valid ? Option.some(normalized) : Option.none();
     },
   };
 };
+
 const PreparedCardEnrollmentForm = ({
   enrollment,
   offer,
@@ -416,9 +453,11 @@ const PreparedCardEnrollmentForm = ({
   const [decisions, setDecisions] = useState<EnrollmentDecisions>(emptyDecisions);
   const { admit, formLifetimeRef } = useCardAuthorizationLifetime(() => setFields(emptyCardFields));
   const allAccepted = allDecisionsAccepted(decisions);
+
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const email = billingEmail.validate();
+
     if (
       Option.isNone(email) ||
       !allAccepted ||
@@ -428,16 +467,20 @@ const PreparedCardEnrollmentForm = ({
     ) {
       return;
     }
+
     const signal = admit();
+
     if (Option.isNone(signal)) {
       return;
     }
+
     setFields(emptyCardFields);
     submit(
       email.value,
       enrollment.paymentSourceMode === "create" ? { ...fields, signal } : undefined
     );
   };
+
   return (
     <form ref={formLifetimeRef} className="subscription-form" onSubmit={onSubmit}>
       {enrollment.paymentSourceMode === "create" ? (
@@ -463,6 +506,7 @@ const PreparedCardEnrollmentForm = ({
     </form>
   );
 };
+
 const PreparedEnrollmentForm = (props: EnrollmentFormProps): JSX.Element => {
   if (props.enrollment.method === "daviplata" && props.enrollment.paymentSourceMode === "create") {
     return Option.match(props.gateway, {
@@ -478,12 +522,14 @@ const PreparedEnrollmentForm = (props: EnrollmentFormProps): JSX.Element => {
       ),
     });
   }
+
   return props.enrollment.method === "nequi" && props.enrollment.paymentSourceMode === "create" ? (
     <NequiEnrollmentForm key={props.enrollment.enrollmentId} {...props} />
   ) : (
     <PreparedCardEnrollmentForm key={props.enrollment.enrollmentId} {...props} />
   );
 };
+
 const EnrollmentStatusAction = ({
   current,
   busy,
@@ -506,6 +552,7 @@ const EnrollmentStatusAction = ({
       </PaymentFeedback>
     );
   }
+
   if (current.status === "refused" || current.status === "expired") {
     return (
       <PaymentFeedback
@@ -523,6 +570,7 @@ const EnrollmentStatusAction = ({
       </PaymentFeedback>
     );
   }
+
   return (
     <PaymentFeedback tone="pending" title="Verificando fuente de pago">
       <output aria-live="polite">
@@ -536,6 +584,7 @@ const EnrollmentStatusAction = ({
     </PaymentFeedback>
   );
 };
+
 const PaymentSubmissionStatus = ({
   submission,
 }: Readonly<{
@@ -549,6 +598,7 @@ const PaymentSubmissionStatus = ({
       </PaymentFeedback>
     );
   }
+
   if (submission.status === "refused") {
     return (
       <PaymentFeedback tone="refused" title="Pago no iniciado">
@@ -556,6 +606,7 @@ const PaymentSubmissionStatus = ({
       </PaymentFeedback>
     );
   }
+
   if (submission.billingAttempt.status === "succeeded") {
     return (
       <PaymentFeedback tone="success" title="Pago aprobado">
@@ -566,6 +617,7 @@ const PaymentSubmissionStatus = ({
       </PaymentFeedback>
     );
   }
+
   if (submission.billingAttempt.status === "failed") {
     return (
       <PaymentFeedback tone="refused" title="Pago rechazado">
@@ -573,6 +625,7 @@ const PaymentSubmissionStatus = ({
       </PaymentFeedback>
     );
   }
+
   return (
     <PaymentFeedback tone="pending" title="Pago pendiente">
       <output aria-live="polite">
@@ -581,6 +634,7 @@ const PaymentSubmissionStatus = ({
     </PaymentFeedback>
   );
 };
+
 const TerminalPaymentFeedback = ({
   current,
   busy,
@@ -600,10 +654,12 @@ const TerminalPaymentFeedback = ({
       </PaymentFeedback>
     );
   }
+
   const canRetry =
     current.value.status === "refused" ||
     (current.value.status === "payment-pending" &&
       current.value.billingAttempt.status === "failed");
+
   return (
     <div className="flex flex-col gap-3">
       <PaymentSubmissionStatus submission={current.value} />
@@ -620,6 +676,7 @@ const TerminalPaymentFeedback = ({
     </div>
   );
 };
+
 const renderPaymentEnrollment = (
   input: DaviplataFormActions & {
     current: PaymentFlowView;
@@ -631,10 +688,12 @@ const renderPaymentEnrollment = (
   }
 ): JSX.Element => {
   const { current, busy, prepare, submit, refresh } = input;
-  if (current._tag === "PaymentSubmission") {
+
+  if (Predicate.isTagged(current, "PaymentSubmission")) {
     if (!isAwaitingPaymentStatus(current.value)) {
       return <TerminalPaymentFeedback current={current} busy={busy} prepare={prepare} />;
     }
+
     return (
       <div className="subscription-payment-status">
         <PaymentSubmissionStatus submission={current.value} />
@@ -644,7 +703,9 @@ const renderPaymentEnrollment = (
       </div>
     );
   }
+
   const enrollment = current.value;
+
   if (enrollment.status === "prepared") {
     return (
       <div className="flex flex-col gap-5">
@@ -665,10 +726,12 @@ const renderPaymentEnrollment = (
       </div>
     );
   }
+
   return (
     <EnrollmentStatusAction busy={busy} current={enrollment} prepare={prepare} refresh={refresh} />
   );
 };
+
 const EnrollmentContent = ({
   offer,
   gateway,
@@ -704,9 +767,11 @@ const EnrollmentContent = ({
         onDaviplataUncertain,
       }),
   });
+
 const focusPaymentHeading: RefCallback<HTMLHeadingElement> = (node) => {
   node?.focus();
 };
+
 const enrollmentFailureCopy = (
   needsRecovery: boolean,
   enrollment: Option.Option<PaymentFlowView>
@@ -714,11 +779,14 @@ const enrollmentFailureCopy = (
   if (needsRecovery) {
     return "No pudimos confirmar el resultado. Consulta el estado antes de volver a intentarlo.";
   }
+
   if (Option.isNone(enrollment)) {
     return "No pudimos preparar el formulario. Intenta de nuevo.";
   }
+
   return "Revisa los datos para continuar.";
 };
+
 const EnrollmentFeedback = ({
   failed,
   enrollment,
@@ -751,6 +819,7 @@ const EnrollmentFeedback = ({
     ) : null}
   </>
 );
+
 export const PaymentDetails = ({
   offer,
   gateway,

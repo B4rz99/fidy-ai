@@ -43,9 +43,11 @@ it.effect("retains typed platform failure for recoverable digest refusal", () =>
     vi.spyOn(crypto.subtle, "digest").mockRejectedValue(new Error("unavailable"));
     const bytes = yield* Effect.result(digestBytes(new Uint8Array([1])));
     expect(Result.isFailure(bytes) && bytes.failure._tag).toBe("PlatformError");
+
     const secret = yield* Effect.result(
       secretDigest({ purpose: "pat", value: Redacted.make("abc") })
     );
+
     expect(Result.isFailure(secret) && secret.failure._tag).toBe("PlatformError");
   })
 );

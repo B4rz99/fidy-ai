@@ -45,6 +45,7 @@ import {
 export const ResolveNeedsReviewItemInput = Schema.Struct({
   extraction: TransactionExtraction,
 }).annotate({ identifier: "ResolveNeedsReviewItemInput" });
+
 export type ResolveNeedsReviewItemInput = typeof ResolveNeedsReviewItemInput.Type;
 
 const read = operationPolicy({
@@ -53,18 +54,21 @@ const read = operationPolicy({
   agentConfirmation: "not-required",
   kind: "query",
 });
+
 const write = operationPolicy({
   access: userOwnedAgentScoped("write"),
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "mutation",
 });
+
 const statementUpload = operationPolicy({
   access: verifiedWhatsAppHostedOnly,
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "mutation",
 });
+
 const confirmedWrite = operationPolicy({
   access: userOwnedAgentScoped("write"),
   requiredTier: "free",
@@ -73,6 +77,7 @@ const confirmedWrite = operationPolicy({
 });
 
 const maximumReviewMaterialCharacters = 100_000;
+
 export const ReviewMaterial = Schema.Union([
   Schema.Struct({
     available: Schema.Literal(true),
@@ -86,6 +91,7 @@ export const ReviewMaterial = Schema.Union([
 ]);
 
 export const maximumReviewExcerptCharacters = 180;
+
 export const ReviewPageContext = Schema.Struct({
   items: Schema.Array(
     Schema.Struct({
@@ -292,10 +298,17 @@ export {
   maximumStatementSubmissionsPerHour,
   statementParserRevision,
 } from "~/core/ingestion/contract";
+
 export { StatementSubmissionId, StatementSourceFormat } from "~/core/ingestion/contract";
 
+export const StatementParseFailureReason = Schema.Literals([
+  "unsupported-format",
+  "resource-limit",
+  "malformed-file",
+]);
+
 export class StatementParseFailed extends Data.TaggedError("StatementParseFailed")<{
-  readonly safeReason: "unsupported-format" | "resource-limit" | "malformed-file";
+  readonly safeReason: typeof StatementParseFailureReason.Type;
 }> {}
 
 export type ParsedStatement = Readonly<{
@@ -305,7 +318,9 @@ export type ParsedStatement = Readonly<{
 }>;
 
 const bytesPerKibibyte = 1024;
+
 const maximumExpandedMebibytes = 12;
+
 const maximumReferencedTextMebibytes = 8;
 
 export const statementParserLimits = {
@@ -317,32 +332,37 @@ export const statementParserLimits = {
 } as const;
 
 export const EmailInterpretationReviewReason = NotificationEmailInterpretationReviewReason;
+
 export type EmailInterpretationReviewReason = NotificationEmailInterpretationReviewReason;
 
 export const NotificationEmailInterpretationEvidence = Schema.Struct({
   ...NotificationInterpretationEvidence.fields,
   revision: InterpretationRevision,
 });
+
 export type NotificationEmailInterpretationEvidence =
   typeof NotificationEmailInterpretationEvidence.Type;
 
-export type NotificationEmailInterpretation =
-  | Readonly<{
-      _tag: "Interpreted";
-      extraction: TransactionExtraction;
-      evidence: NotificationEmailInterpretationEvidence;
-    }>
-  | Readonly<{
-      _tag: "NeedsReview";
-      reason: EmailInterpretationReviewReason;
-    }>;
+type InterpretedNotificationEmail = {
+  readonly extraction: TransactionExtraction;
+  readonly evidence: NotificationEmailInterpretationEvidence;
+};
 
-export type NotificationEmailOutcome =
-  | NotificationEmailInterpretation
-  | Readonly<{
-      _tag: "NeedsReview";
-      reason: "canonical-validation-failed";
-    }>;
+export type NotificationEmailInterpretation = Data.TaggedEnum<{
+  Interpreted: InterpretedNotificationEmail;
+  NeedsReview: { readonly reason: EmailInterpretationReviewReason };
+}>;
+
+export const NotificationEmailInterpretation = Data.taggedEnum<NotificationEmailInterpretation>();
+
+export type NotificationEmailOutcome = Data.TaggedEnum<{
+  Interpreted: InterpretedNotificationEmail;
+  NeedsReview: {
+    readonly reason: EmailInterpretationReviewReason | "canonical-validation-failed";
+  };
+}>;
+
+export const NotificationEmailOutcome = Data.taggedEnum<NotificationEmailOutcome>();
 
 export class EmailCatalogGenerationFailed extends Data.TaggedError("EmailCatalogGenerationFailed")<{
   readonly reason: "missing-formats" | "missing-fixture" | "stale-catalog";

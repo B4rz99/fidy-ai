@@ -14,13 +14,16 @@ import type { BrowserSessionObservation } from "@/transport/session-entry";
 const applicationModule = import("./bound-application").then(Result.succeed, (cause: unknown) =>
   Result.fail(cause)
 );
+
 class ApplicationCodeUnavailable extends Data.TaggedError("ApplicationCodeUnavailable")<{}> {}
+
 const applicationCode = Atom.make(
   Effect.tryPromise({
     try: () => applicationModule,
     catch: () => new ApplicationCodeUnavailable(),
   })
 );
+
 const BoundApplication = ({
   apiOrigin,
   session,
@@ -31,10 +34,13 @@ const BoundApplication = ({
   initial: BrowserSessionObservation;
 }>): JSX.Element => {
   const loaded = useAtomValue(applicationCode);
+
   if (AsyncResult.isFailure(loaded)) throw new ApplicationCodeUnavailable();
+
   if (!AsyncResult.isSuccess(loaded)) {
     return <PendingRead label="Cargando aplicación" />;
   }
+
   return Result.match(loaded.value, {
     onSuccess: (module) => (
       <module.BoundApplication apiOrigin={apiOrigin} session={session} initial={initial} />
@@ -44,6 +50,7 @@ const BoundApplication = ({
     },
   });
 };
+
 const RoutedApplication = ({
   initial,
 }: Readonly<{ initial: InitialBrowserSession }>): JSX.Element => {
@@ -51,6 +58,7 @@ const RoutedApplication = ({
     configured: import.meta.env.VITE_API_ORIGIN,
     browserOrigin: window.location.origin,
   });
+
   return (
     <BrowserSessionBoundary
       apiOrigin={apiOrigin}

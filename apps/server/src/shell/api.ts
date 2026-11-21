@@ -42,6 +42,7 @@ const OrdinaryFidyApi = HttpApi.make("fidy")
   .add(RecoveryGroup);
 
 const ordinaryOperationCatalog = makeOperationCatalog(OrdinaryFidyApi);
+
 const OperationsGroup = makeOperationsGroup(ordinaryOperationCatalog);
 
 export class FidyApi extends OrdinaryFidyApi.add(OperationsGroup)

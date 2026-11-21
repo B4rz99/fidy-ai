@@ -30,6 +30,7 @@ export const RefundRow = Schema.Struct({
     Schema.Literals(["provider-declined", "provider-cancelled", "provider-refused"])
   ),
 });
+
 export const Charge = Schema.Struct({
   id: Schema.String,
   price_id: Schema.String,
@@ -40,16 +41,22 @@ export const Charge = Schema.Struct({
   transaction_id: Schema.String,
   method: Schema.Literals(["card", "nequi", "daviplata"]),
 });
+
 const treatmentCodec = Schema.fromJsonString(CorrectionTreatment);
+
 type EncodedRefund = typeof RefundAttempt.Encoded;
+
 type RefundLifecycle =
   | Pick<Extract<EncodedRefund, { status: "pending" }>, "status" | "progress">
   | Pick<Extract<EncodedRefund, { status: "succeeded" }>, "status" | "verifiedAt">
   | Pick<Extract<EncodedRefund, { status: "failed" }>, "status" | "failedAt" | "failure">;
+
 const reject = (reason: RefundStartFailure): Effect.Effect<never, RefundStartFailure> =>
   Effect.fail(reason);
+
 export const safeFailure = (error: unknown): RefundStartFailure =>
   Schema.is(RefundStartFailure)(error) ? error : "unavailable";
+
 export const liveRefundAuthority = ({
   authority,
   current,
@@ -65,12 +72,16 @@ const lifecycle = (
   if (row.status === "pending") {
     return Effect.succeed({ status: row.status, progress: row.progress });
   }
+
   if (row.finalized_at_ms === null) return reject("unavailable");
   const finalized = DateTime.formatIso(row.finalized_at_ms);
+
   if (row.status === "succeeded") {
     return Effect.succeed({ status: row.status, verifiedAt: finalized });
   }
+
   if (row.failure === null) return reject("unavailable");
+
   return Effect.succeed({ status: row.status, failedAt: finalized, failure: row.failure });
 };
 
@@ -81,11 +92,13 @@ export const view = (
     const intent = yield* Schema.decodeEffect(Schema.fromJsonString(StartRefundInput))(
       row.intent_json
     );
+
     const treatment = yield* Schema.decodeEffect(treatmentCodec)(row.treatment_json);
     const progress = yield* lifecycle(row);
     const cents = BigInt(row.amount_in_cents);
     const whole = cents / 100n;
     const fraction = String(cents % 100n).padStart(2, "0");
+
     return yield* Schema.decodeEffect(RefundAttempt)({
       id: row.id,
       userId: row.user_id,
@@ -101,9 +114,11 @@ export const view = (
       ...progress,
     });
   });
+
 export const replayView = Effect.fnUntraced(function* (row: typeof RefundRow.Type, intent: string) {
   return row.intent_json === intent ? yield* view(row) : yield* reject("idempotency-conflict");
 });
+
 export const prepareRefundTerms = Effect.fnUntraced(function* (
   input: typeof StartRefundInput.Encoded,
   charge: typeof Charge.Type
@@ -112,16 +127,20 @@ export const prepareRefundTerms = Effect.fnUntraced(function* (
     amount: charge.amount,
     currency: charge.currency,
   });
+
   const money =
     input.intent.kind === "refund"
       ? yield* Schema.decodeEffect(Money)(input.intent.money)
       : original;
+
   if (money.currency !== original.currency) return yield* reject("currency-mismatch");
   const total = refundMinorUnits(original);
   const requested = refundMinorUnits(money);
+
   if (Option.isNone(total) || Option.isNone(requested)) return yield* reject("unsupported");
   const now = yield* Clock.currentTimeMillis;
   const id = newId();
+
   const treatment = yield* Schema.encodeEffect(treatmentCodec)({
     policyId: "refund-ends-paid-period-v1",
     taxTreatment: charge.tax_treatment,
@@ -129,6 +148,7 @@ export const prepareRefundTerms = Effect.fnUntraced(function* (
     renewalEffect: "stop-future-renewals",
     accounting: { kind: "sandbox-only" },
   });
+
   return {
     charge,
     requested: requested.value,

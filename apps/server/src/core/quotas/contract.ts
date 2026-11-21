@@ -7,6 +7,7 @@ export const AllowanceKind = Schema.Literals([
   "hosted_history_turn",
   "canonical_call",
 ]);
+
 export type AllowanceKind = typeof AllowanceKind.Type;
 
 export const freeAllowanceLimits: Readonly<Record<AllowanceKind, number>> = {
@@ -20,6 +21,7 @@ export const AllowancePeriod = Schema.Struct({
   startsAt: Schema.DateTimeUtc,
   resetsAt: Schema.DateTimeUtc,
 });
+
 export type AllowancePeriod = typeof AllowancePeriod.Type;
 
 const count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
@@ -33,6 +35,7 @@ export const AllowanceMeter = Schema.Union([
   }),
   Schema.TaggedStruct("Uncapped", {}),
 ]);
+
 export type AllowanceMeter = typeof AllowanceMeter.Type;
 
 export const QuotaStatus = Schema.Struct({
@@ -42,6 +45,7 @@ export const QuotaStatus = Schema.Struct({
   hostedHistoryTurns: AllowanceMeter,
   canonicalCalls: AllowanceMeter,
 });
+
 export type QuotaStatus = typeof QuotaStatus.Type;
 
 const maximumRetryKeyLength = 128;
@@ -52,6 +56,7 @@ export const CanonicalRetryKey = Schema.NonEmptyString.check(
 )
   .pipe(Schema.brand("CanonicalRetryKey"))
   .annotate({ identifier: "CanonicalRetryKey" });
+
 export type CanonicalRetryKey = typeof CanonicalRetryKey.Type;
 
 export const canonicalRetryLifetimeMs = 86_400_000;

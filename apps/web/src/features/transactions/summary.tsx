@@ -1,4 +1,4 @@
-import { BigDecimal, Option } from "effect";
+import { Array as Arr, BigDecimal, Option } from "effect";
 import type { JSX } from "react";
 import { formatMoney } from "@/transport/money";
 import { type Transaction, formatOccurrence } from "./presentation";
@@ -10,26 +10,33 @@ type SummaryProps = Readonly<{
   locale: string;
   timeZone: string;
 }>;
+
 const SummaryLine = ({ label, value }: Readonly<{ label: string; value: string }>): JSX.Element => (
   <div className="flex items-start justify-between gap-4 py-2.5">
     <dt className="text-sm text-muted-foreground">{label}</dt>
     <dd className="text-right text-sm font-medium tabular-nums">{value}</dd>
   </div>
 );
+
 const currencyFigures = (
   transactions: ReadonlyArray<Transaction>,
+  currency: Transaction["money"]["currency"],
   locale: string
 ): ReadonlyArray<Readonly<{ label: string; value: string }>> => {
-  const currency = Option.getOrThrow(Option.fromNullishOr(transactions[0])).money.currency;
   const amounts = transactions.map((transaction) => transaction.money.amount);
   const sum = BigDecimal.sumAll(amounts);
+
   const largest = (records: ReadonlyArray<Transaction>): string => {
-    if (records.length === 0) return "—";
     const sorted = records.toSorted((left, right) =>
       BigDecimal.Order(right.money.amount, left.money.amount)
     );
-    return formatMoney({ locale, money: Option.getOrThrow(Option.fromNullishOr(sorted[0])).money });
+
+    return Option.match(Arr.head(sorted), {
+      onNone: () => "—",
+      onSome: (record) => formatMoney({ locale, money: record.money }),
+    });
   };
+
   const total = (direction: Transaction["direction"]): string =>
     formatMoney({
       locale,
@@ -42,6 +49,7 @@ const currencyFigures = (
         ),
       },
     });
+
   return [
     { label: "Ingresos registrados", value: total("inflow") },
     { label: "Gastos registrados", value: total("outflow") },
@@ -62,27 +70,30 @@ const currencyFigures = (
     },
   ];
 };
-const dateRange = ({
-  transactions,
-  locale,
-  timeZone,
-}: SummaryProps): Readonly<{ first: string; last: string }> => {
+
+type DateRange = Readonly<{ first: string; last: string }>;
+
+const dateRange = ({ transactions, locale, timeZone }: SummaryProps): DateRange => {
   const dates = transactions
     .map((transaction) => transaction.occurredAt)
     .toSorted((left, right) => left.epochMilliseconds - right.epochMilliseconds);
+
   const format = (value: Option.Option<Transaction["occurredAt"]>): string =>
     Option.match(value, {
       onNone: () => "—",
       onSome: (occurredAt) => formatOccurrence({ locale, occurredAt, timeZone }),
     });
+
   return {
     first: format(Option.fromNullishOr(dates[0])),
     last: format(Option.fromNullishOr(dates.at(-1))),
   };
 };
+
 const SummaryCount = ({ transactions }: Pick<SummaryProps, "transactions">): JSX.Element => {
   const inflows = transactions.filter((record) => record.direction === "inflow").length;
   const outflows = transactions.filter((record) => record.direction === "outflow").length;
+
   return (
     <p data-transaction-slot="transaction-summary-count">
       {transactions.length} {transactions.length === 1 ? "transacción" : "transacciones"} ·{" "}
@@ -91,6 +102,7 @@ const SummaryCount = ({ transactions }: Pick<SummaryProps, "transactions">): JSX
     </p>
   );
 };
+
 const CurrencySummary = ({
   currency,
   props,
@@ -99,7 +111,8 @@ const CurrencySummary = ({
   props: SummaryProps;
 }>): JSX.Element => {
   const transactions = props.transactions.filter((record) => record.money.currency === currency);
-  const figures = currencyFigures(transactions, props.locale);
+  const figures = currencyFigures(transactions, currency, props.locale);
+
   return (
     <div>
       <span data-transaction-slot="transaction-summary-currency">{currency}</span>
@@ -120,9 +133,11 @@ const CurrencySummary = ({
     </div>
   );
 };
+
 export const TransactionSummary = (props: SummaryProps): JSX.Element => {
   const currencies = Array.from(new Set(props.transactions.map((record) => record.money.currency)));
   const range = dateRange(props);
+
   return (
     <section aria-label="Resumen de transacciones" data-transaction-slot="transaction-summary">
       <h2>Resumen</h2>

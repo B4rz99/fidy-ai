@@ -1,17 +1,25 @@
 import { type WompiEnvironment } from "../../../src/shell/secret-material/contract";
 import { WompiTransactionId } from "./wompi-model";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Predicate, Schema } from "effect";
 import { RequestBodyPolicy } from "../../http/contract";
 import { readBoundedRequestBody } from "../../http/operations";
 
 const maximumEventBytes = 8192;
+
 const eventDeadlineMs = 2000;
+
 const maximumSignedProperties = 16;
+
 const checksumPattern = /^[0-9a-fA-F]{64}$/u;
+
 const propertyPattern = /^[a-zA-Z][a-zA-Z0-9_.]*$/u;
+
 const hexBase = 16;
+
 const idProperty = "transaction.id";
+
 const statusProperty = "transaction.status";
+
 const Body = Schema.Struct({
   event: Schema.Literal("transaction.updated"),
   environment: Schema.Literals(["test", "prod"]),
@@ -24,14 +32,16 @@ const Body = Schema.Struct({
   }),
   timestamp: Schema.Int,
 });
+
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: maximumEventBytes,
   deadlineMilliseconds: eventDeadlineMs,
 });
 
 const signedScalar = (value: unknown): Option.Option<string> => {
-  if (typeof value === "string") return Option.some(value);
-  return typeof value === "number" && Number.isSafeInteger(value)
+  if (Predicate.isString(value)) return Option.some(value);
+
+  return Predicate.isNumber(value) && Number.isSafeInteger(value)
     ? Option.some(String(value))
     : Option.none();
 };
@@ -39,12 +49,15 @@ const signedScalar = (value: unknown): Option.Option<string> => {
 const ownValue = (data: unknown, path: string): Option.Option<string> => {
   if (!propertyPattern.test(path)) return Option.none();
   let current: unknown = data;
+
   for (const segment of path.split(".")) {
-    if (current === null || typeof current !== "object") return Option.none();
+    if (!Predicate.isObjectOrArray(current)) return Option.none();
     const field = Object.getOwnPropertyDescriptor(current, segment);
+
     if (field === undefined || !Object.hasOwn(field, "value")) return Option.none();
     current = field.value;
   }
+
   return signedScalar(current);
 };
 
@@ -52,9 +65,11 @@ const equalHex = (expected: string, observed: string): boolean => {
   if (!checksumPattern.test(observed)) return false;
   const candidate = observed.toLowerCase();
   let difference = 0;
+
   for (const [index, character] of Array.from(expected).entries()) {
     difference |= character.charCodeAt(0) ^ candidate.charCodeAt(index);
   }
+
   return difference === 0;
 };
 
@@ -65,9 +80,10 @@ const signedValues = (event: typeof Body.Type, rawData: unknown): Option.Option<
   ) {
     return Option.none();
   }
+
   const values = event.signature.properties.map((name) => ownValue(rawData, name));
-  if (values.some(Option.isNone)) return Option.none();
-  return Option.some(values.map((value) => Option.getOrThrow(value)).join(""));
+
+  return Option.map(Option.all(values), (present) => present.join(""));
 };
 
 const verifiedChecksum = (
@@ -80,15 +96,18 @@ const verifiedChecksum = (
 ): Effect.Effect<boolean> =>
   Effect.gen(function* () {
     const cleartext = `${input.values}${input.event.timestamp}${input.secret}`;
+
     const digest = yield* Effect.option(
       Effect.tryPromise({
         try: () => crypto.subtle.digest("SHA-256", new TextEncoder().encode(cleartext)),
         catch: () => undefined,
       })
     );
+
     if (Option.isNone(digest)) return false;
     const hash = new Uint8Array(digest.value);
     const checksum = Array.from(hash, (byte) => byte.toString(hexBase).padStart(2, "0")).join("");
+
     return (
       equalHex(checksum, input.event.signature.checksum) &&
       (Option.isNone(input.header) || equalHex(checksum, input.header.value))
@@ -107,18 +126,23 @@ const readEvent = (
 > =>
   Effect.gen(function* () {
     const bytes = yield* readBoundedRequestBody(request, policy).pipe(Effect.option);
+
     if (Option.isNone(bytes)) return Option.none();
+
     const text = yield* Effect.option(
       Effect.try({
         try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes.value),
         catch: () => undefined,
       })
     );
+
     if (Option.isNone(text)) return Option.none();
     const parsed = Schema.decodeOption(Schema.fromJsonString(Schema.Unknown))(text.value);
+
     if (Option.isNone(parsed)) return Option.none();
     const event = Schema.decodeUnknownOption(Body)(parsed.value);
     const raw = Schema.decodeUnknownOption(Schema.Struct({ data: Schema.Unknown }))(parsed.value);
+
     return Option.isSome(event) && Option.isSome(raw)
       ? Option.some({ event: event.value, rawData: raw.value.data })
       : Option.none();
@@ -134,19 +158,25 @@ export const verifiedWompiEventHint = (
   Effect.gen(function* () {
     if (input.secret.length === 0) return Option.none();
     const parsed = yield* readEvent(input.request);
+
     if (Option.isNone(parsed)) return Option.none();
     const { event, rawData } = parsed.value;
+
     if (event.environment !== (input.environment === "sandbox" ? "test" : "prod")) {
       return Option.none();
     }
+
     const values = signedValues(event, rawData);
+
     if (Option.isNone(values)) return Option.none();
+
     const trusted = yield* verifiedChecksum({
       event,
       header: Option.fromNullOr(input.request.headers.get("x-event-checksum")),
       secret: input.secret,
       values: values.value,
     });
+
     return trusted
       ? Option.some({
           transactionId: event.data.transaction.id,

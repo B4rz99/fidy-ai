@@ -23,6 +23,7 @@ type Clients = Readonly<{
   webAuthClient: WebAuthClient;
   hostedTurnClient: HostedTurnClient;
 }>;
+
 const makeClients = ({
   apiOrigin,
   session,
@@ -36,11 +37,13 @@ const makeClients = ({
   webAuthClient: makeWebAuthClient({ apiOrigin, session }),
   hostedTurnClient: makeHostedTurnClient({ apiOrigin, session }),
 });
+
 const AuthenticationRouter = ({
   clients,
   session,
 }: Readonly<{ clients: Clients; session: BrowserSessionLifetime }>): JSX.Element => {
   const registry = useContext(RegistryContext);
+
   const [router] = useState(() =>
     createWebRouter({
       ...clients,
@@ -49,6 +52,7 @@ const AuthenticationRouter = ({
       history: Option.none(),
     })
   );
+
   return <RouterProvider router={router} />;
 };
 
@@ -62,14 +66,18 @@ export const BoundApplication = ({
   initial: BrowserSessionObservation;
 }>): JSX.Element => {
   const { expireAuthentication } = useSession();
+
   const [clients] = useState(() =>
     makeClients({ apiOrigin, session, expired: expireAuthentication })
   );
+
   const [initialValues] = useState(() => initialApplicationValues({ ...clients, initial }));
+
   const makeEnrollmentClient = useCallback(
     () => makeSubscriptionEnrollmentClient({ apiOrigin, session }),
     [apiOrigin, session]
   );
+
   return (
     <RegistryProvider initialValues={initialValues}>
       <SubscriptionEnrollmentLifetime makeClient={makeEnrollmentClient}>

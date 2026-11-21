@@ -19,8 +19,11 @@ import { Effect, Option, Schema } from "effect";
 import { namespaceClasses } from "./storage-release";
 
 export const nativeStack = "FidyNativeStorage";
+
 export const nativeIngressHost = new URL(installedOrigins.acceptance.api).hostname;
+
 export const nativeWebHost = new URL(installedOrigins.acceptance.browser).hostname;
+
 export const installationNames = {
   Core: "fidy-native-storage-core",
   Ingress: "fidy-native-storage-ingress",
@@ -42,6 +45,7 @@ export const requireAbsentInstallation = (input: {
   domains: ReadonlyArray<{ hostname: string }>;
 }): void => {
   const targets: ReadonlySet<string> = new Set(Object.values(installationNames));
+
   if (
     input.scripts.some((script) => targets.has(script.id)) ||
     input.namespaces.some((namespace) => targets.has(namespace.script)) ||
@@ -63,13 +67,16 @@ const networkSurface = {
   tailConsumers: Schema.optional(Schema.Never),
   streamingTailConsumers: Schema.optional(Schema.Never),
 };
+
 export type NativeHostMode = "acceptance" | "staged";
+
 export const nativeHostPairs = (
   mode: NativeHostMode
 ): ReadonlyArray<(typeof installedOrigins)[keyof typeof installedOrigins]> =>
   mode === "staged"
     ? [installedOrigins.acceptance, installedOrigins.production]
     : [installedOrigins.acceptance];
+
 const closedDomain = (role: "Web" | "Ingress", mode: NativeHostMode): Schema.Codec<unknown> =>
   Schema.Struct({
     name: Schema.Literal(role === "Web" ? nativeWebHost : nativeIngressHost),
@@ -87,6 +94,7 @@ const closedDomain = (role: "Web" | "Ingress", mode: NativeHostMode): Schema.Cod
         : Schema.Tuple([]),
     redirects: Schema.optional(Schema.Tuple([])),
   });
+
 export const requireInstallationWorker = ({
   logicalId,
   props,
@@ -119,6 +127,7 @@ export const requireInstallationWorker = ({
 };
 
 const ProviderBindings = Schema.Struct({ bindings: Schema.optional(NativeBindings) });
+
 export const requireClosedBindings = ({
   worker,
   bindings,
@@ -137,12 +146,15 @@ const requireSiteAsset = (role: NativeRole, props: unknown, bindings: NativeBind
     bindings.push({ name: "ASSETS", type: "assets" });
   }
 };
+
 const requireSignerHost = (fingerprint: string, hosts: NativeHostMode): void => {
   if (fingerprint !== "" && hosts !== "acceptance") {
     throw Error("Fixture signer cannot stage live host routes");
   }
 };
+
 const roles = ["Core", "Ingress", "ForwardedEmail", "Web"] as const;
+
 const requireFixtureMain = (
   role: NativeRole,
   props: unknown,
@@ -160,11 +172,13 @@ const requireFixtureMain = (
       })
     )(props);
   }
+
   if (fingerprint !== "" && (role === "Core" || role === "Ingress")) {
     const main = accounting ? accountingWorkerMain(role) : receiptWorkerMain({ role, fallback });
     Schema.decodeUnknownSync(Schema.Struct({ main: Schema.Literal(main) }))(props);
   }
 };
+
 const requireFixtureService = (
   role: NativeRole,
   bindings: readonly NativeBinding[],
@@ -172,10 +186,12 @@ const requireFixtureService = (
 ): void => {
   if (fingerprint === "" || (role !== "Ingress" && role !== "Core")) return;
   const provider = bindings.find((binding) => binding.name === "RELEASE_FIXTURE");
+
   if (provider?.service !== "fidy-native-smoke-" + retainedProvider.revision) {
     throw Error("Resolved original provider target differs");
   }
 };
+
 type NativePlanBindings = {
   plan: Plan;
   revision: string;
@@ -183,20 +199,23 @@ type NativePlanBindings = {
   fingerprint: string;
   fallback: boolean;
 };
+
 const requireAccountingBindings = (
   role: NativeRole,
   revision: string,
   bindings: ReadonlyArray<NativeBinding>
 ): void => {
-  const expected = {
-    RELEASE_GIT_SHA: role === "Smoke" ? accountingFixture.revision : revision,
-    CONTRACT_DIGEST: accountingFixture.contractDigest,
-    NATIVE_STORAGE_ADMISSION: "closed",
-    ...(role === "Ingress"
-      ? {}
-      : { SMOKE_QUEUE_NAME: "fidy-native-smoke-" + accountingFixture.revision }),
-  };
-  for (const [name, text] of Object.entries(expected)) {
+  const expected = new Map([
+    ["RELEASE_GIT_SHA", role === "Smoke" ? accountingFixture.revision : revision],
+    ["CONTRACT_DIGEST", accountingFixture.contractDigest],
+    ["NATIVE_STORAGE_ADMISSION", "closed"],
+  ]);
+
+  if (role !== "Ingress") {
+    expected.set("SMOKE_QUEUE_NAME", "fidy-native-smoke-" + accountingFixture.revision);
+  }
+
+  for (const [name, text] of expected) {
     if (
       !bindings.some(
         (binding) => binding.name === name && binding.type === "plain_text" && binding.text === text
@@ -206,6 +225,7 @@ const requireAccountingBindings = (
     }
   }
 };
+
 const requirePlannedRoleBindings = ({
   role,
   bindings,
@@ -221,6 +241,7 @@ const requirePlannedRoleBindings = ({
     requireSuccessorCoreBindings({ bindings, fingerprint });
   } else requireClosedBindings({ worker: role, bindings, fingerprint });
 };
+
 const requirePlannedBindings = ({
   plan,
   revision,
@@ -235,12 +256,15 @@ const requirePlannedBindings = ({
 }): void => {
   requireSignerHost(fingerprint, hosts);
   const resources = Object.values(plan.resources);
+
   const verifiedRoles = successorPlan
     ? (["Core", "Ingress", "Smoke"] as const)
     : ([...roles, "Smoke"] as const);
+
   for (const role of verifiedRoles) {
     const logicalId = role === "Smoke" ? "ReleaseSmoke-" + revision : role;
     const node = resources.find((item) => describeResource(item).logicalId === logicalId);
+
     if (node === undefined) throw Error("Missing installed native Worker " + role);
     const props: unknown = node.action === "noop" ? node.state.props : node.props;
     requireInstallationWorker({ logicalId: role, props, revision, hosts });
@@ -249,25 +273,33 @@ const requirePlannedBindings = ({
       fallback,
       accounting: Option.isSome(accountingRevision),
     });
+
     const bindings = node.bindings.flatMap(
       (binding) => Schema.decodeUnknownSync(ProviderBindings)(binding.data).bindings ?? []
     );
+
     requireFixtureService(role, bindings, fingerprint);
     requireSiteAsset(role, props, bindings);
     requirePlannedRoleBindings({ role, bindings, fingerprint, successorPlan });
+
     if (Option.isSome(accountingRevision)) {
       requireAccountingBindings(role, accountingRevision.value, bindings);
     }
+
     if (role === "Core") requireNativeClasses(bindings);
   }
 };
+
 export const requireNativeBindings = (input: NativePlanBindings): void =>
   requirePlannedBindings({ ...input, successorPlan: false, accountingRevision: Option.none() });
+
 export const requireSuccessorPlanBindings = (
   input: Omit<NativePlanBindings, "hosts"> & { accountingRevision: Option.Option<string> }
 ): void => requirePlannedBindings({ ...input, hosts: "acceptance", successorPlan: true });
+
 const requireNativeClasses = (bindings: ReadonlyArray<NativeBinding>): void => {
   const classes = bindings.filter((binding) => binding.type === "durable_object_namespace");
+
   const verified = Object.entries(namespaceClasses).every(([name, expected]) =>
     classes.some(
       (binding) =>
@@ -277,6 +309,7 @@ const requireNativeClasses = (bindings: ReadonlyArray<NativeBinding>): void => {
         binding.transferredFrom === undefined
     )
   );
+
   if (!verified || classes.length !== Object.keys(namespaceClasses).length) {
     throw Error("Native namespace lifecycle differs");
   }

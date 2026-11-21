@@ -1,3 +1,4 @@
+import type { Effect } from "effect";
 import type { ExternalEventBindings } from "../directory/contract";
 import type { ProactivityDeliveryWork } from "../insights/contract";
 
@@ -27,4 +28,4 @@ export type CoreQueueEnvironment = BillingWorkRouting &
 export type CoreQueueHandler = (
   batch: MessageBatch<unknown>,
   environment: CoreQueueEnvironment
-) => Promise<void>;
+) => Effect.Effect<void>;

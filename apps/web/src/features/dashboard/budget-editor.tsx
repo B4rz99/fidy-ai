@@ -3,7 +3,7 @@ import type { BudgetChoice } from "./budget-options";
 import { PendingRead } from "@/ui/components/pending-read";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link } from "@tanstack/react-router";
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import { useId, useState } from "react";
 import type { FormEvent, JSX, ReactNode } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
@@ -29,6 +29,7 @@ type ContentProps = Readonly<{
   onClose: () => void;
   onSave: (target: BudgetTarget) => void;
 }>;
+
 export const DashboardBudgetEditor = ({
   apiClient,
   timeZone,
@@ -43,6 +44,7 @@ export const DashboardBudgetEditor = ({
       })
       .pipe(revalidateWorkspaceQuery)
   );
+
   const categoriesQuery = workspaceCategoriesQuery(apiClient).view;
   const budgetsResult = useAtomValue(budgetsQuery);
   const categoriesResult = useAtomValue(categoriesQuery);
@@ -51,6 +53,7 @@ export const DashboardBudgetEditor = ({
   const refreshBudgets = useAtomRefresh(budgetsQuery);
   const refreshCategories = useAtomRefresh(categoriesQuery);
   const waiting = budgets.waiting || categories.waiting;
+
   const retry = (
     <CanonicalQueryRetry
       retryLabel="Reintentar carga de presupuestos"
@@ -64,11 +67,17 @@ export const DashboardBudgetEditor = ({
       }}
     />
   );
-  if (budgets._tag === "Initial" || categories._tag === "Initial") {
+
+  if (Predicate.isTagged(budgets, "Initial") || Predicate.isTagged(categories, "Initial")) {
     return <PendingRead label="Cargando presupuestos" />;
   }
-  if (budgets._tag !== "Ready" || categories._tag !== "Ready") return retry;
+
+  if (!Predicate.isTagged(budgets, "Ready") || !Predicate.isTagged(categories, "Ready")) {
+    return retry;
+  }
+
   if ([budgets.refreshFailure, categories.refreshFailure].some(Option.isSome)) return retry;
+
   return (
     <BudgetConfigurationForm
       {...form}
@@ -90,20 +99,26 @@ const BudgetConfigurationForm = ({
 }: Omit<ContentProps, "apiClient" | "timeZone"> &
   Readonly<{ choices: ReadonlyArray<BudgetChoice> }>): JSX.Element => {
   const id = useId();
+
   const [selectedId, setSelectedId] = useState(
     () =>
       choices.find(
         (choice) => choice.categoryId === widget.categoryId && choice.currency === widget.currency
       )?.value ?? ""
   );
+
   const selected = choices.find(({ value }) => value === selectedId);
+
   if (choices.length === 0) return <NoBudgetChoices onClose={onClose} />;
+
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
+
     if (!disabled && selected !== undefined) {
       onSave({ categoryId: selected.categoryId, currency: selected.currency });
     }
   };
+
   return (
     <form className="grid gap-6" onSubmit={submit}>
       <BudgetConfigurationFields

@@ -14,7 +14,9 @@ type CategoryProps = Readonly<{
   categories: ReadonlyArray<Category>;
   disabled: boolean;
 }>;
+
 type SaveStatus = "idle" | "saving" | "rejected" | "uncertain" | "refreshing" | "recovered";
+
 const feedbackCopy: Readonly<Record<SaveStatus, string>> = {
   idle: "",
   saving: "Guardando categoría…",
@@ -23,6 +25,7 @@ const feedbackCopy: Readonly<Record<SaveStatus, string>> = {
   rejected: "No se guardó la categoría. No pudimos actualizar el historial.",
   uncertain: "No pudimos confirmar el cambio. Actualiza el historial antes de volver a editar.",
 };
+
 const CategoryFeedback = ({
   status,
   onRefresh,
@@ -39,21 +42,26 @@ const CategoryFeedback = ({
       </div>
     );
   }
+
   return status === "idle" ? (
     <></>
   ) : (
     <output className="text-xs text-muted-foreground">{feedbackCopy[status]}</output>
   );
 };
+
 const CategoryCorrection = (props: CategoryProps): JSX.Element => {
   const corrections = useTransactionCorrections();
   const feedback = corrections.status === "recovering" ? "saving" : corrections.status;
+
   const status: SaveStatus = Option.contains(corrections.inlineTransaction, props.transaction.id)
     ? feedback
     : "idle";
+
   const change = (categoryId: string): void => {
     if (props.disabled || corrections.locked || categoryId === props.transaction.categoryId) return;
     const category = Option.fromNullishOr(props.categories.find((item) => item.id === categoryId));
+
     if (Option.isNone(category)) return;
     corrections.submit({
       kind: "single",
@@ -62,6 +70,7 @@ const CategoryCorrection = (props: CategoryProps): JSX.Element => {
       changes: { categoryId: category.value.id },
     });
   };
+
   return (
     <div className="min-w-0">
       <InlineChoiceDropdown
@@ -83,12 +92,14 @@ const CategoryCorrection = (props: CategoryProps): JSX.Element => {
     </div>
   );
 };
+
 export const InlineTransactionCategory = ({
   transactions,
   ...props
 }: Omit<CategoryProps, "transaction"> &
   Readonly<{ transactions: ReadonlyArray<Transaction> }>): JSX.Element => {
   const transaction = Option.fromNullishOr(transactions.find((item) => item.id === props.row.id));
+
   return Option.isSome(transaction) ? (
     <CategoryCorrection
       key={`${transaction.value.id}:${transaction.value.revision}`}

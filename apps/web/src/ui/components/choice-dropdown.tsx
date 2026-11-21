@@ -1,4 +1,4 @@
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import type { AriaAttributes, JSX, ReactNode } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
@@ -41,6 +41,7 @@ export const ChoiceDropdown = ({
     triggerLabel,
     () => options.find((option) => option.value === value)?.label ?? ""
   );
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -92,7 +93,7 @@ const ChoiceMenuOptions = ({ value, getOptions, onChange }: ChoiceMenuProps): JS
   <DropdownMenuRadioGroup
     value={value}
     onValueChange={(next: unknown) => {
-      if (typeof next === "string") onChange(next);
+      if (Predicate.isString(next)) onChange(next);
     }}
   >
     {getOptions().map((option) => (

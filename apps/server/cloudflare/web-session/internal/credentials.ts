@@ -9,8 +9,11 @@ export const sessionCookie = (request: Request): Option.Option<WebSessionBearer>
       .get("cookie")
       ?.split(";")
       .map((value) => value.trim()) ?? [];
+
   const selected = cookies.filter((cookie) => cookie.startsWith(cookieName));
+
   if (selected.length !== 1) return Option.none();
+
   return Schema.decodeUnknownOption(WebSessionBearer)(selected[0]?.slice(cookieName.length));
 };
 

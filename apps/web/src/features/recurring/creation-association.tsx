@@ -6,6 +6,7 @@ export const SourceAssociation = ({
   view,
 }: Readonly<{ receipt: CreationReceipt; view: Workspace }>): JSX.Element => {
   const invalidIds = new Set(view.invalidFulfillmentIds);
+
   const marks = [
     ...view.document.fulfillments.filter((mark) => !invalidIds.has(mark.id)),
     ...view.matches.map(({ item, fact }) => ({
@@ -14,16 +15,19 @@ export const SourceAssociation = ({
       transactionId: fact.id,
     })),
   ];
+
   const association = marks.find(
     (mark) =>
       mark.transactionId === receipt.transactionId &&
       (mark.planId !== receipt.planId || mark.date !== receipt.date)
   );
+
   const name =
     association === undefined
       ? undefined
       : view.document.plans.find((plan) => plan.id === association.planId)?.revisions.at(-1)?.plan
           .name;
+
   if (association !== undefined && name !== undefined) {
     return (
       <span>
@@ -32,6 +36,7 @@ export const SourceAssociation = ({
       </span>
     );
   }
+
   return (
     <span>
       {view.matchesComplete
@@ -40,6 +45,7 @@ export const SourceAssociation = ({
     </span>
   );
 };
+
 export const PendingExpectation = ({ item }: Readonly<{ item: Occurrence }>): JSX.Element => (
   <span>
     {item.remaining === undefined

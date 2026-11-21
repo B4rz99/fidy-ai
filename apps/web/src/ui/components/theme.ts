@@ -5,24 +5,29 @@ import {
 } from "@/browser/theme-preference";
 import { type RefCallback, useCallback, useSyncExternalStore } from "react";
 
-export const useTheme = (): Readonly<{
+type ThemeControl = Readonly<{
   theme: "light" | "dark";
   mounted: RefCallback<HTMLDivElement>;
   toggle: () => void;
-}> => {
+}>;
+
+export const useTheme = (): ThemeControl => {
   const theme = useSyncExternalStore(observeThemePreference, readThemePreference);
+
   const mounted = useCallback<RefCallback<HTMLDivElement>>(
     (element) => {
       if (element === null) return;
       const root = element.ownerDocument.documentElement;
       const previous = root.classList.contains("dark");
       root.classList.toggle("dark", theme === "dark");
+
       return (): void => {
         root.classList.toggle("dark", previous);
       };
     },
     [theme]
   );
+
   return {
     theme,
     mounted,

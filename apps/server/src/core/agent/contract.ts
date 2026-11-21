@@ -1,16 +1,20 @@
 import { OnboardingConsentBasis } from "~/core/consent/contract";
 import { InsightEventId } from "~/core/insights/contract";
 import { UserId } from "~/core/identity/contract";
-import { type Option, Schema, Struct } from "effect";
+import { Data, type Option, Predicate, Schema, Struct } from "effect";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 
 export const maximumHostedTurnIterations = 32;
+
 export const maximumModelRoundMillis = 120_000;
+
 export const maximumToolCallsPerTurn = 64;
 
 const maximumToolCallIdLength = 256;
+
 const maximumTranscriptTextLength = 16_000;
+
 const maximumCanonicalToolEvidenceBytes = 1_000_000;
 
 const canonicalJsonStringIsValid = (value: string): boolean =>
@@ -19,14 +23,18 @@ const canonicalJsonStringIsValid = (value: string): boolean =>
 const isCanonicalJsonString = Schema.makeFilter<string>((value) =>
   canonicalJsonStringIsValid(value) ? undefined : "Expected well-formed Unicode without NUL"
 );
+
 const isCanonicalUuid = Schema.makeFilter<string>((value) =>
   value === value.toLowerCase() ? undefined : "Expected canonical lowercase UUID spelling"
 );
 
 const canonicalJsonValueIsValid = (value: Schema.Json): boolean => {
-  if (typeof value === "string") return canonicalJsonStringIsValid(value);
-  if (typeof value === "number") return !Object.is(value, -0);
+  if (Predicate.isString(value)) return canonicalJsonStringIsValid(value);
+
+  if (Predicate.isNumber(value)) return !Object.is(value, -0);
+
   if (value === null) return true;
+
   return Object.entries(value).every(
     ([key, member]: readonly [string, Schema.Json]) =>
       canonicalJsonStringIsValid(key) && canonicalJsonValueIsValid(member)
@@ -36,6 +44,7 @@ const canonicalJsonValueIsValid = (value: Schema.Json): boolean => {
 const canonicalToolEvidenceIsValid = Schema.makeFilter<Schema.Json>((value) => {
   if (!canonicalJsonValueIsValid(value)) return "Expected losslessly persistable JSON";
   const encodedBytes = new TextEncoder().encode(JSON.stringify(value)).byteLength;
+
   return encodedBytes <= maximumCanonicalToolEvidenceBytes
     ? undefined
     : `Expected at most ${maximumCanonicalToolEvidenceBytes} encoded UTF-8 bytes`;
@@ -44,11 +53,13 @@ const canonicalToolEvidenceIsValid = Schema.makeFilter<Schema.Json>((value) => {
 export const TranscriptEntryId = Schema.String.check(Schema.isUUID(), isCanonicalUuid)
   .pipe(Schema.brand("TranscriptEntryId"))
   .annotate({ identifier: "TranscriptEntryId" });
+
 export type TranscriptEntryId = typeof TranscriptEntryId.Type;
 
 export const TranscriptTurnId = Schema.String.check(Schema.isUUID(), isCanonicalUuid)
   .pipe(Schema.brand("TranscriptTurnId"))
   .annotate({ identifier: "TranscriptTurnId" });
+
 export type TranscriptTurnId = typeof TranscriptTurnId.Type;
 
 export const ToolCallId = Schema.String.check(
@@ -58,6 +69,7 @@ export const ToolCallId = Schema.String.check(
 )
   .pipe(Schema.brand("ToolCallId"))
   .annotate({ identifier: "ToolCallId" });
+
 export type ToolCallId = typeof ToolCallId.Type;
 
 export const AgentIteration = Schema.Int.check(
@@ -66,6 +78,7 @@ export const AgentIteration = Schema.Int.check(
 )
   .pipe(Schema.brand("AgentIteration"))
   .annotate({ identifier: "AgentIteration" });
+
 export type AgentIteration = typeof AgentIteration.Type;
 
 export const TranscriptText = Schema.String.check(
@@ -76,6 +89,7 @@ export const TranscriptText = Schema.String.check(
 )
   .pipe(Schema.brand("TranscriptText"))
   .annotate({ identifier: "TranscriptText" });
+
 export type TranscriptText = typeof TranscriptText.Type;
 
 export const ProactiveInsightTranscriptEntry = Schema.TaggedStruct(
@@ -87,12 +101,15 @@ export const ProactiveInsightTranscriptEntry = Schema.TaggedStruct(
     text: TranscriptText,
   }
 );
+
 export type ProactiveInsightTranscriptEntry = typeof ProactiveInsightTranscriptEntry.Type;
 
 export const ProactiveDeliveryId = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("ProactiveDeliveryId")
 );
+
 export type ProactiveDeliveryId = typeof ProactiveDeliveryId.Type;
+
 export const ProactiveMessageTranscriptEntry = Schema.TaggedStruct(
   "ProactiveMessageTranscriptEntry",
   {
@@ -108,11 +125,14 @@ export const ProactiveMessageTranscriptEntry = Schema.TaggedStruct(
     text: TranscriptText,
   }
 );
+
 export type ProactiveMessageTranscriptEntry = typeof ProactiveMessageTranscriptEntry.Type;
+
 export const ProactiveTranscriptEntry = Schema.Union([
   ProactiveInsightTranscriptEntry,
   ProactiveMessageTranscriptEntry,
 ]);
+
 export type ProactiveTranscriptEntry = typeof ProactiveTranscriptEntry.Type;
 
 const TranscriptIdentity = {
@@ -125,6 +145,7 @@ export const UserTranscriptEntry = Schema.TaggedStruct("UserTranscriptEntry", {
   ...TranscriptIdentity,
   text: TranscriptText,
 });
+
 export type UserTranscriptEntry = typeof UserTranscriptEntry.Type;
 
 export const AssistantTranscriptEntry = Schema.TaggedStruct("AssistantTranscriptEntry", {
@@ -132,11 +153,13 @@ export const AssistantTranscriptEntry = Schema.TaggedStruct("AssistantTranscript
   iteration: AgentIteration,
   text: TranscriptText,
 });
+
 export type AssistantTranscriptEntry = typeof AssistantTranscriptEntry.Type;
 
 export const CanonicalToolEvidence = Schema.Json.check(canonicalToolEvidenceIsValid).annotate({
   identifier: "CanonicalToolEvidence",
 });
+
 export type CanonicalToolEvidence = typeof CanonicalToolEvidence.Type;
 
 export const CanonicalToolCallEntry = Schema.TaggedStruct("CanonicalToolCallEntry", {
@@ -146,15 +169,27 @@ export const CanonicalToolCallEntry = Schema.TaggedStruct("CanonicalToolCallEntr
   operation: CanonicalOperationId,
   input: CanonicalToolEvidence,
 });
+
 export type CanonicalToolCallEntry = typeof CanonicalToolCallEntry.Type;
 
+export const ToolOutputRejected = Schema.TaggedStruct("ToolOutputRejected", {
+  failure: CanonicalToolEvidence,
+});
+
+export const ToolSucceeded = Schema.TaggedStruct("Succeeded", { output: CanonicalToolEvidence });
+
+export const CanonicalOperationFailed = Schema.TaggedStruct("CanonicalOperationFailed", {
+  failure: CanonicalToolEvidence,
+});
+
 export const CanonicalToolOutcome = Schema.Union([
-  Schema.TaggedStruct("Succeeded", { output: CanonicalToolEvidence }),
+  ToolSucceeded,
   Schema.TaggedStruct("CommittedOutputUnavailable", {}),
   Schema.TaggedStruct("ToolInputRejected", { failure: CanonicalToolEvidence }),
-  Schema.TaggedStruct("ToolOutputRejected", { failure: CanonicalToolEvidence }),
-  Schema.TaggedStruct("CanonicalOperationFailed", { failure: CanonicalToolEvidence }),
+  ToolOutputRejected,
+  CanonicalOperationFailed,
 ]);
+
 export type CanonicalToolOutcome = typeof CanonicalToolOutcome.Type;
 
 export const CanonicalToolResultEntry = Schema.TaggedStruct("CanonicalToolResultEntry", {
@@ -164,6 +199,7 @@ export const CanonicalToolResultEntry = Schema.TaggedStruct("CanonicalToolResult
   operation: CanonicalOperationId,
   outcome: CanonicalToolOutcome,
 });
+
 export type CanonicalToolResultEntry = typeof CanonicalToolResultEntry.Type;
 
 export const TurnFailureReason = Schema.Literals([
@@ -172,24 +208,28 @@ export const TurnFailureReason = Schema.Literals([
   "DeliveryFailed",
   "DeliveryUnconfirmed",
 ]);
+
 export type TurnFailureReason = typeof TurnFailureReason.Type;
 
 export const FailedTurnTranscriptEntry = Schema.TaggedStruct("FailedTurnTranscriptEntry", {
   ...TranscriptIdentity,
   reason: TurnFailureReason,
 });
+
 export type FailedTurnTranscriptEntry = typeof FailedTurnTranscriptEntry.Type;
 
 export const InterruptedTurnTranscriptEntry = Schema.TaggedStruct(
   "InterruptedTurnTranscriptEntry",
   TranscriptIdentity
 );
+
 export type InterruptedTurnTranscriptEntry = typeof InterruptedTurnTranscriptEntry.Type;
 
 export const TurnContinuationEntry = Schema.Union([
   CanonicalToolCallEntry,
   CanonicalToolResultEntry,
 ]).annotate({ identifier: "TurnContinuationEntry" });
+
 export type TurnContinuationEntry = typeof TurnContinuationEntry.Type;
 
 export const TranscriptContentEntry = Schema.Union([
@@ -198,6 +238,7 @@ export const TranscriptContentEntry = Schema.Union([
   CanonicalToolCallEntry,
   CanonicalToolResultEntry,
 ]).annotate({ identifier: "TranscriptContentEntry" });
+
 export type TranscriptContentEntry = typeof TranscriptContentEntry.Type;
 
 export const TranscriptEntry = Schema.Union([
@@ -208,6 +249,7 @@ export const TranscriptEntry = Schema.Union([
   FailedTurnTranscriptEntry,
   InterruptedTurnTranscriptEntry,
 ]).annotate({ identifier: "TranscriptEntry" });
+
 export type TranscriptEntry = typeof TranscriptEntry.Type;
 
 export const CompactedConversation = Schema.Struct({
@@ -220,6 +262,7 @@ export const CompactedConversation = Schema.Struct({
   ),
   updatedAt: Schema.DateTimeUtc,
 });
+
 export type CompactedConversation = typeof CompactedConversation.Type;
 
 const terminalTimeIssue = (turn: {
@@ -234,28 +277,34 @@ const PendingConversationTurn = Schema.TaggedStruct("Pending", {
   id: TranscriptTurnId,
   startedAt: UtcTimestamp,
 });
+
 const CompletedConversationTurnBase = Schema.TaggedStruct("Completed", {
   id: TranscriptTurnId,
   startedAt: UtcTimestamp,
   terminalAt: UtcTimestamp,
 });
+
 const CompletedConversationTurn = CompletedConversationTurnBase.check(
   Schema.makeFilter<typeof CompletedConversationTurnBase.Type>(terminalTimeIssue)
 );
+
 const FailedConversationTurnBase = Schema.TaggedStruct("Failed", {
   id: TranscriptTurnId,
   startedAt: UtcTimestamp,
   terminalAt: UtcTimestamp,
   reason: TurnFailureReason,
 });
+
 const FailedConversationTurn = FailedConversationTurnBase.check(
   Schema.makeFilter<typeof FailedConversationTurnBase.Type>(terminalTimeIssue)
 );
+
 const InterruptedConversationTurnBase = Schema.TaggedStruct("Interrupted", {
   id: TranscriptTurnId,
   startedAt: UtcTimestamp,
   terminalAt: UtcTimestamp,
 });
+
 const InterruptedConversationTurn = InterruptedConversationTurnBase.check(
   Schema.makeFilter<typeof InterruptedConversationTurnBase.Type>(terminalTimeIssue)
 );
@@ -266,6 +315,7 @@ export const ConversationTurn = Schema.Union([
   FailedConversationTurn,
   InterruptedConversationTurn,
 ]).annotate({ identifier: "ConversationTurn" });
+
 export type ConversationTurn = typeof ConversationTurn.Type;
 
 export const HostedAgentSessionId = Schema.String.check(
@@ -276,9 +326,11 @@ export const HostedAgentSessionId = Schema.String.check(
 )
   .pipe(Schema.brand("HostedAgentSessionId"))
   .annotate({ identifier: "HostedAgentSessionId" });
+
 export type HostedAgentSessionId = typeof HostedAgentSessionId.Type;
 
 export const HostedAgentSessionConsentBasis = OnboardingConsentBasis;
+
 export type HostedAgentSessionConsentBasis = typeof HostedAgentSessionConsentBasis.Type;
 
 export const HostedAgentSession = Schema.Struct({
@@ -289,6 +341,7 @@ export const HostedAgentSession = Schema.Struct({
   lastTerminalTurnAt: Schema.Option(UtcTimestamp),
   status: Schema.Literals(["active", "idle-ended", "revoked"]),
 });
+
 export type HostedAgentSession = typeof HostedAgentSession.Type;
 
 const CompactedConversationText = CompactedConversation.mapFields(Struct.pick(["text"]));
@@ -296,6 +349,7 @@ const CompactedConversationText = CompactedConversation.mapFields(Struct.pick(["
 export const CompactedConversationOutput = Schema.Struct({
   compactedConversation: CompactedConversationText.fields.text,
 });
+
 export type CompactedConversationOutput = typeof CompactedConversationOutput.Type;
 
 export type HostedAdmissionState = Readonly<{
@@ -320,13 +374,17 @@ export type HostedAdmissionRequest = Readonly<{
   state: HostedAdmissionState;
 }>;
 
-export type HostedAdmissionDecision =
-  | Readonly<{ _tag: "Refused"; reason: "ConsentRequired" | "InvalidState" }>
-  | Readonly<{ _tag: "RecoverPending" }>
-  | Readonly<{ _tag: "ContinueSession"; sessionId: HostedAgentSessionId }>
-  | Readonly<{ _tag: "BeginSession"; consentBasis: HostedAgentSessionConsentBasis }>;
+export type HostedAdmissionDecision = Data.TaggedEnum<{
+  Refused: { readonly reason: "ConsentRequired" | "InvalidState" };
+  RecoverPending: {};
+  ContinueSession: { readonly sessionId: HostedAgentSessionId };
+  BeginSession: { readonly consentBasis: HostedAgentSessionConsentBasis };
+}>;
+
+export const HostedAdmissionDecision = Data.taggedEnum<HostedAdmissionDecision>();
 
 export const ConversationCompactionTokenCount = Schema.Int.check(Schema.isGreaterThan(0)).pipe(
   Schema.brand("ConversationCompactionTokenCount")
 );
+
 export type ConversationCompactionTokenCount = typeof ConversationCompactionTokenCount.Type;

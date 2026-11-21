@@ -9,6 +9,7 @@ import {
   Option,
   Predicate,
   Schema,
+  type Scope,
 } from "effect";
 import { dual } from "effect/Function";
 import {
@@ -34,21 +35,26 @@ import {
 } from "./contract";
 
 const stackSourceFilePattern = /^src\/[A-Za-z0-9_./-]{1,220}\.(?:ts|tsx|js|mjs)$/u;
+
 const stackLinePattern = /^\s*at\s+(?:([^\s(]+)\s+\()?(.+):(\d+):(\d+)\)?\s*$/u;
 
 const normalizeSourceFile = (value: string): Option.Option<string> => {
   if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//u.test(value)) return Option.none();
   const sourceMarker = value.lastIndexOf("/src/");
   const relative = sourceMarker >= 0 ? value.slice(sourceMarker + 1) : value;
+
   if (relative.split("/").some((segment) => segment === "." || segment === "..")) {
     return Option.none();
   }
+
   return stackSourceFilePattern.test(relative) ? Option.some(relative) : Option.none();
 };
 
 const projectStackLine = (line: string): Option.Option<ProjectedStackFrame> => {
   const match = stackLinePattern.exec(line);
+
   if (match === null) return Option.none();
+
   return Option.flatMap(Option.fromUndefinedOr(match[2]), (sourceFile) =>
     Option.flatMap(normalizeSourceFile(sourceFile), (filename) =>
       Schema.decodeOption(
@@ -67,8 +73,10 @@ const projectStackLine = (line: string): Option.Option<ProjectedStackFrame> => {
 
 const stackText = (cause: unknown): Option.Option<string> => {
   if (!Predicate.isObject(cause)) return Option.none();
+
   try {
     if (!Predicate.hasProperty(cause, "stack")) return Option.none();
+
     return Predicate.isString(cause.stack) ? Option.some(cause.stack) : Option.none();
   } catch {
     return Option.none();
@@ -77,15 +85,19 @@ const stackText = (cause: unknown): Option.Option<string> => {
 
 const projectReasonStack = (reason: Cause.Reason<unknown>): ReadonlyArray<ProjectedStackFrame> => {
   if (Cause.isFailReason(reason)) return projectStack(reason.error);
+
   if (Cause.isDieReason(reason)) return projectStack(reason.defect);
+
   return [];
 };
 
 export const projectStack = (cause: unknown): ReadonlyArray<ProjectedStackFrame> => {
   if (Cause.isCause(cause)) {
     const direct = cause.reasons.flatMap(projectReasonStack);
+
     return direct.length > 0 ? direct : Cause.prettyErrors(cause).flatMap(projectStack);
   }
+
   return Option.match(stackText(cause), {
     onNone: () => [],
     onSome: (stack) => stack.split("\n").flatMap((line) => Option.toArray(projectStackLine(line))),
@@ -93,15 +105,22 @@ export const projectStack = (cause: unknown): ReadonlyArray<ProjectedStackFrame>
 };
 
 const firstSuccessStatus = 200;
+
 const firstRedirectStatus = 300;
+
 const firstClientErrorStatus = 400;
+
 const firstServerErrorStatus = 500;
 
 export const projectHttpStatusClass = (status: TelemetryHttpStatus): TelemetryHttpStatusClass => {
   if (status < firstSuccessStatus) return "1xx";
+
   if (status < firstRedirectStatus) return "2xx";
+
   if (status < firstClientErrorStatus) return "3xx";
+
   if (status < firstServerErrorStatus) return "4xx";
+
   return "5xx";
 };
 
@@ -145,15 +164,19 @@ export const DisabledTelemetryResource: TelemetryResource = {
 export class Telemetry extends Context.Service<Telemetry, TelemetryService>()(
   "@fidy/server/shell/observability/operations/Telemetry"
 ) {
+  static readonly make = <E, R>(
+    resource: Effect.Effect<TelemetryResource, E, R>
+  ): Effect.Effect<TelemetryService, E, R | Scope.Scope> =>
+    Effect.acquireRelease(resource, (telemetryResource) => telemetryResource.close).pipe(
+      Effect.map((telemetryResource) => makeTelemetryService(telemetryResource.adapter))
+    );
+
   static readonly layer = <E, R>(
     resource: Effect.Effect<TelemetryResource, E, R>
-  ): Layer.Layer<Telemetry, E, R> =>
-    Layer.effect(
-      Telemetry,
-      Effect.acquireRelease(resource, (telemetryResource) => telemetryResource.close).pipe(
-        Effect.map((telemetryResource) => makeTelemetryService(telemetryResource.adapter))
-      )
-    );
+  ): Layer.Layer<Telemetry, E, R> => Layer.effect(this, this.make(resource));
+
+  static readonly fromAdapter = (adapter: TelemetryAdapter): TelemetryService =>
+    makeTelemetryService(adapter);
 }
 
 const CurrentTelemetrySpan = Context.Reference<Option.Option<TelemetrySpan>>(
@@ -162,6 +185,7 @@ const CurrentTelemetrySpan = Context.Reference<Option.Option<TelemetrySpan>>(
 );
 
 const durableContextLifetimeHours = 24;
+
 const durableContextLifetimeMilliseconds = Duration.toMillis(
   Duration.hours(durableContextLifetimeHours)
 );
@@ -208,6 +232,7 @@ const exportCompletedWork = <A, E>(input: {
       const success = Exit.isSuccess(input.exit)
         ? input.options.projectSuccess(input.exit.value)
         : { outcome: workOutcome(input.exit.cause), statusClass: Option.none() };
+
       const record = yield* Schema.decodeEffect(
         TelemetryWorkRecord,
         TelemetryStrictDecoding
@@ -230,6 +255,7 @@ const exportCompletedWork = <A, E>(input: {
         attempt: input.options.descriptor.attempt,
         latencyMilliseconds: boundedTelemetryDuration(input.finishedAt - input.startedAt),
       });
+
       yield* Effect.sync(() => input.adapter.exportWork(record));
     })
   );
@@ -242,6 +268,7 @@ const observeWork = <A, E, R>(
   Effect.gen(function* () {
     const span = yield* CurrentTelemetrySpan;
     const startedAt = yield* Clock.currentTimeMillis;
+
     return yield* Effect.onExit(work, (exit) =>
       Effect.flatMap(Clock.currentTimeMillis, (finishedAt) =>
         exportCompletedWork({ adapter, options, exit, startedAt, finishedAt, span })
@@ -260,11 +287,13 @@ const observeWith = <A, E, R>(input: {
     if (Option.isNone(started)) return input.work;
     const key = activeSpanKey(started.value.traceId, started.value.spanId);
     input.activeSpans.set(key, input.descriptor.operation);
+
     const observed = Effect.onExit(input.work, (exit) =>
       Effect.sync(() => input.activeSpans.delete(key)).pipe(
         Effect.andThen(ignoreTelemetryFailure(() => input.adapter.finishSpan(started.value, exit)))
       )
     );
+
     return Effect.provideService(observed, CurrentTelemetrySpan, started);
   });
 
@@ -306,9 +335,11 @@ export const decodeTraceParent = ({
   const match = /^00-([0-9a-f]{32})-([0-9a-f]{16})-(00|01)$/u.exec(
     Option.getOrElse(value, () => "")
   );
+
   if (match === null || /^0+$/u.test(match[1] ?? "") || /^0+$/u.test(match[2] ?? "")) {
     return Option.none();
   }
+
   return Schema.decodeUnknownOption(DurableTraceContext)({
     version: 1,
     traceId: match[1],
@@ -349,6 +380,7 @@ const withActiveSpan = (
 
 export const makeTelemetryService = (adapter: TelemetryAdapter): TelemetryService => {
   const activeSpans = new Map<string, SpanDescriptor["operation"]>();
+
   return Telemetry.of({
     observeWork: (options, work) => observeWork(adapter, options, work),
     span: (descriptor, work) =>

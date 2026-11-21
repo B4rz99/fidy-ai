@@ -1,9 +1,11 @@
+import type { SecureRandom } from "effect/crypto";
 import { Context, Data, type Effect, Option, type Redacted, Schema } from "effect";
 import { WebSessionId } from "../../src/core/web-session/contract";
 import { UserId } from "../../src/core/identity/contract";
 import { ConnectionAttemptReference } from "../../src/shell/connections/contract";
 
 const digestLength = 32;
+
 const maximumByte = 255;
 
 export const ConnectionBrowserAdmission = Schema.Struct({
@@ -15,6 +17,7 @@ export const ConnectionBrowserAdmission = Schema.Struct({
   ).check(Schema.isBetweenLength(digestLength, digestLength)),
   deadlineMilliseconds: Schema.Int,
 });
+
 export type ConnectionBrowserAdmission = typeof ConnectionBrowserAdmission.Type;
 
 export const ConnectionSandboxAdmission = Context.Reference<
@@ -23,9 +26,10 @@ export const ConnectionSandboxAdmission = Context.Reference<
 
 export class ConnectionAuthorizationUnavailable extends Data.TaggedError(
   "ConnectionAuthorizationUnavailable"
-) {}
+)<{ readonly cause: unknown }> {}
 
 const maximumPermissionCount = 5;
+
 export const ConnectionConsentIntent = Schema.Struct({
   permissions: Schema.Array(
     Schema.Literals([
@@ -42,6 +46,7 @@ export const ConnectionConsentIntent = Schema.Struct({
   historyPolicy: Schema.Literal("bank-default"),
   expiryPolicy: Schema.Literal("bank-default"),
 });
+
 export type ConnectionConsentIntent = typeof ConnectionConsentIntent.Type;
 
 export type ConnectionBankPreparation = Readonly<{
@@ -62,7 +67,9 @@ export type ConnectionBankPreparation = Readonly<{
 }>;
 
 export const connectionCallbackPath = "/connections/bancolombia/sandbox/callback";
+
 const maximumCodeLength = 4096;
+
 export const ConnectionCallbackAdmission = Schema.Struct({
   ...ConnectionBrowserAdmission.fields,
   state: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/u)),
@@ -76,6 +83,7 @@ export const ConnectionCallbackAdmission = Schema.Struct({
     Schema.TaggedStruct("Denied", {}),
   ]),
 });
+
 export type ConnectionCallbackAdmission = typeof ConnectionCallbackAdmission.Type;
 
 export type ConnectionBankGrant = Readonly<{
@@ -83,6 +91,7 @@ export type ConnectionBankGrant = Readonly<{
   refreshToken: Option.Option<Redacted.Redacted<string>>;
   expiresAtMilliseconds: number;
 }>;
+
 export type ConnectionBankActivation = Readonly<{
   clientId: string;
   activate: (
@@ -96,9 +105,13 @@ export type ConnectionBankActivation = Readonly<{
       expiresAtMilliseconds: number;
       retainGrant: (
         grant: ConnectionBankGrant
-      ) => Effect.Effect<void, ConnectionAuthorizationUnavailable>;
+      ) => Effect.Effect<void, ConnectionAuthorizationUnavailable, SecureRandom.SecureRandom>;
     }>
-  ) => Effect.Effect<ReadonlyArray<string>, ConnectionAuthorizationUnavailable>;
+  ) => Effect.Effect<
+    ReadonlyArray<string>,
+    ConnectionAuthorizationUnavailable,
+    SecureRandom.SecureRandom
+  >;
 }>;
 
 export type ConnectionBankCleanup = Readonly<{
@@ -119,6 +132,7 @@ export const SynchronizationWork = Schema.Struct({
   userId: UserId,
   jobId: Schema.String.check(Schema.isUUID()),
 });
+
 export type SynchronizationWork = typeof SynchronizationWork.Type;
 
 export type SynchronizationProvider = {
@@ -131,6 +145,7 @@ export type SynchronizationProvider = {
     grant: ConnectionBankGrant;
   }) => Effect.Effect<unknown, ConnectionAuthorizationUnavailable>;
 };
+
 export type ConnectionAdapters = {
   preparation: Option.Option<ConnectionBankPreparation>;
   activation: Option.Option<ConnectionBankActivation>;

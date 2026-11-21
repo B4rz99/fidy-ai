@@ -1,6 +1,6 @@
 import { verifyHostedInferenceConformanceChecks } from "../../src/shell/hosted-inference/operations";
 import { Cause, Effect, Exit, Option } from "effect";
-import { makeCloudflareHostedInference } from "./runtime";
+import { cloudflareHostedInference } from "./runtime";
 import type { OpenAiEnvironment } from "./contract";
 
 const jsonHeaders = {
@@ -15,7 +15,8 @@ const handler = {
         Response.json({ outcome: "not_found" }, { headers: jsonHeaders, status: 404 })
       );
     }
-    return makeCloudflareHostedInference(environment).pipe(
+
+    return cloudflareHostedInference(environment).pipe(
       Effect.mapError(() => ({
         check: "configuration" as const,
         category: "ProviderUnavailable" as const,
@@ -29,6 +30,7 @@ const handler = {
             { headers: jsonHeaders, status: 200 }
           );
         }
+
         const failure =
           Cause.hasDies(exit.cause) || Cause.hasInterrupts(exit.cause)
             ? { check: "internal", category: "UnexpectedFailure" }
@@ -36,6 +38,7 @@ const handler = {
                 check: "internal" as const,
                 category: "UnexpectedFailure" as const,
               }));
+
         return Response.json(
           {
             modelApprovalRevision: "openai-gpt-6-luna-v1",

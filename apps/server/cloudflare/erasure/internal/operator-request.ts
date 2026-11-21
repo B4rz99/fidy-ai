@@ -17,12 +17,18 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 16384,
   deadlineMilliseconds: 2000,
 });
+
 const admissionLifetimeMs = 5000;
+
 const unavailableStatus = 503;
+
 const invalidStatus = 400;
+
 const unauthorizedStatus = 401;
+
 const reply = (status: number): Response =>
   new Response(null, { status, headers: { "cache-control": "no-store" } });
+
 type NativeEnvironment = Readonly<{
   CLOUDFLARE_ACCESS_ISSUER: string;
   CLOUDFLARE_ACCESS_AUDIENCE: string;
@@ -37,40 +43,61 @@ type NativeEnvironment = Readonly<{
       ERASURE: ErasureRegistryNamespace;
     }>
   >;
+
 type OperatorCall = { request: Request; environment: NativeEnvironment; http: OutboundHttpService };
+
 type Admitted = {
   command: typeof ErasureOperatorAction.Type;
   operator: { operatorRef: string; expiresAtMs: number };
   current: number;
 };
+
 const admittedCommand = (
   input: OperatorCall,
   apply: (admission: Admitted) => Effect.Effect<Response, ErasureUnavailable | Schema.SchemaError>
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if (!validRequest(input.request)) return reply(invalidStatus);
+
     const operator = yield* authenticateOperator({
       ...input,
       configuration: operatorConfiguration(input.environment),
     });
+
     if (Option.isNone(operator)) return reply(unauthorizedStatus);
     const raw = yield* boundedJsonBody({ request: input.request, policy, schema: Schema.Unknown });
+
     const action = Option.flatMap(
       raw,
       Schema.decodeUnknownOption(ErasureOperatorAction, { onExcessProperty: "error" })
     );
+
     if (Option.isNone(action)) return reply(invalidStatus);
     const current = yield* Clock.currentTimeMillis;
+
     if (operator.value.expiresAtMs <= current) return reply(unauthorizedStatus);
+
     return yield* apply({ command: action.value, operator: operator.value, current });
-  }).pipe(Effect.orElseSucceed(() => reply(unavailableStatus)));
+  }).pipe(
+    Effect.tapError(() =>
+      Effect.logWarning({
+        component: "erasure",
+        operation: "operatorRequest",
+        outcome: "unavailable",
+      })
+    ),
+    Effect.orElseSucceed(() => reply(unavailableStatus))
+  );
 
 export const nativeOperatorRequest = (input: OperatorCall): Effect.Effect<Response> =>
   admittedCommand(input, (admission) => {
     const erasure = input.environment.ERASURE;
+
     if (erasure === undefined) return Effect.succeed(reply(unavailableStatus));
     const command = admission.command;
+
     if (!("userId" in command)) return Effect.succeed(reply(invalidStatus));
+
     return forwardCommand({
       ...admission,
       command,
@@ -80,6 +107,7 @@ export const nativeOperatorRequest = (input: OperatorCall): Effect.Effect<Respon
   });
 
 type UserCommand = typeof ErasureOperatorAction.Type;
+
 const forwardCommand = (
   input: Readonly<{
     request: Request;
@@ -91,15 +119,19 @@ const forwardCommand = (
 ): Effect.Effect<Response, ErasureUnavailable | Schema.SchemaError> =>
   Effect.gen(function* () {
     const { command, current } = input;
+
     const admission = {
       userId: command.userId,
       deadlineMs: Math.min(current + admissionLifetimeMs, input.operator.expiresAtMs),
       authority: { permission: "titular.erase", ...input.operator },
     };
+
     const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
       commandBody(command, admission)
     );
+
     const path = commandPath(command);
+
     return yield* Effect.tryPromise({
       try: () =>
         input.target().fetch(
@@ -110,7 +142,7 @@ const forwardCommand = (
             signal: input.request.signal,
           })
         ),
-      catch: () => new ErasureUnavailable(),
+      catch: () => new ErasureUnavailable({ cause: Option.none() }),
     });
   });
 
@@ -126,17 +158,33 @@ const commandPath = (command: UserCommand): string => {
       return "erasure-custody-evidence";
   }
 };
-const commandBody = (
-  command: UserCommand,
-  admission: Readonly<{
-    userId: string;
-    deadlineMs: number;
-    authority: Readonly<{ permission: string; operatorRef: string; expiresAtMs: number }>;
-  }>
-): unknown => {
+
+type OperatorAdmission = Readonly<{
+  userId: string;
+  deadlineMs: number;
+  authority: Readonly<{ permission: string; operatorRef: string; expiresAtMs: number }>;
+}>;
+
+type CustodyScopeCommand = Extract<UserCommand, { action: "CustodyScope" }>;
+
+type CustodyEvidenceCommand = Extract<UserCommand, { action: "CustodyEvidence" }>;
+
+type OperatorCommandBody =
+  | (OperatorAdmission &
+      Readonly<{ reference: string; evidence: CustodyEvidenceCommand["evidence"] }>)
+  | (OperatorAdmission &
+      Readonly<{
+        reference: string;
+        custodian: CustodyScopeCommand["custodian"];
+        after: CustodyScopeCommand["after"];
+      }>)
+  | (OperatorAdmission & Readonly<{ reference: string }>);
+
+const commandBody = (command: UserCommand, admission: OperatorAdmission): OperatorCommandBody => {
   if (command.action === "CustodyEvidence") {
     return { ...admission, reference: command.evidence.reference, evidence: command.evidence };
   }
+
   if (command.action === "CustodyScope") {
     return {
       ...admission,
@@ -145,6 +193,7 @@ const commandBody = (
       after: command.after,
     };
   }
+
   return { ...admission, reference: command.reference };
 };
 

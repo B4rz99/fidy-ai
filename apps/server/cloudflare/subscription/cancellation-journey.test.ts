@@ -6,27 +6,37 @@ import type { Miniflare } from "miniflare";
 import { native, nativeBillingPlatform } from "../user-store.test-fixture";
 
 const user = "22370000-0000-4000-8000-000000000001";
+
 const subscription = "22370000-0000-4000-8000-000000000002";
+
 const source = "22370000-0000-4000-8000-000000000003";
+
 const attempt = "22370000-0000-4000-8000-000000000004";
 
 const paidUser = Effect.fnUntraced(function* (runtime: Miniflare) {
   const owner = yield* native(() =>
     runtime.getDurableObjectNamespace("USER_STORE", "core").then((ns) => ns.getByName(user))
   );
+
   const check = (): Effect.Effect<Awaited<ReturnType<typeof owner.fetch>>> =>
     native(() => owner.fetch("https://owner.internal/work/check", { method: "POST" }));
+
   expect((yield* check()).status).toBe(204);
+
   const store = yield* native(() =>
     runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: user })
   );
+
   const exec = (
     ...args: Parameters<typeof store.exec>
   ): Effect.Effect<Awaited<ReturnType<typeof store.exec>>> => native(() => store.exec(...args));
+
   const now = yield* Clock.currentTimeMillis;
+
   const provider = yield* native(() =>
     runtime.unsafeGetDurableObjectStorage("wompi-fixture", "ProviderState", { name: "provider" })
   );
+
   yield* native(() => provider.exec("CREATE TABLE received_voids(source INTEGER NOT NULL)"));
   yield* exec(
     "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',0)",
@@ -50,18 +60,22 @@ const paidUser = Effect.fnUntraced(function* (runtime: Miniflare) {
     attempt,
     subscription
   );
+
   return { exec, check, provider, now };
 });
 
 const verified = Effect.fnUntraced(function* (paid: Effect.Success<ReturnType<typeof paidUser>>) {
   const { exec } = paid;
+
   const settled = Effect.gen(function* () {
     const state = yield* exec(
       "SELECT source_cancellation_state FROM subscription_cancellations WHERE paid_attempt_id=?",
       attempt
     );
+
     return state[0]?.["source_cancellation_state"] === "voided";
   });
+
   yield* settled.pipe(
     Effect.repeat({
       until: (confirmed) => confirmed,
@@ -78,9 +92,11 @@ const routePAT = Effect.fnUntraced(function* (
   const id = "22370000-0000-4000-8000-000000000005";
   const short = "abcdefgh";
   const bearer = "fin_" + short + "_" + "x".repeat(43);
+
   const digest = yield* native(() =>
     crypto.subtle.digest("SHA-256", new TextEncoder().encode(bearer))
   );
+
   const expires = paid.now + 604800000;
   yield* paid.exec(
     "INSERT INTO pats(id,user_id,short_id,bearer_digest,recipient_label,scopes_json,lifetime_days,created_at_ms,issued_at_ms,expires_at_ms,request_id) VALUES (?,?,?,?,'agent',?,7,?,?,?,?)",
@@ -94,9 +110,11 @@ const routePAT = Effect.fnUntraced(function* (
     expires,
     id
   );
+
   const directory = yield* native(() =>
     runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
   );
+
   yield* native(() =>
     runtime
       .getDurableObjectNamespace("DIRECTORY", "core")
@@ -107,6 +125,7 @@ const routePAT = Effect.fnUntraced(function* (
   yield* native(() =>
     directory.exec("INSERT INTO pat_routes VALUES (?,?,?,?,?)", short, user, id, id, expires)
   );
+
   return (key: string): Effect.Effect<Awaited<ReturnType<Miniflare["dispatchFetch"]>>> =>
     native(() =>
       runtime.dispatchFetch("https://api.fidyapp.com/subscription/cancellation", {
@@ -159,8 +178,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         ).toEqual([{ operation: "subscription.cancelSubscription", count: 1 }]);
         yield* paid.exec("UPDATE pats SET revoked_at_ms=? WHERE short_id='abcdefgh'", paid.now + 1);
         expect((yield* cancel(key)).status).toBe(401);
-      }),
-    25000
+      })
   );
   test.effect(
     "a browser cancellation detaches the card and preserves the paid-through instant",
@@ -172,10 +190,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         yield* paid.exec("UPDATE payment_sources SET method='card' WHERE id=?", source);
         const bearer = "1".repeat(43);
         const session = "22370000-0000-4000-8000-000000000007";
+
         const digest = yield* native(() =>
           crypto.subtle.digest("SHA-256", new TextEncoder().encode(bearer))
         );
+
         const expires = paid.now + 3600000;
+
         const cancel = (): Effect.Effect<Awaited<ReturnType<Miniflare["dispatchFetch"]>>> =>
           native(() =>
             runtime.dispatchFetch("https://api.fidyapp.com/subscription/cancellation", {
@@ -187,10 +208,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               },
             })
           );
+
         expect((yield* cancel()).status).toBe(401);
+
         const directory = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
         );
+
         yield* native(() =>
           directory.exec(
             "INSERT INTO session_routes VALUES (?,?,?,?,?)",
@@ -220,8 +244,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             paidThrough: DateTime.formatIso(DateTime.makeUnsafe(expires)),
           },
         });
-      }),
-    25000
+      })
   );
   test.effect(
     "duplicate Queue delivery restarts the failed cancellation Workflow and the User verifies one source void",
@@ -246,16 +269,20 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const response = yield* check();
         expect(response.status).toBe(204);
         expect(response.headers.get("fidy-alarm-repaired")).toBe("1");
+
         const bindings = yield* native(() =>
           runtime.getBindings<{
             BILLING_COLLECTION_WORKFLOW: Workflow;
             BILLING_COLLECTION_QUEUE: Queue;
           }>("core")
         );
+
         const workflowId = "source-cancel-v3-" + user + "-" + attempt;
+
         const instance = yield* Effect.tryPromise(() =>
           bindings.BILLING_COLLECTION_WORKFLOW.get(workflowId)
         ).pipe(Effect.retry(Schedule.spaced("50 millis")), Effect.timeout("5 seconds"));
+
         yield* native(() => instance.status()).pipe(
           Effect.repeat({
             until: (state) => state.status === "errored",
@@ -269,12 +296,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           )
         ).toEqual([{ verification_count: 0, void_started_at_ms: null }]);
         yield* exec("DROP TRIGGER unavailable_claim");
+
         const offer = {
           version: 3,
           kind: "source-cancellation",
           paidAttemptId: attempt,
           userId: user,
         };
+
         yield* native(() =>
           bindings.BILLING_COLLECTION_QUEUE.sendBatch([{ body: offer }, { body: offer }])
         );
@@ -286,11 +315,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           }),
           Effect.timeout("3 seconds")
         );
+
         const [evidence] = yield* exec(
           "SELECT void_started_at_ms,void_verified_at_ms,verification_count,next_offer_at_ms FROM subscription_cancellations"
         );
-        expect(typeof evidence?.["void_started_at_ms"]).toBe("number");
-        expect(typeof evidence?.["void_verified_at_ms"]).toBe("number");
+
+        expect(evidence?.["void_started_at_ms"]).toEqual(expect.any(Number));
+        expect(evidence?.["void_verified_at_ms"]).toEqual(expect.any(Number));
         expect(evidence).toMatchObject({
           verification_count: 1,
           next_offer_at_ms: null,
@@ -298,7 +329,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(
           yield* native(() => provider.exec("SELECT COUNT(*) AS total FROM received_voids"))
         ).toEqual([{ total: 1 }]);
-      }),
-    25000
+      })
   );
 });

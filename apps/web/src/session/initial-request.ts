@@ -8,16 +8,22 @@ export const observeInitialBrowserRequest = (
     typeof BroadcastChannel === "undefined"
       ? undefined
       : new BroadcastChannel(authenticationChannelName);
+
   const release = (): void => {
     channel?.close();
+
     if (typeof window !== "undefined") window.removeEventListener(authenticationEndedEvent, cancel);
     request.release();
   };
+
   const cancel = (): void => {
     request.cancel();
     release();
   };
+
   if (channel !== undefined) channel.onmessage = cancel;
+
   if (typeof window !== "undefined") window.addEventListener(authenticationEndedEvent, cancel);
+
   return { ...request, cancel, release };
 };

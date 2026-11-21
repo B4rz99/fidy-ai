@@ -23,12 +23,14 @@ const read = operationPolicy({
   agentConfirmation: "not-required",
   kind: "query",
 });
+
 const additiveWrite = operationPolicy({
   access: userOwnedAgentScoped("write"),
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "mutation",
 });
+
 const destructiveWrite = operationPolicy({
   access: userOwnedAgentScoped("write"),
   requiredTier: "free",

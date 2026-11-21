@@ -1,10 +1,14 @@
 import { type RegisteredRouter, useRouter, useRouterState } from "@tanstack/react-router";
 import { DateTime, Option, Schema } from "effect";
 import type { Transaction } from "./presentation";
+import { reportBrowserDefect } from "@/transport/browser-defects";
 
 export const transactionSearchLimit = 500;
+
 const maximumCategoryLength = 120;
+
 const maximumRestoredPages = 20;
+
 const LocalFilters = Schema.Struct({
   search: Schema.String.check(Schema.isMaxLength(transactionSearchLimit)),
   direction: Schema.String.check(
@@ -12,12 +16,15 @@ const LocalFilters = Schema.Struct({
   ),
   categoryId: Schema.String.check(Schema.isMaxLength(maximumCategoryLength)),
 });
+
 export type TransactionFilters = typeof LocalFilters.Type;
+
 export const emptyTransactionFilters: TransactionFilters = {
   search: "",
   direction: "all",
   categoryId: "all",
 };
+
 const SavedView = Schema.Struct({
   version: Schema.Literal(1),
   binding: Schema.String,
@@ -77,7 +84,7 @@ const saveTransactionView = (
         },
       }),
     })
-    .catch(() => undefined);
+    .catch(() => reportBrowserDefect("navigation_failed"));
 };
 
 export const matchesTransactionFilters = ({
@@ -93,6 +100,7 @@ export const matchesTransactionFilters = ({
     `${Option.getOrElse(transaction.counterparty, () => "")} ${Option.getOrElse(transaction.notes, () => "")}`.toLocaleLowerCase(
       "es-CO"
     );
+
   return (
     text.includes(filters.search.trim().toLocaleLowerCase("es-CO")) &&
     (filters.direction === "all" || transaction.direction === filters.direction) &&
@@ -104,16 +112,17 @@ export const matchesTransactionFilters = ({
   );
 };
 
-export const useTransactionFilters = (
-  scope: string
-): Readonly<{
+type TransactionFilterState = Readonly<{
   filters: TransactionFilters;
   change: (filters: TransactionFilters) => void;
-}> => {
+}>;
+
+export const useTransactionFilters = (scope: string): TransactionFilterState => {
   const router = useRouter();
   const binding = router.options.context.sessionBinding;
   const saved = useRouterState({ select: (state) => state.location.state });
   const view = readTransactionView({ state: saved, binding, scope });
+
   return {
     filters: view.filters,
     change: (filters) => {
@@ -124,6 +133,7 @@ export const useTransactionFilters = (
       ) {
         return;
       }
+
       saveTransactionView(router, scope, { ...view, filters });
     },
   };

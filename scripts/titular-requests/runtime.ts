@@ -11,31 +11,45 @@ import { applyCaseCommand } from "./operations";
 import { caseDeadlines, completionReviewDate } from "./calendar";
 
 const privateDirectoryMode = 0o700;
+
 const privateFileMode = 0o600;
+
 const permissionMask = 0o777;
+
 const applicationId = 1179206745;
+
 const maximumBytes = 20_971_520;
+
 const maximumCases = 1000;
+
 const maximumEvents = 20000;
+
 const commandCodec = Schema.fromJsonString(CaseCommand);
+
 const caseCodec = Schema.fromJsonString(TitularCase);
+
+const isRegisterFailure = Schema.is(RegisterFailure);
 
 const nativeCall = <A>(run: () => A): Effect.Effect<A, RegisterFailure> =>
   Effect.try({
     try: run,
     catch: (cause) =>
-      cause instanceof RegisterFailure ? cause : new RegisterFailure({ reason: "Unavailable" }),
+      isRegisterFailure(cause) ? cause : RegisterFailure.make({ reason: "Unavailable", cause }),
   });
+
 const isRepositoryPath = Effect.fn(function* (directory: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   let current = directory;
+
   while (path.dirname(current) !== current) {
     if (yield* fs.exists(path.join(current, ".git"))) return true;
     current = path.dirname(current);
   }
+
   return yield* fs.exists(path.join(current, ".git"));
 });
+
 const ownedPermissions = (
   input: Readonly<{ info: FileSystem.File.Info; uid: number; mode: number }>
 ): boolean =>
@@ -44,43 +58,53 @@ const ownedPermissions = (
 const checkDirectory = Effect.fn(function* (root: string, uid: number) {
   const fs = yield* FileSystem.FileSystem;
   const folder = yield* fs.stat(root);
+
   if (
     folder.type !== "Directory" ||
     !ownedPermissions({ info: folder, uid, mode: privateDirectoryMode }) ||
     (yield* fs.realPath(root)) !== root
   ) {
-    return yield* new RegisterFailure({ reason: "UnsafeStorage" });
+    return yield* RegisterFailure.make({ reason: "UnsafeStorage" });
   }
 });
+
 const prepareFile = Effect.fn(function* (root: string, uid: number) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const target = path.join(root, "register.sqlite");
   const created = !(yield* fs.exists(target));
+
   if (created) yield* fs.writeFileString(target, "", { mode: privateFileMode, flag: "wx" });
   const file = yield* fs.stat(target);
+
   if (
     file.type !== "File" ||
     !ownedPermissions({ info: file, uid, mode: privateFileMode }) ||
     !Option.contains(1n)(file.nlink)
   ) {
-    return yield* new RegisterFailure({ reason: "UnsafeStorage" });
+    return yield* RegisterFailure.make({ reason: "UnsafeStorage" });
   }
+
   if (file.size > BigInt(maximumBytes) || (yield* fs.realPath(target)) !== target) {
-    return yield* new RegisterFailure({ reason: "UnsafeStorage" });
+    return yield* RegisterFailure.make({ reason: "UnsafeStorage" });
   }
+
   return { path: target, created: created || file.size === 0n };
 });
+
 const privateStorage = Effect.fn(function* (directory: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const root = path.resolve(directory);
   const uid = yield* Effect.sync(() => Option.fromNullishOr(process.getuid?.()));
+
   if (Option.isNone(uid) || (yield* isRepositoryPath(root))) {
-    return yield* new RegisterFailure({ reason: "UnsafeStorage" });
+    return yield* RegisterFailure.make({ reason: "UnsafeStorage" });
   }
+
   if (!(yield* fs.exists(root))) yield* fs.makeDirectory(root, { mode: privateDirectoryMode });
   yield* checkDirectory(root, uid.value);
+
   return yield* prepareFile(root, uid.value);
 });
 
@@ -89,25 +113,31 @@ const initialize = (db: Database, created: boolean): void => {
     Schema.decodeUnknownSync(Schema.Struct({ application_id: Schema.Literal(applicationId) }))(
       db.query("PRAGMA application_id").get()
     );
+
     return;
   }
+
   db.exec(`PRAGMA journal_mode=DELETE; BEGIN IMMEDIATE; PRAGMA application_id=${applicationId};
     CREATE TABLE cases (id TEXT PRIMARY KEY, snapshot TEXT NOT NULL);
     CREATE TABLE events (command_id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES cases(id), command TEXT NOT NULL, snapshot TEXT NOT NULL, at_ms INTEGER NOT NULL); COMMIT;`);
 };
+
 const openRegister = Effect.fn(function* (directory: string) {
   const storage = yield* privateStorage(directory).pipe(
     Effect.mapError((failure) =>
-      failure._tag === "RegisterFailure"
+      isRegisterFailure(failure)
         ? failure
-        : new RegisterFailure({ reason: "UnsafeStorage" })
+        : RegisterFailure.make({ reason: "UnsafeStorage", cause: failure })
     )
   );
+
   return yield* nativeCall(() => {
     const db = new Database(storage.path, { strict: true });
+
     try {
       initialize(db, storage.created);
       db.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=2000");
+
       return db;
     } catch (cause) {
       db.close();
@@ -119,8 +149,9 @@ const openRegister = Effect.fn(function* (directory: string) {
 const decodeSnapshot = (row: unknown): Effect.Effect<TitularCase, RegisterFailure> =>
   Schema.decodeUnknownEffect(Schema.Struct({ snapshot: Schema.String }))(row).pipe(
     Effect.flatMap((value) => Schema.decodeEffect(caseCodec)(value.snapshot)),
-    Effect.mapError(() => new RegisterFailure({ reason: "Unavailable" }))
+    Effect.mapError((cause) => RegisterFailure.make({ reason: "Unavailable", cause }))
   );
+
 const findCase = (
   input: Readonly<{ db: Database; caseId: string }>
 ): Effect.Effect<Option.Option<TitularCase>, RegisterFailure> =>
@@ -129,6 +160,7 @@ const findCase = (
       row === null ? Effect.succeedNone : decodeSnapshot(row).pipe(Effect.asSome)
     )
   );
+
 const replay = (
   input: Readonly<{ db: Database; command: CaseCommand }>
 ): Effect.Effect<Option.Option<TitularCase>, RegisterFailure> =>
@@ -138,16 +170,21 @@ const replay = (
         .query("SELECT command,snapshot FROM events WHERE command_id=?")
         .get(input.command.commandId)
     );
+
     if (row === null) return Option.none();
+
     const stored = yield* Schema.decodeUnknownEffect(
       Schema.Struct({ command: Schema.String, snapshot: Schema.String })
-    )(row).pipe(Effect.mapError(() => new RegisterFailure({ reason: "Unavailable" })));
+    )(row).pipe(Effect.mapError((cause) => RegisterFailure.make({ reason: "Unavailable", cause })));
+
     const encoded = yield* Schema.encodeEffect(commandCodec)(input.command).pipe(
-      Effect.mapError(() => new RegisterFailure({ reason: "InvalidInput" }))
+      Effect.mapError((cause) => RegisterFailure.make({ reason: "InvalidInput", cause }))
     );
+
     if (stored.command !== encoded) {
-      return yield* new RegisterFailure({ reason: "Conflict" });
+      return yield* RegisterFailure.make({ reason: "Conflict" });
     }
+
     return Option.some(yield* decodeSnapshot(stored));
   });
 
@@ -164,12 +201,14 @@ const storeCommand = (
         )
         .get()
     );
+
     if (
       counts.events >= maximumEvents ||
       (input.command.action === "Receive" && counts.cases >= maximumCases)
     ) {
-      throw new RegisterFailure({ reason: "Unavailable" });
+      throw RegisterFailure.make({ reason: "Unavailable" });
     }
+
     const snapshot = Schema.encodeSync(caseCodec)(input.next);
     input.db
       .query(
@@ -186,25 +225,31 @@ const storeCommand = (
         input.atMs
       );
   });
+
 const transact = (
   input: Readonly<{ db: Database; command: CaseCommand; atMs: number }>
 ): Effect.Effect<TitularCase, RegisterFailure> =>
   Effect.gen(function* () {
     yield* nativeCall(() => input.db.exec("BEGIN IMMEDIATE"));
     const existing = yield* replay(input);
+
     if (Option.isSome(existing)) {
       yield* nativeCall(() => input.db.exec("COMMIT"));
+
       return existing.value;
     }
+
     const previous = yield* findCase({ db: input.db, caseId: input.command.caseId });
     const next = yield* applyCaseCommand({ ...input, previous });
     yield* storeCommand({ ...input, next });
     yield* nativeCall(() => input.db.exec("COMMIT"));
+
     return next;
   }).pipe(Effect.uninterruptible);
 
 const report = (value: TitularCase): CaseReceipt => {
   const targets = caseDeadlines(value);
+
   return {
     case: value,
     authority: "manual-record-only",
@@ -230,8 +275,10 @@ export const runCaseRegister = Effect.fn(function* (
 ) {
   const request = yield* Schema.decodeUnknownEffect(RegisterRequest, { onExcessProperty: "error" })(
     input.request
-  ).pipe(Effect.mapError(() => new RegisterFailure({ reason: "InvalidInput" })));
+  ).pipe(Effect.mapError((cause) => RegisterFailure.make({ reason: "InvalidInput", cause })));
+
   const atMs = yield* Clock.currentTimeMillis;
+
   return yield* Effect.acquireUseRelease(
     openRegister(input.directory),
     (db) =>
@@ -239,8 +286,11 @@ export const runCaseRegister = Effect.fn(function* (
         if (request.operation === "Apply") {
           return report(yield* transact({ db, command: request.command, atMs }));
         }
+
         const value = yield* findCase({ db, caseId: request.caseId });
-        if (Option.isNone(value)) return yield* new RegisterFailure({ reason: "InvalidInput" });
+
+        if (Option.isNone(value)) return yield* RegisterFailure.make({ reason: "InvalidInput" });
+
         return report(value.value);
       }),
     (db) =>

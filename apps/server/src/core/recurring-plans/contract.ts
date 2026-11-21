@@ -3,10 +3,15 @@ import { IanaTimeZone } from "~/core/_shared/context";
 import { Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
 
 const maximumNameLength = 120;
+
 const maximumPlans = 100;
+
 const maximumRevisions = 100;
+
 const maximumRecords = 4096;
+
 const maximumDay = 31;
+
 export const RecurringDate = Schema.String.check(
   Schema.isPattern(/^20\d{2}-\d{2}-\d{2}$/u),
   Schema.makeFilter(
@@ -15,11 +20,15 @@ export const RecurringDate = Schema.String.check(
       "Expected a valid local calendar date"
   )
 );
+
 export const RecurringMonth = Schema.String.check(Schema.isPattern(/^20\d{2}-(0[1-9]|1[0-2])$/u));
+
 export const RecurringPlanId = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("RecurringPlanId")
 );
+
 export type RecurringPlanId = typeof RecurringPlanId.Type;
+
 export const RecurringFrequency = Schema.Literals([
   "weekly",
   "fortnightly",
@@ -29,17 +38,20 @@ export const RecurringFrequency = Schema.Literals([
   "half-yearly",
   "yearly",
 ]);
+
 const MonthDay = Schema.Union([
   Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: maximumDay })),
   Schema.Literal("last"),
 ]);
+
 const PositiveMoney = Money.check(
   Schema.makeFilter(
     (money: ReadonlyMoney) =>
       BigDecimal.Order(money.amount, BigDecimal.make(0n, 0)) > 0 || "Expected positive Money"
   )
 );
-const PlanShape = Schema.Struct({
+
+const UncheckedRecurringPlan = Schema.Struct({
   name: Schema.NonEmptyString.check(Schema.isTrimmed(), Schema.isMaxLength(maximumNameLength)),
   kind: Schema.Literals(["income", "expense", "transfer"]),
   cardPayment: Schema.optionalKey(Schema.Boolean),
@@ -57,18 +69,22 @@ const PlanShape = Schema.Struct({
   categoryId: Schema.optionalKey(Schema.String.check(Schema.isUUID())),
   accountId: Schema.optionalKey(Schema.String.check(Schema.isUUID())),
 });
-export const RecurringPlanInput = PlanShape.check(
+
+export const RecurringPlanInput = UncheckedRecurringPlan.check(
   Schema.makeFilter((plan: RecurringPlanInput) => {
     if (plan.cardPayment === true && plan.kind !== "transfer") {
       return "Card payments must be transfers";
     }
+
     return true;
   }),
   Schema.makeFilter((plan: RecurringPlanInput) => {
     if (plan.endDate !== undefined && plan.endDate < plan.firstDate) return "End precedes start";
+
     if (plan.amountMode === "unknown") {
       return plan.money === undefined || "Unknown amount cannot be zero or Money";
     }
+
     return plan.money?.currency === plan.currency || "Expected positive Money in the plan Currency";
   }),
   Schema.makeFilter(
@@ -78,16 +94,21 @@ export const RecurringPlanInput = PlanShape.check(
       "Choose two different month days"
   )
 );
+
 export type RecurringPlanInput = Omit<typeof RecurringPlanInput.Type, "money"> &
   Partial<Readonly<{ money: ReadonlyMoney }>>;
+
 const Revision = Schema.Struct({ from: RecurringDate, plan: RecurringPlanInput });
+
 const Pause = Schema.Struct({ from: RecurringDate, through: Schema.optionalKey(RecurringDate) });
+
 export const RecurringPlan = Schema.Struct({
   id: RecurringPlanId,
   revisions: Schema.NonEmptyArray(Revision).check(Schema.isMaxLength(maximumRevisions)),
   pauses: Schema.Array(Pause).check(Schema.isMaxLength(maximumRevisions)),
   stoppedOn: Schema.optionalKey(RecurringDate),
 });
+
 export type RecurringPlan = Omit<typeof RecurringPlan.Type, "revisions"> &
   Readonly<{
     revisions: readonly [
@@ -95,7 +116,9 @@ export type RecurringPlan = Omit<typeof RecurringPlan.Type, "revisions"> &
       ...Readonly<{ from: string; plan: RecurringPlanInput }>[],
     ];
   }>;
+
 const OccurrenceKey = { planId: RecurringPlanId, date: RecurringDate };
+
 export const RecurringFulfillment = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
   ...OccurrenceKey,
@@ -105,18 +128,22 @@ export const RecurringFulfillment = Schema.Struct({
   automatic: Schema.optionalKey(Schema.Boolean),
   transactionId: Schema.optionalKey(Schema.String.check(Schema.isUUID())),
 });
+
 export type RecurringFulfillment = Omit<typeof RecurringFulfillment.Type, "money"> &
   Readonly<{ money: ReadonlyMoney }>;
+
 const Exception = Schema.Struct({
   ...OccurrenceKey,
   skipped: Schema.Boolean,
   replacement: Schema.optionalKey(RecurringPlanInput),
 });
+
 const SuggestionDecision = Schema.Struct({
   seriesId: Schema.String.check(Schema.isUUID()),
   disposition: Schema.Literals(["dismissed", "linked"]),
   planId: Schema.optionalKey(RecurringPlanId),
 });
+
 export const RecurringDocument = Schema.Struct({
   revision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   plans: Schema.Array(RecurringPlan).check(Schema.isMaxLength(maximumPlans)),
@@ -127,6 +154,7 @@ export const RecurringDocument = Schema.Struct({
   ),
   suggestions: Schema.Array(SuggestionDecision).check(Schema.isMaxLength(maximumRecords)),
 });
+
 export type RecurringDocument = Omit<
   typeof RecurringDocument.Type,
   "plans" | "fulfillments" | "exceptions"
@@ -139,6 +167,7 @@ export type RecurringDocument = Omit<
         Partial<Readonly<{ replacement: RecurringPlanInput }>>
     >;
   }>;
+
 export type RecurringSchedule = Pick<
   RecurringDocument,
   "plans" | "exceptions" | "fulfillments" | "excludedTransactionIds"
@@ -180,6 +209,7 @@ export const RecurringEdit = Schema.Union([
     planId: Schema.optionalKey(RecurringPlanId),
   }),
 ]);
+
 export type RecurringEdit =
   | Exclude<typeof RecurringEdit.Type, { kind: "create" | "edit" | "fulfill" }>
   | (Omit<Extract<typeof RecurringEdit.Type, { kind: "create" }>, "plan"> &
@@ -188,11 +218,14 @@ export type RecurringEdit =
       Readonly<{ plan: RecurringPlanInput }>)
   | (Omit<Extract<typeof RecurringEdit.Type, { kind: "fulfill" }>, "fulfillment"> &
       Readonly<{ fulfillment: RecurringFulfillment }>);
+
 export const RecurringCommand = Schema.Struct({
   expectedRevision: Schema.Int,
   edit: RecurringEdit,
 });
+
 export type RecurringCommand = Readonly<{ expectedRevision: number; edit: RecurringEdit }>;
+
 export const RecurringOccurrence = Schema.Struct({
   ...OccurrenceKey,
   plan: RecurringPlanInput,
@@ -202,6 +235,7 @@ export const RecurringOccurrence = Schema.Struct({
   remaining: Schema.optionalKey(Money),
   fulfillments: Schema.Array(RecurringFulfillment),
 });
+
 export type RecurringOccurrence = Omit<
   typeof RecurringOccurrence.Type,
   "plan" | "completed" | "remaining" | "fulfillments"
@@ -217,6 +251,7 @@ export class InvalidRecurringEdit extends Schema.Error<
   InvalidRecurringEdit,
   Brand.Brand<"InvalidRecurringEdit">
 >("InvalidRecurringEdit")({ message: Schema.String }) {}
+
 export const RecurringMatchFact = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
   money: Money,
@@ -225,12 +260,15 @@ export const RecurringMatchFact = Schema.Struct({
   counterparty: Schema.optionalKey(Schema.String),
   categoryId: Schema.String,
 });
+
 export type RecurringMatchFact = Omit<typeof RecurringMatchFact.Type, "money"> &
   Readonly<{ money: ReadonlyMoney }>;
+
 export type RecurringMatch = Readonly<{ item: RecurringOccurrence; fact: RecurringMatchFact }>;
+
 export const RecurringFilters = Schema.Struct({
   search: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(maximumNameLength))),
-  kind: Schema.optionalKey(PlanShape.fields.kind),
+  kind: Schema.optionalKey(UncheckedRecurringPlan.fields.kind),
   frequency: Schema.optionalKey(RecurringFrequency),
   currency: Schema.optionalKey(Currency),
   categoryId: Schema.optionalKey(Schema.String),
@@ -239,9 +277,11 @@ export const RecurringFilters = Schema.Struct({
     Schema.Literals(["upcoming", "unconfirmed", "partial", "completed", "skipped"])
   ),
 });
+
 export type RecurringFilters = typeof RecurringFilters.Type;
+
 export const RecurringSummary = Schema.Struct({
-  kind: PlanShape.fields.kind,
+  kind: UncheckedRecurringPlan.fields.kind,
   currency: Currency,
   completed: Money,
   remaining: Money,

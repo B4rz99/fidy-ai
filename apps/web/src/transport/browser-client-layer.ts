@@ -15,11 +15,14 @@ export const browserClientLayer = (
   options: BrowserClientOptions & Readonly<{ boundary: BrowserHttpBoundary }>
 ): Layer.Layer<HttpClient.HttpClient> => {
   const underlying = "httpClient" in options ? options.httpClient : FetchHttpClient.layer;
+
   const coordinated =
     "session" in options
       ? coordinateBrowserRequests({ transport: underlying, signal: options.session.signal })
       : underlying;
+
   const transport = coordinated.pipe(browserHttpClientLayer(options.boundary, options.apiOrigin));
+
   return !("session" in options)
     ? transport
     : bindBrowserSession({ transport, lifetime: options.session });

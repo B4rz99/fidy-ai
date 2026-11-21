@@ -14,12 +14,15 @@ import { canonicalRequestProtection } from "../canonical-admission/contract";
 
 const successfulBody = (response: Response): Effect.Effect<string> => {
   expect(response.status).toBe(200);
+
   return native(() => response.text());
 };
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("a capture in the same atomic batch sees the original keyword rules", () =>
     Effect.gen(function* () {
       const journey = yield* nativeTransactionJourney;
+
       const response = yield* native(() =>
         journey.send(
           new Request("https://api.fidyapp.com/operations/atomic-batch", {
@@ -60,6 +63,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           })
         )
       );
+
       const body = yield* native(() => response.json());
       expect(
         yield* native(() =>
@@ -98,6 +102,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           scopes: ["write", "dashboard"],
           current: yield* Clock.currentTimeMillis,
         });
+
         const call = (calls: ReadonlyArray<unknown>, key = "original"): Effect.Effect<Response> =>
           native(() =>
             db.send(
@@ -112,18 +117,22 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               })
             )
           );
+
         const first = {
           callId: alice.user,
           operation: "budgets.createBudget",
           input: { payload: { categoryId: category, cap: { amount: "19", currency: "COP" } } },
         };
+
         const second = { callId: bob.user, operation: "dashboard.initializeDashboard", input: {} };
+
         const counts = (): Effect.Effect<ReadonlyArray<unknown>> =>
           native(() =>
             db.exec(
               "SELECT (SELECT count(*) FROM budgets) AS budgets,(SELECT count(*) FROM user_documents WHERE kind='dashboard') AS dashboards,(SELECT count(*) FROM audit_entries WHERE record_type='credential_call' AND outcome='accepted') AS accepted,(SELECT count(*) FROM commercial_allowance_consumptions) AS charges,(SELECT count(*) FROM canonical_request_receipts) AS receipts"
             )
           );
+
         yield* native(() =>
           db.exec(
             "CREATE TRIGGER interrupt_child_audit BEFORE INSERT ON audit_entries WHEN NEW.operation='dashboard.initializeDashboard' AND NEW.record_type='credential_call' BEGIN SELECT RAISE(IGNORE); END"
@@ -134,10 +143,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           { budgets: 0, dashboards: 0, accepted: 0, charges: 0, receipts: 0 },
         ]);
         yield* native(() => db.exec("DROP TRIGGER interrupt_child_audit"));
+
         const [committed, retry] = yield* Effect.all(
           [call([first, second]), call([first, second])],
-          { concurrency: 2 }
+          {
+            concurrency: 2,
+          }
         );
+
         expect([committed.status, retry.status]).toEqual([200, 200]);
         const bytes = yield* native(() => committed.text());
         expect(yield* native(() => retry.text())).toBe(bytes);
@@ -171,39 +184,44 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   );
   test.effect(
     "rejects an ineligible child and an attempted foreign edit with no partial domain changes",
-    () =>
-      Effect.gen(function* () {
-        const db = yield* nativeTransactionJourney;
-        const send = (
-          subject: typeof alice,
-          path: string,
-          ...[method, body]: [method: string, body: unknown]
-        ): Effect.Effect<Response> =>
-          native(() =>
-            db.send(
-              new Request("https://api.fidyapp.com" + path, {
-                method,
-                headers: {
-                  origin: "https://app.fidyapp.com",
-                  cookie: "__Host-fidy_session=" + subject.bearer,
-                  "Fidy-Session-Binding": subject.session,
-                  "content-type": "application/json",
-                },
-                body: JSON.stringify(body),
-              })
-            )
-          );
-        const keyword = { keyword: "reserved", categoryId: category };
-        const created = yield* send(bob, "/category-keyword-rules", "POST", keyword);
-        const foreign = (yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ data: Schema.Struct({ id: Schema.String }) })
-        )(yield* native(() => created.json()))).data.id;
-        const first = {
-          callId: alice.user,
-          operation: "categories.createKeywordRule",
-          input: { payload: keyword },
-        };
-        for (const child of [
+    Effect.fnUntraced(function* () {
+      const db = yield* nativeTransactionJourney;
+
+      const send = (
+        subject: typeof alice,
+        path: string,
+        ...[method, body]: [method: string, body: unknown]
+      ): Effect.Effect<Response> =>
+        native(() =>
+          db.send(
+            new Request("https://api.fidyapp.com" + path, {
+              method,
+              headers: {
+                origin: "https://app.fidyapp.com",
+                cookie: "__Host-fidy_session=" + subject.bearer,
+                "Fidy-Session-Binding": subject.session,
+                "content-type": "application/json",
+              },
+              body: JSON.stringify(body),
+            })
+          )
+        );
+
+      const keyword = { keyword: "reserved", categoryId: category };
+      const created = yield* send(bob, "/category-keyword-rules", "POST", keyword);
+
+      const foreign = (yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.Struct({ id: Schema.String }) })
+      )(yield* native(() => created.json()))).data.id;
+
+      const first = {
+        callId: alice.user,
+        operation: "categories.createKeywordRule",
+        input: { payload: keyword },
+      };
+
+      yield* Effect.forEach(
+        [
           { operation: "categories.listKeywordRules", input: {}, code: "validation_failed" },
           {
             operation: "operations.executeAtomicBatch",
@@ -215,57 +233,66 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             input: { params: { id: foreign } },
             code: "not_found",
           },
-        ]) {
+        ],
+        Effect.fnUntraced(function* (child) {
           const refusal = yield* send(alice, "/operations/atomic-batch", "POST", {
             calls: [first, { callId: bob.user, operation: child.operation, input: child.input }],
           });
+
           expect(refusal.status).toBe(400);
           expect(yield* native(() => refusal.json())).toMatchObject({
             error: { failedCallIndex: 1, operation: child.operation, code: child.code },
           });
-        }
-        const own = yield* native(() => db.browser(0, "/category-keyword-rules"));
-        const other = yield* native(() => db.browser(1, "/category-keyword-rules"));
-        expect(yield* native(() => own.json())).toMatchObject({ data: [] });
-        expect(yield* native(() => other.json())).toMatchObject({
-          data: [{ id: foreign, keyword: "reserved" }],
-        });
-        expect(
-          yield* native(() =>
-            db.exec(
-              "SELECT operation,outcome FROM audit_entries WHERE operation='categories.deleteKeywordRule'"
-            )
+        }),
+        { discard: true }
+      );
+
+      const own = yield* native(() => db.browser(0, "/category-keyword-rules"));
+      const other = yield* native(() => db.browser(1, "/category-keyword-rules"));
+      expect(yield* native(() => own.json())).toMatchObject({ data: [] });
+      expect(yield* native(() => other.json())).toMatchObject({
+        data: [{ id: foreign, keyword: "reserved" }],
+      });
+      expect(
+        yield* native(() =>
+          db.exec(
+            "SELECT operation,outcome FROM audit_entries WHERE operation='categories.deleteKeywordRule'"
           )
-        ).toEqual([{ operation: "categories.deleteKeywordRule", outcome: "not_found" }]);
-      })
+        )
+      ).toEqual([{ operation: "categories.deleteKeywordRule", outcome: "not_found" }]);
+    })
   );
   test.effect(
     "PAT retry keys belong to the authenticated User and expire at the original 24-hour deadline",
-    () =>
-      Effect.gen(function* () {
-        const db = yield* nativeTransactionJourney;
-        const capture = {
-          calls: [
-            {
-              callId: alice.session,
-              operation: "transactions.createTransaction",
-              input: {
-                payload: {
-                  money: { amount: "12", currency: "COP" },
-                  direction: "outflow",
-                  categoryId: category,
-                  occurredAt: "2025-01-01T00:00:00Z",
-                },
+    Effect.fnUntraced(function* () {
+      const db = yield* nativeTransactionJourney;
+
+      const capture = {
+        calls: [
+          {
+            callId: alice.session,
+            operation: "transactions.createTransaction",
+            input: {
+              payload: {
+                money: { amount: "12", currency: "COP" },
+                direction: "outflow",
+                categoryId: category,
+                occurredAt: "2025-01-01T00:00:00Z",
               },
             },
-          ],
-        };
-        const aliceToken = "fin_abcdefgh_" + "x".repeat(43);
-        const bobToken = "fin_bcdefghi_" + "y".repeat(43);
-        for (const [userId, token] of [
+          },
+        ],
+      };
+
+      const aliceToken = "fin_abcdefgh_" + "x".repeat(43);
+      const bobToken = "fin_bcdefghi_" + "y".repeat(43);
+
+      yield* Effect.forEach(
+        [
           [alice.user, aliceToken],
           [bob.user, bobToken],
-        ] as const) {
+        ] as const,
+        Effect.fnUntraced(function* ([userId, token]) {
           yield* native(() =>
             db
               .owner(userId)
@@ -289,64 +316,70 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             scopes: ["write"],
             current: yield* Clock.currentTimeMillis,
           });
-        }
-        const submit = (token: string): Effect.Effect<string> =>
-          native(() =>
-            db.send(
-              new Request("https://api.fidyapp.com/operations/atomic-batch", {
-                method: "POST",
-                headers: {
-                  authorization: "Bearer " + token,
-                  "content-type": "application/json",
-                  "Fidy-Retry-Key": "same-pat-key",
-                },
-                body: JSON.stringify({
-                  calls: [
-                    ...capture.calls,
-                    {
-                      callId: bob.session,
-                      operation: "identity.updateUserPreferences",
-                      input: { payload: { locale: "es-CO", timeZone: "America/Lima" } },
-                    },
-                  ],
-                }),
-              })
-            )
-          ).pipe(Effect.flatMap(successfulBody));
-        const original = yield* submit(aliceToken);
-        expect(yield* submit(bobToken)).not.toBe(original);
-        yield* native(() =>
-          db.exec("UPDATE canonical_request_receipts SET accepted_at_ms=accepted_at_ms-86300000")
-        );
-        const before = yield* native(() =>
-          db.exec("SELECT accepted_at_ms FROM canonical_request_receipts")
-        );
-        expect(yield* submit(aliceToken)).toBe(original);
-        expect(
-          yield* native(() => db.exec("SELECT accepted_at_ms FROM canonical_request_receipts"))
-        ).toEqual(before);
-        const originalWindowMs = 86_400_000;
-        yield* native(() => db.exec("UPDATE canonical_request_buckets SET virtual_at_ms=0"));
-        yield* native(() =>
-          db.exec("CREATE TABLE fixture_receipt_boundary(remaining_ms INTEGER NOT NULL)")
-        );
-        yield* native(() => db.exec("INSERT INTO fixture_receipt_boundary VALUES(1)"));
-        yield* native(() =>
-          db.exec(`CREATE TRIGGER fixture_receipt_boundary_at_admission AFTER UPDATE ON canonical_request_buckets WHEN NEW.virtual_at_ms>0
-          BEGIN UPDATE canonical_request_receipts SET accepted_at_ms=NEW.virtual_at_ms-${canonicalRequestProtection.intervalMs}-${originalWindowMs}+(SELECT remaining_ms FROM fixture_receipt_boundary); END`)
-        );
-        expect(yield* submit(aliceToken)).toBe(original);
-        yield* native(() => db.exec("UPDATE fixture_receipt_boundary SET remaining_ms=0"));
-        yield* native(() => db.exec("UPDATE canonical_request_buckets SET virtual_at_ms=0"));
-        expect(yield* submit(aliceToken)).not.toBe(original);
-        expect(
-          yield* native(() => db.exec("SELECT count(*) AS movements FROM transactions"))
-        ).toEqual([{ movements: 2 }]);
-        expect(
-          yield* native(() =>
-            db.owner(bob.user).exec("SELECT count(*) AS movements FROM transactions")
+        }),
+        { discard: true }
+      );
+
+      const submit = (token: string): Effect.Effect<string> =>
+        native(() =>
+          db.send(
+            new Request("https://api.fidyapp.com/operations/atomic-batch", {
+              method: "POST",
+              headers: {
+                authorization: "Bearer " + token,
+                "content-type": "application/json",
+                "Fidy-Retry-Key": "same-pat-key",
+              },
+              body: JSON.stringify({
+                calls: [
+                  ...capture.calls,
+                  {
+                    callId: bob.session,
+                    operation: "identity.updateUserPreferences",
+                    input: { payload: { locale: "es-CO", timeZone: "America/Lima" } },
+                  },
+                ],
+              }),
+            })
           )
-        ).toEqual([{ movements: 1 }]);
-      })
+        ).pipe(Effect.flatMap(successfulBody));
+
+      const original = yield* submit(aliceToken);
+      expect(yield* submit(bobToken)).not.toBe(original);
+      yield* native(() =>
+        db.exec("UPDATE canonical_request_receipts SET accepted_at_ms=accepted_at_ms-86300000")
+      );
+
+      const before = yield* native(() =>
+        db.exec("SELECT accepted_at_ms FROM canonical_request_receipts")
+      );
+
+      expect(yield* submit(aliceToken)).toBe(original);
+      expect(
+        yield* native(() => db.exec("SELECT accepted_at_ms FROM canonical_request_receipts"))
+      ).toEqual(before);
+      const originalWindowMs = 86_400_000;
+      yield* native(() => db.exec("UPDATE canonical_request_buckets SET virtual_at_ms=0"));
+      yield* native(() =>
+        db.exec("CREATE TABLE fixture_receipt_boundary(remaining_ms INTEGER NOT NULL)")
+      );
+      yield* native(() => db.exec("INSERT INTO fixture_receipt_boundary VALUES(1)"));
+      yield* native(() =>
+        db.exec(`CREATE TRIGGER fixture_receipt_boundary_at_admission AFTER UPDATE ON canonical_request_buckets WHEN NEW.virtual_at_ms>0
+          BEGIN UPDATE canonical_request_receipts SET accepted_at_ms=NEW.virtual_at_ms-${canonicalRequestProtection.intervalMs}-${originalWindowMs}+(SELECT remaining_ms FROM fixture_receipt_boundary); END`)
+      );
+      expect(yield* submit(aliceToken)).toBe(original);
+      yield* native(() => db.exec("UPDATE fixture_receipt_boundary SET remaining_ms=0"));
+      yield* native(() => db.exec("UPDATE canonical_request_buckets SET virtual_at_ms=0"));
+      expect(yield* submit(aliceToken)).not.toBe(original);
+      expect(
+        yield* native(() => db.exec("SELECT count(*) AS movements FROM transactions"))
+      ).toEqual([{ movements: 2 }]);
+      expect(
+        yield* native(() =>
+          db.owner(bob.user).exec("SELECT count(*) AS movements FROM transactions")
+        )
+      ).toEqual([{ movements: 1 }]);
+    })
   );
 });

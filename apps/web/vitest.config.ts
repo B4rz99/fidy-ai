@@ -2,6 +2,12 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 import { serverClientBoundary } from "./server-client-boundary.ts";
 
+const nodeSessionTests = [
+  "test/session/initial-session.test.ts",
+  "test/session/login-destination.test.ts",
+  "test/session/session-observer.test.ts",
+];
+
 export default defineConfig({
   plugins: [serverClientBoundary(), react()],
   resolve: {
@@ -10,10 +16,33 @@ export default defineConfig({
     },
   },
   test: {
-    environment: "node",
     clearMocks: true,
     maxWorkers: 4,
-    include: ["src/**/*.test.ts", "cloudflare/**/*.test.ts", "scripts/**/*.test.ts"],
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "node",
+          environment: "node",
+          include: [
+            "src/**/*.test.ts",
+            "cloudflare/**/*.test.ts",
+            "scripts/**/*.test.ts",
+            "test/**/*.node.test.ts",
+            ...nodeSessionTests,
+          ],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "dom",
+          environment: "jsdom",
+          include: ["test/**/*.test.ts"],
+          exclude: ["test/**/*.node.test.ts", ...nodeSessionTests],
+        },
+      },
+    ],
     coverage: {
       provider: "istanbul",
       reportsDirectory: "coverage",

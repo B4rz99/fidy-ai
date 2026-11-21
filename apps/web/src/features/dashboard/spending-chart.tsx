@@ -16,10 +16,13 @@ import { periodLabel } from "./period-presentation";
 import { RegisterTransactionAction } from "./register-action";
 
 type SpendingResult = Extract<DashboardWidgetView["result"], { readonly buckets: unknown }>;
+
 type SpendingCurrency = SpendingResult["buckets"][number]["moneyGroups"][number]["currency"];
+
 type DashboardLocale = DashboardView["context"]["locale"];
 
 const categoryAxisHeight = 80;
+
 const calendarAxisHeight = 30;
 
 const CurrencySpendingChart = ({
@@ -33,6 +36,7 @@ const CurrencySpendingChart = ({
 }>): JSX.Element => {
   const chartData = currencyChartData({ data, currency });
   const category = data.buckets.some((bucket) => bucket.key.kind === "category");
+
   return (
     <section className="dashboard-chart-series" key={currency} aria-label={`Serie ${currency}`}>
       <span className="dashboard-chart-currency">
@@ -61,6 +65,7 @@ const CurrencySpendingChart = ({
                 Option.map((exact) => formatCurrencyAmount({ amount: exact, currency, locale })),
                 Option.getOrElse(() => "No disponible")
               );
+
               return [amount, "Gastos"];
             }}
           />
@@ -80,12 +85,15 @@ export const SpendingChart = ({
   locale,
 }: Readonly<{ card: string; data: SpendingResult; locale: DashboardLocale }>): JSX.Element => {
   const currencySet = new Set<SpendingCurrency>();
+
   for (const { moneyGroups } of data.buckets) {
     for (const { currency, outflow } of moneyGroups) {
       if (BigDecimal.isPositive(outflow.amount)) currencySet.add(currency);
     }
   }
+
   const currencies = Array.from(currencySet).sort();
+
   if (currencies.length === 0) {
     return (
       <Empty className="border">
@@ -96,6 +104,7 @@ export const SpendingChart = ({
       </Empty>
     );
   }
+
   return (
     <div className="flex flex-col gap-5">
       {currencies.map((currency) => (

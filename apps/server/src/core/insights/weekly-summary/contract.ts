@@ -1,12 +1,14 @@
-import { BigDecimal, Schema } from "effect";
+import { BigDecimal, Data, Schema } from "effect";
 import { Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
 import { WeeklyPeriods } from "~/core/insights/contract";
 import { CategoryId } from "~/core/categories/contract";
 
 const changeFor = (order: number): "Increased" | "Decreased" | "Unchanged" => {
   if (order > 0) return "Increased";
+
   return order < 0 ? "Decreased" : "Unchanged";
 };
+
 export const WeeklyComparison = Schema.Struct({
   current: Money,
   previous: Money,
@@ -22,6 +24,7 @@ export const WeeklyComparison = Schema.Struct({
     }>
   >((value) => {
     const order = BigDecimal.Order(value.current.amount, value.previous.amount);
+
     return (
       value.current.currency === value.previous.currency &&
       value.current.currency === value.absoluteDelta.currency &&
@@ -33,6 +36,7 @@ export const WeeklyComparison = Schema.Struct({
     );
   })
 );
+
 export type WeeklyComparison = typeof WeeklyComparison.Type;
 
 export const WeeklyCategory = Schema.Struct({ categoryId: CategoryId, outflow: Money }).check(
@@ -40,12 +44,17 @@ export const WeeklyCategory = Schema.Struct({ categoryId: CategoryId, outflow: M
     BigDecimal.isPositive(value.outflow.amount)
   )
 );
+
 export type WeeklyCategory = typeof WeeklyCategory.Type;
+
 type CategoryView = Readonly<{ categoryId: CategoryId; outflow: ReadonlyMoney }>;
+
 const categoryPrecedes = (left: CategoryView, right: CategoryView): boolean => {
   const order = BigDecimal.Order(left.outflow.amount, right.outflow.amount);
+
   return order > 0 || (order === 0 && left.categoryId < right.categoryId);
 };
+
 const categoryCoverage = (
   categories: ReadonlyArray<CategoryView>,
   current: ReadonlyMoney
@@ -55,11 +64,13 @@ const categoryCoverage = (
     current.amount
   ) <= 0 &&
   (!BigDecimal.isPositive(current.amount) || categories.length > 0);
+
 const categoriesOrdered = (
   categories: ReadonlyArray<CategoryView>,
   current: ReadonlyMoney
 ): boolean => {
   const seen = new Set<CategoryId>();
+
   for (const [index, category] of categories.entries()) {
     if (
       category.outflow.currency !== current.currency ||
@@ -68,20 +79,27 @@ const categoriesOrdered = (
     ) {
       return false;
     }
+
     seen.add(category.categoryId);
     const previous = categories[index - 1];
+
     if (previous === undefined) continue;
+
     if (!categoryPrecedes(previous, category)) return false;
   }
+
   return categoryCoverage(categories, current);
 };
+
 type ComparisonView = Readonly<{ current: ReadonlyMoney; previous: ReadonlyMoney }>;
+
 type GroupView = Readonly<{
   currency: Currency;
   inflow: ComparisonView;
   outflow: ComparisonView;
   topOutflowCategories: ReadonlyArray<CategoryView>;
 }>;
+
 export const WeeklyCurrencyGroup = Schema.Struct({
   currency: Currency,
   inflow: WeeklyComparison,
@@ -95,6 +113,7 @@ export const WeeklyCurrencyGroup = Schema.Struct({
     ) {
       return false;
     }
+
     if (
       [
         value.inflow.current,
@@ -105,14 +124,18 @@ export const WeeklyCurrencyGroup = Schema.Struct({
     ) {
       return false;
     }
+
     return categoriesOrdered(value.topOutflowCategories, value.outflow.current);
   })
 );
+
 const groupsOrdered = (groups: ReadonlyArray<GroupView>): boolean =>
   groups.every((group, index) => {
     const previous = groups[index - 1];
+
     return previous === undefined || previous.currency < group.currency;
   });
+
 export const WeeklySummaryPayload = Schema.Struct({
   periods: WeeklyPeriods,
   financialRevision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -130,6 +153,7 @@ export const WeeklySummaryPayload = Schema.Struct({
     )
   )
   .annotate({ identifier: "WeeklySummaryPayload" });
+
 export type WeeklySummaryPayload = typeof WeeklySummaryPayload.Type;
 
 export type WeeklySummaryPresentation = Readonly<{
@@ -138,6 +162,9 @@ export type WeeklySummaryPresentation = Readonly<{
   sections: ReadonlyArray<Readonly<{ currency: Currency; text: string }>>;
 }>;
 
-export type WeeklySummaryOutcome =
-  | Readonly<{ _tag: "NoActivity" }>
-  | Readonly<{ _tag: "Summary"; payload: WeeklySummaryPayload }>;
+export type WeeklySummaryOutcome = Data.TaggedEnum<{
+  NoActivity: {};
+  Summary: { readonly payload: WeeklySummaryPayload };
+}>;
+
+export const WeeklySummaryOutcome = Data.taggedEnum<WeeklySummaryOutcome>();

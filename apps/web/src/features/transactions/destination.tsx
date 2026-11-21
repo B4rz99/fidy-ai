@@ -1,5 +1,5 @@
 import { Link, useSearch } from "@tanstack/react-router";
-import { Option, Predicate } from "effect";
+import { type Data, Option, Predicate } from "effect";
 import type { JSX } from "react";
 import type { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
@@ -7,6 +7,7 @@ import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 
 export const TransactionDestinationRecovery = (): JSX.Element => {
   const search = useSearch({ from: "/independent-application/app/transactions" });
+
   return search.date === undefined ? (
     <Button
       variant="outline"
@@ -28,14 +29,22 @@ export const TransactionDestinationFailure = ({
   state,
   refresh,
 }: Readonly<{
-  state: Exclude<ReturnType<typeof presentCanonicalQuery>, { _tag: "Initial" }>;
+  state: Exclude<
+    ReturnType<typeof presentCanonicalQuery>,
+    Data.TaggedEnum.Value<ReturnType<typeof presentCanonicalQuery>, "Initial">
+  >;
   refresh: () => void;
 }>): JSX.Element => {
-  const failure = state._tag === "Failure" ? Option.some(state.failure) : state.refreshFailure;
+  const failure = Predicate.isTagged(state, "Failure")
+    ? Option.some(state.failure)
+    : state.refreshFailure;
+
   const unavailable = Option.exists(
     failure,
-    (error) => error._tag === "DeclaredFailure" && Predicate.isTagged(error.error, "NotFound")
+    (error) =>
+      Predicate.isTagged(error, "DeclaredFailure") && Predicate.isTagged(error.error, "NotFound")
   );
+
   return (
     <main className="p-5">
       <h1 className="mb-6 text-3xl font-semibold">Transacciones</h1>

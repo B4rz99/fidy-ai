@@ -14,6 +14,7 @@ export const Field = ({
   children,
 }: Readonly<{ label: string; name: string; children: ReactNode }>): JSX.Element => {
   const problem = usePlanFieldProblem(name);
+
   return (
     <div data-recurring-slot="field" data-recurring-field={name} className="grid gap-2">
       <Label htmlFor={`recurring-${name}`}>{label}</Label>
@@ -26,6 +27,7 @@ export const Field = ({
     </div>
   );
 };
+
 export const ScheduleFields = ({
   initial,
   categories,
@@ -35,6 +37,7 @@ export const ScheduleFields = ({
 }>): JSX.Element => {
   const [frequency, setFrequency] = useState<string>(initial.frequency ?? "monthly");
   const planning = use(PlanningMonthContext);
+
   return (
     <>
       <Field label="Frecuencia" name="frequency">
@@ -75,6 +78,7 @@ export const ScheduleFields = ({
     </>
   );
 };
+
 export const IdentityFields = ({
   initial,
 }: Readonly<{ initial: Partial<PlanInput> }>): JSX.Element => (
@@ -143,6 +147,7 @@ const ReferenceFields = ({
 const MonthDays = ({ initial }: Readonly<{ initial: Partial<PlanInput> }>): JSX.Element => {
   const firstAria = usePlanFieldAria("day1");
   const secondAria = usePlanFieldAria("day2");
+
   return (
     <>
       <p className="text-xs text-muted-foreground">

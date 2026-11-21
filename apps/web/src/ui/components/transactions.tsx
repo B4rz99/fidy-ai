@@ -1,7 +1,9 @@
 import { type JSX, type ReactNode, type RefCallback, useCallback, useRef } from "react";
-import { Option } from "effect";
+import { Option, Schema } from "effect";
 import { Button } from "./button";
 import "./transactions.css";
+
+const isHTMLElement = Schema.is(Schema.instanceOf(HTMLElement));
 
 export const TransactionSurface = ({
   children,
@@ -43,12 +45,14 @@ export const TransactionTypeToggle = ({
 );
 
 const noRestoreFocus = Option.none<(fallback: HTMLElement) => void>();
+
 const focusReturn =
   (previous: HTMLElement, targetId: Option.Option<string>): ((fallback: HTMLElement) => void) =>
   (fallback): void => {
     const target = Option.flatMap(targetId, (id) =>
       Option.fromNullishOr(document.getElementById(id))
     );
+
     if (Option.isSome(target)) {
       target.value.focus({ preventScroll: true });
       target.value.scrollIntoView({ block: "center", behavior: "instant" });
@@ -61,16 +65,20 @@ const focusReturn =
 
 const usePanelFocus = (active: boolean): RefCallback<HTMLDivElement> => {
   const restoreFocus = useRef(noRestoreFocus);
+
   return useCallback<RefCallback<HTMLDivElement>>(
     (node): void => {
       if (node === null) return;
+
       if (active) {
         const returnFocusId = Option.fromNullishOr(node.getAttribute("data-return-focus-id"));
-        if (document.activeElement instanceof HTMLElement) {
+
+        if (isHTMLElement(document.activeElement)) {
           if (Option.isSome(returnFocusId) || Option.isNone(restoreFocus.current)) {
             restoreFocus.current = Option.some(focusReturn(document.activeElement, returnFocusId));
           }
         }
+
         node.focus({ preventScroll: true });
       } else {
         Option.map(restoreFocus.current, (restore) => restore(node));
@@ -99,6 +107,7 @@ export const TransactionContextPanel = ({
   returnFocusId: Option.Option<string>;
 }>): JSX.Element => {
   const focusPanel = usePanelFocus(active);
+
   const content = (
     <div
       key={identity}
@@ -111,6 +120,7 @@ export const TransactionContextPanel = ({
       {children}
     </div>
   );
+
   if (!active) {
     return (
       <aside data-transaction-slot="transaction-context-panel" aria-label={title}>
@@ -118,6 +128,7 @@ export const TransactionContextPanel = ({
       </aside>
     );
   }
+
   return (
     <dialog
       open

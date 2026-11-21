@@ -1,11 +1,28 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Clock, Effect, Schema } from "effect";
+import { Clock, Effect, Predicate, Schema } from "effect";
 import { expect } from "vitest";
 import { oauthIssuer, oauthPaths, oauthResource } from "../../src/shell/oauth-agents/contract";
 import { alice, bob } from "../financial-user-store.test-fixture";
 import { nativeGrant, protocolFor, tokenPair } from "./native-grant.test-fixture";
 import { native, nativeOAuthPlatform } from "../user-store.test-fixture";
+
+const responseText = (response: Pick<Response, "text">): Effect.Effect<string> =>
+  native(() => response.text());
+
+const callTool = Effect.fn(function* (
+  protocol: ReturnType<typeof protocolFor>,
+  token: string,
+  name: string
+) {
+  const next = yield* protocol(token, "tools/call", {
+    name,
+    args: name === "categories.listCategories" ? {} : { query: {} },
+  });
+
+  expect(next.status).toBe(200);
+  expect(yield* native(() => next.json())).toMatchObject({ result: { isError: false } });
+});
 
 const subscription = (
   runtime: Parameters<typeof protocolFor>[0],
@@ -36,23 +53,30 @@ const subscription = (
       }),
     })
   );
+
 const holdSubscription = Effect.fn(function* (subscribe: () => ReturnType<typeof subscription>) {
   const reply = yield* subscribe();
   expect(reply.status).toBe(200);
   const reader = reply.body?.getReader();
+
   if (reader === undefined) return yield* Effect.die("Missing resident stream");
+
   return yield* Effect.acquireRelease(
     Effect.gen(function* () {
       const ack = yield* native(() => reader.read());
-      if (!(ack.value instanceof Uint8Array)) {
+
+      if (!Predicate.isUint8Array(ack.value)) {
         return yield* Effect.die("Missing MCP acknowledgement");
       }
+
       expect(new TextDecoder().decode(ack.value)).toContain("subscriptions/acknowledged");
+
       return reader;
     }),
     (stream) => native(() => stream.cancel())
   );
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "refuses substituted token purpose, credential scope, client and resource without spending a refresh generation",
@@ -60,22 +84,29 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const { runtime, owner, client_id, credential, exchange, connectionId, session } =
           yield* nativeGrant;
+
         const input = {
           client_id,
           resource: oauthResource,
           grant_type: "refresh_token",
           refresh_token: credential.refresh_token,
         };
-        for (const fields of [
-          { ...input, refresh_token: credential.access_token },
-          { ...input, client_id: "20000000-0000-4000-8000-000000000051" },
-          { ...input, resource: "https://other.example/mcp" },
-          { ...input, scope: "dashboard" },
-        ]) {
-          const bad = yield* exchange(fields);
-          expect(bad.status).toBe(400);
-          expect(yield* native(() => bad.text())).not.toContain(credential.refresh_token);
-        }
+
+        yield* Effect.forEach(
+          [
+            { ...input, refresh_token: credential.access_token },
+            { ...input, client_id: "20000000-0000-4000-8000-000000000051" },
+            { ...input, resource: "https://other.example/mcp" },
+            { ...input, scope: "dashboard" },
+          ],
+          Effect.fnUntraced(function* (fields) {
+            const bad = yield* exchange(fields);
+            expect(bad.status).toBe(400);
+            expect(yield* responseText(bad)).not.toContain(credential.refresh_token);
+          }),
+          { discard: true }
+        );
+
         const wrong = yield* protocolFor(runtime)(credential.refresh_token, "tools/list");
         expect(wrong.status).toBe(401);
         expect(
@@ -106,21 +137,27 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const { runtime, credential, owner } = yield* nativeGrant;
+
         const current = yield* Clock.currentTimeMillis,
           originalExpiry = current + 4000;
+
         yield* owner.exec(
           "UPDATE oauth_credentials SET expires_at_ms=? WHERE kind='access'",
           originalExpiry
         );
+
         const subscribe = (): ReturnType<typeof subscription> =>
           subscription(runtime, credential.access_token);
+
         const leases = yield* Effect.forEach(Array.from({ length: 8 }), () =>
           holdSubscription(subscribe)
         );
+
         const refused = yield* subscribe();
         expect(refused.status).toBe(503);
         yield* native(() => refused.arrayBuffer());
         const first = leases[0];
+
         if (first === undefined) return yield* Effect.die("Missing first resident");
         yield* owner.exec(
           "UPDATE oauth_credentials SET expires_at_ms=? WHERE kind='access'",
@@ -130,19 +167,20 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           true
         );
         yield* holdSubscription(subscribe);
-      }),
-    { timeout: 15_000 }
+      })
   );
   test.effect(
     "rolls back local OAuth revocation when its immutable Consent evidence cannot be retained",
     () =>
       Effect.gen(function* () {
         const { owner, credential, connectionId, runtime, session } = yield* nativeGrant;
+
         const facts = (): ReturnType<typeof owner.exec> =>
           owner.exec(
             "SELECT revoked_at_ms IS NOT NULL AS revoked,(SELECT count(*) FROM consent_history WHERE record_type='oauth_user_revocation' AND connection_id=c.id) AS decisions FROM oauth_connections c WHERE id=?",
             connectionId
           );
+
         yield* owner.exec(
           "CREATE TRIGGER withhold_decision BEFORE INSERT ON consent_history WHEN NEW.record_type='oauth_user_revocation' BEGIN SELECT RAISE(IGNORE); END"
         );
@@ -159,51 +197,67 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         );
       })
   );
-  for (const reason of ["browser revocation", "refresh replay"] as const) {
-    test.effect("closes a mounted MCP subscription after " + reason, () =>
+
+  test.effect.each(["browser revocation", "refresh replay"] as const)(
+    "closes a mounted MCP subscription after %s",
+    (reason) =>
       Effect.gen(function* () {
         const { runtime, credential, connectionId, client_id, exchange, session } =
           yield* nativeGrant;
+
         const response = yield* subscription(runtime, credential.access_token);
         expect(response.status).toBe(200);
         const reader = response.body?.getReader();
+
         if (reader === undefined) return yield* Effect.die("Missing MCP subscription");
         const first = yield* native(() => reader.read());
-        if (!(first.value instanceof Uint8Array)) {
+
+        if (!Predicate.isUint8Array(first.value)) {
           return yield* Effect.die("Missing MCP event bytes");
         }
+
         expect(new TextDecoder().decode(first.value)).toContain("subscriptions/acknowledged");
-        if (reason === "browser revocation") {
-          const revoked = yield* session(oauthPaths.revoke, alice, { connectionId });
-          expect(revoked.status).toBe(200);
-          yield* native(() => revoked.text());
-        } else {
-          const input = {
-            client_id,
-            resource: oauthResource,
-            grant_type: "refresh_token",
-            refresh_token: credential.refresh_token,
-          };
-          const rotated = yield* exchange(input);
-          expect(rotated.status).toBe(200);
-          yield* native(() => rotated.text());
-          const replay = yield* exchange(input);
-          expect(replay.status).toBe(400);
-          yield* native(() => replay.text());
-        }
+
+        const close = {
+          "browser revocation": Effect.gen(function* () {
+            const revoked = yield* session(oauthPaths.revoke, alice, { connectionId });
+            expect(revoked.status).toBe(200);
+            yield* responseText(revoked);
+          }),
+          "refresh replay": Effect.gen(function* () {
+            const input = {
+              client_id,
+              resource: oauthResource,
+              grant_type: "refresh_token",
+              refresh_token: credential.refresh_token,
+            };
+
+            const rotated = yield* exchange(input);
+            expect(rotated.status).toBe(200);
+            yield* responseText(rotated);
+            const replay = yield* exchange(input);
+            expect(replay.status).toBe(400);
+            yield* responseText(replay);
+          }),
+        };
+
+        yield* close[reason];
+
         const closed = yield* Effect.tryPromise(() => reader.read()).pipe(
           Effect.match({ onSuccess: (chunk) => chunk.done, onFailure: () => true })
         );
+
         expect(closed).toBe(true);
       })
-    );
-  }
+  );
+
   test.effect(
     "publishes OAuth discovery and the MCP challenge before any client or User exists",
     () =>
       Effect.gen(function* () {
         const create = yield* nativeOAuthPlatform,
           runtime = yield* create();
+
         const request = (
           path: string
         ): Effect.Effect<Awaited<ReturnType<typeof runtime.dispatchFetch>>> =>
@@ -212,8 +266,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               headers: { "cf-connecting-ip": "192.0.2.1" },
             })
           );
+
         const resource = yield* request(oauthPaths.resource),
           issuer = yield* request(oauthPaths.issuer);
+
         expect(resource.status).toBe(200);
         expect(issuer.status).toBe(200);
         expect(yield* native(() => resource.json())).toMatchObject({
@@ -240,7 +296,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const { runtime, owner, session, exchange, client_id, credential, connectionId } =
           yield* nativeGrant;
+
         const protocol = protocolFor(runtime);
+
         const rotation = {
           client_id,
           resource: oauthResource,
@@ -248,43 +306,49 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           refresh_token: credential.refresh_token,
           scope: "read",
         };
+
         const rotated = yield* exchange(rotation);
         expect(rotated.status).toBe(200);
+
         const winner = yield* Schema.decodeUnknownEffect(tokenPair)(
           yield* native(() => rotated.json())
         );
+
         expect(winner.access_token).not.toBe(credential.access_token);
         const listed = yield* protocol(winner.access_token, "tools/list");
         expect(listed.status).toBe(200);
+
         const catalogue = yield* Schema.decodeUnknownEffect(
           Schema.Struct({
             result: Schema.Struct({ tools: Schema.Array(Schema.Struct({ name: Schema.String })) }),
           })
         )(yield* native(() => listed.json()));
+
         expect(catalogue.result.tools.map((tool) => tool.name)).toContain(
           "transactions.listTransactions"
         );
         expect(catalogue.result.tools.map((tool) => tool.name)).not.toContain(
           "transactions.createTransaction"
         );
+
         const records = yield* protocol(winner.access_token, "tools/call", {
           name: "transactions.listTransactions",
           args: { query: {} },
         });
+
         expect(records.status).toBe(200);
         expect(yield* native(() => records.json())).toMatchObject({ result: { isError: false } });
-        for (const name of [
-          "categories.listCategories",
-          "transactions.listTransactions",
-          "categories.listCategories",
-        ]) {
-          const next = yield* protocol(winner.access_token, "tools/call", {
-            name,
-            args: name === "categories.listCategories" ? {} : { query: {} },
-          });
-          expect(next.status).toBe(200);
-          expect(yield* native(() => next.json())).toMatchObject({ result: { isError: false } });
-        }
+
+        yield* Effect.forEach(
+          [
+            "categories.listCategories",
+            "transactions.listTransactions",
+            "categories.listCategories",
+          ],
+          (name) => callTool(protocol, winner.access_token, name),
+          { discard: true }
+        );
+
         const connections = yield* session(oauthPaths.connections, alice);
         expect(connections.status).toBe(200);
         expect(yield* native(() => connections.json())).toMatchObject({
@@ -300,23 +364,29 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             },
           ],
         });
+
         const createdBudget = yield* session("/budgets", alice, {
           categoryId: "10000000-0000-4000-8000-000000000016",
           cap: { amount: "1000", currency: "COP" },
         });
+
         expect(createdBudget.status).toBe(201);
+
         const {
           data: { id },
         } = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.Struct({ id: Schema.String }) })
         )(yield* native(() => createdBudget.json()));
+
         const destroy = (state?: string): ReturnType<typeof protocol> =>
           protocol(credential.access_token, "tools/call", {
             name: "budgets.deleteBudget",
             args: { params: { id } },
-            ...(state === undefined ? {} : { continuation: state }),
+            continuation: state,
           });
+
         const ask = yield* destroy();
+
         const form = Schema.Struct({
           result: Schema.Struct({
             requestState: Schema.String,
@@ -325,9 +395,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }),
           }),
         });
+
         const firstReview = yield* Schema.decodeUnknownEffect(form)(
           yield* native(() => ask.json())
         );
+
         expect(firstReview.result.inputRequests.review.params.message).toContain("1000 COP");
         yield* owner.exec(
           "UPDATE budgets SET cap='1200',updated_at_ms=updated_at_ms+1 WHERE id=?",
@@ -336,14 +408,18 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const stale = yield* destroy(firstReview.result.requestState);
         expect(yield* native(() => stale.json())).toMatchObject({ result: { isError: true } });
         const refreshed = yield* destroy();
+
         const secondReview = yield* Schema.decodeUnknownEffect(form)(
           yield* native(() => refreshed.json())
         );
+
         expect(secondReview.result.inputRequests.review.params.message).toContain("1200 COP");
+
         const consumption = (): ReturnType<typeof owner.exec> =>
           owner.exec(
             "SELECT sum(units) AS n FROM commercial_allowance_consumptions WHERE allowance='canonical_call'"
           );
+
         expect(yield* consumption()).toEqual([{ n: 6 }]);
         const accepted = yield* destroy(secondReview.result.requestState);
         expect(yield* native(() => accepted.json())).toMatchObject({ result: { isError: false } });
@@ -353,11 +429,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* consumption()).toEqual([{ n: 6 }]);
         const replayed = yield* destroy(secondReview.result.requestState);
         expect(yield* native(() => replayed.json())).toMatchObject({ result: { isError: true } });
+
         const independent = yield* protocol(credential.access_token, "tools/call", {
           name: "categories.listCategories",
           args: {},
           continuation: secondReview.result.requestState,
         });
+
         expect(yield* native(() => independent.json())).toMatchObject({
           result: { isError: false, _meta: { "co.fidy/canonicalAllowance": { remaining: "43" } } },
         });
@@ -369,7 +447,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         );
         const replay = yield* exchange(rotation);
         expect(replay.status).toBe(400);
-        yield* native(() => replay.text());
+        yield* responseText(replay);
         const dead = yield* protocol(winner.access_token, "tools/list");
         expect(dead.status).toBe(401);
         yield* native(() => dead.text());
@@ -378,7 +456,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         yield* native(() => revokeAll.text());
         const revoked = yield* exchange({ ...rotation, refresh_token: winner.refresh_token });
         expect(revoked.status).toBe(400);
-        yield* native(() => revoked.text());
+        yield* responseText(revoked);
       })
   );
 });
@@ -389,21 +467,26 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const { runtime, owner, exchange, client_id, credential } = yield* nativeGrant;
+
         const input = {
           client_id,
           resource: oauthResource,
           grant_type: "refresh_token",
           refresh_token: credential.refresh_token,
         };
+
         const responses = yield* Effect.all([exchange(input), exchange(input)], { concurrency: 2 });
         expect(
           responses.map((response) => response.status).sort((left, right) => left - right)
         ).toEqual([200, 400]);
         const success = responses.find((response) => response.status === 200);
+
         if (success === undefined) return yield* Effect.die("Missing successful refresh");
+
         const pair = yield* Schema.decodeUnknownEffect(tokenPair)(
           yield* native(() => success.json())
         );
+
         const list = yield* protocolFor(runtime)(pair.access_token, "tools/list");
         expect(list.status).toBe(401);
         yield* native(() => list.text());
@@ -420,12 +503,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const { runtime, owner, exchange, session, connectionId, client_id, credential } =
           yield* nativeGrant;
+
         const input = {
           client_id,
           resource: oauthResource,
           grant_type: "refresh_token",
           refresh_token: credential.refresh_token,
         };
+
         yield* native(() =>
           owner.directory.exec(
             "CREATE TRIGGER unavailable BEFORE INSERT ON oauth_routes BEGIN SELECT RAISE(ABORT,'unavailable'); END"
@@ -442,9 +527,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         yield* native(() => owner.directory.exec("DROP TRIGGER unavailable"));
         const rotated = yield* exchange(input);
         expect(rotated.status).toBe(200);
+
         const pair = yield* Schema.decodeUnknownEffect(tokenPair)(
           yield* native(() => rotated.json())
         );
+
         yield* native(() =>
           owner.directory.exec("UPDATE oauth_routes SET user_id=? WHERE kind='access'", bob.user)
         );

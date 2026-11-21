@@ -1,8 +1,43 @@
 import { useState } from "react";
 
+type StoryStage = "pending" | "recorded";
+
+const storyStages: Readonly<
+  Record<
+    StoryStage,
+    Readonly<{
+      revealed: boolean;
+      next: StoryStage;
+      action: string;
+      statusClass: string;
+      status: string;
+    }>
+  >
+> = {
+  pending: {
+    revealed: false,
+    next: "recorded",
+    action: "Registrar ejemplo",
+    statusClass: "story-status empty-status",
+    status: "",
+  },
+  recorded: {
+    revealed: true,
+    next: "pending",
+    action: "↻ Reiniciar ejemplo",
+    statusClass: "story-status",
+    status: "Una transacción de $28.000 registrada en Restaurantes. Tu presupuesto ya la incluye.",
+  },
+};
+
+type StoryValues = Readonly<Record<StoryStage, string>>;
+
+const storyStageOrder: ReadonlyArray<StoryStage> = ["pending", "recorded"];
+
 export const DashboardStory = (): React.JSX.Element => {
-  const [recorded, setRecorded] = useState(false);
-  const [instant, setInstant] = useState(false);
+  const [stage, setStage] = useState<StoryStage>("pending");
+  const [transition, setTransition] = useState<"animated" | "instant">("animated");
+
   return (
     <>
       {" "}
@@ -22,13 +57,17 @@ export const DashboardStory = (): React.JSX.Element => {
             </p>
           </div>
           {"\n    "}
-          <div className="story-demo" data-recorded={recorded} data-instant={instant}>
+          <div
+            className="story-demo"
+            data-recorded={storyStages[stage].revealed}
+            data-transition={transition}
+          >
             {"\n      "}
             <StoryChat
-              recorded={recorded}
+              stage={stage}
               onRecord={(event) => {
-                setInstant(event.detail === 0);
-                setRecorded(!recorded);
+                setTransition(event.detail === 0 ? "instant" : "animated");
+                setStage(storyStages[stage].next);
               }}
             />
             {"\n      "}
@@ -36,7 +75,7 @@ export const DashboardStory = (): React.JSX.Element => {
               {"→"}
             </div>
             {"\n      "}
-            <StoryResult recorded={recorded} />
+            <StoryResult stage={stage} />
             {"\n    "}
           </div>
           {"\n  "}
@@ -47,10 +86,10 @@ export const DashboardStory = (): React.JSX.Element => {
 };
 
 const StoryChat = ({
-  recorded,
+  stage,
   onRecord,
 }: {
-  recorded: boolean;
+  stage: StoryStage;
   onRecord: React.MouseEventHandler<HTMLButtonElement>;
 }): React.JSX.Element => (
   <div className="story-chat">
@@ -67,7 +106,7 @@ const StoryChat = ({
       <small>{"Mensaje de ejemplo"}</small>
     </div>
     {"\n        "}
-    <div className="story-reply" aria-hidden={!recorded}>
+    <div className="story-reply" aria-hidden={!storyStages[stage].revealed}>
       <strong>{"Listo, quedó registrado."}</strong>
       <span>
         {"Crepes · Restaurantes"}
@@ -82,7 +121,7 @@ const StoryChat = ({
       aria-controls="story-dashboard"
       onClick={onRecord}
     >
-      {recorded ? "↻ Reiniciar ejemplo" : "Registrar ejemplo"}
+      {storyStages[stage].action}
     </button>
     {"\n        "}
     <small className="story-note">{"Pruébalo. Solo cambia esta demostración."}</small>
@@ -90,12 +129,12 @@ const StoryChat = ({
   </div>
 );
 
-const StoryMetrics = ({ recorded }: { recorded: boolean }): React.JSX.Element => (
+const StoryMetrics = ({ stage }: { stage: StoryStage }): React.JSX.Element => (
   <div className="metrics">
     <div className="metric">
       <small>{"Gastos registrados · COP"}</small>
       <strong data-story-total="">
-        <StoryValue recorded={recorded} before="$1.056.000" after="$1.084.000" />
+        <StoryValue stage={stage} values={{ pending: "$1.056.000", recorded: "$1.084.000" }} />
       </strong>
       <small>{"Basado en tus transacciones"}</small>
     </div>
@@ -103,13 +142,12 @@ const StoryMetrics = ({ recorded }: { recorded: boolean }): React.JSX.Element =>
     <div className="metric">
       <small>{"Restaurantes · COP"}</small>
       <strong data-story-category="">
-        <StoryValue recorded={recorded} before="$356.000" after="$384.000" />
+        <StoryValue stage={stage} values={{ pending: "$356.000", recorded: "$384.000" }} />
       </strong>
       <em data-story-remaining="">
         <StoryValue
-          recorded={recorded}
-          before="$244.000 disponibles"
-          after="$216.000 disponibles"
+          stage={stage}
+          values={{ pending: "$244.000 disponibles", recorded: "$216.000 disponibles" }}
         />
       </em>
       <div className="budget-bar">
@@ -123,14 +161,14 @@ const StoryMetrics = ({ recorded }: { recorded: boolean }): React.JSX.Element =>
   </div>
 );
 
-const StoryLedger = ({ recorded }: { recorded: boolean }): React.JSX.Element => (
+const StoryLedger = ({ stage }: { stage: StoryStage }): React.JSX.Element => (
   <div className="story-ledger">
     <div className="story-ledger-head">
       <strong>{"Última transacción"}</strong>
       <span>{"Categoría"}</span>
       <span>{"Valor"}</span>
     </div>
-    <div className="story-row" aria-hidden={!recorded}>
+    <div className="story-row" aria-hidden={!storyStages[stage].revealed}>
       <span className="story-row-name">
         {"Crepes"}
         <small>{"Almuerzo · hoy"}</small>
@@ -142,7 +180,7 @@ const StoryLedger = ({ recorded }: { recorded: boolean }): React.JSX.Element => 
   </div>
 );
 
-const StoryResult = ({ recorded }: { recorded: boolean }): React.JSX.Element => (
+const StoryResult = ({ stage }: { stage: StoryStage }): React.JSX.Element => (
   <div className="story-result">
     <div className="dashboard" id="story-dashboard">
       {"\n        "}
@@ -159,24 +197,18 @@ const StoryResult = ({ recorded }: { recorded: boolean }): React.JSX.Element => 
           <strong>{"Tu mes, en perspectiva."}</strong>
           <span className="story-badge">
             <StoryValue
-              recorded={recorded}
-              before="Antes del mensaje"
-              after="Ejemplo registrado ✓"
+              stage={stage}
+              values={{ pending: "Antes del mensaje", recorded: "Ejemplo registrado ✓" }}
             />
           </span>
         </div>
         {"\n          "}
-        <StoryMetrics recorded={recorded} />
+        <StoryMetrics stage={stage} />
         {"\n          "}
-        <StoryLedger recorded={recorded} />
+        <StoryLedger stage={stage} />
         {"\n          "}
-        <output
-          className={recorded ? "story-status" : "story-status empty-status"}
-          aria-live="polite"
-        >
-          {recorded
-            ? "Una transacción de $28.000 registrada en Restaurantes. Tu presupuesto ya la incluye."
-            : ""}
+        <output className={storyStages[stage].statusClass} aria-live="polite">
+          {storyStages[stage].status}
         </output>
         {"\n        "}
       </div>
@@ -185,20 +217,17 @@ const StoryResult = ({ recorded }: { recorded: boolean }): React.JSX.Element => 
 );
 
 const StoryValue = ({
-  recorded,
-  before,
-  after,
+  stage,
+  values,
 }: {
-  recorded: boolean;
-  before: string;
-  after: string;
+  stage: StoryStage;
+  values: StoryValues;
 }): React.JSX.Element => (
   <span className="story-value">
-    <span aria-hidden={recorded} data-visible={!recorded}>
-      {before}
-    </span>
-    <span aria-hidden={!recorded} data-visible={recorded}>
-      {after}
-    </span>
+    {storyStageOrder.map((shown) => (
+      <span key={shown} aria-hidden={shown !== stage} data-visible={shown === stage}>
+        {values[shown]}
+      </span>
+    ))}
   </span>
 );

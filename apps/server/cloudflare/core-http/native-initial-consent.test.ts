@@ -1,26 +1,38 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Clock, Effect, Schema } from "effect";
+import { Clock, Effect, Exit, Schema } from "effect";
 import { expect } from "vitest";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { DisclosureSnapshot } from "../../src/shell/consent/contract";
 import { alice, bob, nativeTransactionJourney } from "../financial-user-store.test-fixture";
 import { native } from "../user-store.test-fixture";
 
+const refusedHistoryChange = Effect.fn(function* (
+  db: Effect.Success<typeof nativeTransactionJourney>,
+  sql: string
+) {
+  expect(Exit.isFailure(yield* Effect.exit(native(() => db.exec(sql))))).toBe(true);
+});
+
 const initialContext = Effect.gen(function* () {
   const db = yield* nativeTransactionJourney;
-  const observe = (binding?: string): Effect.Effect<Response> =>
-    native(() =>
+
+  const observe = (binding?: string): Effect.Effect<Response> => {
+    const headers = {
+      origin: "https://app.fidyapp.com",
+      cookie: "__Host-fidy_session=" + alice.bearer,
+    };
+
+    return native(() =>
       db.send(
         new Request("https://api.fidyapp.com/web/session/binding?context=application", {
-          headers: {
-            origin: "https://app.fidyapp.com",
-            cookie: "__Host-fidy_session=" + alice.bearer,
-            ...(binding === undefined ? {} : { "Fidy-Session-Binding": binding }),
-          },
+          headers:
+            binding === undefined ? headers : { ...headers, "Fidy-Session-Binding": binding },
         })
       )
     );
+  };
+
   const head = (): Effect.Effect<Awaited<ReturnType<typeof db.exec>>> =>
     native(() =>
       db.exec(
@@ -28,6 +40,7 @@ const initialContext = Effect.gen(function* () {
         alice.session
       )
     );
+
   const original = yield* head();
   const missing = yield* observe();
   expect(missing.status).toBe(200);
@@ -37,9 +50,11 @@ const initialContext = Effect.gen(function* () {
   });
   expect((yield* observe(bob.session)).status).toBe(401);
   const time = yield* Clock.currentTimeMillis;
+
   const snapshot = yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(
     currentDisclosureFor()
   );
+
   yield* native(() =>
     db.exec(
       "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms,disclosure_json) VALUES(?,?,'processing_grant',?,?)",
@@ -59,12 +74,16 @@ const initialContext = Effect.gen(function* () {
       time
     )
   );
-  for (const sql of [
-    "UPDATE consent_history SET session_id=NULL WHERE record_type='processing_withdrawal'",
-    "DELETE FROM consent_history WHERE record_type='processing_withdrawal'",
-  ]) {
-    expect((yield* Effect.exit(native(() => db.exec(sql))))._tag).toBe("Failure");
-  }
+
+  yield* Effect.forEach(
+    [
+      "UPDATE consent_history SET session_id=NULL WHERE record_type='processing_withdrawal'",
+      "DELETE FROM consent_history WHERE record_type='processing_withdrawal'",
+    ],
+    (sql) => refusedHistoryChange(db, sql),
+    { discard: true }
+  );
+
   const withdrawn = yield* observe();
   expect(withdrawn.status).toBe(200);
   expect(yield* native(() => withdrawn.json())).toEqual({
@@ -73,6 +92,7 @@ const initialContext = Effect.gen(function* () {
   });
   expect(yield* head()).toEqual(original);
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "omits private metadata from the cookie-only initial application context after missing or withdrawn Consent without renewal or read evidence",

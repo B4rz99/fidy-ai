@@ -1,22 +1,25 @@
 import { dirname, relative, resolve } from "node:path";
 
 const trio = /\/(contract|operations|runtime)\.ts$/u;
+
 const serverModule = /^(?:src\/(?:core|shell)|cloudflare)\//u;
+
 const sharedKernel = /^src\/core\/_shared\/(?:money|context|time)\.ts$/u;
+
 const testSource = /(?:\.(?:test|spec|fixture)|\.test-fixture)\.[cm]?[jt]sx?$/u;
 
 const compositionRoots = new Set([
   "cloudflare/recovery/support-recovery.test.ts",
   "../cli/src/direct-client/runtime.ts",
-  "../cli/src/direct-client/resources.test.ts",
+  "../cli/test/direct-client/resources.test.ts",
   "../web/src/transport/browser-http-policy.ts",
-  "../web/src/transport/client.test.ts",
+  "../web/test/transport/client.node.test.ts",
   "../../scripts/pro/runtime.ts",
   "src/client.ts",
   "src/browser-bootstrap.ts",
   "src/browser-http.ts",
   "src/browser-transport.ts",
-  "src/shell/memory/memory-policy.test.ts",
+  "test/shell/memory/memory-policy.test.ts",
   "cloudflare/core-worker.ts",
   "cloudflare/release-smoke-worker.ts",
   "cloudflare/public-worker.ts",
@@ -35,19 +38,21 @@ const compositionRoots = new Set([
   "cloudflare/onboarding/consent-ingress.test.ts",
   "cloudflare/transactions/transactions.test.ts",
 ]);
+
 const testRunner = new Set([
   "cloudflare/vitest.config.ts",
   "cloudflare/test-sequencer.ts",
   "cloudflare/test-shards.ts",
   "cloudflare/test-shards.test.ts",
 ]);
+
 const sharedTestSupport = new Set([
   "../../scripts/dev-browser-api.ts",
   "cloudflare/signed-whatsapp.test-fixture.ts",
   "cloudflare/openai.test-fixture.ts",
   "src/shell/testing/credential-evidence-harness.ts",
   "src/shell/testing/crypto-harness.ts",
-  "src/shell/outbound-http/testing.ts",
+  "test/support/outbound-http.ts",
   "cloudflare/user-store.test-fixture.ts",
   "cloudflare/financial-user-store.test-fixture.ts",
   "cloudflare/erasure-purge.test-fixture.ts",
@@ -66,6 +71,7 @@ export const serverPath = (source, packageRoot) =>
 /** @param {string} path - Server-relative module path. */
 const defaultOwner = (path) => {
   const match = /^(src\/(?:core|shell)\/(?:channels\/)?[^/]+|cloudflare\/[^/]+)\//u.exec(path);
+
   return match?.[1];
 };
 
@@ -76,16 +82,24 @@ export const ownership = (modules) => {
       .filter((path) => serverModule.test(path) && !path.includes("/internal/") && trio.test(path))
       .map(dirname)
   );
+
   /** @param {string} path - Server-relative module path. */
   const owner = (path) => {
+    const mirroredSource = /^test\/((?:core|shell)\/.+)$/u.exec(path)?.[1];
+
+    if (mirroredSource !== undefined) return owner(`src/${mirroredSource}`);
+
     if (!serverModule.test(path)) return undefined;
     let candidate = dirname(path);
+
     while (candidate !== ".") {
       if (named.has(candidate)) return candidate;
       candidate = dirname(candidate);
     }
+
     return defaultOwner(path);
   };
+
   return owner;
 };
 
@@ -198,25 +212,34 @@ const privateReachability = (modules, owner, packageRoot) => {
   const reachable = (start) => {
     const visited = new Set([start]);
     const pending = [start];
+
     while (pending.length > 0) {
       const path = pending.pop();
+
       if (path === undefined) continue;
+
       const targets = (modules.get(path)?.dependencies ?? []).map((dependency) =>
         serverPath(dependency.resolved, packageRoot)
       );
+
       const next = targets.filter(
         (target) => owner(target) === owner(start) && !visited.has(target)
       );
+
       for (const target of next) visited.add(target);
       pending.push(...next);
     }
+
     return [...visited];
   };
+
   const paths = [...modules.keys()].filter((path) => owner(path) === dirname(path));
   const runtime = new Set(paths.filter((path) => path.endsWith("/runtime.ts")).flatMap(reachable));
+
   const ordinary = new Set(
     paths.filter((path) => /\/(contract|operations)\.ts$/u.test(path)).flatMap(reachable)
   );
+
   return { runtime, ordinary };
 };
 
@@ -229,8 +252,10 @@ export const boundaryViolations = (report, packageRoot) => {
   const modules = new Map(
     report.modules.map((module) => [serverPath(module.source, packageRoot), module])
   );
+
   const owner = ownership([...modules.keys()]);
   const reachable = privateReachability(modules, owner, packageRoot);
+
   return [...modules]
     .filter(([path]) => !path.includes("node_modules/"))
     .flatMap(([from, module]) => {
@@ -238,6 +263,7 @@ export const boundaryViolations = (report, packageRoot) => {
         (from.endsWith("/runtime.ts") && owner(from) === dirname(from)) ||
         compositionRoots.has(from) ||
         (reachable.runtime.has(from) && !reachable.ordinary.has(from));
+
       const targets = module.dependencies
         .map((dependency) => serverPath(dependency.resolved, packageRoot))
         .filter(
@@ -248,6 +274,7 @@ export const boundaryViolations = (report, packageRoot) => {
               /\.[cm]?[jt]sx?$/u.test(to) &&
               !to.includes("node_modules/"))
         );
+
       return targets.flatMap((to) => {
         const edge = {
           from,
@@ -256,9 +283,10 @@ export const boundaryViolations = (report, packageRoot) => {
           sameOwner: owner(from) !== undefined && owner(from) === owner(to),
           published: trio.test(to) && owner(to) === dirname(to),
         };
-        return [...directionRules, ...boundaryRules]
-          .filter((rule) => rule.rejects(edge))
-          .map(({ name, reason }) => ({ name, reason, from, to }));
+
+        return [...directionRules, ...boundaryRules].flatMap(({ name, reason, rejects }) =>
+          rejects(edge) ? [{ name, reason, from, to }] : []
+        );
       });
     });
 };

@@ -1,6 +1,6 @@
 import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import type { UserStoreBindings } from "../directory/contract";
-import { Context, Data, Effect, Schema } from "effect";
+import { Context, Data, Effect, Option, Schema } from "effect";
 import {
   InsightEventId,
   ProactivityThresholds,
@@ -16,6 +16,7 @@ export const WeeklySummaryWork = Schema.Struct({
   userId: UserId,
   insightEventId: InsightEventId,
 });
+
 export type WeeklySummaryWork = typeof WeeklySummaryWork.Type;
 
 export const WeeklyQuestionWork = Schema.Struct({
@@ -25,6 +26,7 @@ export const WeeklyQuestionWork = Schema.Struct({
   userId: UserId,
   id: Schema.String.check(Schema.isUUID()),
 });
+
 export type WeeklyQuestionWork = typeof WeeklyQuestionWork.Type;
 
 export const CategoryDeliveryWork = Schema.Struct({
@@ -35,6 +37,7 @@ export const CategoryDeliveryWork = Schema.Struct({
   userId: UserId,
   id: Schema.String.check(Schema.isUUID()),
 });
+
 export type CategoryDeliveryWork = typeof CategoryDeliveryWork.Type;
 
 export const ProactivityDeliveryWork = Schema.Union([
@@ -42,6 +45,7 @@ export const ProactivityDeliveryWork = Schema.Union([
   WeeklyQuestionWork,
   CategoryDeliveryWork,
 ]);
+
 export type ProactivityDeliveryWork = typeof ProactivityDeliveryWork.Type;
 
 export const ProactivityWorkflowId = Schema.Union([
@@ -63,9 +67,11 @@ export const ProactivityWorkObservation = Schema.Struct({
 });
 
 export const proactivityObservationLimit = 8;
+
 export const ProactivityWorkObservations = Schema.Array(ProactivityWorkObservation).check(
   Schema.isMaxLength(proactivityObservationLimit)
 );
+
 export type ProactivityWorkObservations = typeof ProactivityWorkObservations.Type;
 
 export const ProactivityActivity = Schema.Union([
@@ -88,6 +94,7 @@ export const ProactivityActivity = Schema.Union([
     id: ScheduleId,
   }),
 ]);
+
 export type ProactivityActivity = typeof ProactivityActivity.Type;
 
 export const ProactivityActivityResult = Schema.Union([
@@ -95,6 +102,7 @@ export const ProactivityActivityResult = Schema.Union([
   Schema.TaggedStruct("RecoveryAdmitted", {}),
   Schema.TaggedStruct("Deferred", { nextEligibleAtMs: Schema.Int }),
 ]);
+
 export type ProactivityActivityResult = typeof ProactivityActivityResult.Type;
 
 type ProactivitySettings = Partial<
@@ -109,9 +117,12 @@ type ProactivitySettings = Partial<
     KAPSO_API_KEY: string;
   }>
 >;
+
 export const WeeklyThresholdConfiguration = Schema.toCodecStringTree(ProactivityThresholds);
 
-export class InsightUnavailable extends Data.TaggedError("InsightUnavailable") {}
+export class InsightUnavailable extends Data.TaggedError("InsightUnavailable")<{
+  readonly cause: Option.Option<unknown>;
+}> {}
 
 export type NativeReminderEnvironment = UserStoreBindings &
   ProactivitySettings &
@@ -119,8 +130,10 @@ export type NativeReminderEnvironment = UserStoreBindings &
 
 export const weeklyPauseMention =
   "Pausé tus resúmenes semanales porque no recibí respuesta. Puedes pedirme que los reactive.";
+
 export const reminderPauseMention =
   "Pausé tus recordatorios de registro manual porque no recibí respuesta. Puedes pedirme que los reactive.";
+
 export type PauseNoticeService = {
   bind: (
     turn: { id: string; user: string; session: string },
@@ -132,15 +145,17 @@ export type PauseNoticeService = {
   ) => Effect.Effect<TranscriptText, InsightUnavailable, SqliteClient>;
   acknowledge: (turn: string) => Effect.Effect<void, InsightUnavailable, SqliteClient>;
 };
+
 export const HostedPauseNotice = Context.Reference<PauseNoticeService>(
   "@fidy/server/cloudflare/insights/contract/HostedPauseNotice",
   {
     defaultValue: (): PauseNoticeService => ({
-      bind: (): Effect.Effect<never, InsightUnavailable> => Effect.fail(new InsightUnavailable()),
+      bind: (): Effect.Effect<never, InsightUnavailable> =>
+        Effect.fail(new InsightUnavailable({ cause: Option.none() })),
       include: (): Effect.Effect<never, InsightUnavailable> =>
-        Effect.fail(new InsightUnavailable()),
+        Effect.fail(new InsightUnavailable({ cause: Option.none() })),
       acknowledge: (): Effect.Effect<never, InsightUnavailable> =>
-        Effect.fail(new InsightUnavailable()),
+        Effect.fail(new InsightUnavailable({ cause: Option.none() })),
     }),
   }
 );

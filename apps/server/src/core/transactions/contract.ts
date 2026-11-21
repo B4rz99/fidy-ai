@@ -14,6 +14,7 @@ import { UtcTimestamp } from "~/core/_shared/time";
 export const TransactionId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("TransactionId"))
   .annotate({ identifier: "TransactionId" });
+
 export type TransactionId = typeof TransactionId.Type;
 
 const maxHintTextCodePoints = 64;
@@ -21,6 +22,7 @@ const maxHintTextCodePoints = 64;
 export const LastFourDigits = Schema.String.check(Schema.isPattern(/^[0-9]{4}$/u))
   .pipe(Schema.brand("LastFourDigits"))
   .annotate({ identifier: "LastFourDigits" });
+
 export type LastFourDigits = typeof LastFourDigits.Type;
 
 export const NotificationFormatId = Schema.String.check(
@@ -29,9 +31,11 @@ export const NotificationFormatId = Schema.String.check(
 )
   .pipe(Schema.brand("NotificationFormatId"))
   .annotate({ identifier: "NotificationFormatId" });
+
 export type NotificationFormatId = typeof NotificationFormatId.Type;
 
 export const NotificationCurrencyBasis = Schema.Literals(["explicit", "format-cop-default-v1"]);
+
 export type NotificationCurrencyBasis = typeof NotificationCurrencyBasis.Type;
 
 const normalizeInstrumentLabel = (text: string): string =>
@@ -57,6 +61,7 @@ export const InstrumentLabel = Schema.String.pipe(
     })
   )
 ).annotate({ identifier: "InstrumentLabel" });
+
 export type InstrumentLabel = typeof InstrumentLabel.Type;
 
 export const AccountHints = Schema.Struct({
@@ -64,6 +69,7 @@ export const AccountHints = Schema.Struct({
   accountLastFour: Schema.OptionFromOptionalKey(LastFourDigits),
   instrumentLabel: Schema.OptionFromOptionalKey(InstrumentLabel),
 }).annotate({ identifier: "AccountHints" });
+
 export type AccountHints = typeof AccountHints.Type;
 
 export const NotificationInterpretationEvidence = Schema.Struct({
@@ -71,10 +77,13 @@ export const NotificationInterpretationEvidence = Schema.Struct({
   currencyBasis: NotificationCurrencyBasis,
   accountHints: AccountHints,
 }).annotate({ identifier: "NotificationInterpretationEvidence" });
+
 export type NotificationInterpretationEvidence = typeof NotificationInterpretationEvidence.Type;
 
 const zero = BigDecimal.make(0n, 0);
+
 const maximumTransactionNotesLength = 500;
+
 const maximumCounterpartyLength = 120;
 
 const positiveTransactionMoney = Schema.makeFilter<{
@@ -91,6 +100,7 @@ export const Direction = Schema.Literals(["inflow", "outflow"]).annotate({
     "`inflow` is money reaching them. The amount is unsigned, so this is the only field " +
     "that carries the sign.",
 });
+
 export type Direction = typeof Direction.Type;
 
 export type EffectiveTransactionAggregate = Readonly<{
@@ -117,6 +127,7 @@ export const Counterparty = Schema.NonEmptyString.check(
   Schema.isTrimmed(),
   Schema.isMaxLength(maximumCounterpartyLength)
 );
+
 export type Counterparty = typeof Counterparty.Type;
 
 const OccurredAt = UtcTimestamp.pipe(
@@ -163,6 +174,7 @@ export const Transaction = Schema.Struct({
 })
   .check(positiveTransactionMoney)
   .annotate({ identifier: "Transaction" });
+
 export type Transaction = typeof Transaction.Type;
 
 export const RecurringTransactionFact = Schema.Struct({
@@ -180,6 +192,7 @@ export const TransactionPairInput = Schema.Struct({
   firstTransactionId: TransactionId,
   secondTransactionId: TransactionId,
 }).annotate({ identifier: "TransactionPairInput" });
+
 export type TransactionPairInput = typeof TransactionPairInput.Type;
 
 const IndependentPresentationMetadata = Schema.Struct({
@@ -195,6 +208,7 @@ const LinkedPresentationMetadata = Schema.Union([
     requestedId: TransactionId,
   }),
 ]);
+
 const IndependentTransactionPresentation = Schema.Struct({
   ...Transaction.fields,
   presentation: IndependentPresentationMetadata,
@@ -206,6 +220,7 @@ export const TransactionPresentation = Schema.Struct({
 })
   .check(positiveTransactionMoney)
   .annotate({ identifier: "TransactionPresentation" });
+
 export type TransactionPresentation = typeof TransactionPresentation.Type;
 
 export const TransactionInspection = Schema.Struct({
@@ -221,12 +236,14 @@ export const TransactionInspection = Schema.Struct({
 })
   .check(positiveTransactionMoney)
   .annotate({ identifier: "TransactionInspection" });
+
 export type TransactionInspection = typeof TransactionInspection.Type;
 
 export const RestoredTransactionPair = Schema.Struct({
   firstTransaction: IndependentTransactionPresentation,
   secondTransaction: IndependentTransactionPresentation,
 }).annotate({ identifier: "RestoredTransactionPair" });
+
 export type RestoredTransactionPair = typeof RestoredTransactionPair.Type;
 
 export const CreateTransactionInput = Transaction.mapFields(
@@ -237,6 +254,7 @@ export const CreateTransactionInput = Transaction.mapFields(
 )
   .check(positiveTransactionMoney)
   .annotate({ identifier: "CreateTransactionInput" });
+
 export type CreateTransactionInput = typeof CreateTransactionInput.Type;
 
 export const UpdateTransactionInput = Schema.Struct({
@@ -256,6 +274,7 @@ export const UpdateTransactionInput = Schema.Struct({
     occurredAt: Schema.optionalKey(OccurredAt),
   }),
 }).annotate({ identifier: "UpdateTransactionInput" });
+
 export type UpdateTransactionInput = typeof UpdateTransactionInput.Type;
 
 export const TransactionExtraction = Transaction.mapFields(
@@ -263,6 +282,7 @@ export const TransactionExtraction = Transaction.mapFields(
 )
   .check(positiveTransactionMoney)
   .annotate({ identifier: "TransactionExtraction" });
+
 export type TransactionExtraction = typeof TransactionExtraction.Type;
 
 export const maximumTransactionPageSize = 100;
@@ -302,6 +322,7 @@ export const TransactionQuery = Schema.Struct({
   currency: Schema.Option(TransactionQueryValues.fields.currency),
   cursor: Schema.Option(TransactionQueryValues.fields.cursor),
 }).annotate({ identifier: "TransactionQuery" });
+
 export type TransactionQuery = typeof TransactionQuery.Type;
 
 export class TransactionNotFound extends Data.TaggedError("TransactionNotFound")<{
@@ -338,6 +359,7 @@ export const TransactionUserDecisions = Schema.Struct({
   counterparty: Schema.Boolean,
   notes: Schema.Boolean,
 });
+
 export type TransactionUserDecisions = typeof TransactionUserDecisions.Type;
 
 export type ReconciliationMember = Readonly<{

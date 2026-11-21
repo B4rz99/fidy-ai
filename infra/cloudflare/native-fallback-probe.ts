@@ -1,4 +1,4 @@
-import { ReleaseFailure } from "./production-release";
+import { ReleaseFailure, releaseFailureFrom } from "./production-release";
 import { Clock, Effect, Option, Redacted, Schema, Stream } from "effect";
 import { type HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import { installedOrigins } from "@fidy/server/browser-transport";
@@ -22,6 +22,7 @@ import { smokeHeaders } from "./smoke-exchange";
 import { storageOwners } from "./storage-release";
 
 type Coordinates = { revision: string; core: string; ingress: string; proof: string };
+
 export const fallbackHeaders = (pair: Coordinates): Readonly<Record<string, string>> =>
   smokeHeaders({
     config: {
@@ -47,11 +48,13 @@ export const observeDormantPair = Effect.fn(function* (
       { headers: fallbackHeaders(pair) }
     )
   );
+
   if (response.status !== ok) {
     return yield* new ReleaseFailure({
       message: "Dormant marker request returned HTTP " + response.status,
     });
   }
+
   const parsed = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       core: SmokeIdentity,
@@ -59,10 +62,9 @@ export const observeDormantPair = Effect.fn(function* (
       markers: SharedStoreMarkers,
     })
   )(yield* response.json).pipe(
-    Effect.mapError(
-      () => new ReleaseFailure({ message: "Dormant Core marker document is incomplete" })
-    )
+    Effect.mapError(releaseFailureFrom("Dormant Core marker document is incomplete"))
   );
+
   if (
     !["x-fidy-fixture-fallback-ingress", "x-fidy-smoke-worker-version"].every(
       (name) => response.headers[name] === pair.ingress
@@ -72,6 +74,7 @@ export const observeDormantPair = Effect.fn(function* (
       message: "Dormant Ingress marker identifies a different version",
     });
   }
+
   if (
     parsed.fixtureFallbackCoreVersion !== pair.core ||
     parsed.core.workerVersionId !== pair.core ||
@@ -81,6 +84,7 @@ export const observeDormantPair = Effect.fn(function* (
       message: "Dormant Core marker identifies a different version or revision",
     });
   }
+
   if (
     serving &&
     storageOwners.some((owner) => parsed.markers[owner].workerVersionId !== pair.core)
@@ -92,6 +96,7 @@ export const observeDormantPair = Effect.fn(function* (
 });
 
 const serviceUnavailableStatus = 503;
+
 const controlRequests = new Map([
   ["/web/pairings", "pairing start"],
   ["/web/providers/google/start", "provider start"],
@@ -102,35 +107,47 @@ const controlRequests = new Map([
   ["/web/session/binding", "session binding"],
   ["/transactions", "transaction history"],
 ]);
+
 const canonicalUnavailable = new TextEncoder().encode(
   JSON.stringify({
     error: { code: "unavailable", message: "The operation is unavailable. Retry later." },
     next: [],
   })
 );
+
 const matchesCanonicalUnavailable = Effect.fn(function* (response: Response) {
   const internal = HttpClientResponse.fromWeb(
     HttpClientRequest.get(installedOrigins.acceptance.api),
     response
   );
+
   let offset = 0;
+
   const matchesSegment = (chunk: Uint8Array): boolean =>
     chunk.length <= canonicalUnavailable.length - offset &&
     chunk.every((value, index) => value === canonicalUnavailable[offset + index]);
+
   const read = yield* internal.stream.pipe(
     Stream.runForEachWhile((chunk) =>
       Effect.sync(() => {
         if (!matchesSegment(chunk)) {
           offset = -1;
+
           return false;
         }
+
         offset += chunk.length;
+
         return true;
       })
     ),
     Effect.timeoutOption("2 seconds"),
+    Effect.tapError((error) =>
+      Effect.logWarning("Canonical unavailable body was unreadable", { reason: error._tag })
+    ),
     Effect.orElseSucceed(() => Option.none())
   );
+
   return Option.isSome(read) && offset === canonicalUnavailable.length;
 });
 
@@ -140,12 +157,14 @@ export const observePairingStart = Effect.fn(function* (
   send: Parameters<typeof retainedFinancialControls>[0]["send"]
 ) {
   const { api, browser } = installedOrigins.acceptance;
+
   const request = new Request(api + "/web/pairings", {
     method: "POST",
     redirect: "manual",
     headers: { "content-type": "application/json", origin: browser, ...fallbackHeaders(pair) },
     body: body === "json" ? "{}" : null,
   });
+
   const signature = yield* signAcceptanceRequest({
     request,
     boundary: "ingress",
@@ -158,17 +177,22 @@ export const observePairingStart = Effect.fn(function* (
       SMOKE_PROOF: pair.proof,
     },
   });
+
   request.headers.set(acceptanceProofHeader, signature);
   const response = yield* send(request);
   const status = "HTTP " + response.status;
+
   if (
     response.status === serviceUnavailableStatus &&
     (yield* matchesCanonicalUnavailable(response))
   ) {
     return status + ", canonical admission unavailable";
   }
+
   const stream = response.body;
+
   if (stream !== null && !response.bodyUsed) yield* Effect.tryPromise(() => stream.cancel());
+
   return response.headers.get("x-fidy-recovery-isolation") === "isolated"
     ? status + ", isolated admission"
     : status;
@@ -179,40 +203,49 @@ const isIsolationResponse = (request: Request, response: Response): boolean =>
   request.method === "GET" &&
   request.url === installedOrigins.acceptance.api + "/transactions" &&
   !request.headers.has(acceptanceProofHeader);
+
 const controlResponse = Effect.fn(function* (request: Request, response: Response) {
   if (response.status < clientError || isIsolationResponse(request, response)) return response;
   const operation = controlRequests.get(new URL(request.url).pathname) ?? "control identity";
+
   const error =
     operation === "pairing start" &&
     response.status === serviceUnavailableStatus &&
     (yield* matchesCanonicalUnavailable(response))
       ? ", canonical admission unavailable"
       : "";
+
   const isolation =
     response.headers.get("x-fidy-recovery-isolation") === "isolated" ? ", isolated admission" : "";
+
   return yield* new ReleaseFailure({
     message:
       "Retained control refused at " + operation + ", HTTP " + response.status + error + isolation,
   });
 });
+
 export const controlsDigest = Effect.fn(function* (
   pair: Coordinates,
   send: Parameters<typeof retainedFinancialControls>[0]["send"],
   routing: "ordinary" | "pinned" = "pinned"
 ) {
   const route = routing === "ordinary" ? { [smokeProofHeader]: pair.proof } : fallbackHeaders(pair);
+
   const controls = yield* retainedFinancialControls({
     revision: pair.revision,
     origins: installedOrigins.acceptance,
     proof: Redacted.make(pair.proof),
     send: (request) => {
       for (const [name, value] of Object.entries(route)) request.headers.set(name, value);
+
       return send(request).pipe(Effect.flatMap((response) => controlResponse(request, response)));
     },
   });
+
   if (controls.length !== 2 || new Set(controls.map((control) => control.id)).size !== 2) {
     return yield* Effect.fail(Error("Original controls are not distinct"));
   }
+
   const encoded = yield* Schema.encodeEffect(
     Schema.fromJsonString(
       Schema.Array(
@@ -220,6 +253,7 @@ export const controlsDigest = Effect.fn(function* (
       )
     )
   )(controls);
+
   return new Bun.CryptoHasher("sha256").update(encoded).digest("hex");
 });
 

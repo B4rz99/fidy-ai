@@ -44,8 +44,8 @@ export type StatementWorkflow = Readonly<{
     id: string;
     params: typeof StatementWork.Type;
     retention: typeof statementWorkflowRetention;
-  }) => Promise<unknown>;
-  get: (id: string) => Promise<unknown>;
+  }) => Promise<WorkflowInstance | void>;
+  get: (id: string) => Promise<WorkflowInstance>;
 }>;
 
 export class StatementDeliveryUnavailable extends Data.TaggedError("StatementDeliveryUnavailable")<{
@@ -53,6 +53,7 @@ export class StatementDeliveryUnavailable extends Data.TaggedError("StatementDel
 }> {}
 
 export const localDocumentUrl = "https://user.invalid/ingestion/document";
+
 export const NativeStatementDocument = Schema.Struct({
   userId: Schema.String.check(Schema.isUUID()),
   portfolio: Schema.NonEmptyString,
@@ -63,11 +64,14 @@ export const NativeStatementDocument = Schema.Struct({
   occurredAt: Schema.Int,
   receivedAt: Schema.Int,
 });
+
 export const localMediaUrl = "https://user.invalid/ingestion/media";
+
 export const NativeMedia = Schema.Struct({
   ...NativeStatementDocument.fields,
   caption: Schema.String,
 });
+
 export type LocalIngestionEnvironment = Readonly<{
   DIRECTORY: DurableObjectNamespace;
   STATEMENT_STAGING_BUCKET: R2Bucket;
@@ -79,6 +83,7 @@ export type LocalIngestionEnvironment = Readonly<{
 }>;
 
 export const localEmailUrl = "https://user.invalid/ingestion/email";
+
 export type NativeEmailEnvironment = UserStoreBindings;
 
 export type LocalIngestionRequest = Readonly<{

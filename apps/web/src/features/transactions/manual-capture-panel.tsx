@@ -26,6 +26,7 @@ type Props = Readonly<{
   onRefresh: () => void;
   onCreated: (transaction: CanonicalSuccess<"transactions.createTransaction">["data"]) => void;
 }>;
+
 const attemptFields = (
   draft: CaptureDraft,
   props: Props
@@ -48,6 +49,7 @@ const attemptFields = (
   },
   { label: "Notas", value: draft.notes || "Sin notas" },
 ];
+
 const PreviousAttempt = ({
   capture,
   props,
@@ -76,6 +78,7 @@ const PreviousAttempt = ({
       </>
     ),
   });
+
 const ManualCaptureEditor = ({
   capture,
   props,
@@ -104,6 +107,7 @@ const ManualCaptureEditor = ({
     />
   </>
 );
+
 const historyInspected = (capture: ManualCapture, props: Props): boolean =>
   props.editable &&
   Option.exists(
@@ -113,16 +117,19 @@ const historyInspected = (capture: ManualCapture, props: Props): boolean =>
       version.timeZone === props.version.timeZone &&
       version.generation < props.version.generation
   );
+
 const CaptureContent = ({
   capture,
   props,
 }: Readonly<{ capture: ManualCapture; props: Props }>): JSX.Element => {
   const uncertain = capture.uncertain;
   const checked = historyInspected(capture, props);
+
   const close = (): void => {
     if (Option.isNone(capture.attempt)) capture.clear();
     props.onClose();
   };
+
   return (
     <section className="flex min-w-0 flex-col gap-6">
       <header className="flex items-center justify-between gap-3">
@@ -166,6 +173,7 @@ const CaptureContent = ({
     </section>
   );
 };
+
 export const ManualCapturePanel = (props: Props): JSX.Element =>
   Option.match(use(ManualCaptureContext), {
     onNone: () => <p role="alert">No pudimos abrir el borrador.</p>,

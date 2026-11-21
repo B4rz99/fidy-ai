@@ -35,6 +35,7 @@ const HistoryCategoryReference = Schema.Struct({
   category_revision: CategoryReference.fields.revision,
   category_id: CategoryReference.fields.categoryId,
 });
+
 export const understoodCategory = (row: unknown): boolean =>
   Option.isSome(
     Schema.decodeUnknownOption(HistoryCategoryReference)(row).pipe(
@@ -43,6 +44,7 @@ export const understoodCategory = (row: unknown): boolean =>
       )
     )
   );
+
 const presentRetainedHistory = (input: Parameters<typeof presentHistory>[0]): Response =>
   input.rows.results.every(understoodCategory)
     ? presentHistory(input)
@@ -56,31 +58,39 @@ export const readUserHistory = Effect.fn(function* (
 ) {
   const sql = yield* SqliteClient;
   const prepared = yield* Effect.tryPromise(() => readBoundWebSessionProof(request));
+
   if (Option.isNone(prepared)) return noAuthority();
   const search = new URL(request.url).pathname === "/transactions/search";
   const operation = search ? "transactions.searchTransactions" : "transactions.listTransactions";
   const selection = { request, search, id: Option.none<string>() } as const;
   const query = parseQuery(selection);
+
   return yield* Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
     const lookup = boundSessionLookup({ ...prepared.value, current });
     const { statement, authority } = lookup;
     const [row] = yield* sql.unsafe(statement.sql, statement.params);
+
     const subject = Option.filter(resolveBoundCanonicalWebSession({ lookup, row }), (caller) =>
       owns(caller.userId)
     );
+
     if (Option.isNone(subject)) return noAuthority();
     const user = subject.value.userId;
     const users = { sql: "SELECT ? AS userId", params: [user] };
     const standing = quotaStatusSelection({ users, current });
     const [statusRow] = yield* sql.unsafe(standing.sql, standing.params);
     const status = decodeQuotaStatus({ row: statusRow, current });
+
     if (Option.isNone(status)) return yield* new HistoryUnavailable();
     const admitted = yield* admitLocalRequest({ user, current });
+
     if (admitted.length !== 1) {
       return attachCanonicalStanding({ response: rateLimited(), status: status.value, current });
     }
+
     let response = invalid();
+
     if (Option.isSome(query)) {
       const page = selectedHistoryPage({ authority, query: query.value, userSelection: users });
       const rows = yield* sql.unsafe(page.sql, page.bindings);
@@ -89,8 +99,10 @@ export const readUserHistory = Effect.fn(function* (
         query: query.value,
         selection,
       });
+
       if (!response.ok) return yield* new HistoryUnavailable();
     }
+
     const audit = recordAuthorizedCall({
       authority,
       id: newId(),
@@ -99,8 +111,11 @@ export const readUserHistory = Effect.fn(function* (
       outcome: response.ok ? "success" : "validation_failed",
       afterOwnerWrite: false,
     });
+
     const audited = yield* sql.unsafe(audit.sql + " RETURNING id", audit.params);
+
     if (audited.length !== 1) return yield* new HistoryUnavailable();
+
     return attachCanonicalStanding({ response, status: status.value, current });
   }).pipe(withStoreCapacity("required"));
 });
@@ -111,7 +126,9 @@ export const readLocalTransactionPage = Effect.fn(function* (request: Request, u
     search: new URL(request.url).pathname === "/transactions/search",
     id: Option.none<string>(),
   };
+
   const query = parseQuery(selection);
+
   if (Option.isNone(query)) {
     return localTransactionRefusal({
       status: 400,
@@ -119,14 +136,18 @@ export const readLocalTransactionPage = Effect.fn(function* (request: Request, u
       message: "Invalid Transaction history query.",
     });
   }
+
   const sql = yield* SqliteClient;
   const page = localHistoryPage({ user, query: query.value });
   const rows = yield* sql.unsafe(page.sql, page.bindings);
+
   if (!rows.every(understoodCategory)) return yield* new HistoryUnavailable();
+
   const records = yield* Effect.fromOption(
     decodeLocalHistoryPage({ rows, selection, query: query.value }),
     () => new HistoryUnavailable()
   );
+
   return {
     status: 200,
     outcome: "success" as const,

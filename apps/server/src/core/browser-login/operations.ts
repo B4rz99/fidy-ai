@@ -2,8 +2,8 @@ import { DateTime, Option } from "effect";
 import {
   BrowserLoginPublicCode,
   type BrowserLoginPublicCodeSymbols,
-  type BrowserLoginRedemptionDecision,
-  type PendingBrowserLoginProofDecision,
+  BrowserLoginRedemptionDecision,
+  PendingBrowserLoginProofDecision,
   type PendingBrowserLoginProofInput,
   type RedemptionInput,
   browserLoginPairingLifetime,
@@ -12,18 +12,23 @@ import {
 } from "./contract";
 
 const unbiasedBase20ByteLimit = 240;
+
 const millisecondsPerSecond = 1_000;
+
 const pollingSlowdownIncrementSeconds = 5;
 
 export const selectPublicCodeSymbols = (
   input: Readonly<{ readonly bytes: ReadonlyArray<number>; readonly maximum: number }>
 ): string => {
   let accepted = "";
+
   for (const byte of input.bytes) {
     if (byte >= unbiasedBase20ByteLimit) continue;
     accepted += browserLoginPublicCodeAlphabet[byte % browserLoginPublicCodeAlphabet.length];
+
     if (accepted.length === input.maximum) break;
   }
+
   return accepted;
 };
 
@@ -46,25 +51,25 @@ const wrongPendingBrowserLoginProof = (
   wrongVerifierAttempts: number
 ): PendingBrowserLoginProofDecision => {
   const nextAttempts = nextWrongVerifierAttempts(wrongVerifierAttempts);
-  return {
-    _tag: "WrongVerifier",
+
+  return PendingBrowserLoginProofDecision.WrongVerifier({
     wrongVerifierAttempts: nextAttempts,
     lifecycle: nextAttempts === maximumWrongVerifierAttempts ? "invalidated" : "pending_approval",
-  };
+  });
 };
 
 const decideUnexpiredPendingBrowserLoginProof = (
   input: PendingBrowserLoginProofInput
 ): PendingBrowserLoginProofDecision =>
   input.verifierMatches
-    ? { _tag: "Accept" }
+    ? PendingBrowserLoginProofDecision.Accept()
     : wrongPendingBrowserLoginProof(input.wrongVerifierAttempts);
 
 const decideLivePendingBrowserLoginProof = (
   input: PendingBrowserLoginProofInput
 ): PendingBrowserLoginProofDecision =>
   DateTime.isGreaterThanOrEqualTo(input.attemptedAt, input.expiresAt)
-    ? { _tag: "Expired" }
+    ? PendingBrowserLoginProofDecision.Expired()
     : decideUnexpiredPendingBrowserLoginProof(input);
 
 export const decidePendingBrowserLoginProof = (
@@ -72,7 +77,7 @@ export const decidePendingBrowserLoginProof = (
 ): PendingBrowserLoginProofDecision =>
   input.lifecycle === "pending_approval"
     ? decideLivePendingBrowserLoginProof(input)
-    : { _tag: "Invalid" };
+    : PendingBrowserLoginProofDecision.Invalid();
 
 const nextWrongVerifierAttempts = (wrongVerifierAttempts: number): number =>
   Math.min(maximumWrongVerifierAttempts, wrongVerifierAttempts + 1);
@@ -87,18 +92,20 @@ export const decideBrowserLoginRedemption = (
   input: RedemptionInput
 ): BrowserLoginRedemptionDecision => {
   if (input.lifecycle !== "pending_approval" && input.lifecycle !== "ready") {
-    return { _tag: "Invalid" };
+    return BrowserLoginRedemptionDecision.Invalid();
   }
+
   if (DateTime.isGreaterThanOrEqualTo(input.attemptedAt, input.expiresAt)) {
-    return { _tag: "Expired" };
+    return BrowserLoginRedemptionDecision.Expired();
   }
+
   if (!input.verifierMatches) {
     const wrongVerifierAttempts = nextWrongVerifierAttempts(input.wrongVerifierAttempts);
-    return {
-      _tag: "WrongVerifier",
+
+    return BrowserLoginRedemptionDecision.WrongVerifier({
       wrongVerifierAttempts,
       lifecycle: determineLifecycleAfterWrongVerifier(input.lifecycle, wrongVerifierAttempts),
-    };
+    });
   }
 
   if (Option.isSome(input.lastAcceptedPollAt)) {
@@ -106,22 +113,22 @@ export const decideBrowserLoginRedemption = (
       (DateTime.toEpochMillis(input.attemptedAt) -
         DateTime.toEpochMillis(input.lastAcceptedPollAt.value)) /
       millisecondsPerSecond;
+
     if (elapsedSeconds < input.minimumPollIntervalSeconds) {
       const minimumPollIntervalSeconds =
         input.minimumPollIntervalSeconds + pollingSlowdownIncrementSeconds;
-      return {
-        _tag: "SlowDown",
+
+      return BrowserLoginRedemptionDecision.SlowDown({
         minimumPollIntervalSeconds,
         retryAfterSeconds: Math.max(1, Math.ceil(minimumPollIntervalSeconds - elapsedSeconds)),
-      };
+      });
     }
   }
 
   return input.lifecycle === "ready"
-    ? { _tag: "Consume" }
-    : {
-        _tag: "Pending",
+    ? BrowserLoginRedemptionDecision.Consume()
+    : BrowserLoginRedemptionDecision.Pending({
         acceptedAt: input.attemptedAt,
         minimumPollIntervalSeconds: input.minimumPollIntervalSeconds,
-      };
+      });
 };

@@ -15,6 +15,7 @@ const fetch = (request: Request, env: ProofEnvironment): Promise<Response> => {
   if (request.headers.get("X-Xlsx-Proof-Key") !== env.XLSX_PROOF_KEY) {
     return Promise.resolve(new Response(null, { status: 404 }));
   }
+
   return env.PARSER_PROOF.get(env.PARSER_PROOF.idFromName("synthetic-parser")).fetch(request);
 };
 

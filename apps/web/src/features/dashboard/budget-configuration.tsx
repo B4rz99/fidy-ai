@@ -15,6 +15,7 @@ type Configuration = Readonly<{
   disabled: boolean;
   open: (widget: BudgetWidget) => void;
 }>;
+
 const BudgetConfiguration = createContext<Option.Option<Configuration>>(Option.none());
 
 export const ConfigureBudgetButton = ({
@@ -22,7 +23,9 @@ export const ConfigureBudgetButton = ({
   compact,
 }: Readonly<{ widget: BudgetWidget; compact: boolean }>): JSX.Element => {
   const configuration = useContext(BudgetConfiguration);
+
   if (Option.isNone(configuration)) return <></>;
+
   return (
     <Button
       data-dashboard-budget={widget.id}
@@ -59,8 +62,10 @@ export const DashboardBudgetActions = ({
 const findBudgetWidget = (layout: DashboardLayout, id: string): Option.Option<BudgetWidget> => {
   if (layout.kind === "leaf") {
     const { widget } = layout.widget;
+
     return widget.id === id && widget.type === "budget-bar" ? Option.some(widget) : Option.none();
   }
+
   return Option.fromUndefinedOr(
     layout.children.flatMap(({ node }) => Option.toArray(findBudgetWidget(node, id)))[0]
   );
@@ -73,6 +78,7 @@ type ConfigurationProps = Readonly<{
   view: DashboardView;
   onGesture: (gesture: DashboardGesture) => void;
 }>;
+
 export const DashboardBudgetConfiguration = ({
   apiClient,
   children,
@@ -83,6 +89,7 @@ export const DashboardBudgetConfiguration = ({
   const [selectedId, setSelectedId] = useState(() => Option.none<BudgetWidget["id"]>());
   const widget = Option.flatMap(selectedId, (id) => findBudgetWidget(view.layout, id));
   const close = (): void => setSelectedId(Option.none());
+
   return (
     <BudgetConfiguration
       value={Option.some({

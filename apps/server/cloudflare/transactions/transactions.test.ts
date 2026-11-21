@@ -25,26 +25,36 @@ import { ErrorCode, ScopeMissing } from "../../src/shell/public-http/contract";
 import { transactionNow } from "../canonical-work/operations";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
+
 const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
   Effect.tryPromise({
     try: () => Promise.resolve(promise()),
     catch: () => new TestPromiseFailure(),
   }).pipe(Effect.orDie);
+
 const users = ["10000000-0000-4000-8000-000000000051", "10000000-0000-4000-8000-000000000052"];
+
 const sessions = ["10000000-0000-4000-8000-000000000061", "10000000-0000-4000-8000-000000000062"];
+
 const category = "10000000-0000-4000-8000-000000000016";
+
 const bearer = (index: number): string =>
   index < 2 ? String(index + 1).repeat(43) : String(index + 1).padStart(43, "0");
-const request = (index: number, path = "/transactions", body?: object): Request =>
+
+const request = (index: number, path = "/transactions", body?: unknown): Request =>
   new Request(`https://core.internal${path}`, {
     method: body === undefined ? "GET" : "POST",
     headers: {
       "Fidy-Session-Binding": sessions[index] ?? "invalid",
       cookie: `__Host-fidy_session=${bearer(index)}`,
-      ...(body === undefined ? {} : { "content-type": "application/json" }),
+      ...Option.match(Option.fromUndefinedOr(body), {
+        onNone: () => ({}),
+        onSome: () => ({ "content-type": "application/json" }),
+      }),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+
 const TestTransactionPayload = Schema.Struct({
   money: Schema.Struct({ amount: Schema.String, currency: Schema.String }),
   direction: Schema.String,
@@ -53,7 +63,9 @@ const TestTransactionPayload = Schema.Struct({
   counterparty: Schema.optionalKey(Schema.String),
   notes: Schema.optionalKey(Schema.String),
 });
+
 type TestTransactionPayload = typeof TestTransactionPayload.Type;
+
 const input = (changes: Partial<TestTransactionPayload> = {}): TestTransactionPayload => ({
   money: { amount: "9007199254740993.15", currency: "USD" },
   direction: "outflow",
@@ -61,10 +73,12 @@ const input = (changes: Partial<TestTransactionPayload> = {}): TestTransactionPa
   occurredAt: "2025-01-10T12:00:00.000Z",
   ...changes,
 });
+
 const Created = Schema.Struct({
   data: Schema.toCodecJson(Transaction),
   next: Schema.Array(Schema.Unknown),
 });
+
 const BatchResult = Schema.Struct({
   data: Schema.Struct({
     results: Schema.Array(
@@ -80,6 +94,7 @@ const BatchResult = Schema.Struct({
   }),
   next: Schema.Array(Schema.Unknown),
 });
+
 const BatchEnvelope = Schema.Struct({
   data: Schema.Struct({
     results: Schema.Array(
@@ -92,8 +107,11 @@ const BatchEnvelope = Schema.Struct({
   }),
   next: Schema.Array(Schema.Unknown),
 });
+
 const CallerFailure = Schema.Struct({ error: Schema.Struct({ code: ErrorCode }) });
+
 const BatchRejection = AtomicBatchRejected;
+
 const batchCallId = (suffix: number): AtomicBatchCallId =>
   Schema.decodeSync(AtomicBatchCallId)(
     `20000000-0000-4000-8000-${String(suffix).padStart(12, "0")}`
@@ -110,12 +128,15 @@ const TestCorrectionPayload = Schema.Struct({
     occurredAt: Schema.optionalKey(Schema.String),
   }),
 });
+
 type TestCorrectionPayload = typeof TestCorrectionPayload.Type;
+
 const transactionCall = (suffix: number, payload: TestTransactionPayload): AtomicBatchCall => ({
   callId: batchCallId(suffix),
   operation: "transactions.createTransaction",
   input: { payload },
 });
+
 const correctionCall = (
   suffix: number,
   id: string,
@@ -125,31 +146,37 @@ const correctionCall = (
   operation: "transactions.updateTransaction",
   input: { params: { id }, payload },
 });
+
 const linkCall = (suffix: number, first: string, second: string): AtomicBatchCall => ({
   callId: batchCallId(suffix),
   operation: "transactions.linkTransactions",
   input: { payload: { firstTransactionId: first, secondTransactionId: second } },
 });
+
 const unlinkCall = (suffix: number, first: string, second: string): AtomicBatchCall => ({
   callId: batchCallId(suffix),
   operation: "transactions.unlinkTransactions",
   input: { payload: { firstTransactionId: first, secondTransactionId: second } },
 });
+
 const memoryCall = (suffix: number, text: string): AtomicBatchCall => ({
   callId: batchCallId(suffix),
   operation: "memory.remember",
   input: { payload: { text } },
 });
+
 const reviseMemoryCall = (suffix: number, id: string, text: string): AtomicBatchCall => ({
   callId: batchCallId(suffix),
   operation: "memory.revise",
   input: { params: { id }, payload: { text } },
 });
+
 const keywordRuleCall = (suffix: number, keyword: string, categoryId: string): AtomicBatchCall => ({
   callId: batchCallId(suffix),
   operation: "categories.createKeywordRule",
   input: { payload: { keyword, categoryId } },
 });
+
 const updateKeywordRuleCall = (
   suffix: number,
   id: string,
@@ -159,16 +186,19 @@ const updateKeywordRuleCall = (
   operation: "categories.updateKeywordRule",
   input: { params: { id }, payload },
 });
+
 const deleteKeywordRuleCall = (suffix: number, id: string): AtomicBatchCall => ({
   callId: batchCallId(suffix),
   operation: "categories.deleteKeywordRule",
   input: { params: { id } },
 });
+
 const forgetMemoryCall = (suffix: number, id: string): AtomicBatchCall => ({
   callId: batchCallId(suffix),
   operation: "memory.forget",
   input: { params: { id } },
 });
+
 const batchRequest = (index: number, calls: ReadonlyArray<AtomicBatchCall>): Request =>
   new Request("https://api.fidyapp.com/operations/atomic-batch", {
     method: "POST",
@@ -180,6 +210,7 @@ const batchRequest = (index: number, calls: ReadonlyArray<AtomicBatchCall>): Req
     },
     body: JSON.stringify({ calls }),
   });
+
 const bearerRequest = (
   index: number,
   token: string,
@@ -227,6 +258,7 @@ const DecisionStateRow = Schema.Struct({
   state: Schema.String,
   visible: Schema.OptionFromNullOr(Schema.String),
 });
+
 const MemberRow = Schema.Struct({ id: Schema.String });
 
 type ReconciliationState = Readonly<{
@@ -238,7 +270,9 @@ type ReconciliationState = Readonly<{
   }>;
   members: ReadonlyArray<{ transaction: string }>;
 }>;
+
 type NativeJourney = Effect.Success<typeof nativeTransactionJourney>;
+
 const seedNativeTransaction = ({
   db,
   userId,
@@ -249,6 +283,7 @@ const seedNativeTransaction = ({
   ...overrides
 }: RetainedTransactionFacts & { db: NativeJourney }): ReturnType<NativeJourney["exec"]> => {
   const facts = { ...retainedTransactionDefaults, ...overrides };
+
   return db
     .owner(userId)
     .exec(
@@ -266,6 +301,7 @@ const seedNativeTransaction = ({
       facts.userDecisions
     );
 };
+
 const seedNativeSource = ({
   db,
   userId,
@@ -285,18 +321,21 @@ const seedNativeSource = ({
       userId,
       transactionId
     );
+
 const nativeCountRows = (
   db: NativeJourney,
   sql: string,
   ...bindings: [] | [string]
-): Promise<unknown> =>
+): Promise<number> =>
   db
     .owner(bindings[0] ?? users[0] ?? "")
     .exec(sql, ...bindings)
-    .then(([row]) => row?.count);
+    .then(([row]) => Schema.decodeUnknownSync(Schema.Finite)(row?.count));
+
 const AuditedOperations = Schema.Array(
   Schema.Struct({ operation: Schema.String, outcome: Schema.String })
 );
+
 const nativeAuditedOperations = (
   db: NativeJourney,
   user: string
@@ -308,6 +347,7 @@ const nativeAuditedOperations = (
       user
     )
     .then(Schema.decodeUnknownSync(AuditedOperations));
+
 const nativeRefusedChildren = (
   db: NativeJourney,
   user: string
@@ -318,22 +358,26 @@ const nativeRefusedChildren = (
       "SELECT operation,outcome FROM audit_entries WHERE user_id=? AND record_type='session_call' AND outcome='validation_failed' AND operation<>'operations.executeAtomicBatch' ORDER BY rowid",
       user
     );
+
 const nativeReconciliationState = (db: NativeJourney, user: string): Promise<ReconciliationState> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const local = db.owner(user);
+
       const decisions = yield* fromTestPromise(() =>
         local.exec(
           "SELECT first_transaction_id AS first,second_transaction_id AS second,state,visible_transaction_id AS visible FROM transaction_reconciliation_decisions WHERE user_id=? ORDER BY first_transaction_id",
           user
         )
       );
+
       const members = yield* fromTestPromise(() =>
         local.exec(
           "SELECT transaction_id AS id FROM reconciled_transactions WHERE user_id=? ORDER BY transaction_id",
           user
         )
       );
+
       return {
         decisions: yield* Schema.decodeUnknownEffect(Schema.Array(DecisionStateRow))(decisions),
         members: (yield* Schema.decodeUnknownEffect(Schema.Array(MemberRow))(members)).map(
@@ -344,13 +388,16 @@ const nativeReconciliationState = (db: NativeJourney, user: string): Promise<Rec
       };
     })
   );
+
 beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
+
 afterEach(() => vi.useRealTimers());
 
-const groupCorrectionRequest = (index: number, payload: object): Request => {
+const groupCorrectionRequest = (index: number, payload: unknown): Request => {
   const original = request(index, "/transactions/corrections", payload);
   const headers = new Headers(original.headers);
   headers.set("origin", "https://app.fidyapp.com");
+
   return new Request(original, { headers });
 };
 
@@ -369,10 +416,12 @@ it("corrects a selected group of 500 Transactions in one atomic save with retain
           category
         )
       );
+
       const transactions = Array.from({ length: 500 }, (_, index) => ({
         id: `${prefix}${String(index + 1).padStart(12, "0")}`,
         expectedRevision: 0,
       }));
+
       const result = yield* fromTestPromise(() =>
         db.send(
           groupCorrectionRequest(0, {
@@ -381,6 +430,7 @@ it("corrects a selected group of 500 Transactions in one atomic save with retain
           })
         )
       );
+
       expect(result.status).toBe(200);
       expect(yield* fromTestPromise(() => result.json())).toEqual({
         data: { updated: 500 },
@@ -410,6 +460,7 @@ it("corrects a selected group of 500 Transactions in one atomic save with retain
       });
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
+
 it("composes a group correction larger than 4 KiB with another atomic mutation", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -426,6 +477,7 @@ it("composes a group correction larger than 4 KiB with another atomic mutation",
           category
         )
       );
+
       const group: AtomicBatchCall = {
         callId: batchCallId(1),
         operation: "transactions.updateTransactions",
@@ -439,13 +491,17 @@ it("composes a group correction larger than 4 KiB with another atomic mutation",
           },
         },
       };
+
       const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
         group.input
       ).pipe(Effect.orDie);
+
       expect(new TextEncoder().encode(encoded).length).toBeGreaterThan(4096);
+
       const result = yield* fromTestPromise(() =>
         db.send(batchRequest(0, [group, keywordRuleCall(2, "preferencia confirmada", category)]))
       );
+
       expect(result.status).toBe(200);
       expect(
         yield* fromTestPromise(() =>
@@ -515,53 +571,67 @@ it("rejects foreign, missing, duplicate, deleted and stale group members without
           deleted
         )
       );
-      for (const invalid of [
-        { id: foreign, expectedRevision: 0 },
-        { id: missing, expectedRevision: 0 },
-        { id: own, expectedRevision: 0 },
-        { id: deleted, expectedRevision: 0 },
-        { id: stale, expectedRevision: 1 },
-      ]) {
-        const result = yield* fromTestPromise(() =>
-          db.send(
-            groupCorrectionRequest(0, {
-              transactions: [{ id: own, expectedRevision: 0 }, invalid],
-              changes: { notes: "Sin guardar" },
-            })
-          )
-        );
-        expect(result.status).toBe(
-          invalid.id === foreign || invalid.id === missing || invalid.id === deleted ? 404 : 400
-        );
-        expect(
-          yield* fromTestPromise(() =>
-            nativeCountRows(db, "SELECT count(*) AS count FROM transaction_corrections")
-          )
-        ).toBe(0);
-        expect(
-          yield* fromTestPromise(() =>
-            nativeCountRows(db, "SELECT count(*) AS count FROM transactions WHERE revision != 0")
-          )
-        ).toBe(0);
-      }
+
+      yield* Effect.forEach(
+        [
+          { id: foreign, expectedRevision: 0 },
+          { id: missing, expectedRevision: 0 },
+          { id: own, expectedRevision: 0 },
+          { id: deleted, expectedRevision: 0 },
+          { id: stale, expectedRevision: 1 },
+        ],
+        Effect.fnUntraced(function* (invalid) {
+          const result = yield* fromTestPromise(() =>
+            db.send(
+              groupCorrectionRequest(0, {
+                transactions: [{ id: own, expectedRevision: 0 }, invalid],
+                changes: { notes: "Sin guardar" },
+              })
+            )
+          );
+
+          expect(result.status).toBe(
+            invalid.id === foreign || invalid.id === missing || invalid.id === deleted ? 404 : 400
+          );
+          expect(
+            yield* fromTestPromise(() =>
+              nativeCountRows(db, "SELECT count(*) AS count FROM transaction_corrections")
+            )
+          ).toBe(0);
+          expect(
+            yield* fromTestPromise(() =>
+              nativeCountRows(db, "SELECT count(*) AS count FROM transactions WHERE revision != 0")
+            )
+          ).toBe(0);
+        }),
+        { discard: true }
+      );
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
+
 it("rolls back every group correction and its evidence when final Audit is refused", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
       const owner = users[0] ?? "";
       const ids = ["52000000-0000-4000-8000-000000000001", "52000000-0000-4000-8000-000000000002"];
-      for (const id of ids) {
-        yield* fromTestPromise(() =>
-          seedNativeTransaction({ db, notes: "seed", userId: owner, id, categoryId: category })
-        );
-      }
+
+      yield* Effect.forEach(
+        ids,
+        Effect.fnUntraced(function* (id) {
+          yield* fromTestPromise(() =>
+            seedNativeTransaction({ db, notes: "seed", userId: owner, id, categoryId: category })
+          );
+        }),
+        { discard: true }
+      );
+
       yield* fromTestPromise(() =>
         db.exec(`CREATE TRIGGER refuse_group_audit BEFORE INSERT ON audit_entries
     WHEN NEW.operation = 'transactions.updateTransactions' AND NEW.outcome = 'success'
     BEGIN SELECT RAISE(IGNORE); END`)
       );
+
       const result = yield* fromTestPromise(() =>
         db.send(
           groupCorrectionRequest(0, {
@@ -570,6 +640,7 @@ it("rolls back every group correction and its evidence when final Audit is refus
           })
         )
       );
+
       expect(result.status).not.toBe(200);
       expect(
         yield* fromTestPromise(() =>
@@ -596,10 +667,12 @@ it("refuses under-scoped and oversized group corrections before changing any sel
       const token = `fin_${"r".repeat(8)}_${"r".repeat(43)}`;
       const current = yield* Clock.currentTimeMillis;
       yield* seedNativePAT({ db, userId, token, scopes: ["read"], current });
+
       const payload = {
         transactions: [{ id, expectedRevision: 0 }],
         changes: { notes: "Sin guardar" },
       };
+
       const denied = yield* fromTestPromise(() =>
         db.send(
           new Request("https://api.fidyapp.com/transactions/corrections", {
@@ -609,7 +682,9 @@ it("refuses under-scoped and oversized group corrections before changing any sel
           })
         )
       );
+
       expect(denied.status).toBe(403);
+
       const oversized = yield* fromTestPromise(() =>
         db.send(
           groupCorrectionRequest(0, {
@@ -621,6 +696,7 @@ it("refuses under-scoped and oversized group corrections before changing any sel
           })
         )
       );
+
       expect(oversized.status).toBe(400);
       expect(
         yield* fromTestPromise(() =>
@@ -641,15 +717,22 @@ it("rolls back the whole group when one selected row stops accepting its correct
       const db = yield* nativeTransactionJourney;
       const userId = users[0] ?? "";
       const ids = ["52000000-0000-4000-8000-000000000001", "52000000-0000-4000-8000-000000000002"];
-      for (const id of ids) {
-        yield* fromTestPromise(() =>
-          seedNativeTransaction({ db, notes: "seed", userId, id, categoryId: category })
-        );
-      }
+
+      yield* Effect.forEach(
+        ids,
+        Effect.fnUntraced(function* (id) {
+          yield* fromTestPromise(() =>
+            seedNativeTransaction({ db, notes: "seed", userId, id, categoryId: category })
+          );
+        }),
+        { discard: true }
+      );
+
       yield* fromTestPromise(() =>
         db.exec(`CREATE TRIGGER refuse_one_group_row BEFORE UPDATE ON transactions
       WHEN OLD.id = '52000000-0000-4000-8000-000000000002' BEGIN SELECT RAISE(IGNORE); END`)
       );
+
       const response = yield* fromTestPromise(() =>
         db.send(
           groupCorrectionRequest(0, {
@@ -658,6 +741,7 @@ it("rolls back the whole group when one selected row stops accepting its correct
           })
         )
       );
+
       expect(response.status).not.toBe(200);
       expect(
         yield* fromTestPromise(() =>
@@ -672,7 +756,7 @@ it("rolls back the whole group when one selected row stops accepting its correct
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
-const postTransaction = (index: number, body: object): Request =>
+const postTransaction = (index: number, body: unknown): Request =>
   new Request("https://api.fidyapp.com/transactions", {
     method: "POST",
     headers: {
@@ -688,18 +772,22 @@ const Listed = Schema.Struct({
   data: Schema.Array(Schema.toCodecJson(Transaction)),
   next: Schema.Array(Schema.Unknown),
 });
+
 const EffectiveTransaction = Schema.Struct({
   data: Schema.toCodecJson(TransactionPresentation),
   next: Schema.Array(Schema.Unknown),
 });
+
 const RestoredPair = Schema.Struct({
   data: Schema.toCodecJson(RestoredTransactionPair),
   next: Schema.Array(Schema.Unknown),
 });
+
 const ListedMemories = Schema.Struct({
   data: Schema.Array(Schema.Struct({ id: Schema.String, text: Schema.String })),
   next: Schema.Array(Schema.Unknown),
 });
+
 const ListedKeywordRules = Schema.Struct({
   data: Schema.Array(
     Schema.Struct({ id: Schema.String, keyword: Schema.String, categoryId: Schema.String })
@@ -711,7 +799,8 @@ it("searches only the caller's FinancialRecord with bounded literal terms", () =
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
-      const send = (index: number, path: string, body?: object): Promise<Response> =>
+
+      const send = (index: number, path: string, body?: unknown): Promise<Response> =>
         db.send(
           new Request(`https://api.fidyapp.com${path}`, {
             method: body === undefined ? "GET" : "POST",
@@ -719,66 +808,91 @@ it("searches only the caller's FinancialRecord with bounded literal terms", () =
               origin: "https://app.fidyapp.com",
               "Fidy-Session-Binding": sessions[index] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(index)}`,
-              ...(body === undefined ? {} : { "content-type": "application/json" }),
+              ...Option.match(Option.fromUndefinedOr(body), {
+                onNone: () => ({}),
+                onSome: () => ({ "content-type": "application/json" }),
+              }),
             },
             body: body === undefined ? undefined : JSON.stringify(body),
           })
         );
+
       const own = yield* fromTestPromise(() =>
         send(0, "/transactions", input({ counterparty: "Café 100%", notes: "Almuerzo" }))
       );
+
       const foreign = yield* fromTestPromise(() =>
         send(1, "/transactions", input({ counterparty: "Café 100%" }))
       );
+
       expect(own.status).toBe(201);
       expect(foreign.status).toBe(201);
+
       const ownId = (yield* Schema.decodeUnknownEffect(Created)(
         yield* fromTestPromise(() => own.json())
       )).data.id;
+
       const foreignId = (yield* Schema.decodeUnknownEffect(Created)(
         yield* fromTestPromise(() => foreign.json())
       )).data.id;
+
       const found = yield* fromTestPromise(() =>
         send(0, "/transactions/search?q=%20%20Caf%C3%A9%20100%25%20")
       );
+
       expect(found.status).toBe(200);
+
       const result = yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() => found.json())
       );
+
       expect(result.data.map((item) => item.id)).toEqual([ownId]);
       expect(result.next).toEqual([]);
-      for (const [index, term] of [
-        [1, ownId],
-        [0, foreignId],
-        [0, "100_"],
-      ] as const) {
-        const response = yield* fromTestPromise(() =>
-          send(index, `/transactions/search?q=${encodeURIComponent(term)}`)
-        );
-        expect(
-          (yield* Schema.decodeUnknownEffect(Listed)(yield* fromTestPromise(() => response.json())))
-            .data
-        ).toEqual([]);
-      }
+
+      yield* Effect.forEach(
+        [
+          [1, ownId],
+          [0, foreignId],
+          [0, "100_"],
+        ] as const,
+        Effect.fnUntraced(function* ([index, term]) {
+          const response = yield* fromTestPromise(() =>
+            send(index, `/transactions/search?q=${encodeURIComponent(term)}`)
+          );
+
+          expect(
+            (yield* Schema.decodeUnknownEffect(Listed)(
+              yield* fromTestPromise(() => response.json())
+            )).data
+          ).toEqual([]);
+        }),
+        { discard: true }
+      );
+
       const unicodeTerm = encodeURIComponent("é".repeat(80));
       expect(
         (yield* fromTestPromise(() => send(0, `/transactions/search?q=${unicodeTerm}`))).status
       ).toBe(200);
-      for (const path of [
-        `/transactions/search?q=${"a".repeat(3000)}`,
-        "/transactions/search?q=%25",
-        "/transactions/search?q=a",
-        `/transactions/search?q=${"x".repeat(100)}`,
-        "/transactions/search?q=valid&q=valid",
-        "/transactions/search?q=valid&cursor=bad",
-        "/transactions/search?q=%ZZ",
-        "/transactions/search?q=%FF%FF",
-      ]) {
-        yield* Effect.sleep("100 millis");
-        const rejected = yield* fromTestPromise(() => send(0, path));
-        expect(rejected.status).toBe(400);
-        expect(rejected.headers.get("cache-control")).toBe("no-store");
-      }
+
+      yield* Effect.forEach(
+        [
+          `/transactions/search?q=${"a".repeat(3000)}`,
+          "/transactions/search?q=%25",
+          "/transactions/search?q=a",
+          `/transactions/search?q=${"x".repeat(100)}`,
+          "/transactions/search?q=valid&q=valid",
+          "/transactions/search?q=valid&cursor=bad",
+          "/transactions/search?q=%ZZ",
+          "/transactions/search?q=%FF%FF",
+        ],
+        Effect.fnUntraced(function* (path) {
+          yield* Effect.sleep("100 millis");
+          const rejected = yield* fromTestPromise(() => send(0, path));
+          expect(rejected.status).toBe(400);
+          expect(rejected.headers.get("cache-control")).toBe("no-store");
+        }),
+        { discard: true }
+      );
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
@@ -830,7 +944,8 @@ it("links one exact pair into one effective Transaction while retaining both ori
           ])
         )
       );
-      const send = (path: string, body?: object): Promise<Response> =>
+
+      const send = (path: string, body?: unknown): Promise<Response> =>
         db.send(
           new Request(`https://api.fidyapp.com${path}`, {
             method: body === undefined ? "GET" : "POST",
@@ -838,21 +953,28 @@ it("links one exact pair into one effective Transaction while retaining both ori
               origin: "https://app.fidyapp.com",
               "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
-              ...(body === undefined ? {} : { "content-type": "application/json" }),
+              ...Option.match(Option.fromUndefinedOr(body), {
+                onNone: () => ({}),
+                onSome: () => ({ "content-type": "application/json" }),
+              }),
             },
             body: body === undefined ? undefined : JSON.stringify(body),
           })
         );
+
       const linked = yield* fromTestPromise(() =>
         send("/transactions/link", {
           firstTransactionId: suppressed,
           secondTransactionId: visible,
         })
       );
+
       expect(linked.status).toBe(200);
+
       const effectiveTransaction = (yield* Schema.decodeUnknownEffect(EffectiveTransaction)(
         yield* fromTestPromise(() => linked.json())
       ).pipe(Effect.orDie)).data;
+
       expect(effectiveTransaction.id).toBe(visible);
       expect(encodeMoneyAmount(effectiveTransaction.money.amount)).toBe("9007199254740993.01");
       expect(DateTime.formatIso(effectiveTransaction.createdAt)).toBe("2025-01-05T12:00:00.001Z");
@@ -866,23 +988,29 @@ it("links one exact pair into one effective Transaction while retaining both ori
       const listed = (yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() => send("/transactions").then((response) => response.json()))
       ).pipe(Effect.orDie)).data;
+
       expect(listed.map((transaction) => transaction.id)).toEqual([visible]);
+
       const requestedSuppressed = (yield* Schema.decodeUnknownEffect(EffectiveTransaction)(
         yield* fromTestPromise(() =>
           send(`/transactions/${suppressed}`).then((response) => response.json())
         )
       ).pipe(Effect.orDie)).data;
+
       expect(requestedSuppressed.id).toBe(visible);
       expect(requestedSuppressed.presentation).toEqual({
         kind: "suppressed-member",
         requestedId: suppressed,
       });
+
       const requestedVisible = (yield* Schema.decodeUnknownEffect(EffectiveTransaction)(
         yield* fromTestPromise(() =>
           send(`/transactions/${visible}`).then((response) => response.json())
         )
       ).pipe(Effect.orDie)).data;
+
       expect(requestedVisible.presentation).toEqual({ kind: "visible-member" });
+
       const inspection = (yield* Schema.decodeUnknownEffect(
         Schema.Struct({ data: TransactionInspection })
       )(
@@ -890,7 +1018,9 @@ it("links one exact pair into one effective Transaction while retaining both ori
           send(`/transactions/${visible}`).then((response) => response.json())
         )
       ).pipe(Effect.orDie)).data;
+
       expect(inspection.reconciliation.kind).toBe("linked");
+
       const provenance = yield* Schema.decodeUnknownEffect(
         Schema.Struct({
           data: Schema.Struct({
@@ -904,6 +1034,7 @@ it("links one exact pair into one effective Transaction while retaining both ori
           send(`/transactions/${visible}`).then((response) => response.json())
         )
       );
+
       expect(provenance.data.sources).toEqual([
         { transactionId: suppressed, kinds: ["manual"] },
         { transactionId: visible, kinds: ["manual"] },
@@ -921,6 +1052,7 @@ it("links one exact pair into one effective Transaction while retaining both ori
       expect(encodeMoneyAmount(inspection.reconciliation.firstTransaction.money.amount)).toBe(
         "9007199254740993.01"
       );
+
       const foreignInspection = yield* fromTestPromise(() =>
         db.send(
           new Request(`https://api.fidyapp.com/transactions/${visible}`, {
@@ -932,6 +1064,7 @@ it("links one exact pair into one effective Transaction while retaining both ori
           })
         )
       );
+
       expect(foreignInspection.status).toBe(404);
 
       const searched = (yield* Schema.decodeUnknownEffect(Listed)(
@@ -941,6 +1074,7 @@ it("links one exact pair into one effective Transaction while retaining both ori
           )
         )
       ).pipe(Effect.orDie)).data;
+
       expect(searched.map((transaction) => transaction.id)).toEqual([visible]);
 
       const retained = yield* fromTestPromise(() =>
@@ -949,6 +1083,7 @@ it("links one exact pair into one effective Transaction while retaining both ori
           owner
         )
       );
+
       expect(retained).toEqual([
         { id: suppressed, counterparty: "Cafe Dos", notes: "extracto" },
         { id: visible, counterparty: "Cafe Uno", notes: "notificacion" },
@@ -977,6 +1112,7 @@ it("refuses ineligible pairs without writing any relation", () =>
       const db = yield* nativeTransactionJourney;
       const owner = users[0] ?? "";
       const base = "30000000-0000-4000-8000-00000000015";
+
       const pairs = [
         {
           first: `${base}1`,
@@ -990,6 +1126,7 @@ it("refuses ineligible pairs without writing any relation", () =>
           secondFacts: { direction: "inflow" as const, amount: "9007199254740993.01" },
         },
       ];
+
       yield* fromTestPromise(() =>
         Promise.all(
           pairs.flatMap((pair) => [
@@ -1010,7 +1147,8 @@ it("refuses ineligible pairs without writing any relation", () =>
           ])
         )
       );
-      const send = (body: object): Promise<Response> =>
+
+      const send = (body: unknown): Promise<Response> =>
         db.send(
           new Request("https://api.fidyapp.com/transactions/link", {
             method: "POST",
@@ -1023,21 +1161,30 @@ it("refuses ineligible pairs without writing any relation", () =>
             body: JSON.stringify(body),
           })
         );
-      for (const pair of pairs) {
-        const refused = yield* fromTestPromise(() =>
-          send({ firstTransactionId: pair.first, secondTransactionId: pair.second })
-        );
-        expect(refused.status).toBe(400);
-        expect(refused.headers.get("cache-control")).toBe("no-store");
-      }
+
+      yield* Effect.forEach(
+        pairs,
+        Effect.fnUntraced(function* (pair) {
+          const refused = yield* fromTestPromise(() =>
+            send({ firstTransactionId: pair.first, secondTransactionId: pair.second })
+          );
+
+          expect(refused.status).toBe(400);
+          expect(refused.headers.get("cache-control")).toBe("no-store");
+        }),
+        { discard: true }
+      );
+
       const repeated = yield* fromTestPromise(() =>
         send({ firstTransactionId: `${base}1`, secondTransactionId: `${base}1` })
       );
+
       expect(repeated.status).toBe(400);
       expect(yield* fromTestPromise(() => nativeReconciliationState(db, owner))).toEqual({
         decisions: [],
         members: [],
       });
+
       const listed = (yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() =>
           db
@@ -1053,6 +1200,7 @@ it("refuses ineligible pairs without writing any relation", () =>
             .then((response) => response.json())
         )
       ).pipe(Effect.orDie)).data;
+
       expect(listed.map((transaction) => transaction.id).sort()).toEqual(
         pairs.flatMap((pair) => [pair.first, pair.second]).sort()
       );
@@ -1102,7 +1250,8 @@ it("unlinks the exact pair, restores both originals, and remembers keep-separate
           })
         )
       );
-      const send = (path: string, body: object): Promise<Response> =>
+
+      const send = (path: string, body: unknown): Promise<Response> =>
         db.send(
           new Request(`https://api.fidyapp.com${path}`, {
             method: "POST",
@@ -1115,22 +1264,28 @@ it("unlinks the exact pair, restores both originals, and remembers keep-separate
             body: JSON.stringify(body),
           })
         );
+
       const link = (): Promise<Response> =>
         send("/transactions/link", {
           firstTransactionId: visible,
           secondTransactionId: suppressed,
         });
+
       expect((yield* fromTestPromise(link)).status).toBe(200);
+
       const unlinked = yield* fromTestPromise(() =>
         send("/transactions/unlink", {
           firstTransactionId: suppressed,
           secondTransactionId: visible,
         })
       );
+
       expect(unlinked.status).toBe(200);
+
       const restored = (yield* Schema.decodeUnknownEffect(RestoredPair)(
         yield* fromTestPromise(() => unlinked.json())
       ).pipe(Effect.orDie)).data;
+
       expect(restored.firstTransaction.id).toBe(visible);
       expect(restored.secondTransaction.id).toBe(suppressed);
       expect(restored.firstTransaction.revision).toBe(0);
@@ -1169,6 +1324,7 @@ it("unlinks the exact pair, restores both originals, and remembers keep-separate
           )
         )
       ).toBe(1);
+
       const listed = (yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() =>
           db
@@ -1184,6 +1340,7 @@ it("unlinks the exact pair, restores both originals, and remembers keep-separate
             .then((response) => response.json())
         )
       ).pipe(Effect.orDie)).data;
+
       expect(listed.map((transaction) => transaction.id)).toEqual([suppressed, visible]);
       expect(
         (yield* fromTestPromise(() =>
@@ -1247,6 +1404,7 @@ it.each([
           )
         )
       );
+
       expect(response.status).toBe(503);
       expect(yield* fromTestPromise(() => response.json())).toMatchObject({
         error: { code: "unavailable" },
@@ -1302,7 +1460,8 @@ it("refuses duplicate, chained, and cross-User links without partial relation st
           seedNativeTransaction({ db, userId: neighbor, id: foreign, categoryId: category }),
         ])
       );
-      const send = (index: number, path: string, body?: object): Promise<Response> =>
+
+      const send = (index: number, path: string, body?: unknown): Promise<Response> =>
         db.send(
           new Request(`https://api.fidyapp.com${path}`, {
             method: body === undefined ? "GET" : "POST",
@@ -1310,11 +1469,15 @@ it("refuses duplicate, chained, and cross-User links without partial relation st
               origin: "https://app.fidyapp.com",
               "Fidy-Session-Binding": sessions[index] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(index)}`,
-              ...(body === undefined ? {} : { "content-type": "application/json" }),
+              ...Option.match(Option.fromUndefinedOr(body), {
+                onNone: () => ({}),
+                onSome: () => ({ "content-type": "application/json" }),
+              }),
             },
             body: body === undefined ? undefined : JSON.stringify(body),
           })
         );
+
       expect(
         (yield* fromTestPromise(() =>
           send(0, "/transactions/link", {
@@ -1323,15 +1486,21 @@ it("refuses duplicate, chained, and cross-User links without partial relation st
           })
         )).status
       ).toBe(200);
-      for (const pair of [
-        { firstTransactionId: firstId, secondTransactionId: secondId },
-        { firstTransactionId: firstId, secondTransactionId: thirdId },
-        { firstTransactionId: secondId, secondTransactionId: thirdId },
-      ]) {
-        expect((yield* fromTestPromise(() => send(0, "/transactions/link", pair))).status).toBe(
-          400
-        );
-      }
+
+      yield* Effect.forEach(
+        [
+          { firstTransactionId: firstId, secondTransactionId: secondId },
+          { firstTransactionId: firstId, secondTransactionId: thirdId },
+          { firstTransactionId: secondId, secondTransactionId: thirdId },
+        ],
+        Effect.fnUntraced(function* (pair) {
+          expect((yield* fromTestPromise(() => send(0, "/transactions/link", pair))).status).toBe(
+            400
+          );
+        }),
+        { discard: true }
+      );
+
       expect(
         (yield* fromTestPromise(() =>
           send(0, "/transactions/link", {
@@ -1346,23 +1515,29 @@ it("refuses duplicate, chained, and cross-User links without partial relation st
         ],
         members: [{ transaction: firstId }, { transaction: secondId }],
       });
+
       const neighborList = (yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() => send(1, "/transactions").then((response) => response.json()))
       ).pipe(Effect.orDie)).data;
+
       expect(neighborList.map((transaction) => transaction.id)).toEqual([foreign]);
       expect((yield* fromTestPromise(() => send(1, `/transactions/${firstId}`))).status).toBe(404);
       expect((yield* fromTestPromise(() => send(1, `/transactions/${secondId}`))).status).toBe(404);
+
       const neighborSearch = (yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() =>
           send(1, "/transactions/search?q=Cafe").then((response) => response.json())
         )
       ).pipe(Effect.orDie)).data;
+
       expect(neighborSearch).toEqual([]);
+
       const ownerSearch = (yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() =>
           send(0, "/transactions/search?q=Cafe").then((response) => response.json())
         )
       ).pipe(Effect.orDie)).data;
+
       expect(ownerSearch.map((transaction) => transaction.id).sort()).toEqual(
         [firstId, thirdId].sort()
       );
@@ -1384,6 +1559,7 @@ it("serializes concurrent links through the User coordinator so only one pair co
           seedNativeTransaction({ db, userId: owner, id: thirdId, categoryId: category }),
         ])
       );
+
       const link = (firstId: string, secondId: string): Promise<Response> =>
         db.send(
           new Request("https://api.fidyapp.com/transactions/link", {
@@ -1397,9 +1573,11 @@ it("serializes concurrent links through the User coordinator so only one pair co
             body: JSON.stringify({ firstTransactionId: firstId, secondTransactionId: secondId }),
           })
         );
+
       const results = yield* fromTestPromise(() =>
         Promise.all([link(firstId, secondId), link(secondId, thirdId), link(firstId, secondId)])
       );
+
       expect(results.map(({ status }) => status).sort((left, right) => left - right)).toEqual([
         200, 400, 400,
       ]);
@@ -1447,7 +1625,8 @@ it("keeps the effective Transaction consistent after corrections to either membe
           })
         )
       );
-      const send = (path: string, method: string, body: object): Promise<Response> =>
+
+      const send = (path: string, method: string, body: unknown): Promise<Response> =>
         db.send(
           new Request(`https://api.fidyapp.com${path}`, {
             method,
@@ -1460,6 +1639,7 @@ it("keeps the effective Transaction consistent after corrections to either membe
             body: JSON.stringify(body),
           })
         );
+
       expect(
         (yield* fromTestPromise(() =>
           send("/transactions/link", "POST", {
@@ -1468,6 +1648,7 @@ it("keeps the effective Transaction consistent after corrections to either membe
           })
         )).status
       ).toBe(200);
+
       const read = (id: string): Promise<Response> =>
         db.send(
           new Request(`https://api.fidyapp.com/transactions/${id}`, {
@@ -1478,9 +1659,11 @@ it("keeps the effective Transaction consistent after corrections to either membe
             },
           })
         );
+
       const beforeSuppressed = (yield* Schema.decodeUnknownEffect(EffectiveTransaction)(
         yield* fromTestPromise(() => read(suppressed).then((response) => response.json()))
       ).pipe(Effect.orDie)).data;
+
       expect(beforeSuppressed.revision).toBe(0);
       expect(
         (yield* fromTestPromise(() =>
@@ -1490,17 +1673,21 @@ it("keeps the effective Transaction consistent after corrections to either membe
           })
         )).status
       ).toBe(200);
+
       const corrected = (yield* Schema.decodeUnknownEffect(EffectiveTransaction)(
         yield* fromTestPromise(() => read(suppressed).then((response) => response.json()))
       ).pipe(Effect.orDie)).data;
+
       expect(corrected.id).toBe(visible);
       expect(corrected.revision).toBe(1);
       expect(corrected.categoryId).toBe(correctedCategory);
       expect(Option.getOrNull(corrected.counterparty)).toBe("Corregido");
       expect(DateTime.formatIso(corrected.occurredAt)).toBe("2025-01-06T12:00:00.000Z");
+
       const visiblePresentation = (yield* Schema.decodeUnknownEffect(EffectiveTransaction)(
         yield* fromTestPromise(() => read(visible).then((response) => response.json()))
       ).pipe(Effect.orDie)).data;
+
       expect(visiblePresentation.revision).toBe(0);
       expect(
         (yield* fromTestPromise(() =>
@@ -1518,6 +1705,7 @@ it("keeps the effective Transaction consistent after corrections to either membe
           })
         )).status
       ).toBe(200);
+
       const listed = (yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() =>
           db
@@ -1533,16 +1721,19 @@ it("keeps the effective Transaction consistent after corrections to either membe
             .then((response) => response.json())
         )
       ).pipe(Effect.orDie)).data;
+
       expect(listed).toHaveLength(1);
       expect(listed[0]?.id).toBe(visible);
       expect(listed[0]?.categoryId).toBe(correctedCategory);
       expect(Option.getOrNull(listed[0]?.counterparty ?? Option.none())).toBe("Corregido");
       expect(Option.getOrNull(listed[0]?.notes ?? Option.none())).toBe("Nota visible");
+
       const RetainedFacts = Schema.Struct({
         id: Schema.String,
         counterparty: Schema.OptionFromNullOr(Schema.String),
         notes: Schema.OptionFromNullOr(Schema.String),
       });
+
       const retained = yield* fromTestPromise(() =>
         db
           .exec(
@@ -1551,6 +1742,7 @@ it("keeps the effective Transaction consistent after corrections to either membe
           )
           .then((rows) => Schema.decodeUnknownSync(Schema.Array(RetainedFacts))(rows))
       );
+
       expect(retained).toEqual([
         { id: visible, counterparty: Option.some("Original"), notes: Option.some("Nota visible") },
         { id: suppressed, counterparty: Option.some("Corregido"), notes: Option.none() },
@@ -1628,6 +1820,7 @@ it.each(["same-instant", "one-millisecond-newer"] as const)(
             )
           )).status
         ).toBe(200);
+
         const listed = (yield* Schema.decodeUnknownEffect(Listed)(
           yield* fromTestPromise(() =>
             db
@@ -1643,7 +1836,9 @@ it.each(["same-instant", "one-millisecond-newer"] as const)(
               .then((response) => response.json())
           )
         ).pipe(Effect.orDie)).data;
+
         const effective = listed[0];
+
         if (effective === undefined) throw new Error("Missing effective Transaction");
         expect(listed).toHaveLength(1);
         expect(effective.categoryId).toBe(suppressedCategory);
@@ -1657,22 +1852,30 @@ it.each(["same-instant", "one-millisecond-newer"] as const)(
         yield* fromTestPromise(() => db.exec("INSERT INTO fixture_clock VALUES (?)", instant));
         const firstDate = "2025-01-07T12:00:00.000Z";
         const secondDate = "2025-01-08T12:00:00.000Z";
-        for (const [id, occurredAt] of [
-          [visible, firstDate],
-          [suppressed, secondDate],
-        ] as const) {
-          const offset = ordering === "one-millisecond-newer" && id === visible ? 1 : 0;
-          yield* fromTestPromise(() =>
-            db.exec("UPDATE fixture_clock SET instant=?", instant + offset)
-          );
-          const correctedMember = yield* nativeBrowserWrite(db)(alice, {
-            method: "PUT",
-            path: "/transactions/" + id,
-            body: { expectedRevision: 0, changes: { occurredAt } },
-          });
-          expect(correctedMember.status).toBe(200);
-          yield* fromTestPromise(() => correctedMember.arrayBuffer());
-        }
+
+        yield* Effect.forEach(
+          [
+            [visible, firstDate],
+            [suppressed, secondDate],
+          ] as const,
+          Effect.fnUntraced(function* ([id, occurredAt]) {
+            const offset = ordering === "one-millisecond-newer" && id === visible ? 1 : 0;
+            yield* fromTestPromise(() =>
+              db.exec("UPDATE fixture_clock SET instant=?", instant + offset)
+            );
+
+            const correctedMember = yield* nativeBrowserWrite(db)(alice, {
+              method: "PUT",
+              path: "/transactions/" + id,
+              body: { expectedRevision: 0, changes: { occurredAt } },
+            });
+
+            expect(correctedMember.status).toBe(200);
+            yield* fromTestPromise(() => correctedMember.arrayBuffer());
+          }),
+          { discard: true }
+        );
+
         yield* fromTestPromise(() => db.exec("UPDATE fixture_clock SET instant=?", instant + 1000));
         const expectedDate = ordering === "same-instant" ? secondDate : firstDate;
         const expectedSource = [{ occurred_at_ms: Date.parse(expectedDate) }];
@@ -1686,6 +1889,7 @@ it.each(["same-instant", "one-millisecond-newer"] as const)(
             db.exec("SELECT occurred_at_ms FROM transaction_projection_leaf WHERE id=?", visible)
           )
         ).toEqual(expectedSource);
+
         const corrected = (yield* Schema.decodeUnknownEffect(Listed)(
           yield* fromTestPromise(() =>
             db
@@ -1701,7 +1905,9 @@ it.each(["same-instant", "one-millisecond-newer"] as const)(
               .then((response) => response.json())
           )
         ).pipe(Effect.orDie)).data;
+
         const correctedTransaction = corrected[0];
+
         if (correctedTransaction === undefined) throw new Error("Missing effective Transaction");
         expect(DateTime.formatIso(correctedTransaction.occurredAt)).toBe(expectedDate);
         expect(correctedTransaction.categoryId).toBe(suppressedCategory);
@@ -1743,7 +1949,8 @@ it("links and unlinks under the caller's live credential scope and records only 
       const writeToken = `fin_${"w".repeat(8)}_${"d".repeat(43)}`;
       yield* seedNativePAT({ db, userId: owner, token: readToken, scopes: ["read"], current });
       yield* seedNativePAT({ db, userId: owner, token: writeToken, scopes: ["write"], current });
-      const bearerRequest = (token: string, path: string, body?: object): Request =>
+
+      const bearerRequest = (token: string, path: string, body?: unknown): Request =>
         new Request(`https://api.fidyapp.com${path}`, {
           method: body === undefined ? "GET" : "POST",
           headers: {
@@ -1754,6 +1961,7 @@ it("links and unlinks under the caller's live credential scope and records only 
           },
           body: body === undefined ? undefined : JSON.stringify(body),
         });
+
       const pair = { firstTransactionId: firstId, secondTransactionId: secondId };
       expect(
         (yield* fromTestPromise(() =>
@@ -1764,16 +1972,21 @@ it("links and unlinks under the caller's live credential scope and records only 
         decisions: [],
         members: [],
       });
+
       const linked = yield* fromTestPromise(() =>
         db.send(bearerRequest(writeToken, "/transactions/link", pair))
       );
+
       expect(linked.status).toBe(200);
+
       const listed = (yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() =>
           db.send(bearerRequest(readToken, "/transactions")).then((response) => response.json())
         )
       ).pipe(Effect.orDie)).data;
+
       expect(listed.map((transaction) => transaction.id)).toEqual([firstId]);
+
       const searched = (yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() =>
           db
@@ -1783,12 +1996,14 @@ it("links and unlinks under the caller's live credential scope and records only 
             .then((response) => response.json())
         )
       ).pipe(Effect.orDie)).data;
+
       expect(searched.map((transaction) => transaction.id)).toEqual([firstId]);
       expect(
         (yield* fromTestPromise(() =>
           db.send(bearerRequest(writeToken, "/transactions/unlink", pair))
         )).status
       ).toBe(200);
+
       const audits = yield* fromTestPromise(() =>
         db.exec(
           `SELECT operation,outcome FROM audit_entries WHERE record_type='credential_call' AND user_id=?
@@ -1797,6 +2012,7 @@ it("links and unlinks under the caller's live credential scope and records only 
           owner
         )
       );
+
       expect(audits).toEqual([
         { operation: "transactions.linkTransactions", outcome: "rejected" },
         { operation: "transactions.linkTransactions", outcome: "accepted" },
@@ -1915,11 +2131,14 @@ it("corrects selected facts once, retains decisions and evidence, and rejects st
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
-      const methodFor = (path: string, body?: object): string => {
+
+      const methodFor = (path: string, body?: unknown): string => {
         if (body === undefined) return "GET";
+
         return path === "/transactions" ? "POST" : "PUT";
       };
-      const send = (index: number, path: string, body?: object): Promise<Response> =>
+
+      const send = (index: number, path: string, body?: unknown): Promise<Response> =>
         db.send(
           new Request(`https://api.fidyapp.com${path}`, {
             method: methodFor(path, body),
@@ -1927,23 +2146,32 @@ it("corrects selected facts once, retains decisions and evidence, and rejects st
               origin: "https://app.fidyapp.com",
               "Fidy-Session-Binding": sessions[index] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(index)}`,
-              ...(body === undefined ? {} : { "content-type": "application/json" }),
+              ...Option.match(Option.fromUndefinedOr(body), {
+                onNone: () => ({}),
+                onSome: () => ({ "content-type": "application/json" }),
+              }),
             },
             body: body === undefined ? undefined : JSON.stringify(body),
           })
         );
+
       const createdResponse = yield* fromTestPromise(() =>
         send(0, "/transactions", input({ counterparty: "Acme" }))
       );
+
       expect(createdResponse.status).toBe(201);
+
       const created = (yield* Schema.decodeUnknownEffect(Created)(
         yield* fromTestPromise(() => createdResponse.json())
       ).pipe(Effect.orDie)).data;
+
       const path = `/transactions/${created.id}`;
+
       const correction = {
         expectedRevision: 0,
         changes: { categoryId: "10000000-0000-4000-8000-000000000001", counterparty: null },
       };
+
       expect((yield* fromTestPromise(() => send(1, path, correction))).status).toBe(404);
       expect(
         (yield* fromTestPromise(() =>
@@ -1980,9 +2208,11 @@ it("corrects selected facts once, retains decisions and evidence, and rejects st
       ).toBe(1);
       const changed = yield* fromTestPromise(() => send(0, path, correction));
       expect(changed.status).toBe(200);
+
       const result = (yield* Schema.decodeUnknownEffect(Created)(
         yield* fromTestPromise(() => changed.json())
       ).pipe(Effect.orDie)).data;
+
       expect(result.id).toBe(created.id);
       expect(result.revision).toBe(1);
       expect(result.money).toEqual(created.money);
@@ -1991,11 +2221,13 @@ it("corrects selected facts once, retains decisions and evidence, and rejects st
       expect((yield* fromTestPromise(() => send(0, path, correction))).status).toBe(400);
       const fetched = yield* fromTestPromise(() => send(0, path));
       expect(fetched.status).toBe(200);
+
       const stored = yield* fromTestPromise(() =>
         db
           .exec("SELECT revision, user_decisions FROM transactions WHERE id = ?", created.id)
           .then((rows) => rows[0])
       );
+
       expect(stored?.revision).toBe(1);
       expect(
         yield* Schema.decodeUnknownEffect(
@@ -2008,6 +2240,7 @@ it("corrects selected facts once, retains decisions and evidence, and rejects st
         categoryId: true,
         counterparty: true,
       });
+
       const evidence = yield* fromTestPromise(() =>
         db
           .exec(
@@ -2016,6 +2249,7 @@ it("corrects selected facts once, retains decisions and evidence, and rejects st
           )
           .then((rows) => rows[0])
       );
+
       expect(evidence?.before_facts).toContain("Acme");
       expect(evidence?.after_facts).not.toContain("Acme");
       expect(
@@ -2066,7 +2300,8 @@ it("serializes competing corrections and rolls back evidence when the correction
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
-      const send = (path: string, method: string, body?: object): Promise<Response> =>
+
+      const send = (path: string, method: string, body?: unknown): Promise<Response> =>
         db.send(
           new Request(`https://api.fidyapp.com${path}`, {
             method,
@@ -2079,11 +2314,13 @@ it("serializes competing corrections and rolls back evidence when the correction
             body: body === undefined ? undefined : JSON.stringify(body),
           })
         );
+
       const created = (yield* Schema.decodeUnknownEffect(Created)(
         yield* fromTestPromise(() =>
           send("/transactions", "POST", input()).then((response) => response.json())
         )
       ).pipe(Effect.orDie)).data;
+
       const path = `/transactions/${created.id}`;
       const first = { expectedRevision: 0, changes: { notes: "first" } };
       yield* fromTestPromise(() =>
@@ -2092,11 +2329,13 @@ it("serializes competing corrections and rolls back evidence when the correction
         )
       );
       expect((yield* fromTestPromise(() => send(path, "PUT", first))).status).not.toBe(200);
+
       const empty = yield* fromTestPromise(() =>
         db
           .exec("SELECT revision FROM transactions WHERE id = ?", created.id)
           .then((rows) => rows[0])
       );
+
       expect(empty?.revision).toBe(0);
       expect(
         (yield* fromTestPromise(() =>
@@ -2104,12 +2343,14 @@ it("serializes competing corrections and rolls back evidence when the correction
         ))?.count
       ).toBe(0);
       yield* fromTestPromise(() => db.exec("DROP TRIGGER refuse_correction_audit"));
+
       const results = yield* fromTestPromise(() =>
         Promise.all([
           send(path, "PUT", first),
           send(path, "PUT", { expectedRevision: 0, changes: { notes: "second" } }),
         ])
       );
+
       expect(results.map(({ status }) => status).sort((left, right) => left - right)).toEqual([
         200, 400,
       ]);
@@ -2125,6 +2366,7 @@ it("rolls back public Transaction capture when its audit silently refuses a writ
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
+
       const post = (): Promise<Response> =>
         db.send(
           new Request("https://api.fidyapp.com/transactions", {
@@ -2138,6 +2380,7 @@ it("rolls back public Transaction capture when its audit silently refuses a writ
             body: JSON.stringify(input()),
           })
         );
+
       yield* Effect.tryPromise({
         try: () =>
           db.exec(
@@ -2148,13 +2391,19 @@ it("rolls back public Transaction capture when its audit silently refuses a writ
       expect((yield* Effect.tryPromise({ try: post, catch: () => undefined })).status).not.toBe(
         201
       );
-      for (const table of ["transactions", "source_attestations"]) {
-        expect(
-          yield* fromTestPromise(() =>
-            db.exec(`SELECT count(*) AS total FROM ${table} WHERE user_id=?`, users[0] ?? "")
-          )
-        ).toEqual([{ total: 0 }]);
-      }
+
+      yield* Effect.forEach(
+        ["transactions", "source_attestations"],
+        Effect.fnUntraced(function* (table) {
+          expect(
+            yield* fromTestPromise(() =>
+              db.exec(`SELECT count(*) AS total FROM ${table} WHERE user_id=?`, users[0] ?? "")
+            )
+          ).toEqual([{ total: 0 }]);
+        }),
+        { discard: true }
+      );
+
       yield* Effect.tryPromise({
         try: () => db.exec("DROP TRIGGER refuse_capture_audit"),
         catch: () => undefined,
@@ -2175,28 +2424,36 @@ it("coordinates concurrent public mutations through a real per-User Durable Obje
       expect(results.map(({ status }) => status)).toEqual([201, 201, 201]);
       const transactions = results.map((response) => response.json());
       const [first, second, other] = yield* fromTestPromise(() => Promise.all(transactions));
+
       const created = [first, second, other].map(
         (value) => Schema.decodeUnknownSync(Created)(value).data
       );
+
       expect(new Set(created.map(({ id }) => id)).size).toBe(3);
       const browse = db.browser;
       const ownerListResponse = yield* fromTestPromise(() => browse(0));
+
       const owner = (yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() => ownerListResponse.json())
       ).pipe(Effect.orDie)).data;
+
       const neighborListResponse = yield* fromTestPromise(() => browse(1));
+
       const neighbor = (yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() => neighborListResponse.json())
       ).pipe(Effect.orDie)).data;
+
       expect(new Set(owner.map(({ id }) => id))).toEqual(
         new Set(created.slice(0, 2).map(({ id }) => id))
       );
       expect(neighbor).toEqual([created[2]]);
       const protectedTransaction = created[0];
+
       if (protectedTransaction === undefined) throw new Error("Missing owner capture");
       expect(
         (yield* fromTestPromise(() => browse(1, `/transactions/${protectedTransaction.id}`))).status
       ).toBe(404);
+
       const attemptedDeletion = db.send(
         new Request(`https://api.fidyapp.com/transactions/${protectedTransaction.id}`, {
           method: "DELETE",
@@ -2209,15 +2466,19 @@ it("coordinates concurrent public mutations through a real per-User Durable Obje
           },
         })
       );
+
       const [createdAgain, deleted] = yield* fromTestPromise(() =>
         Promise.all([post(0), attemptedDeletion])
       );
+
       expect(createdAgain.status).toBe(201);
       expect(deleted.status).not.toBe(200);
       const preservedListResponse = yield* fromTestPromise(() => browse(0));
+
       const preserved = (yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() => preservedListResponse.json())
       ).pipe(Effect.orDie)).data;
+
       expect(preserved).toContainEqual(protectedTransaction);
       expect(
         yield* fromTestPromise(() =>
@@ -2234,7 +2495,8 @@ it("rejects forged browser origins and malformed Money before any public mutatio
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
-      const post = (origin: string, data: object): Request =>
+
+      const post = (origin: string, data: unknown): Request =>
         new Request("https://api.fidyapp.com/transactions", {
           method: "POST",
           headers: {
@@ -2245,6 +2507,7 @@ it("rejects forged browser origins and malformed Money before any public mutatio
           },
           body: JSON.stringify(data),
         });
+
       expect(
         (yield* fromTestPromise(() => db.send(post("https://attacker.test", input())))).status
       ).toBe(403);
@@ -2262,13 +2525,17 @@ it("rejects forged browser origins and malformed Money before any public mutatio
           )
         )
       ).toEqual([{ movements: 0, sources: 0, audits: 1 }]);
+
       const created = yield* fromTestPromise(() =>
         db.send(post("https://app.fidyapp.com", input()))
       );
+
       expect(created.status).toBe(201);
+
       const transaction = (yield* Schema.decodeUnknownEffect(Created)(
         yield* fromTestPromise(() => created.json())
       ).pipe(Effect.orDie)).data;
+
       const browse = (index: number, path = "/transactions"): Promise<Response> =>
         db.send(
           new Request(`https://api.fidyapp.com${path}`, {
@@ -2279,6 +2546,7 @@ it("rejects forged browser origins and malformed Money before any public mutatio
             },
           })
         );
+
       const ownerBrowseResponse = yield* fromTestPromise(() => browse(0));
       expect(
         (yield* Schema.decodeUnknownEffect(Listed)(
@@ -2294,6 +2562,7 @@ it("rejects forged browser origins and malformed Money before any public mutatio
       expect(
         (yield* fromTestPromise(() => browse(1, `/transactions/${transaction.id}`))).status
       ).toBe(404);
+
       const tokenOnly = yield* fromTestPromise(() =>
         db.send(
           new Request(`https://api.fidyapp.com/transactions/${transaction.id}`, {
@@ -2305,7 +2574,9 @@ it("rejects forged browser origins and malformed Money before any public mutatio
           })
         )
       );
+
       expect(tokenOnly.status).toBe(401);
+
       const foreignWithBearer = yield* fromTestPromise(() =>
         db.send(
           new Request(`https://api.fidyapp.com/transactions/${transaction.id}`, {
@@ -2319,6 +2590,7 @@ it("rejects forged browser origins and malformed Money before any public mutatio
           })
         )
       );
+
       expect(foreignWithBearer.status).toBe(401);
       expect(
         (yield* fromTestPromise(() =>
@@ -2327,6 +2599,7 @@ it("rejects forged browser origins and malformed Money before any public mutatio
       ).toBe(404);
       expect((yield* fromTestPromise(() => browse(1, "/transactions/not-an-id"))).status).toBe(404);
       expect((yield* fromTestPromise(() => browse(0, "/transactions?unknown=1"))).status).toBe(400);
+
       const outcomes = yield* fromTestPromise(() =>
         db
           .owner(users[1] ?? "")
@@ -2335,11 +2608,13 @@ it("rejects forged browser origins and malformed Money before any public mutatio
             users[1]
           )
       );
+
       expect(outcomes.map(({ outcome }) => outcome)).toEqual([
         "not_found",
         "not_found",
         "not_found",
       ]);
+
       const invalidAudit = yield* fromTestPromise(() =>
         db
           .exec(
@@ -2348,6 +2623,7 @@ it("rejects forged browser origins and malformed Money before any public mutatio
           )
           .then((rows) => rows[0])
       );
+
       expect(invalidAudit?.outcome).toBe("validation_failed");
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
@@ -2356,22 +2632,28 @@ it("bounds requested history pages and keeps variable-size continuations User-ow
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
-      for (const [owner, start, end] of [
-        [users[0] ?? "", 1, 7],
-        [users[1] ?? "", 8, 8],
-      ] as const) {
-        yield* fromTestPromise(() =>
-          db.owner(owner).exec(
-            `WITH RECURSIVE seq(n) AS (SELECT ? UNION ALL SELECT n+1 FROM seq WHERE n<?)
+
+      yield* Effect.forEach(
+        [
+          [users[0] ?? "", 1, 7],
+          [users[1] ?? "", 8, 8],
+        ] as const,
+        Effect.fnUntraced(function* ([owner, start, end]) {
+          yield* fromTestPromise(() =>
+            db.owner(owner).exec(
+              `WITH RECURSIVE seq(n) AS (SELECT ? UNION ALL SELECT n+1 FROM seq WHERE n<?)
           INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms)
           SELECT printf('00000000-0000-4000-8100-%012d',n),?,'1','COP','outflow',?,1736424000000,1736424000000 FROM seq`,
-            start,
-            end,
-            owner,
-            category
-          )
-        );
-      }
+              start,
+              end,
+              owner,
+              category
+            )
+          );
+        }),
+        { discard: true }
+      );
+
       const read = (query: string): Promise<Response> =>
         db.send(
           new Request(`https://api.fidyapp.com/transactions?${query}`, {
@@ -2382,6 +2664,7 @@ it("bounds requested history pages and keeps variable-size continuations User-ow
             },
           })
         );
+
       const Page = Schema.Struct({
         data: Schema.Array(Schema.Struct({ id: Transaction.fields.id })),
         next: Schema.Array(
@@ -2390,26 +2673,36 @@ it("bounds requested history pages and keeps variable-size continuations User-ow
           })
         ),
       });
+
       const first = yield* fromTestPromise(() => read("limit=2"));
       expect(first.status).toBe(200);
+
       const page = yield* Schema.decodeUnknownEffect(Page)(
         yield* fromTestPromise(() => first.json())
       ).pipe(Effect.orDie);
+
       expect(page.data).toHaveLength(2);
       const cursor = Option.getOrThrow(Option.fromUndefinedOr(page.next[0])).args.query.cursor;
       const second = yield* fromTestPromise(() => read(`cursor=${encodeURIComponent(cursor)}`));
       expect(second.status).toBe(200);
+
       const remainder = yield* Schema.decodeUnknownEffect(Page)(
         yield* fromTestPromise(() => second.json())
       ).pipe(Effect.orDie);
+
       expect(remainder.data).toHaveLength(5);
       expect(remainder.next).toEqual([]);
       const ids = [...page.data, ...remainder.data].map((row) => row.id);
       expect(new Set(ids).size).toBe(7);
       expect(ids).not.toContain("00000000-0000-4000-8100-000000000008");
-      for (const limit of ["0", "101", "1.5", "invalid"]) {
-        expect((yield* fromTestPromise(() => read(`limit=${limit}`))).status).toBe(400);
-      }
+
+      yield* Effect.forEach(
+        ["0", "101", "1.5", "invalid"],
+        Effect.fnUntraced(function* (limit) {
+          expect((yield* fromTestPromise(() => read(`limit=${limit}`))).status).toBe(400);
+        }),
+        { discard: true }
+      );
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
@@ -2442,6 +2735,7 @@ it("continues the canonical history beyond its first bounded page without losing
           previous
         )
       );
+
       const first = yield* fromTestPromise(() =>
         db.send(
           new Request(`https://api.fidyapp.com/transactions?direction=outflow&${period}`, {
@@ -2453,7 +2747,9 @@ it("continues the canonical history beyond its first bounded page without losing
           })
         )
       );
+
       expect(first.status).toBe(200);
+
       const Page = Schema.Struct({
         data: Schema.Array(Schema.toCodecJson(Transaction)),
         next: Schema.Array(
@@ -2471,9 +2767,11 @@ it("continues the canonical history beyond its first bounded page without losing
           })
         ),
       });
+
       const page = yield* Schema.decodeUnknownEffect(Page)(
         yield* fromTestPromise(() => first.json())
       ).pipe(Effect.orDie);
+
       expect(page.data).toHaveLength(100);
       expect(page.next).toHaveLength(1);
       const continuation = Option.getOrThrow(Option.fromUndefinedOr(page.next[0]));
@@ -2482,6 +2780,7 @@ it("continues the canonical history beyond its first bounded page without losing
       expect(continuation.args.query.direction).toBe("outflow");
       expect(continuation.args.query.from).toBe("2025-01-01T00:00:00.000Z");
       expect(continuation.args.query.to).toBe("2025-02-01T00:00:00.000Z");
+
       const second = yield* fromTestPromise(() =>
         db.send(
           new Request(
@@ -2496,10 +2795,13 @@ it("continues the canonical history beyond its first bounded page without losing
           )
         )
       );
+
       expect(second.status).toBe(200);
+
       const remainder = yield* Schema.decodeUnknownEffect(Page)(
         yield* fromTestPromise(() => second.json())
       ).pipe(Effect.orDie);
+
       expect(remainder.data).toHaveLength(1);
       expect(remainder.next).toEqual([]);
       expect(new Set([...page.data, ...remainder.data].map(({ id }) => id)).size).toBe(101);
@@ -2507,7 +2809,9 @@ it("continues the canonical history beyond its first bounded page without losing
       const search = yield* fromTestPromise(() =>
         db.browser(0, "/transactions/search?q=Pago%20literal")
       );
+
       expect(search.status).toBe(200);
+
       const SearchPage = Schema.Struct({
         data: Schema.Array(Schema.toCodecJson(Transaction)),
         next: Schema.Array(
@@ -2519,24 +2823,30 @@ it("continues the canonical history beyond its first bounded page without losing
           })
         ),
       });
+
       const matches = yield* Schema.decodeUnknownEffect(SearchPage)(
         yield* fromTestPromise(() => search.json())
       );
+
       expect(matches.data).toHaveLength(100);
       expect(matches.next[0]?.tool).toBe("transactions.searchTransactions");
       expect(matches.next[0]?.args.query.q).toBe("Pago literal");
+
       const searchCursor = Option.getOrThrow(
         Option.fromUndefinedOr(matches.next[0]?.args.query.cursor)
       );
+
       const nextSearch = yield* fromTestPromise(() =>
         db.browser(
           0,
           `/transactions/search?q=Pago%20literal&cursor=${encodeURIComponent(searchCursor)}`
         )
       );
+
       const lastPage = yield* Schema.decodeUnknownEffect(SearchPage)(
         yield* fromTestPromise(() => nextSearch.json())
       );
+
       expect(lastPage.data).toHaveLength(1);
       expect(lastPage.next).toEqual([]);
       expect(new Set([...matches.data, ...lastPage.data].map(({ id }) => id)).size).toBe(101);
@@ -2547,10 +2857,13 @@ it("commits exact manual Money, immutable capture context, and audit before cano
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
+
       const response = yield* fromTestPromise(() =>
         db.send(postTransaction(0, input({ counterparty: "Acme" })))
       );
+
       expect(response.status).toBe(201);
+
       const created = yield* Schema.decodeUnknownEffect(Created)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
@@ -2563,12 +2876,14 @@ it("commits exact manual Money, immutable capture context, and audit before cano
           yield* fromTestPromise(() => listed.json())
         ).pipe(Effect.orDie)).data
       ).toEqual([created.data]);
+
       const evidence = yield* fromTestPromise(() =>
         db.exec(
           "SELECT kind, service_market, locale, time_zone, interpretation_revision FROM source_attestations WHERE user_id = ?",
           users[0] ?? ""
         )
       );
+
       expect(evidence).toEqual([
         {
           kind: "manual",
@@ -2578,12 +2893,14 @@ it("commits exact manual Money, immutable capture context, and audit before cano
           interpretation_revision: "manual-v1",
         },
       ]);
+
       const audit = yield* fromTestPromise(() =>
         db.exec(
           "SELECT operation FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? ORDER BY operation",
           users[0] ?? ""
         )
       );
+
       expect(audit.map((row) => row.operation)).toEqual([
         "transactions.createTransaction",
         "transactions.listTransactions",
@@ -2604,9 +2921,11 @@ it("neither a foreign opaque id nor another session can observe a Transaction", 
           )
         )).status
       ).toBe(401);
+
       const ownerLookupResponse = yield* fromTestPromise(() =>
         db.send(postTransaction(0, input()))
       );
+
       const created = yield* Schema.decodeUnknownEffect(Created)(
         yield* fromTestPromise(() => ownerLookupResponse.json())
       ).pipe(Effect.orDie);
@@ -2662,6 +2981,7 @@ it("commits an ordered two-child batch in one User transaction and agrees with i
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
+
       const response = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [
@@ -2676,10 +2996,13 @@ it("commits an ordered two-child batch in one User transaction and agrees with i
           ])
         )
       );
+
       expect(response.status).toBe(200);
+
       const body = yield* Schema.decodeUnknownEffect(BatchResult)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
+
       expect(body.data.results.map(({ callId }) => callId)).toEqual([
         batchCallId(1),
         batchCallId(2),
@@ -2689,14 +3012,17 @@ it("commits an ordered two-child batch in one User transaction and agrees with i
         "transactions.createTransaction",
       ]);
       const [first, second] = body.data.results.map(({ output }) => output.data);
+
       if (first === undefined || second === undefined) throw new Error("Missing results");
       expect(Option.getOrNull(first.counterparty)).toBe("Acme");
       expect(Option.getOrNull(second.counterparty)).toBe("Bravo");
       expect([first.revision, second.revision]).toEqual([0, 0]);
       const listed = yield* fromTestPromise(() => db.browser(0));
+
       const page = yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() => listed.json())
       ).pipe(Effect.orDie);
+
       expect(new Set(page.data.map(({ id }) => id))).toEqual(new Set([first.id, second.id]));
       expect(page.data.find(({ id }) => id === first.id)).toEqual(first);
       expect(page.data.find(({ id }) => id === second.id)).toEqual(second);
@@ -2735,6 +3061,7 @@ it("rolls back an earlier child when a later child's revision is stale", () =>
           categoryId: category,
         })
       );
+
       const response = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [
@@ -2746,10 +3073,13 @@ it("rolls back an earlier child when a later child's revision is stale", () =>
           ])
         )
       );
+
       expect(response.status).toBe(400);
+
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
+
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(1);
       expect(rejection.error.operation).toBe("transactions.updateTransaction");
@@ -2806,6 +3136,7 @@ it("rejects a stale batch correction after a committed competing correction", ()
           )
         )).status
       ).toBe(200);
+
       const response = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [
@@ -2817,10 +3148,13 @@ it("rejects a stale batch correction after a committed competing correction", ()
           ])
         )
       );
+
       expect(response.status).toBe(400);
+
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
+
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(1);
       expect(rejection.error.operation).toBe("transactions.updateTransaction");
@@ -2838,9 +3172,11 @@ it("rejects a stale batch correction after a committed competing correction", ()
           nativeCountRows(db, "SELECT COUNT(*) AS count FROM source_attestations")
         )
       ).toBe(0);
+
       const evidence = yield* fromTestPromise(() =>
         db.exec("SELECT corrected_at_ms FROM transaction_corrections")
       );
+
       expect(evidence).toHaveLength(1);
       const audits = yield* fromTestPromise(() => nativeRefusedChildren(db, users[0] ?? ""));
       expect(audits).toEqual([
@@ -2867,6 +3203,7 @@ it("attributes a silently skipped child Audit without exposing database details"
         db.exec(`CREATE TRIGGER refuse_batch_correction_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='session_call' AND NEW.operation = 'transactions.updateTransaction' AND NEW.outcome = 'success'
             BEGIN SELECT RAISE(IGNORE); END`)
       );
+
       const response = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [
@@ -2878,6 +3215,7 @@ it("attributes a silently skipped child Audit without exposing database details"
           ])
         )
       );
+
       expect(response.status).toBe(503);
       const body = yield* fromTestPromise(() => response.text());
       expect(body).not.toMatch(/SQL|INSERT|canonical_child_guard/iu);
@@ -2899,9 +3237,11 @@ it("names the capture child when its success Audit is skipped and rolls back the
         db.exec(`CREATE TRIGGER skip_capture_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='session_call' AND NEW.operation = 'transactions.createTransaction' AND NEW.outcome = 'success'
           BEGIN SELECT RAISE(IGNORE); END`)
       );
+
       const response = yield* fromTestPromise(() =>
         db.send(batchRequest(0, [transactionCall(1, input())]))
       );
+
       expect(response.status).toBe(503);
       const body = yield* fromTestPromise(() => response.text());
       expect(body).not.toMatch(/SQL|INSERT|canonical_child_guard/iu);
@@ -2923,11 +3263,13 @@ it("records a skipped keyword-rule guard as that child's refusal without committ
         db.exec(`CREATE TRIGGER skip_rule_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='session_call' AND NEW.operation = 'categories.createKeywordRule' AND NEW.outcome = 'success'
           BEGIN SELECT RAISE(IGNORE); END`)
       );
+
       const response = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [transactionCall(1, input()), keywordRuleCall(2, "Panadería", category)])
         )
       );
+
       expect(response.status).toBe(503);
       const body = yield* fromTestPromise(() => response.text());
       expect(body).not.toMatch(/SQL|INSERT|canonical_child_guard/iu);
@@ -2945,10 +3287,13 @@ it("decides a normalized keyword duplicate from the snapshot before its sibling 
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
+
       const initial = yield* fromTestPromise(() =>
         db.send(batchRequest(0, [keywordRuleCall(1, "Panadería", category)]))
       );
+
       expect(initial.status).toBe(200);
+
       const original = yield* Schema.decodeUnknownEffect(
         Schema.Struct({
           data: Schema.Struct({
@@ -2960,12 +3305,15 @@ it("decides a normalized keyword duplicate from the snapshot before its sibling 
           }),
         })
       )(yield* fromTestPromise(() => initial.json()));
+
       const id = original.data.results[0].output.data.id;
+
       const refused = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [deleteKeywordRuleCall(1, id), keywordRuleCall(2, "PANADERIA", category)])
         )
       );
+
       expect(refused.status).toBe(400);
       expect(yield* fromTestPromise(() => refused.json())).toMatchObject({
         error: { code: "validation_failed", failedCallIndex: 1 },
@@ -2985,9 +3333,11 @@ it("does not assign a child to a forged guard marker from an unrelated write", (
         db.exec(`CREATE TRIGGER fake_guard BEFORE INSERT ON transactions
           BEGIN SELECT RAISE(ABORT, 'CHECK constraint failed: canonical_child_guard_0: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_CHECK)'); END`)
       );
+
       const response = yield* fromTestPromise(() =>
         db.send(batchRequest(0, [transactionCall(1, input())]))
       );
+
       expect(response.status).toBe(503);
       const body = yield* fromTestPromise(() => response.text());
       expect(body).not.toMatch(/failedCallIndex|canonical_child_guard|INSERT|transactions/iu);
@@ -3011,6 +3361,7 @@ it("rolls back a batch containing deletion of an absent Transaction", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
+
       const response = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [
@@ -3023,10 +3374,13 @@ it("rolls back a batch containing deletion of an absent Transaction", () =>
           ])
         )
       );
+
       expect(response.status).toBe(400);
+
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
+
       expect(rejection.error.code).toBe("not_found");
       expect(rejection.error.failedCallIndex).toBe(1);
       expect(rejection.error.operation).toBe("transactions.deleteTransaction");
@@ -3073,20 +3427,26 @@ it("links and unlinks pair children inside one atomic batch", () =>
           })
         )
       );
+
       const linked = yield* fromTestPromise(() =>
         db.send(batchRequest(0, [transactionCall(1, input()), linkCall(2, suppressed, visible)]))
       );
+
       expect(linked.status).toBe(200);
+
       const linkBody = yield* Schema.decodeUnknownEffect(BatchEnvelope)(
         yield* fromTestPromise(() => linked.json())
       ).pipe(Effect.orDie);
+
       expect(linkBody.data.results.map(({ operation }) => operation)).toEqual([
         "transactions.createTransaction",
         "transactions.linkTransactions",
       ]);
+
       const effectiveTransaction = (yield* Schema.decodeUnknownEffect(EffectiveTransaction)(
         linkBody.data.results[1]?.output
       ).pipe(Effect.orDie)).data;
+
       expect(effectiveTransaction.id).toBe(visible);
       expect(effectiveTransaction.presentation).toEqual({ kind: "visible-member" });
       expect(yield* fromTestPromise(() => nativeReconciliationState(db, owner))).toEqual({
@@ -3099,16 +3459,21 @@ it("links and unlinks pair children inside one atomic batch", () =>
       const unlinked = yield* fromTestPromise(() =>
         db.send(batchRequest(0, [unlinkCall(3, suppressed, visible)]))
       );
+
       expect(unlinked.status).toBe(200);
+
       const unlinkBody = yield* Schema.decodeUnknownEffect(BatchEnvelope)(
         yield* fromTestPromise(() => unlinked.json())
       ).pipe(Effect.orDie);
+
       expect(unlinkBody.data.results.map(({ operation }) => operation)).toEqual([
         "transactions.unlinkTransactions",
       ]);
+
       const restored = (yield* Schema.decodeUnknownEffect(RestoredPair)(
         unlinkBody.data.results[0]?.output
       ).pipe(Effect.orDie)).data;
+
       expect(restored.firstTransaction.id).toBe(visible);
       expect(restored.secondTransaction.id).toBe(suppressed);
       expect(restored.firstTransaction.presentation).toEqual({ kind: "independent" });
@@ -3156,13 +3521,17 @@ it("aborts a batch link when a competing link commits before the unit", () =>
       expect(
         (yield* fromTestPromise(() => db.send(batchRequest(0, [linkCall(9, first, third)])))).status
       ).toBe(200);
+
       const response = yield* fromTestPromise(() =>
         db.send(batchRequest(0, [linkCall(1, first, second)]))
       );
+
       expect(response.status).toBe(400);
+
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
+
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(0);
       expect(rejection.error.operation).toBe("transactions.linkTransactions");
@@ -3201,13 +3570,17 @@ it("aborts a batch link when a correction changes a member's Money before the un
           )
         )).status
       ).toBe(200);
+
       const response = yield* fromTestPromise(() =>
         db.send(batchRequest(0, [linkCall(1, first, second)]))
       );
+
       expect(response.status).toBe(400);
+
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
+
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(0);
       expect(rejection.error.operation).toBe("transactions.linkTransactions");
@@ -3246,6 +3619,7 @@ it("attributes the earliest provable child when a pair premise and a revision bo
           )
         )).status
       ).toBe(200);
+
       const response = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [
@@ -3254,10 +3628,13 @@ it("attributes the earliest provable child when a pair premise and a revision bo
           ])
         )
       );
+
       expect(response.status).toBe(400);
+
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
+
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(0);
       expect(rejection.error.operation).toBe("transactions.linkTransactions");
@@ -3299,13 +3676,17 @@ it("aborts a batch unlink when a competing unlink commits before the unit", () =
         (yield* fromTestPromise(() => db.send(batchRequest(0, [unlinkCall(9, first, second)]))))
           .status
       ).toBe(200);
+
       const response = yield* fromTestPromise(() =>
         db.send(batchRequest(0, [unlinkCall(1, second, first)]))
       );
+
       expect(response.status).toBe(400);
+
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
+
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(0);
       expect(rejection.error.operation).toBe("transactions.unlinkTransactions");
@@ -3343,6 +3724,7 @@ it("gives a stale correction the same refusal Audit alone and inside a batch", (
           categoryId: category,
         })
       );
+
       const individual = yield* fromTestPromise(() =>
         db.send(
           new Request(`https://api.fidyapp.com/transactions/${firstId}`, {
@@ -3357,7 +3739,9 @@ it("gives a stale correction the same refusal Audit alone and inside a batch", (
           })
         )
       );
+
       expect(individual.status).toBe(400);
+
       const batch = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [
@@ -3366,6 +3750,7 @@ it("gives a stale correction the same refusal Audit alone and inside a batch", (
           ])
         )
       );
+
       expect(batch.status).toBe(400);
       expect(
         yield* fromTestPromise(() =>
@@ -3392,6 +3777,7 @@ it("raw PAT batches cannot turn query, recursive, browser-only or under-scoped c
       const current = yield* Clock.currentTimeMillis;
       const token = `fin_${"a".repeat(8)}_${"b".repeat(43)}`;
       yield* seedNativePAT({ db, userId: users[0] ?? "", token, scopes: ["write"], current });
+
       const children = [
         { operation: "categories.listCategories", input: {} },
         {
@@ -3401,54 +3787,63 @@ it("raw PAT batches cannot turn query, recursive, browser-only or under-scoped c
         { operation: "pats.inspectPATPairing", input: { payload: { publicCode: "ABCD-1234" } } },
         { operation: "dashboard.initializeDashboard", input: {} },
       ];
-      for (const child of children) {
-        const response = yield* fromTestPromise(() =>
-          db.send(
-            bearerRequest(0, token, [
-              transactionCall(1, input()),
-              { callId: batchCallId(2), ...child },
-            ])
-          )
-        );
-        expect(response.status).toBe(
-          child.operation === "dashboard.initializeDashboard" ? 403 : 400
-        );
-        if (child.operation === "pats.inspectPATPairing") {
-          expect(yield* fromTestPromise(() => response.clone().json())).toMatchObject({
-            error: {
-              code: "scope_missing",
-              failedCallIndex: 1,
-              operation: "pats.inspectPATPairing",
-            },
-          });
-        }
-        const body = yield* fromTestPromise(() => response.text());
-        expect(body).not.toContain("fin_");
-        expect(
-          yield* fromTestPromise(() =>
-            nativeCountRows(db, "SELECT COUNT(*) AS count FROM transactions")
-          )
-        ).toBe(0);
-        expect(
-          yield* fromTestPromise(() =>
-            nativeCountRows(
-              db,
-              "SELECT COUNT(*) AS count FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents"
+
+      yield* Effect.forEach(
+        children,
+        Effect.fnUntraced(function* (child) {
+          const response = yield* fromTestPromise(() =>
+            db.send(
+              bearerRequest(0, token, [
+                transactionCall(1, input()),
+                { callId: batchCallId(2), ...child },
+              ])
             )
-          )
-        ).toBe(0);
-        expect(
-          yield* fromTestPromise(() =>
-            nativeCountRows(
-              db,
-              "SELECT COUNT(*) AS count FROM audit_entries WHERE record_type='credential_call' AND outcome = 'accepted'"
+          );
+
+          expect(response.status).toBe(
+            child.operation === "dashboard.initializeDashboard" ? 403 : 400
+          );
+
+          const pairingRefusal = fromTestPromise(() => response.clone().json());
+          yield* Effect.gen(function* () {
+            expect(yield* pairingRefusal).toMatchObject({
+              error: {
+                code: "scope_missing",
+                failedCallIndex: 1,
+                operation: "pats.inspectPATPairing",
+              },
+            });
+          }).pipe(Effect.when(Effect.succeed(child.operation === "pats.inspectPATPairing")));
+
+          const body = yield* fromTestPromise(() => response.text());
+          expect(body).not.toContain("fin_");
+          expect(
+            yield* fromTestPromise(() =>
+              nativeCountRows(db, "SELECT COUNT(*) AS count FROM transactions")
             )
-          )
-        ).toBe(0);
-        expect(
-          yield* fromTestPromise(() => nativeCountRows(db, "SELECT COUNT(*) AS count FROM pats"))
-        ).toBe(1);
-      }
+          ).toBe(0);
+          expect(
+            yield* fromTestPromise(() =>
+              nativeCountRows(
+                db,
+                "SELECT COUNT(*) AS count FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents"
+              )
+            )
+          ).toBe(0);
+          expect(
+            yield* fromTestPromise(() =>
+              nativeCountRows(
+                db,
+                "SELECT COUNT(*) AS count FROM audit_entries WHERE record_type='credential_call' AND outcome = 'accepted'"
+              )
+            )
+          ).toBe(0);
+          expect(
+            yield* fromTestPromise(() => nativeCountRows(db, "SELECT COUNT(*) AS count FROM pats"))
+          ).toBe(1);
+        }),
+        { discard: true }
+      );
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
@@ -3483,13 +3878,17 @@ it("enforces each child's live PAT scope and commits a mixed two-child batch und
         scopes: ["read"],
         current,
       });
+
       const refused = yield* fromTestPromise(() =>
         db.send(bearerRequest(0, readToken, [transactionCall(1, input())]))
       );
+
       expect(refused.status).toBe(403);
+
       const rejection = yield* Schema.decodeUnknownEffect(ScopeMissing)(
         yield* fromTestPromise(() => refused.json())
       ).pipe(Effect.orDie);
+
       expect(rejection.error.code).toBe("scope_missing");
       expect(
         yield* fromTestPromise(() =>
@@ -3513,21 +3912,27 @@ it("enforces each child's live PAT scope and commits a mixed two-child batch und
           ])
         )
       );
+
       expect(committed.status).toBe(200);
+
       const body = yield* Schema.decodeUnknownEffect(BatchResult)(
         yield* fromTestPromise(() => committed.json())
       ).pipe(Effect.orDie);
+
       expect(body.data.results).toHaveLength(2);
+
       const audits = yield* fromTestPromise(() =>
         db.exec(
           "SELECT operation, outcome FROM audit_entries WHERE record_type='credential_call' AND operation LIKE 'transactions.%' ORDER BY operation,rowid"
         )
       );
+
       expect(audits).toEqual([
         { operation: "transactions.createTransaction", outcome: "rejected" },
         { operation: "transactions.createTransaction", outcome: "accepted" },
         { operation: "transactions.updateTransaction", outcome: "accepted" },
       ]);
+
       const activity = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ last_used_at_ms: Schema.Int })
       )(
@@ -3537,6 +3942,7 @@ it("enforces each child's live PAT scope and commits a mixed two-child batch und
             .then((rows) => rows[0])
         )
       ).pipe(Effect.orDie);
+
       expect(activity.last_used_at_ms).toBeGreaterThan(0);
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
@@ -3545,6 +3951,7 @@ it("commits a mixed-owner canonical batch once with ordered correlated results a
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
+
       const response = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [
@@ -3554,32 +3961,41 @@ it("commits a mixed-owner canonical batch once with ordered correlated results a
           ])
         )
       );
+
       expect(response.status).toBe(200);
+
       const body = yield* Schema.decodeUnknownEffect(BatchEnvelope)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
+
       expect(body.data.results.map(({ callId, operation }) => [callId, operation])).toEqual([
         [batchCallId(1), "transactions.createTransaction"],
         [batchCallId(2), "memory.remember"],
         [batchCallId(3), "categories.createKeywordRule"],
       ]);
       const send = db.browser;
+
       const transactions = yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() => send(0, "/transactions").then((value) => value.json()))
       ).pipe(Effect.orDie);
+
       expect(transactions.data).toHaveLength(1);
       expect(Option.getOrNull(transactions.data[0]?.counterparty ?? Option.none())).toBe(
         "Mixed owner"
       );
+
       const memories = yield* Schema.decodeUnknownEffect(ListedMemories)(
         yield* fromTestPromise(() => send(0, "/memories").then((value) => value.json()))
       ).pipe(Effect.orDie);
+
       expect(memories.data.map(({ text }) => text)).toEqual(["Prefiere pagar en efectivo"]);
+
       const rules = yield* Schema.decodeUnknownEffect(ListedKeywordRules)(
         yield* fromTestPromise(() =>
           send(0, "/category-keyword-rules").then((value) => value.json())
         )
       ).pipe(Effect.orDie);
+
       expect(rules.data.map(({ keyword }) => keyword)).toEqual(["panaderia"]);
       expect(
         yield* fromTestPromise(() =>
@@ -3608,19 +4024,25 @@ it("commits a mixed-owner canonical batch once with ordered correlated results a
           )
         )
       ).toBe(1);
+
       const neighborTransactions = yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() => send(1, "/transactions").then((value) => value.json()))
       ).pipe(Effect.orDie);
+
       expect(neighborTransactions.data).toEqual([]);
+
       const neighborMemories = yield* Schema.decodeUnknownEffect(ListedMemories)(
         yield* fromTestPromise(() => send(1, "/memories").then((value) => value.json()))
       ).pipe(Effect.orDie);
+
       expect(neighborMemories.data).toEqual([]);
+
       const neighborRules = yield* Schema.decodeUnknownEffect(ListedKeywordRules)(
         yield* fromTestPromise(() =>
           send(1, "/category-keyword-rules").then((value) => value.json())
         )
       ).pipe(Effect.orDie);
+
       expect(neighborRules.data).toEqual([]);
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
@@ -3629,6 +4051,7 @@ it("attributes a duplicate keyword in one batch with the owner's declared confli
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
+
       const response = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [
@@ -3638,10 +4061,13 @@ it("attributes a duplicate keyword in one batch with the owner's declared confli
           ])
         )
       );
+
       expect(response.status).toBe(400);
+
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
+
       expect(rejection.error.failedCallIndex).toBe(2);
       expect(rejection.error.operation).toBe("categories.createKeywordRule");
       expect(rejection.error.code).toBe("validation_failed");
@@ -3682,6 +4108,7 @@ it("rolls back every owner when a later mixed-owner keyword-rule child exceeds c
           DateTime.toEpochMillis(DateTime.makeUnsafe(current))
         )
       );
+
       const response = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [
@@ -3692,10 +4119,13 @@ it("rolls back every owner when a later mixed-owner keyword-rule child exceeds c
           ])
         )
       );
+
       expect(response.status).toBe(400);
+
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
+
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(3);
       expect(rejection.error.operation).toBe("categories.createKeywordRule");
@@ -3773,15 +4203,19 @@ it("attributes a cross-owner Memory conflict at commit time and keeps no earlier
           "CREATE TRIGGER drop_memory BEFORE INSERT ON transactions BEGIN DELETE FROM memories; END"
         )
       );
+
       const response = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [transactionCall(1, input()), reviseMemoryCall(2, memoryId, "Revisado")])
         )
       );
+
       expect(response.status).toBe(400);
+
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
+
       expect(rejection.error.code).toBe("not_found");
       expect(rejection.error.failedCallIndex).toBe(1);
       expect(rejection.error.operation).toBe("memory.revise");
@@ -3811,12 +4245,14 @@ it("attributes a cross-owner Memory conflict at commit time and keeps no earlier
           )
         )
       ).toBe(0);
+
       const audits = yield* fromTestPromise(() =>
         db.exec(
           "SELECT operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'memory.*' AND user_id = ? ORDER BY operation",
           users[0] ?? ""
         )
       );
+
       expect(audits).toEqual([{ operation: "memory.revise", outcome: "not_found" }]);
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
@@ -3842,6 +4278,7 @@ it("executes a mixed-owner batch under one write PAT and refuses a read PAT with
         scopes: ["read"],
         current,
       });
+
       const refused = yield* fromTestPromise(() =>
         db.send(
           bearerRequest(0, readToken, [
@@ -3850,10 +4287,13 @@ it("executes a mixed-owner batch under one write PAT and refuses a read PAT with
           ])
         )
       );
+
       expect(refused.status).toBe(403);
+
       const rejection = yield* Schema.decodeUnknownEffect(ScopeMissing)(
         yield* fromTestPromise(() => refused.json())
       ).pipe(Effect.orDie);
+
       expect(rejection.error.code).toBe("scope_missing");
       expect(
         yield* fromTestPromise(() =>
@@ -3891,20 +4331,25 @@ it("executes a mixed-owner batch under one write PAT and refuses a read PAT with
           ])
         )
       );
+
       expect(committed.status).toBe(200);
+
       const body = yield* Schema.decodeUnknownEffect(BatchEnvelope)(
         yield* fromTestPromise(() => committed.json())
       ).pipe(Effect.orDie);
+
       expect(body.data.results.map(({ operation }) => operation)).toEqual([
         "transactions.createTransaction",
         "memory.remember",
         "categories.createKeywordRule",
       ]);
+
       const audits = yield* fromTestPromise(() =>
         db.exec(
           "SELECT operation, outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted' ORDER BY operation"
         )
       );
+
       expect(audits).toEqual([
         { operation: "categories.createKeywordRule", outcome: "accepted" },
         { operation: "memory.remember", outcome: "accepted" },
@@ -3945,6 +4390,7 @@ it("rejects a duplicate call identity named across owners before any child commi
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
+
       const response = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [
@@ -3953,10 +4399,13 @@ it("rejects a duplicate call identity named across owners before any child commi
           ])
         )
       );
+
       expect(response.status).toBe(400);
+
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
+
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(1);
       expect(rejection.error.operation).toBe("categories.createKeywordRule");
@@ -4016,6 +4465,7 @@ it("refuses two children addressing one retained rule or Memory before any child
           DateTime.makeUnsafe(current).epochMilliseconds
         )
       );
+
       const repeatedRule = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [
@@ -4024,13 +4474,17 @@ it("refuses two children addressing one retained rule or Memory before any child
           ])
         )
       );
+
       expect(repeatedRule.status).toBe(400);
+
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => repeatedRule.json())
       ).pipe(Effect.orDie);
+
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(1);
       expect(rejection.error.operation).toBe("categories.deleteKeywordRule");
+
       const repeatedMemory = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [
@@ -4039,14 +4493,19 @@ it("refuses two children addressing one retained rule or Memory before any child
           ])
         )
       );
+
       expect(repeatedMemory.status).toBe(400);
+
       const rule = yield* fromTestPromise(() =>
         db.exec("SELECT keyword FROM keyword_rules WHERE id = ?", ruleId).then((rows) => rows[0])
       );
+
       expect(rule).toEqual({ keyword: "original" });
+
       const memory = yield* fromTestPromise(() =>
         db.exec("SELECT text FROM memories WHERE id = ?", memoryId).then((rows) => rows[0])
       );
+
       expect(memory).toEqual({ text: "Repetida" });
       expect(
         yield* fromTestPromise(() =>
@@ -4100,6 +4559,7 @@ it("commits retained keyword-rule updates and deletes and Memory forgets in one 
           DateTime.makeUnsafe(current).epochMilliseconds
         )
       );
+
       const response = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [
@@ -4110,22 +4570,27 @@ it("commits retained keyword-rule updates and deletes and Memory forgets in one 
           ])
         )
       );
+
       expect(response.status).toBe(200);
+
       const body = yield* Schema.decodeUnknownEffect(BatchEnvelope)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
+
       expect(body.data.results.map(({ operation }) => operation)).toEqual([
         "categories.updateKeywordRule",
         "categories.deleteKeywordRule",
         "memory.forget",
         "transactions.createTransaction",
       ]);
+
       const rules = yield* fromTestPromise(() =>
         db.exec(
           "SELECT id, keyword FROM keyword_rules WHERE user_id = ? ORDER BY id",
           users[0] ?? ""
         )
       );
+
       expect(rules).toEqual([{ id: updatedRuleId, keyword: "despues" }]);
       expect(
         yield* fromTestPromise(() =>
@@ -4145,22 +4610,26 @@ it("commits retained keyword-rule updates and deletes and Memory forgets in one 
           )
         )
       ).toBe(1);
+
       const categoryAudits = yield* fromTestPromise(() =>
         db.exec(
           "SELECT operation FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*' AND user_id = ? ORDER BY operation",
           users[0] ?? ""
         )
       );
+
       expect(categoryAudits).toEqual([
         { operation: "categories.deleteKeywordRule" },
         { operation: "categories.updateKeywordRule" },
       ]);
+
       const memoryAudits = yield* fromTestPromise(() =>
         db.exec(
           "SELECT operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'memory.*' AND user_id = ? ORDER BY operation",
           users[0] ?? ""
         )
       );
+
       expect(memoryAudits).toEqual([{ operation: "memory.forget", outcome: "success" }]);
       expect(
         yield* fromTestPromise(() =>
@@ -4178,6 +4647,7 @@ it("serializes concurrent batches and individual mutations through one User coor
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
+
       const individual = (index: number): Promise<Response> =>
         db.send(
           new Request("https://api.fidyapp.com/transactions", {
@@ -4191,6 +4661,7 @@ it("serializes concurrent batches and individual mutations through one User coor
             body: JSON.stringify(input({ counterparty: "Single" })),
           })
         );
+
       const batch = (index: number, suffix: number): Promise<Response> =>
         db.send(
           batchRequest(index, [
@@ -4198,6 +4669,7 @@ it("serializes concurrent batches and individual mutations through one User coor
             transactionCall(suffix + 1, input({ counterparty: `Batch ${suffix + 1}` })),
           ])
         );
+
       const responses = yield* Effect.all(
         [
           fromTestPromise(() => individual(0)),
@@ -4207,7 +4679,9 @@ it("serializes concurrent batches and individual mutations through one User coor
         ],
         { concurrency: 2 }
       );
+
       expect(responses.map(({ status }) => status)).toEqual([201, 200, 200, 201]);
+
       const ownerList = yield* fromTestPromise(() =>
         db.send(
           new Request("https://api.fidyapp.com/transactions", {
@@ -4219,11 +4693,14 @@ it("serializes concurrent batches and individual mutations through one User coor
           })
         )
       );
+
       const owner = yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() => ownerList.json())
       ).pipe(Effect.orDie);
+
       expect(owner.data).toHaveLength(5);
       expect(new Set(owner.data.map(({ id }) => id)).size).toBe(5);
+
       const neighborList = yield* fromTestPromise(() =>
         db.send(
           new Request("https://api.fidyapp.com/transactions", {
@@ -4235,9 +4712,11 @@ it("serializes concurrent batches and individual mutations through one User coor
           })
         )
       );
+
       const neighbor = yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() => neighborList.json())
       ).pipe(Effect.orDie);
+
       expect(neighbor.data).toHaveLength(1);
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
@@ -4256,6 +4735,7 @@ it("attributes keyword capacity after a deletion and earlier creates without rec
           category
         )
       );
+
       const refused = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [
@@ -4266,10 +4746,13 @@ it("attributes keyword capacity after a deletion and earlier creates without rec
           ])
         )
       );
+
       expect(refused.status).toBe(400);
+
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => refused.json())
       ).pipe(Effect.orDie);
+
       expect(rejection.error.failedCallIndex).toBe(3);
       expect(rejection.error.operation).toBe("categories.createKeywordRule");
       expect(
@@ -4316,25 +4799,32 @@ it("a PAT cannot read or correct another User's Transaction individually or afte
           categoryId: category,
         })
       );
-      for (const method of ["GET", "PUT"] as const) {
-        const response = yield* fromTestPromise(() =>
-          db.send(
-            new Request(`https://api.fidyapp.com/transactions/${neighborId}`, {
-              method,
-              headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-              body:
-                method === "GET"
-                  ? undefined
-                  : JSON.stringify({
-                      expectedRevision: 0,
-                      changes: { notes: "foreign correction" },
-                    }),
-            })
-          )
-        );
-        expect(response.status).toBe(404);
-        expect(yield* fromTestPromise(() => response.text())).not.toContain("seed");
-      }
+
+      yield* Effect.forEach(
+        ["GET", "PUT"] as const,
+        Effect.fnUntraced(function* (method) {
+          const response = yield* fromTestPromise(() =>
+            db.send(
+              new Request(`https://api.fidyapp.com/transactions/${neighborId}`, {
+                method,
+                headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                body:
+                  method === "GET"
+                    ? undefined
+                    : JSON.stringify({
+                        expectedRevision: 0,
+                        changes: { notes: "foreign correction" },
+                      }),
+              })
+            )
+          );
+
+          expect(response.status).toBe(404);
+          expect(yield* fromTestPromise(() => response.text())).not.toContain("seed");
+        }),
+        { discard: true }
+      );
+
       const batch = yield* fromTestPromise(() =>
         db.send(
           bearerRequest(0, token, [
@@ -4346,6 +4836,7 @@ it("a PAT cannot read or correct another User's Transaction individually or afte
           ])
         )
       );
+
       expect(batch.status).toBe(400);
       expect(
         (yield* Schema.decodeUnknownEffect(BatchRejection)(
@@ -4393,6 +4884,7 @@ it("fails closed on a foreign Transaction or an unknown Category without partial
           categoryId: category,
         })
       );
+
       const foreign = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [
@@ -4401,10 +4893,13 @@ it("fails closed on a foreign Transaction or an unknown Category without partial
           ])
         )
       );
+
       expect(foreign.status).toBe(400);
+
       const foreignRejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => foreign.json())
       ).pipe(Effect.orDie);
+
       expect(foreignRejection.error.code).toBe("not_found");
       expect(foreignRejection.error.failedCallIndex).toBe(1);
       expect(foreignRejection.error.operation).toBe("transactions.updateTransaction");
@@ -4417,11 +4912,13 @@ it("fails closed on a foreign Transaction or an unknown Category without partial
           )
         )
       ).toBe(0);
+
       const neighborRows = yield* fromTestPromise(() =>
         db
           .owner(users[1] ?? "")
           .exec("SELECT notes, revision FROM transactions WHERE user_id = ?", users[1] ?? "")
       );
+
       expect(neighborRows).toEqual([{ notes: "seed", revision: 0 }]);
 
       const unrecognized = yield* fromTestPromise(() =>
@@ -4432,10 +4929,13 @@ it("fails closed on a foreign Transaction or an unknown Category without partial
           ])
         )
       );
+
       expect(unrecognized.status).toBe(400);
+
       const unrecognizedRejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => unrecognized.json())
       ).pipe(Effect.orDie);
+
       expect(unrecognizedRejection.error.code).toBe("not_found");
       expect(unrecognizedRejection.error.failedCallIndex).toBe(1);
       expect(unrecognizedRejection.error.operation).toBe("transactions.createTransaction");
@@ -4481,6 +4981,7 @@ it("records a PAT refusal Audit for a refused batch child without partial writes
         scopes: ["write"],
         current,
       });
+
       const refused = yield* fromTestPromise(() =>
         db.send(
           bearerRequest(0, writeToken, [
@@ -4489,18 +4990,23 @@ it("records a PAT refusal Audit for a refused batch child without partial writes
           ])
         )
       );
+
       expect(refused.status).toBe(400);
+
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => refused.json())
       ).pipe(Effect.orDie);
+
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(1);
       expect(rejection.error.operation).toBe("transactions.updateTransaction");
+
       const refusals = yield* fromTestPromise(() =>
         db.exec(
           "SELECT operation,outcome FROM audit_entries WHERE record_type='credential_call' ORDER BY rowid"
         )
       );
+
       expect(refusals).toEqual([
         { operation: "transactions.updateTransaction", outcome: "rejected" },
         { operation: "operations.executeAtomicBatch", outcome: "rejected" },
@@ -4531,16 +5037,20 @@ it("refuses a batch under a revoked session, revoked PAT, or withdrawn Consent w
           sessions[0] ?? ""
         )
       );
+
       const revokedSession = yield* fromTestPromise(() =>
         db.send(batchRequest(0, [transactionCall(1, input())]))
       );
+
       expect(revokedSession.status).toBe(401);
       yield* fromTestPromise(() =>
         db.exec("UPDATE pats SET revoked_at_ms = ? WHERE short_id = ?", current, token.slice(4, 12))
       );
+
       const revokedPAT = yield* fromTestPromise(() =>
         db.send(bearerRequest(0, token, [transactionCall(1, input())]))
       );
+
       expect(revokedPAT.status).toBe(401);
 
       const neighborToken = `fin_${"w".repeat(8)}_${"f".repeat(43)}`;
@@ -4575,17 +5085,23 @@ it("refuses a batch under a revoked session, revoked PAT, or withdrawn Consent w
             current
           )
       );
+
       const withdrawn = yield* fromTestPromise(() =>
         db.send(bearerRequest(1, neighborToken, [transactionCall(1, input())]))
       );
+
       expect(withdrawn.status).toBe(403);
+
       const withdrawal = yield* Schema.decodeUnknownEffect(CallerFailure)(
         yield* fromTestPromise(() => withdrawn.json())
       ).pipe(Effect.orDie);
+
       expect(withdrawal.error.code).toBe("user_action_required");
+
       const neighborSession = yield* fromTestPromise(() =>
         db.send(batchRequest(1, [transactionCall(1, input())]))
       );
+
       expect(neighborSession.status).toBe(401);
 
       expect(
@@ -4608,6 +5124,7 @@ it("attributes a malformed child to its index and Audit while an unshaped body s
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
+
       const malformed = yield* fromTestPromise(() =>
         db.send(
           new Request("https://api.fidyapp.com/operations/atomic-batch", {
@@ -4630,10 +5147,13 @@ it("attributes a malformed child to its index and Audit while an unshaped body s
           })
         )
       );
+
       expect(malformed.status).toBe(400);
+
       const childFailure = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => malformed.json())
       ).pipe(Effect.orDie);
+
       expect(childFailure.error.code).toBe("validation_failed");
       expect(childFailure.error.failedCallIndex).toBe(0);
       expect(childFailure.error.operation).toBe("transactions.createTransaction");
@@ -4647,12 +5167,14 @@ it("attributes a malformed child to its index and Audit while an unshaped body s
         )
       ).toBe(0);
 
-      const unshaped = yield* fromTestPromise(() => db.send(batchRequest(0, [])));
-      expect(unshaped.status).toBe(400);
-      const unshapedFailure = yield* Schema.decodeUnknownEffect(CallerFailure)(
-        yield* fromTestPromise(() => unshaped.json())
+      const unformatted = yield* fromTestPromise(() => db.send(batchRequest(0, [])));
+      expect(unformatted.status).toBe(400);
+
+      const unformattedFailure = yield* Schema.decodeUnknownEffect(CallerFailure)(
+        yield* fromTestPromise(() => unformatted.json())
       ).pipe(Effect.orDie);
-      expect(unshapedFailure.error.code).toBe("validation_failed");
+
+      expect(unformattedFailure.error.code).toBe("validation_failed");
       expect(
         yield* fromTestPromise(() =>
           nativeCountRows(
@@ -4673,7 +5195,7 @@ it("records one metadata-only refusal for each malformed batch envelope", () =>
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
 
-      const rawBatch = (body: object): Request =>
+      const rawBatch = (body: unknown): Request =>
         new Request("https://api.fidyapp.com/operations/atomic-batch", {
           method: "POST",
           headers: {
@@ -4684,6 +5206,7 @@ it("records one metadata-only refusal for each malformed batch envelope", () =>
           },
           body: JSON.stringify(body),
         });
+
       const bodies = [
         {},
         { calls: [] },
@@ -4698,21 +5221,30 @@ it("records one metadata-only refusal for each malformed batch envelope", () =>
           ],
         },
       ];
-      for (const body of bodies) {
-        yield* Effect.sleep("100 millis");
-        const response = yield* fromTestPromise(() => db.send(rawBatch(body)));
-        expect(response.status, `envelope ${bodies.indexOf(body)}`).toBe(400);
-        const failure = yield* Schema.decodeUnknownEffect(CallerFailure)(
-          yield* fromTestPromise(() => response.json())
-        ).pipe(Effect.orDie);
-        expect(failure.error.code).toBe("validation_failed");
-      }
+
+      yield* Effect.forEach(
+        bodies,
+        Effect.fnUntraced(function* (body) {
+          yield* Effect.sleep("100 millis");
+          const response = yield* fromTestPromise(() => db.send(rawBatch(body)));
+          expect(response.status, `envelope ${bodies.indexOf(body)}`).toBe(400);
+
+          const failure = yield* Schema.decodeUnknownEffect(CallerFailure)(
+            yield* fromTestPromise(() => response.json())
+          ).pipe(Effect.orDie);
+
+          expect(failure.error.code).toBe("validation_failed");
+        }),
+        { discard: true }
+      );
+
       const audits = yield* fromTestPromise(() =>
         db.exec(
           "SELECT user_id, session_id, operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ?",
           users[0] ?? ""
         )
       );
+
       expect(audits).toHaveLength(bodies.length);
       expect(
         audits.map((row) => ({
@@ -4750,6 +5282,7 @@ it("does not misattribute a repeated callId with a malformed later operation to 
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
       const first = transactionCall(1, input());
+
       const response = yield* fromTestPromise(() =>
         db.send(
           new Request("https://api.fidyapp.com/operations/atomic-batch", {
@@ -4766,7 +5299,9 @@ it("does not misattribute a repeated callId with a malformed later operation to 
           })
         )
       );
+
       expect(response.status).toBe(400);
+
       const later = yield* fromTestPromise(() =>
         db.send(
           new Request("https://api.fidyapp.com/operations/atomic-batch", {
@@ -4783,7 +5318,9 @@ it("does not misattribute a repeated callId with a malformed later operation to 
           })
         )
       );
+
       expect(later.status).toBe(400);
+
       const unsupportedFirst = yield* fromTestPromise(() =>
         db.send(
           new Request("https://api.fidyapp.com/operations/atomic-batch", {
@@ -4803,6 +5340,7 @@ it("does not misattribute a repeated callId with a malformed later operation to 
           })
         )
       );
+
       expect(unsupportedFirst.status).toBe(400);
       expect(
         yield* fromTestPromise(() =>
@@ -4824,6 +5362,7 @@ it("records an envelope when a non-canonical first child prevents a later child 
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
+
       const response = yield* fromTestPromise(() =>
         db.send(
           new Request("https://api.fidyapp.com/operations/atomic-batch", {
@@ -4843,6 +5382,7 @@ it("records an envelope when a non-canonical first child prevents a later child 
           })
         )
       );
+
       expect(response.status).toBe(400);
       expect(yield* fromTestPromise(() => nativeAuditedOperations(db, users[0] ?? ""))).toEqual([
         { operation: "operations.executeAtomicBatch", outcome: "validation_failed" },
@@ -4879,9 +5419,11 @@ it("records a batch envelope for a PAT without the child's scope, but never for 
           )
         )
       ).toBe(0);
+
       const child = yield* fromTestPromise(() =>
         db.send(bearerRequest(0, token, [transactionCall(1, input())]))
       );
+
       expect(child.status).toBe(403);
       expect(
         yield* fromTestPromise(() =>
@@ -4953,6 +5495,7 @@ it.each([
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* nativeTransactionJourney;
+
         const individual = yield* fromTestPromise(() =>
           db.send(
             new Request(`https://api.fidyapp.com${path}`, {
@@ -4967,31 +5510,41 @@ it.each([
             })
           )
         );
+
         expect(individual.status).toBe(404);
+
         const individualFailure = yield* Schema.decodeUnknownEffect(CallerFailure)(
           yield* fromTestPromise(() => individual.json())
         ).pipe(Effect.orDie);
+
         expect(individualFailure.error.code).toBe("not_found");
+
         const individualAudit = yield* fromTestPromise(() =>
           nativeAuditedOperations(db, users[0] ?? "")
         );
+
         expect(individualAudit).toEqual([{ operation: call.operation, outcome: "not_found" }]);
 
         const batch = yield* fromTestPromise(() => db.send(batchRequest(0, [call])));
         expect(batch.status).toBe(400);
+
         const refusal = yield* Schema.decodeUnknownEffect(BatchRejection)(
           yield* fromTestPromise(() => batch.json())
         ).pipe(Effect.orDie);
+
         expect(refusal.error.code).toBe(individualFailure.error.code);
         expect(refusal.error.failedCallIndex).toBe(0);
         expect(refusal.error.operation).toBe(call.operation);
-        expect(yield* fromTestPromise(() => nativeAuditedOperations(db, users[0] ?? ""))).toEqual([
-          ...individualAudit,
-          { operation: call.operation, outcome: individualFailure.error.code },
-          ...(path.includes("not-a-")
-            ? []
-            : [{ operation: "operations.executeAtomicBatch", outcome: "validation_failed" }]),
-        ]);
+        expect(yield* fromTestPromise(() => nativeAuditedOperations(db, users[0] ?? ""))).toEqual(
+          [
+            ...individualAudit,
+            { operation: call.operation, outcome: individualFailure.error.code },
+          ].concat(
+            path.includes("not-a-")
+              ? []
+              : [{ operation: "operations.executeAtomicBatch", outcome: "validation_failed" }]
+          )
+        );
       }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
     )
 );
@@ -5000,6 +5553,7 @@ it("answers an unstable retained id the same in a batch child as on its individu
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
+
       const response = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [
@@ -5011,10 +5565,13 @@ it("answers an unstable retained id the same in a batch child as on its individu
           ])
         )
       );
+
       expect(response.status).toBe(400);
+
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
+
       expect(rejection.error.code).toBe("not_found");
       expect(rejection.error.failedCallIndex).toBe(1);
       expect(rejection.error.operation).toBe("transactions.updateTransaction");
@@ -5027,9 +5584,11 @@ it("answers an unstable retained id the same in a batch child as on its individu
           )
         )
       ).toBe(0);
+
       const refusedAudits = yield* fromTestPromise(() =>
         nativeAuditedOperations(db, users[0] ?? "")
       );
+
       expect(refusedAudits).toEqual([
         { operation: "transactions.updateTransaction", outcome: "not_found" },
       ]);
@@ -5050,6 +5609,7 @@ it("attributes a repeated observed revision to the later correction without part
           categoryId: category,
         })
       );
+
       const repeated = yield* fromTestPromise(() =>
         db.send(
           batchRequest(0, [
@@ -5058,13 +5618,17 @@ it("attributes a repeated observed revision to the later correction without part
           ])
         )
       );
+
       expect(repeated.status).toBe(400);
+
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => repeated.json())
       ).pipe(Effect.orDie);
+
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(1);
       expect(rejection.error.operation).toBe("transactions.updateTransaction");
+
       const retained = yield* fromTestPromise(() =>
         db.exec(
           "SELECT notes, revision FROM transactions WHERE user_id = ? AND id = ?",
@@ -5072,10 +5636,13 @@ it("attributes a repeated observed revision to the later correction without part
           seededId
         )
       );
+
       expect(retained).toEqual([{ notes: "seed", revision: 0 }]);
+
       const refusedAudits = yield* fromTestPromise(() =>
         nativeAuditedOperations(db, users[0] ?? "")
       );
+
       expect(refusedAudits).toEqual([
         { operation: "transactions.updateTransaction", outcome: "validation_failed" },
         { operation: "operations.executeAtomicBatch", outcome: "validation_failed" },
@@ -5097,14 +5664,17 @@ it("does not misattribute an unrelated earlier abort to a repeated-revision corr
           categoryId: category,
         })
       );
+
       const first = correctionCall(1, seededId, {
         expectedRevision: 0,
         changes: { notes: "first" },
       });
+
       const repeated = correctionCall(2, seededId, {
         expectedRevision: 0,
         changes: { notes: "second" },
       });
+
       yield* fromTestPromise(() =>
         db.exec(
           "CREATE TRIGGER fail_initial_admission BEFORE INSERT ON canonical_request_buckets BEGIN SELECT RAISE(ABORT,'fixture admission unavailable'); END"
@@ -5141,6 +5711,7 @@ it("refuses a cookie-admitted batch without the browser origin and writes nothin
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
+
       const refused = yield* fromTestPromise(() =>
         db.send(
           new Request("https://api.fidyapp.com/operations/atomic-batch", {
@@ -5154,6 +5725,7 @@ it("refuses a cookie-admitted batch without the browser origin and writes nothin
           })
         )
       );
+
       expect(refused.status).toBe(403);
       expect(
         yield* fromTestPromise(() =>
@@ -5181,6 +5753,7 @@ it("permanently deletes visible history with provenance retained and rejects ano
           id: "30000000-0000-4000-8000-000000000992",
         })
       );
+
       const deletion = (index: number): Request =>
         new Request(request(index, `/transactions/${id}`), {
           method: "DELETE",
@@ -5190,6 +5763,7 @@ it("permanently deletes visible history with provenance retained and rejects ano
             origin: "https://app.fidyapp.com",
           },
         });
+
       expect((yield* fromTestPromise(() => db.send(deletion(1)))).status).toBe(404);
       expect((yield* fromTestPromise(() => db.send(deletion(0)))).status).toBe(200);
       expect(
@@ -5256,6 +5830,7 @@ it.each(["linked", "audit-outage", "read-only", "revoked"] as const)(
         yield* fromTestPromise(() =>
           seedNativeTransaction({ db, userId: owner, id, categoryId: category })
         );
+
         let deletion = new Request(request(0, `/transactions/${id}`), {
           method: "DELETE",
           headers: {
@@ -5264,6 +5839,7 @@ it.each(["linked", "audit-outage", "read-only", "revoked"] as const)(
             origin: "https://app.fidyapp.com",
           },
         });
+
         if (failure === "linked") {
           const second = "30000000-0000-4000-8000-000000000994";
           yield* fromTestPromise(() =>
@@ -5303,16 +5879,19 @@ it.each(["linked", "audit-outage", "read-only", "revoked"] as const)(
             scopes: [failure === "read-only" ? "read" : "write"],
             current,
           });
+
           if (failure === "revoked") {
             yield* fromTestPromise(() =>
               db.exec("UPDATE pats SET revoked_at_ms = ? WHERE user_id = ?", current, owner)
             );
           }
+
           deletion = new Request(`https://api.fidyapp.com/transactions/${id}`, {
             method: "DELETE",
             headers: { authorization: `Bearer ${token}` },
           });
         }
+
         const response = yield* fromTestPromise(() => db.send(deletion));
         const status = { linked: 400, "audit-outage": 503, "read-only": 403, revoked: 401 };
         expect(response.status).toBe(status[failure]);
@@ -5353,6 +5932,7 @@ it("cannot link a hidden Transaction or restore its visibility", () =>
       yield* fromTestPromise(() =>
         seedNativeTransaction({ db, userId: owner, id: second, categoryId: category })
       );
+
       const deletion = new Request(request(0, `/transactions/${first}`), {
         method: "DELETE",
         headers: {
@@ -5361,7 +5941,9 @@ it("cannot link a hidden Transaction or restore its visibility", () =>
           origin: "https://app.fidyapp.com",
         },
       });
+
       expect((yield* fromTestPromise(() => db.send(deletion))).status).toBe(200);
+
       const link = new Request(
         request(0, "/transactions/link", {
           firstTransactionId: first,
@@ -5376,6 +5958,7 @@ it("cannot link a hidden Transaction or restore its visibility", () =>
           },
         }
       );
+
       expect((yield* fromTestPromise(() => db.send(link))).status).toBe(404);
       yield* fromTestPromise(() =>
         expect(
@@ -5406,23 +5989,30 @@ it("searches older effective Transactions with combined exact Money filters and 
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
-      for (const [index, subject] of users.entries()) {
-        yield* fromTestPromise(() =>
-          db.owner(subject).exec(
-            `WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n<500)
+
+      yield* Effect.forEach(
+        users.entries(),
+        Effect.fnUntraced(function* ([index, subject]) {
+          yield* fromTestPromise(() =>
+            db.owner(subject).exec(
+              `WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n<500)
         INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,counterparty,notes,occurred_at_ms,created_at_ms)
         SELECT printf('00000000-0000-4000-8200-%012d',n),?,
         CASE WHEN n=7 THEN '9007199254740993.16' ELSE '9007199254740993.15' END,
         CASE WHEN n=6 THEN 'COP' ELSE 'USD' END,CASE WHEN n=5 THEN 'inflow' ELSE 'outflow' END,?,
         CASE WHEN n<9 THEN 'Internet antiguo' ELSE 'Otro' END,'Pago del hogar',1736424000000+n*1000,1736424000000 FROM seq WHERE (n=8)=?`,
-            subject,
-            category,
-            index
-          )
-        );
-      }
+              subject,
+              category,
+              index
+            )
+          );
+        }),
+        { discard: true }
+      );
+
       const read = (query: URLSearchParams): Promise<Response> =>
         db.browser(0, "/transactions/search?" + query);
+
       const query = new URLSearchParams({
         q: "Internet",
         currency: "USD",
@@ -5432,6 +6022,7 @@ it("searches older effective Transactions with combined exact Money filters and 
         to: "2025-01-11T00:00:00.000Z",
         limit: "2",
       });
+
       const Page = Schema.Struct({
         data: Schema.Array(Schema.Struct({ id: Transaction.fields.id })),
         next: Schema.Array(
@@ -5440,11 +6031,14 @@ it("searches older effective Transactions with combined exact Money filters and 
           })
         ),
       });
+
       const first = yield* fromTestPromise(() => read(query));
       expect(first.status).toBe(200);
+
       const page = yield* Schema.decodeUnknownEffect(Page)(
         yield* fromTestPromise(() => first.json())
       );
+
       expect(page.data.map((row) => row.id)).toEqual([
         "00000000-0000-4000-8200-000000000004",
         "00000000-0000-4000-8200-000000000003",
@@ -5453,9 +6047,11 @@ it("searches older effective Transactions with combined exact Money filters and 
       expect(next).toMatchObject({ ...Object.fromEntries(query), amount: "9007199254740993.15" });
       const second = yield* fromTestPromise(() => read(new URLSearchParams(next)));
       expect(second.status).toBe(200);
+
       const last = yield* Schema.decodeUnknownEffect(Page)(
         yield* fromTestPromise(() => second.json())
       );
+
       expect(last.data.map((row) => row.id)).toEqual([
         "00000000-0000-4000-8200-000000000002",
         "00000000-0000-4000-8200-000000000001",
@@ -5476,8 +6072,10 @@ it("reads an addressed linked Transaction without work proportional to retained 
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* makeNativeTransactionJourney(undefined, nativeTransactionReadPlatform);
+
       const owner = alice.user,
         prefix = "20000000-0000-4000-8000-";
+
       yield* fromTestPromise(() =>
         db.exec(
           `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<2000)
@@ -5507,19 +6105,23 @@ it("reads an addressed linked Transaction without work proportional to retained 
       const read = (): Promise<Response> => db.browser(0, "/transactions/" + id);
       const response = yield* fromTestPromise(read);
       expect(response.status).toBe(200);
+
       const InspectionResponse = Schema.Struct({
         data: TransactionInspection,
         next: Schema.Array(Schema.Unknown),
       });
+
       const body = yield* Schema.decodeUnknownEffect(InspectionResponse)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
+
       expect(body.data.id).toBe("20000000-0000-4000-8000-000000000001");
       expect(body.data.presentation).toEqual({
         kind: "suppressed-member",
         requestedId: "20000000-0000-4000-8000-000000000002",
       });
       expect(body.data.revision).toBe(0);
+
       const actual = yield* fromTestPromise(() =>
         db.runtime
           .getDurableObjectNamespace("USER_STORE", "core")
@@ -5527,25 +6129,33 @@ it("reads an addressed linked Transaction without work proportional to retained 
             namespace.getByName(owner).fetch("https://fixture.invalid/addressed-cost")
           )
       );
+
       expect(actual.status).toBe(200);
+
       const cost = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ rowsRead: Schema.Int, records: Schema.Int })
       )(yield* fromTestPromise(() => actual.json()));
+
       expect(cost.records).toBe(1);
       expect(cost.rowsRead).toBeLessThan(250);
-      for (const readiness of ["dirty", "clearing", "rebuilding"]) {
-        yield* fromTestPromise(() =>
-          db.exec(
-            "UPDATE transaction_projection_state SET readiness=? WHERE user_id=?",
-            readiness,
-            owner
-          )
-        );
-        const repaired = yield* fromTestPromise(read);
-        expect(repaired.status).toBe(200);
-        expect(yield* fromTestPromise(() => repaired.json())).toEqual(
-          yield* Schema.encodeEffect(InspectionResponse)(body)
-        );
-      }
+
+      yield* Effect.forEach(
+        ["dirty", "clearing", "rebuilding"],
+        Effect.fnUntraced(function* (readiness) {
+          yield* fromTestPromise(() =>
+            db.exec(
+              "UPDATE transaction_projection_state SET readiness=? WHERE user_id=?",
+              readiness,
+              owner
+            )
+          );
+          const repaired = yield* fromTestPromise(read);
+          expect(repaired.status).toBe(200);
+          expect(yield* fromTestPromise(() => repaired.json())).toEqual(
+            yield* Schema.encodeEffect(InspectionResponse)(body)
+          );
+        }),
+        { discard: true }
+      );
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));

@@ -5,21 +5,28 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const scriptPath = fileURLToPath(new URL("./check-production-runtime-config.sh", import.meta.url));
+
 const workingDirectory = fileURLToPath(new URL("../", import.meta.url));
+
 const productionWorkflowPath = fileURLToPath(
   new URL("../../../.github/workflows/native-storage-release.yml", import.meta.url)
 );
+
 const testValue = "runtime-config-test-value";
+
 const smokeProof = "a".repeat(64);
 
 const workflowStep = async (stepName: string): Promise<string> => {
   const workflow = await readFile(productionWorkflowPath, "utf8");
   const stepStart = workflow.indexOf(`      - name: ${stepName}\n`);
+
   if (stepStart < 0) return "";
 
   const stepEnd = workflow.indexOf("\n      - name:", stepStart + 1);
+
   return workflow.slice(stepStart, stepEnd < 0 ? undefined : stepEnd);
 };
+
 const requiredConfiguration = [
   "PAT_ADMISSION_KEY",
   "MICROSOFT_CLIENT_ID",
@@ -43,12 +50,14 @@ const requiredConfiguration = [
 
 type ConfigurationName = (typeof requiredConfiguration)[number];
 
-const runConfigurationGate = (
-  missing?: ConfigurationName
-): { readonly exitCode: number; readonly output: string } => {
+type GateRun = { readonly exitCode: number; readonly output: string };
+
+const runConfigurationGate = (missing?: ConfigurationName): GateRun => {
   const env = { ...process.env };
+
   for (const name of requiredConfiguration) env[name] = testValue;
   env.SMOKE_PROOF = smokeProof;
+
   if (missing !== undefined) env[missing] = "";
 
   const result = spawnSync("bash", [scriptPath], {
@@ -66,12 +75,15 @@ const runConfigurationGate = (
 describe("Production runtime configuration gate", () => {
   it("rebuilds the retained Web output before signed planning and saves refused read-only evidence", async () => {
     const workflow = await readFile(productionWorkflowPath, "utf8");
+
     const build = await workflowStep(
       "Build the expected browser artifact for independent verification"
     );
+
     for (const operation of ["plan-fixture-repair", "resume-fixture-upload", "rollout"]) {
       expect(build).toContain(operation);
     }
+
     expect(build).toContain("env.FIXTURE_WEB_REVISION");
     expect(workflow.indexOf(build)).toBeLessThan(
       workflow.indexOf(
@@ -95,12 +107,15 @@ describe("Production runtime configuration gate", () => {
 
   it("rejects a malformed smoke proof without printing its value", () => {
     const env = { ...process.env, SMOKE_PROOF: "not-a-valid-proof" };
+
     for (const name of requiredConfiguration) env[name] = testValue;
+
     const result = spawnSync("bash", [scriptPath], {
       cwd: workingDirectory,
       encoding: "utf8",
       env,
     });
+
     expect(result.status).toBe(1);
     expect(`${result.stdout}${result.stderr}`).toContain(
       "check=production_runtime_configuration category=smoke_proof_invalid"
@@ -129,10 +144,13 @@ describe("Production runtime configuration gate", () => {
     const preview = await workflowStep(
       "Verify the fresh native plan against the existing state store"
     );
+
     const install = await workflowStep("Install the verified fresh native application");
+
     const verify = await workflowStep(
       "Verify the installed application and retained schema markers"
     );
+
     expect(preview).toContain("if: inputs.operation == 'plan-first-install'");
     expect(preview).toContain("run: bun native-storage-resources.ts plan-first-install");
     expect(install).toContain("if: inputs.operation == 'first-install'");
@@ -146,24 +164,30 @@ describe("Production runtime configuration gate", () => {
     const source = await workflowStep(
       "Authenticate the original interrupted upload before planning or applying its repair"
     );
+
     for (const operation of ["plan-fixture-repair", "resume-fixture-upload"]) {
       expect(source).toContain(`inputs.operation == '${operation}'`);
     }
+
     const planning = await workflowStep(
       "Read the complete dormant resource plan without applying it"
     );
+
     expect(planning).toContain("inputs.operation == 'plan-fixture-repair'");
     expect(planning).not.toContain("resume-fixture-upload");
+
     const mutations = [
       "Upload the verified native candidates",
       "Stage the zero-traffic native candidates",
       "Seal dormant fallback stage before promotion",
       "Finish only the tested closed forward repair",
     ];
+
     for (const step of await Promise.all(mutations.map(workflowStep))) {
       expect(step).toContain("inputs.operation == 'resume-fixture-upload'");
       expect(step).not.toContain("plan-fixture-repair");
     }
+
     const workflow = await readFile(productionWorkflowPath, "utf8");
     expect(workflow.indexOf(source)).toBeLessThan(
       workflow.indexOf(await workflowStep("Capture the native stable pair"))
@@ -173,6 +197,7 @@ describe("Production runtime configuration gate", () => {
   it("stages a pairing repair on its real source without promoting or changing hosts", async () => {
     const source = await workflowStep("Authenticate the predecessor of the pairing repair");
     expect(source).toContain("unsealed_stage.py replacement");
+
     for (const step of await Promise.all(
       [
         "Capture the native stable pair",
@@ -184,6 +209,7 @@ describe("Production runtime configuration gate", () => {
     )) {
       expect(step).toContain("inputs.operation == 'stage-pairing-repair'");
     }
+
     for (const step of await Promise.all(
       [
         "Bind the protected verifier to the staged application source",
@@ -199,6 +225,7 @@ describe("Production runtime configuration gate", () => {
   it("restores the protected pairing upload before staging, checking controls and sealing at zero traffic", async () => {
     const workflow = await readFile(productionWorkflowPath, "utf8");
     let position = 0;
+
     for (const step of await Promise.all(
       [
         "Authenticate the interrupted pairing upload and its original controls",
@@ -212,6 +239,7 @@ describe("Production runtime configuration gate", () => {
       expect(workflow.indexOf(step)).toBeGreaterThan(position);
       position = workflow.indexOf(step);
     }
+
     for (const step of await Promise.all(
       [
         "Capture the native stable pair",
@@ -229,33 +257,41 @@ describe("Production runtime configuration gate", () => {
 
   it("restricts resealing to archived pair verification and a GitHub evidence upload", async () => {
     const release = (await readFile(productionWorkflowPath, "utf8")).split("\n  site:")[0];
+
     const source = await workflowStep(
       "Bind the protected verifier to the staged application source"
     );
+
     const restore = await workflowStep("Authenticate the unsealed zero-traffic pair");
+
     const qualify = await workflowStep(
       "Requalify the archived zero-traffic pair without moving traffic"
     );
+
     const seal = await workflowStep("Seal dormant fallback stage before promotion");
     const steps = release.split("\n      - name: ").slice(1);
+
     const admitted = steps.filter((step) =>
       step
         .split("\n")
         .find((line) => line.startsWith("        if:"))
         ?.includes("inputs.operation == 'reseal-fixture-fallback'")
     );
+
     expect(admitted.map((step) => step.split("\n")[0])).toEqual([
       "Bind the protected verifier to the staged application source",
       "Authenticate the unsealed zero-traffic pair",
       "Requalify the archived zero-traffic pair without moving traffic",
       "Seal dormant fallback stage before promotion",
     ]);
+
     const diagnosis = steps.filter((step) =>
       step
         .split("\n")
         .find((line) => line.startsWith("        if:"))
         ?.includes("inputs.operation == 'diagnose-fixture-pairing'")
     );
+
     expect(diagnosis.map((step) => step.split("\n")[0])).toEqual([
       "Bind the protected verifier to the staged application source",
       "Authenticate the unsealed zero-traffic pair",
@@ -267,14 +303,18 @@ describe("Production runtime configuration gate", () => {
     expect(qualify).toContain("bun native-storage-release.ts reseal-fallback");
     expect(qualify).not.toContain("NATIVE_FIXTURE_SIGNING_KEY");
     expect(seal).toContain("if-no-files-found: error");
+
     const installed = await workflowStep(
       "Verify the installed application and retained schema markers"
     );
+
     expect(installed).toContain("inputs.operation != 'reseal-fixture-fallback'");
     expect(installed).toContain("inputs.operation != 'diagnose-fixture-pairing'");
+
     for (const step of steps.filter((item) => item.includes("run: bun native-storage-"))) {
       expect(step).toContain("        if:");
     }
+
     const recover = await workflowStep("Authenticate the interrupted dormant stage");
     expect(recover).toContain("if: inputs.operation == 'recover-fixture-fallback'");
     expect(recover).toContain("fallback_stage.py");
@@ -291,6 +331,7 @@ describe("Production runtime configuration gate", () => {
 
   it("rejects whitespace-only configuration", () => {
     const whitespaceEnv = { ...process.env };
+
     for (const name of requiredConfiguration) whitespaceEnv[name] = testValue;
     whitespaceEnv.SMOKE_PROOF = smokeProof;
     whitespaceEnv.WOMPI_PUBLIC_KEY = " \t\n";

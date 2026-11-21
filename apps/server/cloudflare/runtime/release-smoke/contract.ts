@@ -5,8 +5,11 @@ import { Schema } from "effect";
 import { contractDigestPattern, gitRevisionPattern } from "../contract";
 
 export { smokePath } from "../contract";
+
 export const smokeVersionHeader = "cloudflare-workers-version-overrides";
+
 export const smokeProofHeader = "x-fidy-smoke-proof";
+
 const smokeSecretPattern = /^[0-9a-f]{64}$/u;
 
 export const smokeProofAccepted = ({
@@ -14,16 +17,21 @@ export const smokeProofAccepted = ({
   secret,
 }: Readonly<{ request: Request; secret: string }>): boolean => {
   const offered = request.headers.get(smokeProofHeader) ?? "";
+
   if (!smokeSecretPattern.test(secret) || !smokeSecretPattern.test(offered)) return false;
   let difference = 0;
+
   for (let index = 0; index < secret.length; index++) {
     difference |= secret.charCodeAt(index) ^ offered.charCodeAt(index);
   }
+
   return difference === 0;
 };
 
 export const smokeFailureHeader = "x-fidy-smoke-failure";
+
 export const smokeIdentityHeader = "x-fidy-smoke-identity";
+
 export const smokeCoreVersionHeader = "x-fidy-smoke-core-version";
 
 export const smokeDiagnosticRevision = "0000000000000000000000000000000000000000";
@@ -51,6 +59,7 @@ export const SmokeFailureStage = Schema.Literals([
   "public_response",
   "core_response",
 ]);
+
 export type SmokeFailureStage = typeof SmokeFailureStage.Type;
 
 export const SmokeIdentity = Schema.Struct({
@@ -60,6 +69,7 @@ export const SmokeIdentity = Schema.Struct({
     Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u)
   ),
 });
+
 export type SmokeIdentity = typeof SmokeIdentity.Type;
 
 export const SmokeRequest = Schema.Struct({
@@ -71,13 +81,16 @@ export const SmokeRequest = Schema.Struct({
   expectedGitRevision: SmokeIdentity.fields.gitRevision,
   expectedContractDigest: SmokeIdentity.fields.contractDigest,
 });
+
 export type SmokeRequest = typeof SmokeRequest.Type;
 
 export const smokeManifest = { protocolVersion: 1, asyncWorkVersion: 1 } as const;
+
 export const SmokeManifest = Schema.Struct({
   protocolVersion: Schema.Literal(1),
   asyncWorkVersion: Schema.Literal(1),
 });
+
 export const SmokeResponse = Schema.Struct({
   status: Schema.Literals(["pending", "passed"]),
   core: SmokeIdentity,
@@ -90,6 +103,7 @@ export const SmokeCompletion = Schema.Struct({
   executor: SmokeIdentity,
   expiresAtMs: Schema.Int,
 });
+
 export type SmokeCompletion = typeof SmokeCompletion.Type;
 
 export type SmokeEnvironment = BancolombiaSandboxEnvironment &

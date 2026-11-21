@@ -1,5 +1,5 @@
 import * as Alchemist from "alchemy/Alchemist";
-import { Effect, Option } from "effect";
+import { Effect, Match, Option, Schema } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { nativeResourceInventory } from "./native-graph";
 import { type NativeStageFailure, nativeResourceStage } from "./resource-failure";
@@ -12,6 +12,7 @@ const phases = new Set<Alchemist.PlanningPhase>([
   "computing-plan",
   "plan-ready",
 ]);
+
 const readClasses: ReadonlyArray<readonly [RegExp, string]> = [
   [/^access\/identity_providers(?:\/|$)/u, "Access identity providers"],
   [/^access\/groups(?:\/|$)/u, "Access groups"],
@@ -27,26 +28,33 @@ const readClasses: ReadonlyArray<readonly [RegExp, string]> = [
   [/^workers\/scripts(?:\/|$)/u, "Worker scripts"],
   [/^workers\/domains(?:\/|$)/u, "Worker domains"],
 ];
+
 const stateReads: ReadonlyArray<readonly [RegExp, string]> = [
   [/^\/version$/u, "state version"],
   [/^\/state\/stacks$/u, "state authentication"],
   [/\/resources\/[^/]+$/u, "state resource"],
   [/\/resources$/u, "state inventory"],
 ];
+
 const matchRead = (classes: typeof readClasses, path: string): Option.Option<string> =>
   Option.fromUndefinedOr(classes.find(([pattern]) => pattern.test(path))?.[1]);
+
 const readClass = (url: URL): Option.Option<string> => {
   if (/^alchemy-state-store\.[^.]+\.workers\.dev$/u.test(url.hostname)) {
     return matchRead(stateReads, url.pathname);
   }
+
   if (
     url.origin === "https://api.github.com" &&
     /^\/repos\/[^/]+\/[^/]+\/git\/ref\/heads\/trunk$/u.test(url.pathname)
   ) {
     return Option.some("trunk revision");
   }
+
   if (url.origin !== "https://api.cloudflare.com") return Option.none();
+
   if (url.pathname === "/client/v4/zones") return Option.some("zone authority");
+
   return matchRead(
     readClasses,
     url.pathname.replace(/^\/client\/v4\/(?:accounts|zones)\/[^/]+\//u, "")
@@ -67,15 +75,20 @@ const observeHttp = ({
   const record = (kind: string, outcome: string): void => {
     if (outcomes.size < maximumOutcomes) outcomes.add(kind + " " + outcome);
   };
+
   return Object.assign(
     (...args: Parameters<typeof fetch>) => {
       const [input, init] = args;
-      if (init?.method === undefined || !(input instanceof URL)) return fetch(...args);
+
+      if (init?.method === undefined || !Schema.is(Schema.URL)(input)) return fetch(...args);
       const kind = classify(input, init.method);
+
       if (Option.isNone(kind)) return fetch(...args);
+
       return fetch(...args).then(
         (response) => {
           record(kind.value, String(response.status));
+
           return response;
         },
         (error: unknown) => {
@@ -101,6 +114,7 @@ export const diagnoseSuccessorApply =
     Effect.suspend(() => {
       const writes = new Set<string>();
       const smoke = "fidy-native-smoke-" + revision;
+
       const endpoints = new Map([
         ["POST workers/scripts/" + installationNames.Core + "/versions", "Core version"],
         ["POST workers/scripts/" + installationNames.Ingress + "/versions", "Ingress version"],
@@ -108,14 +122,18 @@ export const diagnoseSuccessorApply =
         ["PUT workflows/" + smoke, "Smoke Workflow"],
         ["POST queues", "Smoke Queue"],
       ]);
+
       const classify = (url: URL, method: string): Option.Option<string> => {
         if (url.origin !== "https://api.cloudflare.com") return Option.none();
         const path = url.pathname.replace(/^\/client\/v4\/accounts\/[^/]+\//u, "");
+
         if (method === "POST" && /^queues\/[^/]+\/consumers$/u.test(path)) {
           return Option.some("Smoke Queue consumer");
         }
+
         return Option.fromUndefinedOr(endpoints.get(method + " " + path));
       };
+
       return operation.pipe(
         Effect.updateService(FetchHttpClient.Fetch, (fetch) =>
           observeHttp({ fetch, outcomes: writes, classify })
@@ -132,6 +150,7 @@ export const diagnoseFreshTarget = <A, E, R>(
 ): Effect.Effect<A, E | NativeStageFailure, R> =>
   Effect.suspend(() => {
     const reads = new Set<string>();
+
     return operation.pipe(
       Effect.updateService(FetchHttpClient.Fetch, (fetch) => observeReads(fetch, reads)),
       nativeResourceStage({
@@ -150,22 +169,37 @@ export const diagnoseNativePlan =
       const pending = new Set<string>();
       const reads = new Set<string>();
       const inventory = nativeResourceInventory(revision);
+
       let phase = "starting",
         started = 0,
         completed = 0;
+
+      const tracked = (logicalId: string, resourceType: string): Option.Option<string> =>
+        inventory.get(logicalId) === resourceType
+          ? Option.some(logicalId.replace(/-[a-f0-9]{40}$/u, ""))
+          : Option.none();
+
       const observe: Alchemist.ProgressReporter = (event) =>
-        Effect.sync(() => {
-          if (event._tag === "plan.phase" && phases.has(event.phase)) phase = event.phase;
-          if (event._tag !== "plan.resource.started" && event._tag !== "plan.resource.completed") {
-            return;
-          }
-          if (event._tag === "plan.resource.started") started++;
-          else completed++;
-          if (inventory.get(event.logicalId) !== event.resourceType) return;
-          const label = event.logicalId.replace(/-[a-f0-9]{40}$/u, "");
-          if (event._tag === "plan.resource.started") pending.add(label);
-          else pending.delete(label);
-        }).pipe(Effect.andThen(report(event)));
+        Effect.sync(() =>
+          Match.value(event).pipe(
+            Match.tag("plan.phase", ({ phase: next }) => {
+              if (phases.has(next)) phase = next;
+            }),
+            Match.tag("plan.resource.started", ({ logicalId, resourceType }) => {
+              started++;
+              const label = tracked(logicalId, resourceType);
+
+              if (Option.isSome(label)) pending.add(label.value);
+            }),
+            Match.tag("plan.resource.completed", ({ logicalId, resourceType }) => {
+              completed++;
+              const label = tracked(logicalId, resourceType);
+
+              if (Option.isSome(label)) pending.delete(label.value);
+            }),
+            Match.orElse(() => undefined)
+          )
+        ).pipe(Effect.andThen(report(event)));
 
       const diagnostics = (): string =>
         " Planner phase " +
@@ -179,6 +213,7 @@ export const diagnoseNativePlan =
         "]. Observed reads [" +
         [...reads].sort().join(", ") +
         "].";
+
       return yield* plan.pipe(
         Effect.provideService(Alchemist.Progress, observe),
         Effect.updateService(FetchHttpClient.Fetch, (fetch) => observeReads(fetch, reads)),

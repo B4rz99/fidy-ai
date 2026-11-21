@@ -103,6 +103,7 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
       const exceptions = compilerOptions.plugins.flatMap(({ overrides }) =>
         overrides.flatMap(disabledFor)
       );
+
       expect(exceptions.toSorted()).toEqual(
         [
           "nodeBuiltinImport:./apps/cli/src/credential/internal/local-path.ts",
@@ -147,9 +148,11 @@ it("does not re-disable unsafe rules for the typed dependency analyzer", () =>
         "typescript/no-unsafe-member-access",
         "typescript/no-unsafe-return",
       ];
+
       const exceptions = overrides.flatMap(({ files, rules }) =>
         unsafeRules.flatMap((rule) => (rules[rule] === "off" ? files : []))
       );
+
       expect(exceptions).toEqual([]);
     }));
 
@@ -161,6 +164,7 @@ it("guards the route factory without leaving other named functions unannotated",
       const returnTypeExemptions = overrides.filter(
         ({ rules }) => rules["typescript/explicit-function-return-type"] === "off"
       );
+
       expect(returnTypeExemptions).toHaveLength(1);
       expect(returnTypeExemptions[0]?.files).toEqual(["apps/web/src/app/routes.ts"]);
       expect(returnTypeExemptions[0]?.rules["effect-guards/require-route-return-type"]).toBe(
@@ -176,6 +180,7 @@ it("keeps refactored lint rules enabled", () =>
       const sequential = overrides.flatMap(({ files, rules }) =>
         rules["no-await-in-loop"] === "off" ? files : []
       );
+
       expect(sequential).toEqual([]);
       expect(overrides.some(({ rules }) => "effect-guards/no-nullable-type" in rules)).toBe(false);
       expect(
@@ -183,10 +188,12 @@ it("keeps refactored lint rules enabled", () =>
           ["max-depth", "max-params"].filter((rule) => rules[rule] === "off")
         )
       ).toEqual([]);
+
       const refactoredComplexity = new Set([
         "apps/server/tools/contracts/generate.ts",
         "scripts/oxlint/dictionary-types.js",
       ]);
+
       expect(
         overrides
           .filter(({ files }) => files.some((file) => refactoredComplexity.has(file)))

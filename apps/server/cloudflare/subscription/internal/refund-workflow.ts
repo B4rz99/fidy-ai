@@ -6,6 +6,7 @@ import { WompiTransactionId } from "./wompi-model";
 import { type RefundSubmission } from "./wompi-refund-client";
 
 const maximumVerificationAttempts = 8;
+
 const RefundWork = Schema.Union([
   Schema.Struct({
     traceContext: Schema.optionalKey(Schema.Unknown),
@@ -23,6 +24,7 @@ const RefundWork = Schema.Union([
     ),
   }),
 ]);
+
 export const RefundSubmissionSnapshot = Schema.Struct({
   id: RefundAttemptId,
   kind: Schema.Literals(["refund", "card-void"]),
@@ -32,7 +34,9 @@ export const RefundSubmissionSnapshot = Schema.Struct({
   wompi_reference: Schema.String,
   wompi_source_id: Schema.Int,
 });
+
 export const isRefundWork = (body: unknown): boolean => Schema.is(RefundWork)(body);
+
 export const submission = (row: typeof RefundSubmissionSnapshot.Type): RefundSubmission => ({
   id: row.id,
   kind: row.kind,
@@ -47,8 +51,9 @@ export const submission = (row: typeof RefundSubmissionSnapshot.Type): RefundSub
 export const receiveRefunds = (
   input: RefundReceiveInput
 ): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
-  Effect.gen(function* () {
-    for (const message of input.batch.messages) {
+  Effect.forEach(
+    input.batch.messages,
+    Effect.fnUntraced(function* (message) {
       const work = yield* Schema.decodeUnknownEffect(RefundWork)(message.body);
       const id = `refund-v1-${work.refundAttemptId}${work.kind === "refund" ? "" : `-verify-${work.verification}`}`;
       const params = yield* sanitizeWorkTrace(work);
@@ -59,10 +64,12 @@ export const receiveRefunds = (
           retention: { successRetention: "3 days", errorRetention: "3 days" },
         })
       ).pipe(
+        Effect.tapError(Effect.logDebug),
         Effect.catch(() =>
           Effect.tryPromise(() => input.environment.BILLING_REFUND_WORKFLOW.get(id))
         )
       );
       message.ack();
-    }
-  });
+    }),
+    { discard: true }
+  );

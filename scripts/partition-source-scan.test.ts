@@ -12,6 +12,7 @@ it("balances the complete source scope without duplication, omissions, or input-
     { path: "header.txt", bytes: 0 },
     { path: "other.ts", bytes: 10 },
   ];
+
   const parts = partitionSourceFiles({ files, count: 3 });
   expect(parts).toEqual(partitionSourceFiles({ files: files.toReversed(), count: 3 }));
   expect(parts.flat().toSorted()).toEqual(files.map(({ path }) => path).toSorted());
@@ -24,6 +25,7 @@ it("balances the complete source scope without duplication, omissions, or input-
 
 it("refuses invalid partition counts and duplicated source targets", () => {
   const files = [{ path: "source.ts", bytes: 10 }];
+
   for (const count of [0, -1, 1.5]) expect(() => partitionSourceFiles({ files, count })).toThrow();
   expect(() => partitionSourceFiles({ files: [...files, ...files], count: 3 })).toThrow(
     "Duplicate"
@@ -34,7 +36,7 @@ it("keeps every partition on an already selected runner for every change plan", 
   for (const native of [false, true]) {
     for (const sca of [false, true]) {
       const plan = sourceScanPlan({ native, sca });
-      const indices = [1, ...(native ? [2] : []), ...(sca ? [plan.sca] : [])];
+      const indices = [[1], native ? [2] : [], sca ? [plan.sca] : []].flat();
       expect(indices).toEqual(Array.from({ length: plan.count }, (_, index) => index + 1));
     }
   }
@@ -48,6 +50,7 @@ it.effect(
       expect(temporary.exitCode).toBe(0);
       const directory = new TextDecoder().decode(temporary.stdout).trim();
       const script = Bun.fileURLToPath(new URL("./partition-source-scan.ts", import.meta.url));
+
       try {
         expect(Bun.spawnSync(["mkdir", "-p", `${directory}/.fluidattacks`]).exitCode).toBe(0);
         yield* Effect.tryPromise(() =>
@@ -62,8 +65,10 @@ it.effect(
         expect(Bun.spawnSync(["git", "init", "--quiet"], { cwd: directory }).exitCode).toBe(0);
         expect(Bun.spawnSync(["git", "add", "."], { cwd: directory }).exitCode).toBe(0);
         const output = `${directory}/scan.yaml`;
+
         const run = (selection: string): Bun.SyncSubprocess =>
           Bun.spawnSync([process.execPath, script, selection, output], { cwd: directory });
+
         expect(run("1/1").exitCode).toBe(0);
         const source = yield* Effect.tryPromise(() => Bun.file(output).text());
         expect(Bun.YAML.parse(source)).toMatchObject({

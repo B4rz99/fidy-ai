@@ -14,7 +14,9 @@ const portfolio = "123456789012345",
   bsuid = "CO.13491208655302741918",
   token = "22430000-0000-4000-8000-000000000008",
   operationId = "22430000-0000-4000-8000-000000000007";
+
 const message = "wamid.verified-callback";
+
 const notifier = (
   runtime: Miniflare,
   key: CryptoKey
@@ -43,11 +45,13 @@ const notifier = (
         },
       },
     });
+
     const signed = Hex.encode(
       new Uint8Array(
         yield* native(() => crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body)))
       )
     );
+
     return yield* native(() =>
       runtime.dispatchFetch(
         `https://${productionTopology.ingress.hostname}/providers/kapso/callback`,
@@ -63,6 +67,7 @@ const notifier = (
       )
     );
   });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect.each([false, true])(
     "retains exact signed delivery evidence across a lost send reply with erasure requested=%s",
@@ -85,6 +90,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           alice.user
         );
         const owners = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
+
         const privateCall = (
           url: string,
           body: unknown,
@@ -93,7 +99,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           native(() =>
             owners.getByName(id).fetch(url, { method: "POST", body: JSON.stringify(body) })
           );
+
         const now = yield* Clock.currentTimeMillis;
+
         const claim = {
           userId: alice.user,
           family: "hosted",
@@ -106,27 +114,31 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           deadline: now + 120000,
           contentDigest: "c".repeat(64),
         };
+
         expect((yield* privateCall(claimDeliveryUrl, claim, bob.user)).status).toBe(409);
         expect((yield* privateCall(claimDeliveryUrl, claim)).status).toBe(409);
         expect((yield* privateCall(reserveDeliveryUrl, claim)).status).toBe(204);
         expect((yield* privateCall(claimDeliveryUrl, claim)).status).toBe(201);
         expect((yield* privateCall(claimDeliveryUrl, claim)).status).toBe(409);
-        if (erase) {
-          const accepted = yield* native(() =>
-            runtime.dispatchFetch(
-              `https://${productionTopology.ingress.hostname}/web/privacy/erasure`,
-              {
-                method: "POST",
-                headers: {
-                  origin: browserOrigins.production,
-                  "content-type": "application/json",
-                  "Fidy-Session-Binding": alice.session,
-                  cookie: "__Host-fidy_session=" + alice.bearer,
-                },
-                body: JSON.stringify({ confirm: true }),
-              }
-            )
+
+        const requestErasure = (): ReturnType<typeof runtime.dispatchFetch> =>
+          runtime.dispatchFetch(
+            `https://${productionTopology.ingress.hostname}/web/privacy/erasure`,
+            {
+              method: "POST",
+              headers: {
+                origin: browserOrigins.production,
+                "content-type": "application/json",
+                "Fidy-Session-Binding": alice.session,
+                cookie: "__Host-fidy_session=" + alice.bearer,
+              },
+              body: JSON.stringify({ confirm: true }),
+            }
           );
+
+        const eraseAndConfirm = Effect.gen(function* () {
+          const accepted = yield* native(requestErasure);
+
           expect(accepted.status).toBe(202);
           expect(
             (yield* privateCall(replyDeliveryUrl, { ...claim, state: "ambiguous", message: null }))
@@ -136,8 +148,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             { state: "ambiguous" },
           ]);
           expect((yield* privateCall(claimDeliveryUrl, claim)).status).toBe(409);
-        }
+        });
+
+        yield* erase ? eraseAndConfirm : Effect.void;
+
         const deliveredAt = yield* Clock.currentTimeMillis;
+
         const key = yield* native(() =>
           crypto.subtle.importKey(
             "raw",
@@ -147,6 +163,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             ["sign"]
           )
         );
+
         const notify = notifier(runtime, key);
         yield* native(() =>
           owner.directory.exec("ALTER TABLE external_event_routes RENAME TO offline")
@@ -162,9 +179,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect((yield* notify("CO.13491208655302741919", true, deliveredAt)).status).toBe(200);
         expect((yield* notify(bsuid, true, deliveredAt - 60000)).status).toBe(200);
         expect((yield* notify(bsuid, true, deliveredAt)).status).toBe(200);
+
         const proof = owner.exec(
           "SELECT provider_message_id,state,delivered_at_ms IS NOT NULL AS confirmed FROM whatsapp_deliveries"
         );
+
         yield* proof.pipe(
           Effect.filterOrFail(
             (rows) => rows[0]?.state === "delivered",
@@ -197,7 +216,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             correlation: "22430000-0000-4000-8000-000000000009",
           })).status
         ).toBe(409);
-      }),
-    30000
+      })
   );
 });

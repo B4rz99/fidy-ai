@@ -117,23 +117,30 @@ type DirectoryEnvironment = AcceptanceWindowBindings &
   }>;
 
 const digestBytes = 32;
+
 const sourceExpiryPageSize = 32;
+
 const admittedStatus = 204;
+
 const pressureStatus = 429;
 
 const admitUnresolved = Effect.fn(function* (source: string) {
   const sql = yield* SqliteClient;
+
   return yield* withStoreAdmission((admitGrowth) =>
     Effect.gen(function* () {
       const current = yield* Clock.currentTimeMillis;
       const { intervalMs, burst } = canonicalRequestProtection;
       yield* sql`DELETE FROM unresolved_source_buckets WHERE subject IN (SELECT subject FROM unresolved_source_buckets WHERE virtual_at_ms<=${current} ORDER BY virtual_at_ms LIMIT ${sourceExpiryPageSize})`;
       const retained = yield* sql`SELECT 1 FROM unresolved_source_buckets WHERE subject=${source}`;
+
       if (retained.length === 0) yield* admitGrowth;
+
       const rows = yield* sql`INSERT INTO unresolved_source_buckets(subject,virtual_at_ms)
             VALUES (${source},${current + intervalMs}) ON CONFLICT(subject) DO UPDATE
             SET virtual_at_ms=max(virtual_at_ms,${current})+${intervalMs}
             WHERE virtual_at_ms<=${current + (burst - 1) * intervalMs} RETURNING subject`;
+
       return new Response(null, {
         status: rows.length === 1 ? admittedStatus : pressureStatus,
       });
@@ -146,15 +153,20 @@ const inspectPressure = Effect.fnUntraced(function* (
   drain: boolean
 ) {
   const sql = yield* SqliteClient;
+
   return yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
+
       if (drain) {
         yield* drainBootstrapExpiry(now);
         yield* sql`DELETE FROM unresolved_source_buckets WHERE subject IN (SELECT subject FROM unresolved_source_buckets WHERE virtual_at_ms<=${now} ORDER BY virtual_at_ms LIMIT ${sourceExpiryPageSize})`;
       }
+
       const { deadline } = yield* directoryDeadline;
+
       if (Option.isNone(deadline)) return false;
+
       return yield* preserveStoreAlarm(storage, Math.max(deadline.value, now));
     })
   );
@@ -176,9 +188,9 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     );
   }
   override alarm(): Promise<void> {
-    return Effect.runPromise(backgroundWorkAllowed(this.env)).then((allowed) =>
-      allowed ? this.recoverAlarm() : undefined
-    );
+    return this.runtime
+      .runPromise(backgroundWorkAllowed(this.env))
+      .then((allowed) => (allowed ? this.recoverAlarm() : undefined));
   }
   private recoverAlarm(): Promise<void> {
     return this.runtime.runPromise(
@@ -195,27 +207,58 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     if (request.url === scopeDirectoryUrl) {
       return this.runtime.runPromise(
         inspectDirectoryScope(request, this.env.ERASURE).pipe(
+          Effect.tapCause(() =>
+            Effect.logWarning({
+              component: "directory",
+              operation: "inspectDirectoryScope",
+              outcome: "unavailable",
+            })
+          ),
           Effect.catchCause(() => Effect.succeed(unavailable()))
         )
       );
     }
+
     if (request.url === participantCleanupUrl) {
       return this.runtime.runPromise(
         handleSharedCleanup(request, this.env.ERASURE, cleanDirectoryCase).pipe(
+          Effect.tapCause(() =>
+            Effect.logWarning({
+              component: "directory",
+              operation: "handleSharedCleanup",
+              outcome: "unavailable",
+            })
+          ),
           Effect.catchCause(() => Effect.succeed(unavailable()))
         )
       );
     }
+
     if (request.url === participantDrainedUrl) {
       return this.runtime.runPromise(
         participantDrain(request, outstandingDirectoryHandoffs).pipe(
+          Effect.tapCause(() =>
+            Effect.logWarning({
+              component: "directory",
+              operation: "participantDrain",
+              outcome: "unavailable",
+            })
+          ),
           Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
         )
       );
     }
+
     {
       return this.runtime.runPromise(
         fenceErasureParticipant(request, this.env.USER_STORE, this.ctx.storage).pipe(
+          Effect.tapCause(() =>
+            Effect.logWarning({
+              component: "directory",
+              operation: "fenceErasureParticipant",
+              outcome: "unavailable",
+            })
+          ),
           Effect.catchCause(() => Effect.succeed(unavailable()))
         )
       );
@@ -225,6 +268,7 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     if (!this.ctx.id.equals(this.env.DIRECTORY.idFromName(directoryName))) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
+
     if (
       request.method === "POST" &&
       [
@@ -236,6 +280,7 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     ) {
       return this.erasure(request);
     }
+
     if (ownerCheckRequest(request)) {
       return this.runtime.runPromise(
         inspectPressure(this.ctx.storage, false).pipe(
@@ -248,6 +293,7 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
         )
       );
     }
+
     return this.runtime.runPromise(
       (request.url === emailCapacityUrl || request.url === mediaCapacityUrl
         ? ingestionCapacityRequest(request, this.ctx.storage)
@@ -255,7 +301,16 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
             request,
             closedHostEnvironment({ request, environment: this.env, boundary: "core" })
           )
-      ).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
+      ).pipe(
+        Effect.tapCause(() =>
+          Effect.logWarning({
+            component: "directory",
+            operation: "directoryRequest",
+            outcome: "unavailable",
+          })
+        ),
+        Effect.catchCause(() => Effect.succeed(unavailable()))
+      )
     );
   }
 }
@@ -263,37 +318,53 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
 const credentialLookup = Effect.fn(function* (request: Request) {
   yield* (yield* StoreCapacity).observe;
   const sql = yield* SqliteClient;
+
   if (request.url === sourcePressureUrl) {
     const source = yield* Effect.tryPromise(() => request.text());
+
     if (!/^[0-9a-f]{64}$/u.test(source)) return new Response(null, { status: 400 });
+
     return yield* admitUnresolved(source);
   }
+
   if (request.url === patRouteUrl) {
     const shortId = yield* Schema.decodeEffect(TokenShortId)(
       yield* Effect.tryPromise(() => request.text())
     );
+
     const current = yield* Clock.currentTimeMillis;
+
     const [row] =
       yield* sql`SELECT user_id AS userId,pat_id AS patId FROM pat_routes WHERE short_id=${shortId} AND expires_at_ms>${current}`;
+
     return row === undefined
       ? new Response(null, { status: 404 })
       : Response.json(yield* Schema.decodeUnknownEffect(PATRoute)(row));
   }
+
   const digest = new Uint8Array(yield* Effect.tryPromise(() => request.arrayBuffer()));
+
   if (digest.byteLength !== digestBytes) return new Response(null, { status: 400 });
+
   return yield* sql.withTransaction(
     Effect.gen(function* () {
       const current = yield* Clock.currentTimeMillis;
+
       const rows = yield* sql`SELECT user_id AS userId,session_id AS sessionId FROM session_routes
           WHERE token_digest=${digest} AND hard_expires_at_ms>${current}`;
+
       if (rows.length === 0) return new Response(null, { status: 404 });
+
       return Response.json(yield* Schema.decodeUnknownEffect(SessionRoute)(rows[0]));
     })
   );
 });
+
 const nativeProvider = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {
   const refusal = yield* admitBootstrap(request);
+
   if (Option.isSome(refusal)) return refusal.value;
+
   return yield* Effect.scoped(
     Effect.flatMap(Layer.build(OutboundHttpLive), (clients) =>
       providerRequest(request, environment).pipe(
@@ -302,21 +373,28 @@ const nativeProvider = Effect.fn(function* (request: Request, environment: Direc
     )
   ).pipe(Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch));
 });
+
 const evidenceResponse = Effect.fn(function* (request: Request) {
   const id = yield* Effect.tryPromise(() => request.text());
+
   const evidence =
     request.url === handoffInspectUrl
       ? yield* inspectHandoff(id)
       : yield* channelApprovalEvidence(id);
+
   return evidence === null ? new Response(null, { status: 404 }) : Response.json(evidence);
 });
+
 const pairRequest = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {
   const refusal = yield* admitBootstrap(request);
+
   if (Option.isSome(refusal)) return refusal.value;
+
   return yield* new URL(request.url).pathname === "/web/pairings"
     ? startPairing
     : pollPairing(request, environment.USER_STORE);
 });
+
 const routingCommands = new Map<
   string,
   | typeof handleOAuthRouteCommand
@@ -339,6 +417,7 @@ const routingCommands = new Map<
   [externalLookupUrl, externalEventRequest],
   [externalReserveUrl, externalEventRequest],
 ]);
+
 const identityRequest = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {
   switch (request.url) {
     case providerAllowanceUrl:
@@ -357,9 +436,12 @@ const identityRequest = Effect.fn(function* (request: Request, environment: Dire
       return new Response(null, { status: 404 });
   }
 });
+
 const internalRequest = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {
   const routing = routingCommands.get(request.url);
+
   if (routing !== undefined) return yield* routing(request);
+
   switch (request.url) {
     case handoffInspectUrl:
     case channelInspectUrl:
@@ -380,8 +462,10 @@ const internalRequest = Effect.fn(function* (request: Request, environment: Dire
       return yield* identityRequest(request, environment);
   }
 });
+
 const isReadinessRequest = (request: Request): boolean =>
   request.method === "GET" && request.url === storeReadinessUrl;
+
 const directoryRequest = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {
   if (isReadinessRequest(request)) {
     return yield* storeReadiness({
@@ -389,7 +473,9 @@ const directoryRequest = Effect.fn(function* (request: Request, environment: Dir
       release: environment.CF_VERSION_METADATA.id,
     });
   }
+
   const path = new URL(request.url).pathname;
+
   if (Object.values(oauthPaths).some((candidate) => candidate === path)) {
     return yield* publicOAuthRequest({
       request,
@@ -398,16 +484,22 @@ const directoryRequest = Effect.fn(function* (request: Request, environment: Dir
       routeBrowser: () => routeSessionRequest({ request, environment }),
     });
   }
+
   if (ownsProviderAuthenticationPath(path)) return yield* nativeProvider(request, environment);
+
   if (request.method !== "POST") return new Response(null, { status: 404 });
+
   if (["/web/email/authentication/start", "/web/email/authentication/complete"].includes(path)) {
     return yield* directoryLoginEmail(request, environment.USER_STORE);
   }
+
   if (["/pat-pairings", "/pat-pairings/claim"].includes(path)) {
     return yield* nativePATPairing({ request, users: environment.USER_STORE });
   }
+
   if (["/web/pairings", "/web/pairings/redeem"].includes(path)) {
     return yield* pairRequest(request, environment);
   }
+
   return yield* internalRequest(request, environment);
 });

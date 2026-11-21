@@ -1,4 +1,4 @@
-import type { ErasureProjection } from "../../erasure-store/contract";
+import { type ErasureProjection, ErasureQuiescence } from "../../erasure-store/contract";
 
 const historyProjection = ({
   id,
@@ -19,7 +19,7 @@ const historyProjection = ({
     id,
     dataClass: "consent",
     dependencies,
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: `SELECT CAST(r.sequence AS TEXT) AS rowRef FROM consent_history r WHERE ${scope}${hasChildren ? " AND NOT EXISTS(SELECT 1 FROM consent_history child WHERE child.record_type=r.record_type AND child.grant_id=r.id AND child.user_id=r.user_id AND child.sequence<>r.sequence)" : ""}`,
@@ -123,7 +123,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "pending_consent_exchanges",
     dataClass: "consent",
     dependencies: ["whatsapp_provider_handoffs"],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM pending_consent_exchanges r WHERE EXISTS(SELECT 1 FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) w WHERE w.user_id=? AND w.portfolio_id=r.portfolio_id AND w.bsuid=r.bsuid)",
@@ -144,7 +144,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "proactivity_consent_offers",
     dataClass: "consent",
     dependencies: ["proactivity_consent_records"],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM consent_offers AS r WHERE r.kind<>'weekly-summary' AND r.user_id=?",
@@ -170,7 +170,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       "weekly_consent_revocation_records",
       "weekly_governor_questions",
     ],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM consent_offers AS r WHERE r.kind='weekly-summary' AND r.user_id=?",

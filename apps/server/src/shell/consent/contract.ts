@@ -1,4 +1,4 @@
-import { type Option, Schema } from "effect";
+import { Data, type Option, Schema } from "effect";
 import type { UserId } from "~/core/identity/contract";
 import type { OAuthConnectionId } from "~/core/oauth-agents/contract";
 import type { PATScopes } from "~/core/tokens/contract";
@@ -12,6 +12,7 @@ export const ProactivityOptInKind = Schema.Literals([
   "manual-entry-reminder",
   "new-recurring-series",
 ]);
+
 export type ProactivityOptInKind = typeof ProactivityOptInKind.Type;
 
 export { E164PhoneNumber } from "~/core/identity/contract";
@@ -23,6 +24,7 @@ export {
   PATRevocationOrigin,
   type ConsentIngressMessage,
 } from "~/core/consent/contract";
+
 export {
   ConsentRecordId,
   DisclosureRevision,
@@ -30,18 +32,22 @@ export {
   PolicyRevision,
   Sha256Digest,
 } from "~/core/consent/contract";
+
 export {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
 } from "~/core/identity/contract";
+
 export { WhatsAppProviderMessageId } from "~/core/provider-evidence/contract";
+
 export {
   DisclosureDeliveryCorrelationToken,
   WhatsAppDeliveryKey,
   maxWhatsAppFutureTimestampMinutes,
   maxWhatsAppWebhookBytes,
 } from "~/shell/channels/whatsapp/contract";
+
 export type {
   WhatsAppInboundEvent,
   WhatsAppSendFailed,
@@ -119,9 +125,12 @@ export type ConsentSubjectColumn =
   | "transactions.user_id"
   | "forwarded_email_receipts.user_id";
 
-export type ConsentSubject =
-  | Readonly<{ _tag: "User"; userId: string }>
-  | Readonly<{ _tag: "Owner"; column: ConsentSubjectColumn }>;
+export type ConsentSubject = Data.TaggedEnum<{
+  User: { readonly userId: string };
+  Owner: { readonly column: ConsentSubjectColumn };
+}>;
+
+export const ConsentSubject = Data.taggedEnum<ConsentSubject>();
 
 export type ConsentStandingRequirement = "granted" | "unrevoked" | "active";
 
@@ -137,11 +146,14 @@ export type ConsentAuthority = Readonly<{
   bindings: ReadonlyArray<string | number | Uint8Array>;
 }>;
 
-export type PATRevocationProtection =
-  | Readonly<{ _tag: "UserPAT"; sessionId: string; occurredAtMs: Option.Option<number> }>
-  | Readonly<{ _tag: "UserPairing"; sessionId: string }>
-  | Readonly<{ _tag: "ExpiredPAT" }>
-  | Readonly<{ _tag: "ExpiredPairing" }>;
+export type PATRevocationProtection = Data.TaggedEnum<{
+  UserPAT: { readonly sessionId: string; readonly occurredAtMs: Option.Option<number> };
+  UserPairing: { readonly sessionId: string };
+  ExpiredPAT: {};
+  ExpiredPairing: {};
+}>;
+
+export const PATRevocationProtection = Data.taggedEnum<PATRevocationProtection>();
 
 export type RevokeAllPairingConsentsInput = Readonly<{
   session: FreshSessionSubject;

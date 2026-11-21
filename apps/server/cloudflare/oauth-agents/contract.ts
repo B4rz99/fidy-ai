@@ -5,7 +5,9 @@ import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import type { OAuthCanonicalAdmission } from "../../src/shell/mcp/contract";
 import { Context, Data, type Effect, Option } from "effect";
 
-export class BootstrapUnavailable extends Data.TaggedError("BootstrapUnavailable") {}
+export class BootstrapUnavailable extends Data.TaggedError("BootstrapUnavailable")<{
+  readonly cause: Option.Option<unknown>;
+}> {}
 
 export class OAuthMcpCallerUnavailable extends Data.TaggedError("OAuthMcpCallerUnavailable") {}
 

@@ -8,6 +8,7 @@ type Props = {
     visibility: "all" | "desktop" | "mobile";
   }>;
 };
+
 const rows = Astro.props.rows.map((row) => ({
   ...row,
   target: schemaTarget(row.property.schema),

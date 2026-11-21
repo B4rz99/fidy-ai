@@ -5,8 +5,10 @@ import { type PlanDraft, parseMonthDay } from "./plan-validation";
 
 const formValue = (form: FormData, key: string): string => {
   const entry = form.get(key);
-  return typeof entry === "string" ? entry.trim() : "";
+
+  return Option.getOrElse(Schema.decodeUnknownOption(Schema.String)(entry), () => "").trim();
 };
+
 export const planDraft = (form: FormData): PlanDraft => ({
   kind: formValue(form, "kind"),
   cardPayment: formValue(form, "cardPayment") === "yes",
@@ -16,16 +18,20 @@ export const planDraft = (form: FormData): PlanDraft => ({
   day1: formValue(form, "day1"),
   day2: formValue(form, "day2"),
 });
+
 type FormPlan = Readonly<{ form: FormData; timeZone: PlanInput["timeZone"] }>;
+
 export const planFields = ({ form, timeZone }: FormPlan): Schema.JsonObject => {
   const currency = formValue(form, "currency").toUpperCase();
   const amountMode = formValue(form, "amountMode");
   const frequency = formValue(form, "frequency");
+
   const optional = Object.fromEntries(
     ["endDate", "counterparty", "categoryId"].flatMap((key) =>
       formValue(form, key) === "" ? [] : [[key, formValue(form, key)]]
     )
   );
+
   return {
     name: formValue(form, "name"),
     kind: formValue(form, "kind"),
@@ -36,24 +42,34 @@ export const planFields = ({ form, timeZone }: FormPlan): Schema.JsonObject => {
     firstDate: formValue(form, "firstDate"),
     cardPayment: formValue(form, "cardPayment") === "yes",
     ...optional,
-    ...(amountMode === "unknown" ? {} : { money: { amount: formValue(form, "amount"), currency } }),
-    ...(frequency === "twice-monthly"
-      ? Option.match(
+    ...Option.match(
+      Option.liftPredicate(amountMode, (mode) => mode !== "unknown"),
+      {
+        onNone: () => ({}),
+        onSome: () => ({ money: { amount: formValue(form, "amount"), currency } }),
+      }
+    ),
+    ...Option.match(
+      Option.flatMap(
+        Option.liftPredicate(frequency, (cadence) => cadence === "twice-monthly"),
+        () =>
           Option.all([
             parseMonthDay(formValue(form, "day1")),
             parseMonthDay(formValue(form, "day2")),
-          ]),
-          {
-            onNone: () => ({}),
-            onSome: (monthDays) => ({ monthDays }),
-          }
-        )
-      : {}),
+          ])
+      ),
+      {
+        onNone: () => ({}),
+        onSome: (monthDays) => ({ monthDays }),
+      }
+    ),
   };
 };
+
 const decodeField = Schema.decodeUnknownOption(
   Schema.toCodecJson(RecurringPlanInput.mapFields(Struct.map(Schema.optionalKey)))
 );
+
 export const restoredPlan = ({
   form,
   timeZone,

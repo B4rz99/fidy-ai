@@ -12,16 +12,21 @@ const setup = Effect.gen(function* () {
   const runtime = yield* (yield* nativeHostedPlatform)(),
     owner = yield* seed(runtime, alice),
     foreign = yield* seed(runtime, bob);
+
   const ns = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
   const target = ns.getByName(alice.user);
+
   const controls = yield* native(() =>
     runtime.getDurableObjectNamespace("CONTROL", "hosted-provider")
   );
+
   yield* native(() => controls.getByName("provider").fetch("https://fixture.invalid/release"));
   yield* native(() => target.fetch("https://fixture.invalid/hold-alarm"));
+
   const portfolio = "123456789012345",
     bsuid = "CO.13491208655302741918",
     endpoint = "8444555566667";
+
   yield* owner.exec(
     "UPDATE users SET whatsapp_portfolio_id=?,whatsapp_bsuid=?,whatsapp_verified_at_ms=? WHERE id=?",
     portfolio,
@@ -37,9 +42,11 @@ const setup = Effect.gen(function* () {
       alice.user
     )
   );
+
   const disclosure = yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(
     currentDisclosureFor()
   );
+
   yield* owner.exec(
     "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms,disclosure_json) VALUES(?,?,'processing_grant',?,?)",
     alice.user,
@@ -47,20 +54,25 @@ const setup = Effect.gen(function* () {
     owner.now - 1000,
     disclosure
   );
+
   const alarm = Effect.fn(function* (instant: number) {
     const response = yield* native(() =>
       target.fetch("https://fixture.invalid/clocked-alarm?now=" + instant)
     );
+
     expect(response.status).toBe(204);
   });
+
   return { runtime, owner, foreign, target, portfolio, bsuid, endpoint, alarm };
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "retains a first Budget offer without a contact, defers to the morning and needs observed delivery before granting anything",
     () =>
       Effect.gen(function* () {
         const { runtime, owner, foreign, portfolio, bsuid, endpoint, alarm } = yield* setup;
+
         const created = yield* native(() =>
           runtime.dispatchFetch("https://api.fidyapp.com/budgets", {
             method: "POST",
@@ -73,10 +85,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             body: JSON.stringify({ categoryId: category, cap: { amount: "50", currency: "COP" } }),
           })
         );
+
         expect(created.status).toBe(201);
         expect(yield* owner.exec("SELECT kind,next_ms FROM category_opportunities")).toEqual([
           { kind: "budget-threshold", next_ms: null },
         ]);
+
         const incoming = yield* chatWith(runtime, {
           text: "Hola",
           caller: bsuid,
@@ -84,6 +98,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           secret: "callback-fixture-secret",
           message: "wamid.opportunity",
         });
+
         yield* native(() => incoming.arrayBuffer());
         expect(yield* owner.exec("SELECT portfolio,bsuid,endpoint FROM insight_contacts")).toEqual([
           { portfolio, bsuid, endpoint },
@@ -111,8 +126,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const { runtime, owner, foreign, target, bsuid, endpoint, alarm } = yield* setup;
+
         const today = DateTime.formatIsoDate(DateTime.makeUnsafe(owner.now)),
           todayMorning = DateTime.toEpochMillis(DateTime.makeUnsafe(today + "T15:00:00Z"));
+
         const at = todayMorning >= owner.now ? todayMorning : todayMorning + 86400000;
         yield* native(() =>
           target.fetch("https://fixture.invalid/set-opportunity-clock?now=" + at)
@@ -134,6 +151,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           })
         );
         expect(yield* owner.exec("SELECT source FROM category_opportunities")).toEqual([]);
+
         const first = yield* chatWith(runtime, {
           text: "Hola",
           caller: bsuid,
@@ -141,6 +159,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           secret: "callback-fixture-secret",
           message: "wamid.discovery",
         });
+
         yield* native(() => first.arrayBuffer());
         expect(yield* owner.exec("SELECT kind,source FROM category_opportunities")).toEqual([
           { kind: "new-recurring-series", source: "wamid.discovery" },
@@ -149,6 +168,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* owner.exec("SELECT kind FROM reminder_disclosures")).toEqual([
           { kind: "new-recurring-series" },
         ]);
+
         const repeated = yield* chatWith(runtime, {
           text: "Hola",
           caller: bsuid,
@@ -156,6 +176,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           secret: "callback-fixture-secret",
           message: "wamid.next-discovery",
         });
+
         yield* native(() => repeated.arrayBuffer());
         expect(yield* owner.exec("SELECT source FROM category_opportunities")).toEqual([
           { source: "wamid.discovery" },

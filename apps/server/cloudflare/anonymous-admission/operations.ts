@@ -14,9 +14,11 @@ export const deriveAnonymousSource = ({
     const visitor =
       request.headers.get("cf-connecting-ip") ??
       (browserOrigin === browserOrigins.local ? "local-development" : "");
+
     if (visitor.length === 0 || admissionKey.length < minimumAdmissionKeyLength) {
-      throw new Error("PAT admission unavailable");
+      return yield* Effect.die(new Error("PAT admission unavailable"));
     }
+
     const key = yield* Effect.tryPromise({
       try: () =>
         crypto.subtle.importKey(
@@ -28,9 +30,11 @@ export const deriveAnonymousSource = ({
         ),
       catch: () => undefined,
     });
+
     const signature = yield* Effect.tryPromise({
       try: () => crypto.subtle.sign("HMAC", key, new TextEncoder().encode(visitor)),
       catch: () => undefined,
     });
+
     return Hex.encode(new Uint8Array(signature));
   });

@@ -50,7 +50,7 @@ import { type TelemetryService } from "../../../src/shell/observability/contract
 
 import { observeCanonicalResponse } from "../../runtime/application-observation/operations";
 
-import { Effect, Exit, Option, Schema } from "effect";
+import { Effect, Exit, Layer, ManagedRuntime, Option, Schema } from "effect";
 
 import { ownsTransactionPath as transactionPath } from "../../../src/shell/transactions/runtime";
 
@@ -115,6 +115,8 @@ const HTTP_SERVICE_UNAVAILABLE = 503;
 const jsonResponse = (body: string, status: number): Response =>
   new Response(body, { headers: jsonHeaders, status });
 
+const callbackRuntime = ManagedRuntime.make(Layer.empty);
+
 const unavailable = (): Response =>
   jsonResponse('{"status":"unavailable"}', HTTP_SERVICE_UNAVAILABLE);
 
@@ -133,19 +135,21 @@ const callbackEffect = (
         receiveWhatsAppWebhook({
           ...environment,
           onHostedText: (admission) =>
-            Effect.runPromise(
-              Schema.encodeEffect(Schema.fromJsonString(WhatsAppInboundAdmission))(admission)
-            ).then(
-              (body) =>
-                environment.USER_STORE?.getByName(admission.userId).fetch(
-                  "https://user.invalid/hosted-turn/whatsapp",
-                  {
-                    method: "POST",
-                    headers: { "content-type": "application/json", ...traceHeaders },
-                    body,
-                  }
-                ) ?? unavailable()
-            ),
+            callbackRuntime
+              .runPromise(
+                Schema.encodeEffect(Schema.fromJsonString(WhatsAppInboundAdmission))(admission)
+              )
+              .then(
+                (body) =>
+                  environment.USER_STORE?.getByName(admission.userId).fetch(
+                    "https://user.invalid/hosted-turn/whatsapp",
+                    {
+                      method: "POST",
+                      headers: { "content-type": "application/json", ...traceHeaders },
+                      body,
+                    }
+                  ) ?? unavailable()
+              ),
         })(request)
       )
     : Effect.succeed(methodNotAllowed());
@@ -155,9 +159,13 @@ const providerCallbackEffect = (
   environment: CoreHttpEnvironment
 ): Effect.Effect<Response> => {
   const path = new URL(request.url).pathname;
+
   if (path === "/providers/kapso/callback") return callbackEffect(request, environment);
+
   if (request.method !== "POST") return Effect.succeed(methodNotAllowed());
+
   if (environment.WOMPI_EVENT_SECRET === undefined) return Effect.succeed(unavailable());
+
   return receiveWompiBillingEvent({
     request,
     environment: { ...environment, WOMPI_EVENT_SECRET: environment.WOMPI_EVENT_SECRET },
@@ -214,9 +222,11 @@ const statementUploadResponse = (request: Request): Effect.Effect<Response> =>
 
 const directPathResponse = (request: Request): Option.Option<Effect.Effect<Response>> => {
   const path = new URL(request.url).pathname;
+
   if (path === statementStagingPath) {
     return Option.some(statementUploadResponse(request));
   }
+
   return Option.none();
 };
 
@@ -226,15 +236,19 @@ const authorizedCanonicalResponse = (
   operation: CatalogOperation
 ): Effect.Effect<Response> => {
   if (operation.id === "ingestion.submitForExtraction") return statementUploadResponse(request);
+
   if (request.headers.has("authorization")) {
     return routePATRequest({ request, environment }).pipe(observeCanonicalResponse(operation.id));
   }
+
   return routeSessionRequest({ request, environment }).pipe(observeCanonicalResponse(operation.id));
 };
 
 const healthResponse = (environment: CoreHttpEnvironment): Response => {
   const configuration = Schema.decodeExit(ReleaseConfiguration)(environment);
+
   if (Exit.isFailure(configuration)) return unavailable();
+
   return jsonResponse(
     JSON.stringify({
       contractDigest: configuration.value.CONTRACT_DIGEST,
@@ -260,9 +274,11 @@ const canonicalOrHealthResponse = (
   path: string
 ): Effect.Effect<Response> => {
   const operation = canonicalOperation({ method: request.method, path });
+
   if (Option.isSome(operation)) {
     return authorizedCanonicalResponse(request, environment, operation.value);
   }
+
   return mounted(
     request,
     environment,
@@ -300,6 +316,13 @@ const smokeResponse = (
           ),
     catch: () => undefined,
   }).pipe(
+    Effect.tapError(() =>
+      Effect.logWarning({
+        component: "core-http",
+        operation: "smokeResponse",
+        outcome: "unavailable",
+      })
+    ),
     Effect.orElseSucceed(() =>
       Response.json(
         { status: "unavailable" },
@@ -324,6 +347,7 @@ const dedicatedBrowserResponse = (
         Effect.succeed(new Response(null, { status: 405, headers: { allow: "GET" } }))
       );
     }
+
     return Option.some(
       routeConnectionCallback({ request, environment }).pipe(
         Effect.as(
@@ -339,9 +363,11 @@ const dedicatedBrowserResponse = (
       )
     );
   }
+
   if (Option.isSome(processingConsentTransport(path))) {
     return Option.some(routeSessionRequest({ request, environment }));
   }
+
   if (Option.isSome(connectionBrowserTransport(path))) {
     if (request.headers.get("origin") !== environment.BROWSER_ORIGIN) {
       return Option.some(
@@ -353,8 +379,10 @@ const dedicatedBrowserResponse = (
         )
       );
     }
+
     return Option.some(routeSessionRequest({ request, environment }));
   }
+
   return Option.none();
 };
 
@@ -369,10 +397,13 @@ const reservedCoreResponse = (
   if (!ownedCorePath(path)) {
     return Option.some(Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND)));
   }
+
   const browser = dedicatedBrowserResponse(request, environment, path);
+
   if (Option.isSome(browser)) {
     return browser;
   }
+
   if (
     ownsProviderAuthenticationPath(path) ||
     isPairingRequest(request) ||
@@ -380,9 +411,11 @@ const reservedCoreResponse = (
   ) {
     return Option.some(routeBootstrapRequest({ request, environment }));
   }
+
   if (path === smokePath) {
     return Option.some(smokeResponse(request, environment, bankAuthentication));
   }
+
   return supportCoreResponse(request, environment, path);
 };
 
@@ -392,21 +425,35 @@ const supportCoreResponse = (
   path: string
 ): Option.Option<Effect.Effect<Response, never, HttpClient.HttpClient>> => {
   if (path === betaProPath) return Option.some(handleBetaPro(request, environment));
+
   if (path === sampleReviewPath) return Option.some(handleSampleReview(request, environment));
+
   if (path === "/internal/titular-erasure") {
     return Option.some(handleNativeErasureOperator(request, environment));
   }
+
   if (path === pricePublicationPath) {
     return Option.some(handlePricePublication({ request, environment }));
   }
+
   if (refundSupportRoute(path)) {
     return Option.some(
       Effect.tryPromise({
         try: () => handleRefundSupport({ request, environment }),
         catch: () => undefined,
-      }).pipe(Effect.orElseSucceed(unavailable))
+      }).pipe(
+        Effect.tapError(() =>
+          Effect.logWarning({
+            component: "core-http",
+            operation: "refundSupport",
+            outcome: "unavailable",
+          })
+        ),
+        Effect.orElseSucceed(unavailable)
+      )
     );
   }
+
   return Option.none();
 };
 
@@ -434,22 +481,32 @@ const dispatchCoreHttp = ({
   telemetry,
 }: RequestExecution): Effect.Effect<Response, never, HttpClient.HttpClient> => {
   const url = new URL(request.url);
+
   const bound = <R>(work: Effect.Effect<Response, never, R>): Effect.Effect<Response, never, R> =>
     mounted(request, environment, work);
+
   if (Object.values(oauthPaths).some((path) => path === url.pathname)) {
     const work = routeBootstrapRequest({ request, environment });
+
     return request.headers.has("fidy-session-binding") ? bound(work) : work;
   }
+
   const reserved = reservedCoreResponse({ request, environment, bankAuthentication }, url.pathname);
+
   if (Option.isSome(reserved)) return reservedBindingResponse(request, environment, reserved.value);
+
   if (["/providers/kapso/callback", "/providers/wompi/billing-events"].includes(url.pathname)) {
     return bound(providerCallbackEffect(request, environment));
   }
+
   if (enrollmentCorePath(url.pathname)) {
     return routeSessionRequest({ request, environment });
   }
+
   const directPath = directPathResponse(request);
+
   if (Option.isSome(directPath)) return directPath.value;
+
   return nativeAuthenticationOrCanonical(request, environment, telemetry);
 };
 
@@ -459,14 +516,17 @@ const nativeAuthenticationOrCanonical = (
   telemetry: TelemetryService
 ): Effect.Effect<Response, never, HttpClient.HttpClient> => {
   const url = new URL(request.url);
+
   const patListing = canonicalOperation({ method: request.method, path: url.pathname }).pipe(
     Option.filter(
       (operation) => isLocalPATManagement(operation.id) || isLocalPATGrant(operation.id)
     )
   );
+
   if (Option.isSome(patListing)) {
     return authorizedCanonicalResponse(request, environment, patListing.value);
   }
+
   if (url.pathname === supportRecoveryPath) {
     return mounted(
       request,
@@ -482,6 +542,7 @@ const nativeAuthenticationOrCanonical = (
       })
     );
   }
+
   if (
     [
       webAuthenticationEndpoints.startEmail.path,
@@ -492,9 +553,11 @@ const nativeAuthenticationOrCanonical = (
       ? routeBootstrapRequest({ request, environment })
       : Effect.succeed(methodNotAllowed());
   }
+
   if (ownsWebAuthenticationPath(url.pathname) && !canonicalRoute(url.pathname)) {
     return Effect.succeed(methodNotAllowed());
   }
+
   return canonicalOrHealthResponse(request, environment, url.pathname);
 };
 
@@ -511,15 +574,19 @@ const nativeIdentityResponse = (
 ): Option.Option<Effect.Effect<Response>> => {
   const { request, environment } = input;
   const path = new URL(request.url).pathname;
+
   if (Option.isSome(paymentEnrollmentTransport(path))) {
     return Option.some(routeSessionRequest({ request, environment }));
   }
+
   if (request.method === "POST" && nativeSessionWrite(path, environment.USER_STORE !== undefined)) {
     return Option.some(routeSessionRequest({ request, environment }));
   }
+
   if (request.method === "GET" && path === "/user" && request.headers.has("authorization")) {
     return Option.some(routePATRequest({ request, environment }));
   }
+
   if (
     ["GET /user", "GET /web/session/binding", "POST /web/session/logout"].includes(
       request.method + " " + path
@@ -527,6 +594,7 @@ const nativeIdentityResponse = (
   ) {
     return Option.some(routeBrowserSession(request, environment));
   }
+
   return Option.none();
 };
 

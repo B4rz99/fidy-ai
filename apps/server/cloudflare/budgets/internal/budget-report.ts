@@ -26,11 +26,13 @@ export const assembleBudgetReport = ({
 }>): Effect.Effect<BudgetStatusReport, CurrencyMismatch> =>
   Effect.gen(function* () {
     const outflows = new Map<string, Money>();
+
     for (const row of aggregates) {
       if (row.direction === "outflow") {
         outflows.set(`${row.sum.currency}:${row.categoryId}`, row.sum);
       }
     }
+
     const statuses = yield* Effect.forEach(
       budgets.filter(
         (budget) =>
@@ -46,5 +48,6 @@ export const assembleBudgetReport = ({
             Money.make({ amount: BigDecimal.make(0n, 0), currency: budget.cap.currency }),
         })
     );
+
     return { period, statuses, initialized, ...monthlySpending({ aggregates, query, statuses }) };
   });

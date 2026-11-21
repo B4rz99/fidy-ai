@@ -1,7 +1,9 @@
 import { TranscriptText } from "../../../src/core/agent/contract";
 
 const nonceBytes = 32;
+
 const commandPrefix = "CONFIRMAR ";
+
 const modelCommand = new RegExp(`\\b${commandPrefix}[a-f0-9]{${nonceBytes * 2}}\\b`, "iu");
 
 export const guardModelConfirmationReply = (text: TranscriptText): TranscriptText =>

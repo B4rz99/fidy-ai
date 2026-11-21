@@ -25,12 +25,12 @@ const credentialEvidence = [
   },
   {
     configuration: "RESEND_API_KEY",
-    testFile: "apps/server/src/shell/outbound-http/operations.test.ts",
+    testFile: "apps/server/test/shell/outbound-http/operations.test.ts",
     testName: "owns the Resend delivery destination, authorization, and idempotency",
   },
   {
     configuration: "KAPSO_API_KEY",
-    testFile: "apps/server/src/shell/outbound-http/operations.test.ts",
+    testFile: "apps/server/test/shell/outbound-http/operations.test.ts",
     testName: "keeps the configured Kapso API key redacted while sending it only as a header",
   },
   {
@@ -52,15 +52,18 @@ type ConditionalWrapper = Readonly<{
 
 const calleeSegments = (node: Babel.Node): ReadonlyArray<string> => {
   if (Babel.isIdentifier(node)) return [node.name];
+
   if (Babel.isMemberExpression(node) && !node.computed && Babel.isIdentifier(node.property)) {
     return [...calleeSegments(node.object), node.property.name];
   }
+
   return [];
 };
 
 const conditionalWrapper = (node: Babel.CallExpression): Option.Option<ConditionalWrapper> => {
   const directSegments = calleeSegments(node.callee);
   const directMethod = directSegments[directSegments.length - 1];
+
   if (directMethod === "skipIf" || directMethod === "runIf") {
     return Option.some({
       method: directMethod,
@@ -71,7 +74,9 @@ const conditionalWrapper = (node: Babel.CallExpression): Option.Option<Condition
   if (!Babel.isCallExpression(node.callee)) return Option.none();
   const wrappedSegments = calleeSegments(node.callee.callee);
   const wrappedMethod = wrappedSegments[wrappedSegments.length - 1];
+
   if (wrappedMethod !== "skipIf" && wrappedMethod !== "runIf") return Option.none();
+
   return Option.some({
     method: wrappedMethod,
     condition: Option.fromUndefinedOr(node.callee.arguments[0]),
@@ -80,60 +85,81 @@ const conditionalWrapper = (node: Babel.CallExpression): Option.Option<Condition
 
 const staticBoolean = (node: Option.Option<Babel.Node>): Option.Option<boolean> => {
   if (Option.isNone(node)) return Option.none();
+
   if (Babel.isBooleanLiteral(node.value)) return Option.some(node.value.value);
+
   if (Babel.isTSAsExpression(node.value) || Babel.isTSTypeAssertion(node.value)) {
     return staticBoolean(Option.some(node.value.expression));
   }
+
   if (Babel.isUnaryExpression(node.value) && node.value.operator === "!") {
     const value = staticBoolean(Option.some(node.value.argument));
+
     return Option.map(value, (booleanValue) => !booleanValue);
   }
+
   if (Babel.isLogicalExpression(node.value)) {
     return staticLogicalBoolean(node.value);
   }
+
   return Option.none();
 };
 
 const staticLogicalBoolean = (node: Babel.LogicalExpression): Option.Option<boolean> => {
   const left = staticBoolean(Option.some(node.left));
   const right = staticBoolean(Option.some(node.right));
+
   if (Option.isNone(left) || Option.isNone(right)) return Option.none();
+
   if (node.operator === "&&") return Option.some(left.value && right.value);
+
   if (node.operator === "||") return Option.some(left.value || right.value);
+
   return Option.none();
 };
 
 const isStaticallySkipped = (wrapper: ConditionalWrapper): boolean => {
   const condition = staticBoolean(wrapper.condition);
+
   if (Option.isNone(condition)) return false;
+
   return wrapper.method === "skipIf" ? condition.value : !condition.value;
 };
 
 const testDeclarationSegments = (node: Babel.CallExpression): ReadonlyArray<string> => {
   const directSegments = calleeSegments(node.callee);
+
   if (directSegments[0] === "it" || directSegments[0] === "test") return directSegments;
+
   if (!Babel.isCallExpression(node.callee)) return [];
   const wrappedSegments = calleeSegments(node.callee.callee);
+
   return wrappedSegments[0] === "it" || wrappedSegments[0] === "test" ? wrappedSegments : [];
 };
 
 const isSkippedTestDeclaration = (node: Babel.CallExpression): boolean => {
   const segments = testDeclarationSegments(node);
+
   if (segments.length === 0) return false;
+
   if (segments.includes("skip") || segments.includes("todo")) return true;
   const wrapper = conditionalWrapper(node);
+
   return Option.isSome(wrapper) && isStaticallySkipped(wrapper.value);
 };
 
 const isSkippedSuite = (node: Babel.CallExpression): boolean => {
   const segments = calleeSegments(node.callee);
+
   if (segments.includes("skip") || segments.includes("todo")) return true;
   const wrapper = conditionalWrapper(node);
+
   return Option.isSome(wrapper) && isStaticallySkipped(wrapper.value);
 };
 
 const isMatchingActiveDeclaration = (node: Babel.CallExpression, testName: string): boolean => {
   const firstArgument = node.arguments[0];
+
   return (
     testDeclarationSegments(node).length > 0 &&
     !isSkippedTestDeclaration(node) &&
@@ -148,12 +174,15 @@ const countActiveTestDeclarations = (source: string, testName: string): number =
   traverse(syntax, {
     CallExpression: (path) => {
       if (!isMatchingActiveDeclaration(path.node, testName)) return;
+
       const skippedSuite = path.findParent(
         (parent) => parent.isCallExpression() && isSkippedSuite(parent.node)
       );
+
       if (skippedSuite === null) declarations += 1;
     },
   });
+
   return declarations;
 };
 
@@ -181,6 +210,7 @@ const runStaticSkipRegression = (): void => {
     it("duplicate active", () => {});
     it("duplicate active", () => {});
   `;
+
   const expected: ReadonlyArray<readonly [string, number]> = [
     ["describe.skipIf(true)", 0],
     ["describe.runIf(false)", 0],
@@ -195,19 +225,23 @@ const runStaticSkipRegression = (): void => {
     ["active test", 1],
     ["duplicate active", 2],
   ];
+
   for (const [testName, expectedCount] of expected) {
     const actualCount = countActiveTestDeclarations(source, testName);
+
     if (actualCount !== expectedCount) {
       throw new Error(
         `Expected ${expectedCount} active declarations for ${JSON.stringify(testName)}, got ${actualCount}`
       );
     }
   }
+
   process.stdout.write("Credential evidence static-skip regression passed.\n");
 };
 
 const expectConfiguredSecretNames = (source: string, expected: ReadonlyArray<string>): void => {
   const actual = configuredSecretNames(source);
+
   if (actual.join(",") !== expected.join(",")) {
     throw new Error(
       `Expected configuredSecret enumeration ${expected.join(",")}, got ${actual.join(",")}`
@@ -217,11 +251,13 @@ const expectConfiguredSecretNames = (source: string, expected: ReadonlyArray<str
 
 const expectConfiguredSecretRejection = (source: string, label: string): void => {
   let rejected = false;
+
   try {
     configuredSecretNames(source);
   } catch {
     rejected = true;
   }
+
   if (!rejected) throw new Error(`Expected ${label} to be rejected`);
 };
 
@@ -264,6 +300,7 @@ const runCredentialLoaderEnumerationRegression = (): void => {
       ["NAMESPACED_SECRET"]
     );
   }
+
   process.stdout.write("Credential evidence loader enumeration regression passed.\n");
 };
 
@@ -311,6 +348,7 @@ const runCredentialLoaderRejectionRegression = (): void => {
         label
       );
     }
+
     expectConfiguredSecretRejection(
       `
         import { ${loader.call} } from "~/shell/_shared/secret-barrel";
@@ -319,13 +357,17 @@ const runCredentialLoaderRejectionRegression = (): void => {
       `a ${loader.call} imported through a barrel`
     );
   }
+
   process.stdout.write("Credential evidence loader rejection regression passed.\n");
 };
 
 const propertyKeyName = (property: Babel.ObjectProperty): Option.Option<string> => {
   if (property.computed) return Option.none();
+
   if (Babel.isIdentifier(property.key)) return Option.some(property.key.name);
+
   if (Babel.isStringLiteral(property.key)) return Option.some(property.key.value);
+
   return Option.none();
 };
 
@@ -366,9 +408,12 @@ const recordCredentialImport = (
     const imported = Babel.isIdentifier(specifier.imported)
       ? specifier.imported.name
       : specifier.imported.value;
+
     if (imported === loader.call) bindings.names.set(specifier.local.name, loader);
+
     return;
   }
+
   if (Babel.isImportNamespaceSpecifier(specifier)) {
     bindings.namespaces.set(specifier.local.name, loader);
   }
@@ -376,15 +421,19 @@ const recordCredentialImport = (
 
 const credentialLoaderBindings = (syntax: Babel.File): CredentialLoaderBindings => {
   const bindings: MutableCredentialLoaderBindings = { names: new Map(), namespaces: new Map() };
+
   for (const node of syntax.program.body) {
     if (!Babel.isImportDeclaration(node)) continue;
+
     for (const loader of credentialLoaders) {
       if (!node.source.value.endsWith(loader.moduleSuffix)) continue;
+
       for (const specifier of node.specifiers) {
         recordCredentialImport(specifier, loader, bindings);
       }
     }
   }
+
   return bindings;
 };
 
@@ -394,11 +443,16 @@ const loaderForCallee = (
 ): Option.Option<CredentialLoader> => {
   const segments = calleeSegments(callee);
   const [head, tail] = segments;
+
   if (head === undefined) return Option.none();
+
   if (segments.length === 1) return Option.fromUndefinedOr(bindings.names.get(head));
+
   if (segments.length !== 2 || tail === undefined) return Option.none();
   const loader = bindings.namespaces.get(head);
+
   if (loader === undefined) return Option.none();
+
   return loader.call === tail ? Option.some(loader) : Option.none();
 };
 
@@ -406,7 +460,9 @@ const configurationObject = (
   node: Option.Option<Babel.Node>
 ): Option.Option<Babel.ObjectExpression> => {
   if (Option.isNone(node)) return Option.none();
+
   if (Babel.isObjectExpression(node.value)) return Option.some(node.value);
+
   if (
     Babel.isTSAsExpression(node.value) ||
     Babel.isTSSatisfiesExpression(node.value) ||
@@ -414,6 +470,7 @@ const configurationObject = (
   ) {
     return configurationObject(Option.some(node.value.expression));
   }
+
   return Option.none();
 };
 
@@ -422,31 +479,39 @@ const configurationObjectNames = (
   loader: CredentialLoader
 ): ReadonlyArray<string> => {
   const names: Array<string> = [];
+
   for (const property of declaration.properties) {
     if (!Babel.isObjectProperty(property)) {
       throw new Error(
         `${loader.call} must list its configuration properties literally so the credential-evidence gate can enumerate it`
       );
     }
+
     const keyName = propertyKeyName(property);
+
     if (Option.isNone(keyName)) {
       throw new Error(
         `${loader.call} must not compute its configuration keys so the credential-evidence gate can enumerate it`
       );
     }
+
     if (keyName.value !== loader.nameProperty) continue;
+
     if (!Babel.isStringLiteral(property.value)) {
       throw new Error(
         `${loader.call} must name its configuration with a string literal so the credential-evidence gate can enumerate it`
       );
     }
+
     names.push(property.value.value);
   }
+
   if (names.length === 0) {
     throw new Error(
       `${loader.call} must declare a literal ${loader.nameProperty} so the credential-evidence gate can enumerate it`
     );
   }
+
   return names;
 };
 
@@ -455,22 +520,28 @@ const configuredSecretNamesFromCall = (
   bindings: CredentialLoaderBindings
 ): ReadonlyArray<string> => {
   const loader = loaderForCallee(node.callee, bindings);
+
   if (Option.isNone(loader)) return [];
   const declaration = configurationObject(Option.fromUndefinedOr(node.arguments[0]));
+
   if (Option.isNone(declaration)) {
     throw new Error(
       `${loader.value.call} must receive an object literal so the credential-evidence gate can enumerate it`
     );
   }
+
   return configurationObjectNames(declaration.value, loader.value);
 };
 
 const isLoaderImport = (path: NodePath<Babel.Identifier>): boolean => {
   const specifier = path.parentPath;
   const declaration = specifier.parentPath;
+
   if (!declaration.isImportDeclaration()) return false;
   const source = declaration.node.source.value;
+
   if (!credentialLoaders.some((loader) => source.endsWith(loader.moduleSuffix))) return false;
+
   return (
     specifier.isImportSpecifier() ||
     specifier.isImportNamespaceSpecifier() ||
@@ -480,17 +551,21 @@ const isLoaderImport = (path: NodePath<Babel.Identifier>): boolean => {
 
 const isBindingDeclaration = (path: NodePath<Babel.Identifier>): boolean => {
   const declarator = path.parentPath;
+
   return declarator.isVariableDeclarator() && declarator.node.id === path.node;
 };
 
 const isDirectCallCallee = (path: NodePath<Babel.Identifier>): boolean => {
   const call = path.parentPath;
+
   return call.isCallExpression() && call.node.callee === path.node;
 };
 
 const isLoaderMember = (member: Babel.MemberExpression, call: string): boolean => {
   if (member.computed) return false;
+
   if (!Babel.isIdentifier(member.property)) return false;
+
   return member.property.name === call;
 };
 
@@ -499,11 +574,16 @@ const loaderMemberCall = (
   call: string
 ): Option.Option<Babel.MemberExpression> => {
   const member = path.parentPath;
+
   if (!member.isMemberExpression()) return Option.none();
+
   if (!isLoaderMember(member.node, call)) return Option.none();
   const callPath = member.parentPath;
+
   if (!callPath.isCallExpression()) return Option.none();
+
   if (callPath.node.callee !== member.node) return Option.none();
+
   return Option.some(member.node);
 };
 
@@ -512,7 +592,9 @@ const isNamespacedCallObject = (
   bindings: CredentialLoaderBindings
 ): boolean => {
   const loader = bindings.namespaces.get(path.node.name);
+
   if (loader === undefined) return false;
+
   return Option.match(loaderMemberCall(path, loader.call), {
     onNone: () => false,
     onSome: (member) => member.object === path.node,
@@ -527,6 +609,7 @@ const isNamespacedCallProperty = (
     onNone: () => false,
     onSome: (member) => {
       if (!Babel.isIdentifier(member.object)) return false;
+
       return bindings.namespaces.get(member.object.name)?.call === path.node.name;
     },
   });
@@ -536,9 +619,13 @@ const isAllowedCredentialLoaderUse = (
   bindings: CredentialLoaderBindings
 ): boolean => {
   if (isLoaderImport(path)) return true;
+
   if (isBindingDeclaration(path)) return true;
+
   if (bindings.names.has(path.node.name)) return isDirectCallCallee(path);
+
   if (bindings.namespaces.has(path.node.name)) return isNamespacedCallObject(path, bindings);
+
   return isNamespacedCallProperty(path, bindings);
 };
 
@@ -547,6 +634,7 @@ const assertCredentialLoaderUse = (
   bindings: CredentialLoaderBindings
 ): void => {
   const name = path.node.name;
+
   if (
     !credentialLoaderCalls.has(name) &&
     !bindings.names.has(name) &&
@@ -554,6 +642,7 @@ const assertCredentialLoaderUse = (
   ) {
     return;
   }
+
   if (isAllowedCredentialLoaderUse(path, bindings)) return;
   throw new Error(
     `${name} must be called directly, or through a namespace import, so the credential-evidence gate can enumerate it`
@@ -565,6 +654,7 @@ const configuredSecretNames = (source: string): ReadonlyArray<string> => {
     source.matchAll(/Config\.Redacted\("([A-Z0-9_]+)"\)/gu),
     ([, name]) => name
   );
+
   const syntax = parse(source, { sourceType: "module", plugins: ["typescript"] });
   const bindings = credentialLoaderBindings(syntax);
   const configured: Array<string> = [];
@@ -576,6 +666,7 @@ const configuredSecretNames = (source: string): ReadonlyArray<string> => {
       assertCredentialLoaderUse(path, bindings);
     },
   });
+
   return [...direct, ...configured].filter((name): name is string => name !== undefined);
 };
 
@@ -583,14 +674,19 @@ const readConfiguredSecrets = Effect.fn("CredentialEvidenceGate.readConfiguredSe
   function* () {
     const configured = new Set<string>();
     const sourceGlobs = ["apps/server/src/**/*.ts", "apps/server/scripts/**/*.ts"];
-    for (const pattern of sourceGlobs) {
-      const sources = new Bun.Glob(pattern);
-      for (const path of sources.scanSync({ cwd: "." })) {
-        if (path.endsWith(".test.ts")) continue;
-        const source = yield* Effect.tryPromise(() => Bun.file(path).text()).pipe(Effect.orDie);
-        for (const name of configuredSecretNames(source)) configured.add(name);
-      }
+
+    const sourcePaths = sourceGlobs
+      .flatMap((pattern) => Array.from(new Bun.Glob(pattern).scanSync({ cwd: "." })))
+      .filter((path) => !path.endsWith(".test.ts"));
+
+    const sources = yield* Effect.forEach(sourcePaths, (path) =>
+      Effect.tryPromise(() => Bun.file(path).text()).pipe(Effect.orDie)
+    );
+
+    for (const source of sources) {
+      for (const name of configuredSecretNames(source)) configured.add(name);
     }
+
     return configured;
   }
 );
@@ -599,11 +695,14 @@ const testProblems = Effect.fn("CredentialEvidenceGate.testProblems")(function* 
   credential: CredentialEvidence
 ) {
   const file = Bun.file(credential.testFile);
+
   if (!(yield* Effect.tryPromise(() => file.exists()))) {
     return [`${credential.configuration} references missing ${credential.testFile}`];
   }
+
   const source = yield* Effect.tryPromise(() => file.text());
   const declarations = countActiveTestDeclarations(source, credential.testName);
+
   return declarations === 1
     ? []
     : [
@@ -617,6 +716,7 @@ const mappingProblems = (configured: ReadonlySet<string>): ReadonlyArray<string>
     const count = credentialEvidence.filter(
       (entry) => entry.configuration === configuration
     ).length;
+
     return count === 1
       ? []
       : [`${configuration} has ${count} credential mappings; expected exactly one`];
@@ -630,16 +730,19 @@ const mappingProblems = (configured: ReadonlySet<string>): ReadonlyArray<string>
 
 const program = Effect.gen(function* () {
   const configured = yield* readConfiguredSecrets();
+
   const problems = [
     ...mappingProblems(configured),
     ...(yield* Effect.forEach(credentialEvidence, testProblems)).flat(),
   ];
+
   if (problems.length > 0) {
     process.stderr.write(
       `Credential evidence gate failed:\n${problems.map((problem) => `- ${problem}`).join("\n")}\n`
     );
     process.exit(1);
   }
+
   process.stdout.write(
     `Credential evidence gate passed: ${credentialEvidence.length} credential paths.\n`
   );

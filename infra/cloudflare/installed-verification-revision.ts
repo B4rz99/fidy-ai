@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect";
 
 const commit = Schema.is(Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/u)));
+
 const verifierFiles = new Set([
   ".github/workflows/native-storage-release.yml",
   ".github/workflows/native-fleet-pilot-check.yml",
@@ -26,6 +27,7 @@ const verifierFiles = new Set([
   "scripts/infra-performance/deployed-fleet/pilot.py",
   "scripts/infra-performance/deployed-fleet/test_pilot.py",
 ]);
+
 const isVerificationFile = (path: string): boolean =>
   verifierFiles.has(path) || /^infra\/cloudflare\/[^/]+\.test\.ts$/u.test(path);
 
@@ -34,6 +36,7 @@ const typeManifests = ["apps/server/package.json", "bun.lock", "infra/cloudflare
 const reviewedTypesDigest = "cecb1320af85336bd11b1c8cd052a65a0425d49d60919cfdc9e7d81b1d0310d2";
 
 type GitRead = (args: ReadonlyArray<string>) => Effect.Effect<string, Error>;
+
 const reviewedTypeRefresh = Effect.fn(function* (
   git: GitRead,
   refs: ReadonlyArray<string>,
@@ -45,6 +48,7 @@ const reviewedTypeRefresh = Effect.fn(function* (
   ) {
     return false;
   }
+
   const raw = yield* git([
     "diff",
     "--no-color",
@@ -55,6 +59,7 @@ const reviewedTypeRefresh = Effect.fn(function* (
     "--",
     ...typeManifests,
   ]);
+
   return new Bun.CryptoHasher("sha256").update(raw.trimEnd()).digest("hex") === reviewedTypesDigest;
 });
 
@@ -66,12 +71,16 @@ export const verificationRevision = Effect.fn(function* (
   if (!commit(trunk) || (requested !== "" && !commit(requested))) {
     return yield* Effect.fail(Error("Expected a full Git commit"));
   }
+
   if (requested === "" || requested === trunk) return trunk;
   yield* git(["merge-base", "--is-ancestor", requested, trunk]);
   const paths = yield* git(["diff", "--name-only", "--no-renames", "-z", requested, trunk, "--"]);
   const changed = paths.split("\0").filter((path) => path !== "" && !isVerificationFile(path));
+
   if (changed.length === 0) return requested;
+
   if (yield* reviewedTypeRefresh(git, [requested, trunk], changed)) return requested;
+
   return yield* Effect.fail(
     Error("Installed release inputs differ from the verification checkout")
   );

@@ -1,16 +1,13 @@
 import * as assert from "node:assert/strict";
 import { expect, it } from "@effect/vitest";
 import { Effect, Exit, Option, Schema } from "effect";
-import { ConnectionAuthorizationUnavailable } from "../connections/contract";
 import { UserId } from "../../src/core/identity/contract";
 import { ConnectionAttemptReference } from "../../src/shell/connections/contract";
 import { BancolombiaAuthenticationFailed } from "./contract";
-import {
-  makeBancolombiaSandboxPreparation,
-  verifyBancolombiaSandboxAuthentication,
-} from "./runtime";
+import { bancolombiaSandboxPreparation, verifyBancolombiaSandboxAuthentication } from "./runtime";
 
 const userId = "10000000-0000-4000-8000-000000000001";
+
 const profile = {
   contract: "bancolombia-sandbox-consent-2026-10-27",
   userId,
@@ -29,37 +26,50 @@ it.effect(
   () =>
     Effect.gen(function* () {
       let calls = 0;
+
       const binding = {
         fetch: (): Promise<Response> => {
           calls += 1;
+
           return Promise.resolve(Response.json({}));
         },
       };
-      for (const environment of [
-        {},
-        {
-          BANCOLOMBIA_SANDBOX_CLIENT_ID: "10000000-0000-4000-8000-000000000001",
-          BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: "synthetic-key",
-        },
-        { BANCOLOMBIA_SANDBOX_MTLS: binding },
-        {
-          BANCOLOMBIA_SANDBOX_MTLS: binding,
-          BANCOLOMBIA_SANDBOX_CLIENT_ID: "invalid",
-          BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: "synthetic-key",
-        },
-      ]) {
-        const result = yield* verifyBancolombiaSandboxAuthentication(environment).pipe(Effect.exit);
-        assert.deepStrictEqual(
-          result,
-          Exit.fail(new BancolombiaAuthenticationFailed({ stage: "bancolombia_configuration" }))
-        );
-      }
+
+      yield* Effect.forEach(
+        [
+          {},
+          {
+            BANCOLOMBIA_SANDBOX_CLIENT_ID: "10000000-0000-4000-8000-000000000001",
+            BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: "synthetic-key",
+          },
+          { BANCOLOMBIA_SANDBOX_MTLS: binding },
+          {
+            BANCOLOMBIA_SANDBOX_MTLS: binding,
+            BANCOLOMBIA_SANDBOX_CLIENT_ID: "invalid",
+            BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: "synthetic-key",
+          },
+        ],
+        (environment) =>
+          Effect.gen(function* () {
+            const result = yield* verifyBancolombiaSandboxAuthentication(environment).pipe(
+              Effect.exit
+            );
+
+            assert.deepStrictEqual(
+              result,
+              Exit.fail(new BancolombiaAuthenticationFailed({ stage: "bancolombia_configuration" }))
+            );
+          }),
+        { discard: true }
+      );
+
       expect(calls).toBe(0);
     })
 );
 
 it("installs only a bounded, matching-User support-collection sandbox profile", () => {
   const encode = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
+
   for (const configured of [
     undefined,
     "{",
@@ -75,15 +85,16 @@ it("installs only a bounded, matching-User support-collection sandbox profile", 
     encode({ ...profile, customerIpAddress: "Mon, 19 Oct 2018 08:51:49 GMT" }),
   ]) {
     expect(
-      makeBancolombiaSandboxPreparation({
+      bancolombiaSandboxPreparation({
         environment: { BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: configured },
         userId,
       })
     ).toEqual(Option.none());
   }
+
   expect(
     Option.isSome(
-      makeBancolombiaSandboxPreparation({
+      bancolombiaSandboxPreparation({
         environment: { BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: encode(profile) },
         userId,
       })
@@ -91,7 +102,7 @@ it("installs only a bounded, matching-User support-collection sandbox profile", 
   ).toBe(true);
   expect(
     Option.isSome(
-      makeBancolombiaSandboxPreparation({
+      bancolombiaSandboxPreparation({
         environment: {
           BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: encode({ ...profile, financialId: "" }),
         },
@@ -104,8 +115,9 @@ it("installs only a bounded, matching-User support-collection sandbox profile", 
 it.effect("refuses missing mTLS through the admitted profile preparation boundary", () =>
   Effect.gen(function* () {
     const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(profile);
+
     const bank = Option.getOrThrow(
-      makeBancolombiaSandboxPreparation({
+      bancolombiaSandboxPreparation({
         environment: {
           BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: encoded,
           BANCOLOMBIA_SANDBOX_CLIENT_ID: userId,
@@ -114,6 +126,7 @@ it.effect("refuses missing mTLS through the admitted profile preparation boundar
         userId,
       })
     );
+
     const result = yield* bank
       .prepare({
         userId: yield* Schema.decodeEffect(UserId)(userId),
@@ -124,6 +137,10 @@ it.effect("refuses missing mTLS through the admitted profile preparation boundar
         recordConsent: () => Effect.void,
       })
       .pipe(Effect.exit);
-    assert.deepStrictEqual(result, Exit.fail(new ConnectionAuthorizationUnavailable()));
+
+    assert.deepStrictEqual(
+      Exit.mapError(result, (error) => error._tag),
+      Exit.fail("ConnectionAuthorizationUnavailable")
+    );
   })
 );

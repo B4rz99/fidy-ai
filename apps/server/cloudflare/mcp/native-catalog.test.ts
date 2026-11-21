@@ -1,6 +1,10 @@
 import { expect, it } from "vitest";
 import { nativeMcpCatalog } from "./operations";
 import { decideOperationAccess } from "../../src/shell/canonical-policy/operations";
+import {
+  OperationAccessCaller,
+  OperationAccessDecision,
+} from "../../src/shell/canonical-policy/contract";
 
 const published = [
   "budgets.createBudget",
@@ -67,12 +71,13 @@ const published = [
 
 it("preserves the exact public OAuth MCP tool catalog after shared reads are retired", () => {
   const actual = nativeMcpCatalog()
-    .filter(
-      (operation) =>
-        decideOperationAccess(operation.policy.access, {
-          _tag: "OAuthAgent",
-          capabilities: ["read", "write", "dashboard"],
-        })._tag === "Allowed"
+    .filter((operation) =>
+      OperationAccessDecision.$is("Allowed")(
+        decideOperationAccess(
+          operation.policy.access,
+          OperationAccessCaller.OAuthAgent({ capabilities: ["read", "write", "dashboard"] })
+        )
+      )
     )
     .map(({ id }) => id)
     .toSorted();

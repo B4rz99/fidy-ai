@@ -125,15 +125,15 @@ const custodyJourney = Effect.fn(function* () {
     Schema.Struct({ reference: Schema.String })
   )(yield* native(() => erased.json()));
 
-  for (let step = 0; step < 8; step++) {
-    if ((yield* driver.step()) === "ExternalPending") break;
-  }
+  yield* driver
+    .step()
+    .pipe(Effect.repeat({ until: (phase) => phase === "ExternalPending", times: 7 }));
 
   const owner = (yield* native(() =>
     runtime.getDurableObjectNamespace("ERASURE", "core")
   )).getByName(erasureRegistryName);
 
-  const submit = Effect.fn(function* (path: string, data: object, instant?: number) {
+  const submit = Effect.fn(function* (path: string, data: Schema.JsonObject, instant?: number) {
     const now = instant ?? (yield* Clock.currentTimeMillis);
 
     return yield* native(() =>
@@ -300,18 +300,28 @@ const verifyRelease = Effect.fn(function* (
   expect(yield* old.exec("SELECT id FROM users")).toEqual([]);
 });
 
+const caseActionStatus = Effect.fn(function* (
+  runtime: Miniflare,
+  reference: string,
+  [action, status]: readonly [Parameters<typeof privateCaseAction>[2], number]
+) {
+  expect((yield* privateCaseAction(runtime, reference, action)).status).toBe(status);
+});
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("an unresolved custodian remains pending beyond the platform recovery horizon", () =>
     Effect.gen(function* () {
       const { submit, reference, tick, runtime } = yield* custodyJourney();
 
-      for (const [action, status] of [
-        ["Receipt", 200],
-        ["Continue", 202],
-        ["Receipt", 200],
-      ] as const) {
-        expect((yield* privateCaseAction(runtime, reference, action)).status).toBe(status);
-      }
+      yield* Effect.forEach(
+        [
+          ["Receipt", 200],
+          ["Continue", 202],
+          ["Receipt", 200],
+        ] as const,
+        (expected) => caseActionStatus(runtime, reference, expected),
+        { discard: true }
+      );
 
       const unresolved = {
         reference,
@@ -404,7 +414,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       expect(yield* proof("Wompi", ["Verified", 7], before)).toBe(202);
       expect((yield* submit("custody-scope", { custodian: "Wompi", after: 0 })).ok).toBe(false);
 
-      for (let step = 0; step < 8; step++) yield* tick(before);
+      yield* tick(before).pipe(Effect.repeat({ times: 7 }));
       const updated = yield* submit("receipt", {}, before);
 
       const cleaned = yield* Schema.decodeUnknownEffect(ErasureOperatorReceipt)(

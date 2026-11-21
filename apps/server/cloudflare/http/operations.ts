@@ -1,4 +1,4 @@
-import { Cause, Effect, Option, Schema } from "effect";
+import { Cause, Effect, Option, Predicate, Schema } from "effect";
 import {
   BoundedBodyReadFailed,
   RequestBodyCapacityExceeded,
@@ -52,8 +52,9 @@ export const collectBoundedRequestBody = Effect.fn(function* (
       Effect.mapError(
         (failure) =>
           new BoundedBodyReadFailed({
-            reason:
-              failure._tag === "RequestBodyCapacityExceeded" ? "resource-limit" : "malformed-file",
+            reason: Predicate.isTagged(failure, "RequestBodyCapacityExceeded")
+              ? "resource-limit"
+              : "malformed-file",
           })
       )
     ),
@@ -94,7 +95,7 @@ const collectBody = Effect.fn(function* (
   let next = yield* readNextChunk(reader);
 
   while (!next.done) {
-    if (!(next.value instanceof Uint8Array)) return yield* new RequestBodyUnreadable();
+    if (!Predicate.isUint8Array(next.value)) return yield* new RequestBodyUnreadable();
 
     if (byteLength + next.value.byteLength > maximumBytes) {
       return yield* new RequestBodyCapacityExceeded();

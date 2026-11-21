@@ -35,7 +35,9 @@ type Environment = ProviderConfiguration &
   NativeAcceptanceSettings &
   Readonly<{ USER_STORE: Pick<DurableObjectNamespace, "getByName"> }>;
 
-const json = (body: object): Response =>
+const isResponse = Schema.is(Schema.instanceOf(Response));
+
+const json = (body: unknown): Response =>
   Response.json(body, {
     headers: { "cache-control": "no-store", "referrer-policy": "no-referrer" },
   });
@@ -130,26 +132,28 @@ const callback = Effect.fn(function* (
 
   const evidence = { environment, provider, query, attempt, verifier: verifier.value };
 
-  const validated =
-    provider === "google"
-      ? validateGoogleToken(evidence).pipe(Effect.timeout("10 seconds"), Effect.result)
-      : validateMicrosoftToken(evidence).pipe(Effect.timeout("10 seconds"), Effect.result);
+  const result = yield* Effect.result(
+    Effect.gen(function* () {
+      if (!validCode(query)) return yield* Effect.fail("invalid");
 
-  const result = validCode(query) ? yield* validated : Result.fail("invalid");
+      if (provider === "google") {
+        return yield* Effect.timeout(validateGoogleToken(evidence), "10 seconds");
+      }
 
-  if (result._tag === "Failure") {
+      return yield* Effect.timeout(validateMicrosoftToken(evidence), "10 seconds");
+    })
+  );
+
+  if (Result.isSuccess(result)) {
+    const settled = yield* Clock.currentTimeMillis;
+    yield* sql`UPDATE provider_attempts SET state='verified',issuer=${result.success.issuer},subject=${result.success.subject},contact_email=${Option.getOrNull(result.success.contactEmail)},expires_at_ms=MIN(expires_at_ms,${result.success.expiresAtMs}) WHERE id=${id} AND state='exchanging' AND expires_at_ms>${settled}`;
+  } else {
     yield* Effect.log({
       component: "api",
       operation: "provider.authentication",
       provider,
       reason: providerRejectionReason(result.failure),
     });
-  }
-
-  if (result._tag === "Success") {
-    const settled = yield* Clock.currentTimeMillis;
-    yield* sql`UPDATE provider_attempts SET state='verified',issuer=${result.success.issuer},subject=${result.success.subject},contact_email=${Option.getOrNull(result.success.contactEmail)},expires_at_ms=MIN(expires_at_ms,${result.success.expiresAtMs}) WHERE id=${id} AND state='exchanging' AND expires_at_ms>${settled}`;
-  } else {
     yield* sql`UPDATE provider_attempts SET state='rejected' WHERE id=${id} AND state='exchanging'`;
   }
 
@@ -312,7 +316,7 @@ const routeProvider = Effect.fn(function* (
     withStoreCapacity(complete ? "growth" : "required")
   );
 
-  if (result instanceof Response) return result;
+  if (isResponse(result)) return result;
 
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
     ...proof.value,

@@ -1,9 +1,11 @@
 import { UserId } from "../../src/core/identity/contract";
 import { type ErasureClass, ErasureReference } from "../../src/core/erasure/contract";
-import { Data, Schema } from "effect";
+import { Data, type Option, Schema } from "effect";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 
-export class ErasureUnavailable extends Data.TaggedError("ErasureUnavailable") {}
+export class ErasureUnavailable extends Data.TaggedError("ErasureUnavailable")<{
+  readonly cause: Option.Option<unknown>;
+}> {}
 
 export type ErasureScope = Readonly<{ userId: string; reference: string }>;
 
@@ -12,19 +14,19 @@ export type ErasureProjection = Readonly<{
   dataClass: ErasureClass;
   dependencies: ReadonlyArray<string>;
   candidates: (userId: string) => OwnedStatement;
-  quiescence:
-    | Readonly<{ _tag: "Synchronous" }>
-    | Readonly<{
-        _tag: "Durable";
-        select: (input: Readonly<{ userId: string; current: number }>) => OwnedStatement;
-      }>;
+  quiescence: ErasureQuiescence;
   remove: (
     selection: ErasureScope & Readonly<{ rowRefsJson: string }>
   ) => ReadonlyArray<OwnedStatement>;
   remaining: (userId: string) => OwnedStatement;
 }>;
 
-export type ErasureQuiescence = ErasureProjection["quiescence"];
+export type ErasureQuiescence = Data.TaggedEnum<{
+  Synchronous: {};
+  Durable: {
+    readonly select: (input: Readonly<{ userId: string; current: number }>) => OwnedStatement;
+  };
+}>;
 
 export const ErasureQuiescence = Data.taggedEnum<ErasureQuiescence>();
 

@@ -50,7 +50,7 @@ import { type TelemetryService } from "../../../src/shell/observability/contract
 
 import { observeCanonicalResponse } from "../../runtime/application-observation/operations";
 
-import { Effect, Exit, Option, Schema } from "effect";
+import { Effect, Exit, Layer, ManagedRuntime, Option, Schema } from "effect";
 
 import { ownsTransactionPath as transactionPath } from "../../../src/shell/transactions/runtime";
 
@@ -115,6 +115,8 @@ const HTTP_SERVICE_UNAVAILABLE = 503;
 const jsonResponse = (body: string, status: number): Response =>
   new Response(body, { headers: jsonHeaders, status });
 
+const callbackRuntime = ManagedRuntime.make(Layer.empty);
+
 const unavailable = (): Response =>
   jsonResponse('{"status":"unavailable"}', HTTP_SERVICE_UNAVAILABLE);
 
@@ -133,19 +135,21 @@ const callbackEffect = (
         receiveWhatsAppWebhook({
           ...environment,
           onHostedText: (admission) =>
-            Effect.runPromise(
-              Schema.encodeEffect(Schema.fromJsonString(WhatsAppInboundAdmission))(admission)
-            ).then(
-              (body) =>
-                environment.USER_STORE?.getByName(admission.userId).fetch(
-                  "https://user.invalid/hosted-turn/whatsapp",
-                  {
-                    method: "POST",
-                    headers: { "content-type": "application/json", ...traceHeaders },
-                    body,
-                  }
-                ) ?? unavailable()
-            ),
+            callbackRuntime
+              .runPromise(
+                Schema.encodeEffect(Schema.fromJsonString(WhatsAppInboundAdmission))(admission)
+              )
+              .then(
+                (body) =>
+                  environment.USER_STORE?.getByName(admission.userId).fetch(
+                    "https://user.invalid/hosted-turn/whatsapp",
+                    {
+                      method: "POST",
+                      headers: { "content-type": "application/json", ...traceHeaders },
+                      body,
+                    }
+                  ) ?? unavailable()
+              ),
         })(request)
       )
     : Effect.succeed(methodNotAllowed());

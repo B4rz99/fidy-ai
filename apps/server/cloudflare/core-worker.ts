@@ -11,9 +11,9 @@ import {
   watchdogUrl,
 } from "./maintenance/contract";
 import { inspectNativeQueues, sendCanary } from "./runtime/operational-health/operations";
-import { makeCoreHttp } from "./core-http/runtime";
-import { makeCoreQueue } from "./queue/runtime";
-import { Effect, Result } from "effect";
+import { coreHttpHandler } from "./core-http/runtime";
+import { coreQueueHandler } from "./queue/runtime";
+import { Effect, Option, Result } from "effect";
 import { type WorkerTelemetryEnvironment } from "./runtime/telemetry/contract";
 import { cloudflareWorkerTelemetry, observeWorkerExecution } from "./runtime/telemetry/operations";
 
@@ -83,20 +83,23 @@ const maintenanceTick = (
             signal,
           })
         ),
-      catch: () => new ScheduledWorkFailed(),
+      catch: () => scheduledFailure(),
     });
 
-    if (response.status !== completedCheckStatus) return yield* new ScheduledWorkFailed();
+    if (response.status !== completedCheckStatus) return yield* scheduledFailure();
   });
+
+const scheduledFailure = (): ScheduledWorkFailed =>
+  new ScheduledWorkFailed({ cause: Option.none() });
 
 export const makeCoreWorker = ({
   telemetry,
   institutions,
-}: Parameters<typeof makeCoreHttp>[0]): CoreWorker => ({
-  fetch: makeCoreHttp({ telemetry, institutions }),
+}: Parameters<typeof coreHttpHandler>[0]): CoreWorker => ({
+  fetch: coreHttpHandler({ telemetry, institutions }),
   queue: (batch, environment) =>
     Effect.runPromise(backgroundWorkAllowed(environment)).then((allowed) => {
-      if (allowed) return makeCoreQueue(telemetry)(batch, environment);
+      if (allowed) return coreQueueHandler(telemetry)(batch, environment);
 
       return batch.retryAll({ delaySeconds: 60 });
     }),
@@ -107,7 +110,9 @@ export const makeCoreWorker = ({
 
       const results = yield* Effect.all(
         [
-          inspectNativeQueues(environment).pipe(Effect.mapError(() => new ScheduledWorkFailed())),
+          inspectNativeQueues(environment).pipe(
+            Effect.mapError((cause) => new ScheduledWorkFailed({ cause: Option.some(cause) }))
+          ),
           environment.ASYNC_HEALTH_ENABLED === "enabled"
             ? Effect.tryPromise({
                 try: (signal) => {
@@ -119,14 +124,14 @@ export const makeCoreWorker = ({
 
                   return sendCanary({ queue, now: controller.scheduledTime, signal });
                 },
-                catch: () => new ScheduledWorkFailed(),
+                catch: () => scheduledFailure(),
               })
             : Effect.void,
           environment.MAINTENANCE === undefined
             ? Effect.logError({
                 message:
                   "fidy.operational component=watchdog operation=maintenance state=unbound severity=critical",
-              }).pipe(Effect.andThen(Effect.fail(new ScheduledWorkFailed())))
+              }).pipe(Effect.andThen(Effect.fail(scheduledFailure())))
             : tick(environment.MAINTENANCE, watchdogUrl).pipe(
                 Effect.tapError(() =>
                   Effect.logError({
@@ -139,7 +144,7 @@ export const makeCoreWorker = ({
         { concurrency: 3, mode: "result" }
       );
 
-      if (results.some(Result.isFailure)) return yield* new ScheduledWorkFailed();
+      if (results.some(Result.isFailure)) return yield* scheduledFailure();
     }).pipe(
       (work) =>
         observeWorkerExecution(work, {

@@ -14,9 +14,12 @@ const settledInvitations = `SELECT i.id,i.expires_at_ms FROM whatsapp_invitation
 export const drainBootstrapExpiry = Effect.fn(function* (now: number) {
   const sql = yield* SqliteClient;
 
-  for (const table of ["email_capacity_slots", "media_capacity_slots"]) {
-    yield* sql`UPDATE ${sql(table)} SET receipt=NULL,state=NULL,expires_at_ms=NULL WHERE slot IN (SELECT slot FROM ${sql(table)} WHERE receipt IS NOT NULL AND expires_at_ms<=${now} ORDER BY expires_at_ms LIMIT ${pageSize})`;
-  }
+  yield* Effect.forEach(
+    ["email_capacity_slots", "media_capacity_slots"],
+    (table) =>
+      sql`UPDATE ${sql(table)} SET receipt=NULL,state=NULL,expires_at_ms=NULL WHERE slot IN (SELECT slot FROM ${sql(table)} WHERE receipt IS NOT NULL AND expires_at_ms<=${now} ORDER BY expires_at_ms LIMIT ${pageSize})`,
+    { discard: true }
+  );
 
   yield* sql`DELETE FROM session_routes WHERE token_digest IN(SELECT token_digest FROM session_routes WHERE hard_expires_at_ms<=${now} ORDER BY hard_expires_at_ms LIMIT ${pageSize})`;
   yield* sql`DELETE FROM recovery_rotations WHERE id IN(SELECT id FROM recovery_rotations WHERE state<>'reserved' AND expires_at_ms<=${now} ORDER BY expires_at_ms LIMIT ${pageSize})`;

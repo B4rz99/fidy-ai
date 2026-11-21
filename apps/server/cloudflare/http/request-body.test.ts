@@ -2,7 +2,7 @@ import { deepStrictEqual } from "node:assert";
 import { it } from "@effect/vitest";
 import { Cause, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
-import { expect } from "vitest";
+import { assert, expect } from "vitest";
 import {
   RequestBodyCapacityExceeded,
   RequestBodyDeadlineExceeded,
@@ -382,11 +382,10 @@ it.effect("deadlines and cancels a request body that never yields a chunk", () =
 
     expect(Exit.isFailure(exit)).toBe(true);
 
-    if (Exit.isFailure(exit)) {
-      expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toBeInstanceOf(
-        RequestBodyDeadlineExceeded
-      );
-    }
+    assert(Exit.isFailure(exit));
+    expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toBeInstanceOf(
+      RequestBodyDeadlineExceeded
+    );
 
     expect(cancelled).toBe(true);
     expect(request.body?.locked).toBe(false);
@@ -421,11 +420,10 @@ it.effect("deadlines and cancels a request body that stalls between chunks", () 
 
     expect(Exit.isFailure(exit)).toBe(true);
 
-    if (Exit.isFailure(exit)) {
-      expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toBeInstanceOf(
-        RequestBodyDeadlineExceeded
-      );
-    }
+    assert(Exit.isFailure(exit));
+    expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toBeInstanceOf(
+      RequestBodyDeadlineExceeded
+    );
 
     expect(cancelled).toBe(true);
     expect(request.body?.locked).toBe(false);

@@ -18,7 +18,7 @@ const settle = Effect.fn(function* ({
   prior,
   next,
 }: Readonly<{
-  row: Readonly<Record<string, unknown>>;
+  row: unknown;
   value: typeof RecoveryRouteDecision.Type;
   prior: Uint8Array;
   next: Uint8Array;
@@ -29,8 +29,12 @@ const settle = Effect.fn(function* ({
 
   if (!match) return conflict();
 
-  if (row.state !== "reserved") {
-    return row.state === value.decision ? acknowledged() : conflict();
+  const { state } = yield* Schema.decodeUnknownEffect(Schema.Struct({ state: Schema.Unknown }))(
+    row
+  );
+
+  if (state !== "reserved") {
+    return state === value.decision ? acknowledged() : conflict();
   }
 
   const [fence] =

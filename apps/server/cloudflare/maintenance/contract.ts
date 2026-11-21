@@ -1,4 +1,4 @@
-import { Data, type Effect } from "effect";
+import { Data, type Effect, type Option } from "effect";
 
 export type ScheduledOperation =
   | "provider.authenticationRetention"
@@ -42,7 +42,9 @@ export type ScheduledActivity<E = void> = Readonly<{
   work: Effect.Effect<unknown, E>;
 }>;
 
-export class ScheduledWorkFailed extends Data.TaggedError("ScheduledWorkFailed") {}
+export class ScheduledWorkFailed extends Data.TaggedError("ScheduledWorkFailed")<{
+  readonly cause: Option.Option<unknown>;
+}> {}
 
 export class EmailScheduleUnavailable extends Data.TaggedError("EmailScheduleUnavailable") {}
 

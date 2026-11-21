@@ -58,9 +58,9 @@ export class Erasure extends DurableObject<ErasureEnvironment> {
     }
   }
   override alarm(): Promise<void> {
-    return Effect.runPromise(backgroundWorkAllowed(this.env)).then((allowed) =>
-      allowed ? this.recoverAlarm() : undefined
-    );
+    return this.runtime
+      .runPromise(backgroundWorkAllowed(this.env))
+      .then((allowed) => (allowed ? this.recoverAlarm() : undefined));
   }
   private recoverAlarm(): Promise<void> {
     return this.runtime.runPromise(advanceErasureCases(this.ctx.storage, this.env));

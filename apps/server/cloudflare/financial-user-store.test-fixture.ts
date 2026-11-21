@@ -296,18 +296,23 @@ export const nativeBrowserWrite =
   (
     user: typeof alice,
     input: { path: string; method: string } & ({} | { body: unknown })
-  ): Effect.Effect<Response> =>
-    native(() =>
+  ): Effect.Effect<Response> => {
+    const init = {
+      method: input.method,
+      headers: {
+        origin: browserOrigins.production,
+        cookie: "__Host-fidy_session=" + user.bearer,
+        "Fidy-Session-Binding": user.session,
+        "content-type": "application/json",
+      },
+    };
+
+    return native(() =>
       db.send(
-        new Request("https://api.fidyapp.com" + input.path, {
-          method: input.method,
-          headers: {
-            origin: browserOrigins.production,
-            cookie: "__Host-fidy_session=" + user.bearer,
-            "Fidy-Session-Binding": user.session,
-            "content-type": "application/json",
-          },
-          ...("body" in input ? { body: JSON.stringify(input.body) } : {}),
-        })
+        new Request(
+          "https://api.fidyapp.com" + input.path,
+          "body" in input ? { ...init, body: JSON.stringify(input.body) } : init
+        )
       )
     );
+  };

@@ -376,6 +376,7 @@ const readyQueryActivity = (
   });
 type TransactionResourceProps = Readonly<{
   children: ReactNode;
+  capture: boolean;
   locate: Option.Option<string>;
   historyResource: TransactionRouteHistory;
   currentUser: CurrentUser;
@@ -484,6 +485,7 @@ type ReadyQueries = Omit<TransactionQueries, "categoryState" | "transactionState
     >;
   }>;
 const ReadyTransactionResources = ({
+  capture,
   children,
   currentUser,
   profileCurrent,
@@ -512,6 +514,7 @@ const ReadyTransactionResources = ({
           generation: history.generation,
         })}
         readOnly={false}
+        capture={capture}
         dateFilter={dateFilter}
         monthFilter={Option.some({ value: dateFilter.month, onChange: dateFilter.onMonth })}
         continuation={history.continuation}
@@ -577,6 +580,7 @@ const TransactionPeriodView = ({
       key={`${DateTime.toEpochMillis(period.from)}:${period.timeZone}:${Option.getOrElse(locate, () => "browse")}`}
       historyResource={historyResource}
       locate={locate}
+      capture={search.capture === "manual"}
       currentUser={currentUser}
       profileCurrent={profileCurrent}
       period={period}

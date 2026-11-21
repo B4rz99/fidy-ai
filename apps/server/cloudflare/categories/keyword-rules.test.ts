@@ -118,7 +118,7 @@ const setup = Effect.gen(function* () {
       new Request("https://api.fidyapp.com" + path, {
         method,
         headers,
-        ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+        body: payload === undefined ? null : JSON.stringify(payload),
       })
     );
   };
@@ -161,17 +161,19 @@ const capture = (
 ): Promise<Response> => {
   const { send, session, direction = "outflow", counterparty, categoryId } = request;
 
+  const movement = {
+    money: { amount: "25000.00", currency: "COP" },
+    direction,
+    occurredAt: DateTime.formatIso(DateTime.makeUnsafe(clock() - 60_000)),
+  };
+
+  const described = counterparty === undefined ? movement : { ...movement, counterparty };
+
   return send({
     path: "/transactions",
     method: "POST",
     session,
-    payload: {
-      money: { amount: "25000.00", currency: "COP" },
-      direction,
-      occurredAt: DateTime.formatIso(DateTime.makeUnsafe(clock() - 60_000)),
-      ...(counterparty === undefined ? {} : { counterparty }),
-      ...(categoryId === undefined ? {} : { categoryId }),
-    },
+    payload: categoryId === undefined ? described : { ...described, categoryId },
   });
 };
 
@@ -260,24 +262,25 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
   test.effect(
     "preserves a rule and its capture behavior when replacement conflicts or names an unknown Category",
-    () =>
-      Effect.gen(function* () {
-        const { send, sessions } = yield* setup;
-        const session = sessions[0];
+    Effect.fnUntraced(function* () {
+      const { send, sessions } = yield* setup;
+      const session = sessions[0];
 
-        const original = (yield* decodeJson(
-          Schema.toCodecJson(KeywordRuleResponse),
-          yield* awaitPromise(createRule({ send, session, keyword: "Rappi" }))
-        )).data;
+      const original = (yield* decodeJson(
+        Schema.toCodecJson(KeywordRuleResponse),
+        yield* awaitPromise(createRule({ send, session, keyword: "Rappi" }))
+      )).data;
 
-        expect((yield* awaitPromise(createRule({ send, session, keyword: "Éxito" }))).status).toBe(
-          201
-        );
+      expect((yield* awaitPromise(createRule({ send, session, keyword: "Éxito" }))).status).toBe(
+        201
+      );
 
-        for (const replacement of [
+      yield* Effect.forEach(
+        [
           { keyword: "EXITO", categoryId: mercado, status: 400 },
           { keyword: "Farmacia", categoryId: foreignCategory, status: 404 },
-        ]) {
+        ],
+        Effect.fnUntraced(function* (replacement) {
           const refused = yield* awaitPromise(
             send({
               path: `/category-keyword-rules/${original.id}`,
@@ -295,15 +298,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           );
 
           expect(retained.data.find((rule) => rule.id === original.id)).toEqual(original);
-        }
+        }),
+        { discard: true }
+      );
 
-        const captured = yield* decodeJson(
-          Schema.toCodecJson(CreateTransactionResponse),
-          yield* awaitPromise(capture({ send, session, counterparty: "Rappi" }))
-        );
+      const captured = yield* decodeJson(
+        Schema.toCodecJson(CreateTransactionResponse),
+        yield* awaitPromise(capture({ send, session, counterparty: "Rappi" }))
+      );
 
-        expect(captured.data.categoryId).toBe(domicilios);
-      })
+      expect(captured.data.categoryId).toBe(domicilios);
+    })
   );
 
   test.effect("retains exactly one normalized keyword when concurrent creates compete", () =>
@@ -409,11 +414,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           )).status
         ).toBe(404);
 
-        for (const keyword of ["x".repeat(81), "각".repeat(80), "\u0301 café", "\u0301"]) {
-          expect(
-            (yield* awaitPromise(createRule({ send, session: sessions[0], keyword }))).status
-          ).toBe(400);
-        }
+        yield* Effect.forEach(
+          ["x".repeat(81), "각".repeat(80), "\u0301 café", "\u0301"],
+          Effect.fnUntraced(function* (keyword) {
+            expect(
+              (yield* awaitPromise(createRule({ send, session: sessions[0], keyword }))).status
+            ).toBe(400);
+          }),
+          { discard: true }
+        );
 
         expect(
           (yield* awaitPromise(
@@ -444,10 +453,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           db.exec("INSERT INTO categories VALUES (?,'Domicilios',22)", domicilios)
         );
 
-        for (let index = 0; index < 100; index++) {
-          yield* awaitPromise(
-            db
-              .exec(
+        yield* Effect.forEach(
+          Array.from({ length: 100 }, (_, index) => index),
+          Effect.fnUntraced(function* (index) {
+            yield* awaitPromise(
+              db.exec(
                 `INSERT INTO keyword_rules (id,user_id,keyword,category_id,category_revision,created_at_ms,updated_at_ms)
                VALUES (?,?,?,?,'co-1',?,?)`,
                 `80000000-0000-4000-8000-${index.toString().padStart(12, "0")}`,
@@ -457,9 +467,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
                 current,
                 current
               )
-              .then((rows) => rows[0])
-          );
-        }
+            );
+          }),
+          { discard: true }
+        );
 
         const refused = yield* awaitPromise(
           createRule({ send, session: sessions[0], keyword: "demasiada" })
@@ -871,19 +882,23 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         { path: `/category-keyword-rules/${created.id}`, method: "DELETE" },
       ];
 
-      for (const request of refusedRequests) {
-        const originless = yield* awaitPromise(
-          send({ ...request, session: sessions[0], originless: true })
-        );
+      yield* Effect.forEach(
+        refusedRequests,
+        Effect.fnUntraced(function* (request) {
+          const originless = yield* awaitPromise(
+            send({ ...request, session: sessions[0], originless: true })
+          );
 
-        expect(originless.status).toBe(403);
+          expect(originless.status).toBe(403);
 
-        const foreignOrigin = yield* awaitPromise(
-          send({ ...request, session: sessions[0], origin: "https://evil.example" })
-        );
+          const foreignOrigin = yield* awaitPromise(
+            send({ ...request, session: sessions[0], origin: "https://evil.example" })
+          );
 
-        expect(foreignOrigin.status).toBe(403);
-      }
+          expect(foreignOrigin.status).toBe(403);
+        }),
+        { discard: true }
+      );
 
       expect(yield* ruleCount(db, userA)).toBe(1);
 

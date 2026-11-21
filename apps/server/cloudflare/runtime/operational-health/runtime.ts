@@ -25,7 +25,7 @@ const observedRefusal = (boundary: CoreRejectionBoundary, status: number): boole
   return boundary === "mcp" && status >= badRequestStatus && status < serverErrorStatus;
 };
 
-export const makeCoreRejectionObserver = (): ((
+export const coreRejectionObserver = (): ((
   input: Readonly<{
     status: number;
     boundary: CoreRejectionBoundary;

@@ -1,9 +1,11 @@
 import * as XLSX from "xlsx/xlsx.mjs";
 import { statementParserLimits } from "../../src/shell/ingestion/contract";
 import { it } from "@effect/vitest";
-import { Data, Effect } from "effect";
+import { Data, Effect, Schema } from "effect";
 import { describe, expect, vi } from "vitest";
 import documentParsingWorker from "./document-parsing-worker";
+
+const isArrayBuffer = Schema.is(Schema.instanceOf(ArrayBuffer));
 
 class FixtureReadFailure extends Data.TaggedError("FixtureReadFailure") {}
 
@@ -87,7 +89,7 @@ describe("Document parsing Worker proof", () => {
       XLSX.utils.book_append_sheet(workbook, sheet, "Statement");
       const bytes: unknown = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
 
-      if (!(bytes instanceof ArrayBuffer)) return yield* Effect.die("Expected XLSX ArrayBuffer");
+      if (!isArrayBuffer(bytes)) return yield* Effect.die("Expected XLSX ArrayBuffer");
       const response = yield* Effect.tryPromise(() => parse(new Uint8Array(bytes)));
 
       expect(response.status).toBe(200);

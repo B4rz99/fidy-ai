@@ -1,4 +1,4 @@
-import { DateTime, Effect } from "effect";
+import { DateTime } from "effect";
 import type { CanonicalInput } from "@/transport/client";
 
 export type CaptureDraft = Readonly<{
@@ -19,6 +19,6 @@ export const emptyCaptureDraft = (timeZone: string): CaptureDraft => ({
   categoryId: "",
   direction: "outflow",
   occurredOn: DateTime.formatIsoDate(
-    DateTime.setZone(Effect.runSync(DateTime.now), DateTime.zoneMakeNamedUnsafe(timeZone))
+    DateTime.setZone(DateTime.nowUnsafe(), DateTime.zoneMakeNamedUnsafe(timeZone))
   ),
 });

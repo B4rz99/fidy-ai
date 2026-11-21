@@ -1,6 +1,7 @@
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import {
   HostedInferenceError,
+  HostedInferenceFailureReason,
   type OpenAiRequest,
   type OpenAiRun,
   approvedOpenAiModel,
@@ -57,7 +58,7 @@ const withinBudget = (state: BudgetSnapshot, bytes: number, request: OpenAiReque
 
 const refused = (): HostedInferenceError =>
   new HostedInferenceError({
-    reason: { _tag: "ResourceLimit" },
+    reason: HostedInferenceFailureReason.ResourceLimit(),
     retryable: false,
     retryAfter: Option.none(),
   });
@@ -73,7 +74,7 @@ const dryResponse = (): Response =>
     usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
   });
 
-export const makeEvaluationBudget = ({
+export const evaluationBudget = ({
   environment,
   execute,
 }: Readonly<{

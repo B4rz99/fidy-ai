@@ -1,5 +1,15 @@
 import { newId } from "../../secret-material/operations";
-import { Cause, Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
+import {
+  Cause,
+  Clock,
+  DateTime,
+  Effect,
+  Exit,
+  Layer,
+  ManagedRuntime,
+  Option,
+  Schema,
+} from "effect";
 import {
   type HostedInferenceError,
   type HostedInferenceService,
@@ -81,8 +91,10 @@ const metadataFor = (environment: EvaluationEnvironment, instanceId: string): Me
   semanticGrade: "manual_review_required",
 });
 
+const evaluationRuntime = ManagedRuntime.make(Layer.empty);
+
 const manifest = (metadata: Metadata): Promise<Response> =>
-  Effect.runPromise(
+  evaluationRuntime.runPromise(
     evidenceHash(Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(adversarialCorpus)).pipe(
       Effect.map((corpusSha256) =>
         response({
@@ -276,7 +288,7 @@ const evaluate = (
         state.busy = false;
       })
     ),
-    (work) => Effect.runPromise(work, { signal: request.signal })
+    (work) => evaluationRuntime.runPromise(work, { signal: request.signal })
   );
 };
 
@@ -301,15 +313,17 @@ const fetchWithoutBody = (
     );
 };
 
-export const makeEvaluationHandler = ({
+type EvaluationHandler = Readonly<{
+  fetch: (request: Request, environment: EvaluationEnvironment) => Promise<Response>;
+}>;
+
+export const evaluationHandler = ({
   makeInference,
   makeBudget,
 }: Readonly<{
   makeInference: MakeInference;
   makeBudget: (environment: EvaluationEnvironment) => EvaluationBudget;
-}>): {
-  fetch: (request: Request, environment: EvaluationEnvironment) => Promise<Response>;
-} => {
+}>): EvaluationHandler => {
   const state: RunState = {
     makeInference,
     makeBudget,

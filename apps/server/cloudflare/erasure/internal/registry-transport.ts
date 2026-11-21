@@ -1,5 +1,5 @@
 import { checkRegistryKey, checkRegistryValue } from "./registry-value";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
 import type { ErasureRegistry } from "../contract";
 import { ErasureUnavailable } from "../../erasure-store/contract";
 import { RequestBodyPolicy } from "../../http/contract";
@@ -92,7 +92,7 @@ const project = (value: R2Object): typeof metadata.Type => ({
 });
 
 const io = <Value>(run: () => Promise<Value>): Effect.Effect<Value, ErasureUnavailable> =>
-  Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
+  Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable({ cause: Option.none() }) });
 
 const readRecord = (
   registry: ErasureRegistry,
@@ -107,13 +107,13 @@ const readRecord = (
     if (value.size > maximum) {
       yield* io(() => value.body.cancel());
 
-      return yield* new ErasureUnavailable();
+      return yield* new ErasureUnavailable({ cause: Option.none() });
     }
 
     const text = yield* io(() => value.text());
 
     if (new TextEncoder().encode(text).byteLength > maximum) {
-      return yield* new ErasureUnavailable();
+      return yield* new ErasureUnavailable({ cause: Option.none() });
     }
 
     return { ...project(value), value: text };
@@ -129,7 +129,7 @@ const checkCommand = (input: typeof command.Type): Effect.Effect<void, ErasureUn
 
       if (input.action === "put") checkRegistryValue(input);
     },
-    catch: () => new ErasureUnavailable(),
+    catch: () => new ErasureUnavailable({ cause: Option.none() }),
   });
 
 const execute = (
@@ -161,11 +161,11 @@ const execute = (
       case "list": {
         const result = yield* io(() => registry.list(input.options));
 
-        return {
-          objects: result.objects.map(project),
-          truncated: result.truncated,
-          ...(result.truncated ? { cursor: result.cursor } : {}),
-        };
+        const objects = result.objects.map(project);
+
+        return result.truncated
+          ? { objects, truncated: true, cursor: result.cursor }
+          : { objects, truncated: false };
       }
     }
   });
@@ -198,11 +198,11 @@ export const registryRequest = (
     return Response.json(result, { headers: { "cache-control": "no-store" } });
   }).pipe(Effect.orElseSucceed(() => new Response(null, { status: 503 })));
 
-const remoteRequest = <Shape extends Schema.ConstraintDecoder<unknown>>(
+const remoteRequest = <Reply extends Schema.ConstraintDecoder<unknown>>(
   target: Pick<Fetcher, "fetch">,
   input: unknown,
-  schema: Shape
-): Effect.Effect<Shape["Type"], ErasureUnavailable> =>
+  schema: Reply
+): Effect.Effect<Reply["Type"], ErasureUnavailable> =>
   Effect.gen(function* () {
     const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(command))(
       yield* Schema.decodeUnknownEffect(command, { onExcessProperty: "error" })(input)
@@ -224,7 +224,7 @@ const remoteRequest = <Shape extends Schema.ConstraintDecoder<unknown>>(
 
       if (body !== null) yield* io(() => body.cancel());
 
-      return yield* new ErasureUnavailable();
+      return yield* new ErasureUnavailable({ cause: Option.none() });
     }
 
     const value = yield* boundedJsonBody({
@@ -237,14 +237,16 @@ const remoteRequest = <Shape extends Schema.ConstraintDecoder<unknown>>(
       schema,
     });
 
-    if (Option.isNone(value)) return yield* new ErasureUnavailable();
+    if (Option.isNone(value)) return yield* new ErasureUnavailable({ cause: Option.none() });
 
     return value.value;
-  }).pipe(Effect.mapError(() => new ErasureUnavailable()));
+  }).pipe(Effect.mapError((cause) => new ErasureUnavailable({ cause: Option.some(cause) })));
+
+const registryClientRuntime = ManagedRuntime.make(Layer.empty);
 
 export const registryClient = (target: Pick<Fetcher, "fetch">): ErasureRegistry => ({
   get: (key) =>
-    Effect.runPromise(
+    registryClientRuntime.runPromise(
       remoteRequest(target, { action: "get", key }, record).pipe(
         Effect.flatMap((value) => {
           if (value === null) return Effect.succeed(null);
@@ -253,7 +255,7 @@ export const registryClient = (target: Pick<Fetcher, "fetch">): ErasureRegistry 
             value.key !== key ||
             new TextEncoder().encode(value.value).byteLength !== value.size
           ) {
-            return Effect.fail(new ErasureUnavailable());
+            return Effect.fail(new ErasureUnavailable({ cause: Option.none() }));
           }
 
           return Effect.succeed(
@@ -263,13 +265,13 @@ export const registryClient = (target: Pick<Fetcher, "fetch">): ErasureRegistry 
       )
     ),
   head: (key) =>
-    Effect.runPromise(
+    registryClientRuntime.runPromise(
       remoteRequest(target, { action: "head", key }, object).pipe(
         Effect.map((value) => (value === null ? null : registryObject(value)))
       )
     ),
   put: (key, value, options) =>
-    Effect.runPromise(
+    registryClientRuntime.runPromise(
       remoteRequest(
         target,
         { action: "put", key, value, options: options ?? { onlyIf: {} } },
@@ -277,11 +279,11 @@ export const registryClient = (target: Pick<Fetcher, "fetch">): ErasureRegistry 
       ).pipe(Effect.map((value) => (value === null ? null : registryObject(value))))
     ),
   delete: (key) =>
-    Effect.runPromise(
+    registryClientRuntime.runPromise(
       remoteRequest(target, { action: "delete", key }, Schema.Null).pipe(Effect.asVoid)
     ),
   list: (options) =>
-    Effect.runPromise(
+    registryClientRuntime.runPromise(
       remoteRequest(target, { action: "list", options }, page).pipe(
         Effect.map((value): R2Objects => {
           const objects = value.objects.map(registryObject);

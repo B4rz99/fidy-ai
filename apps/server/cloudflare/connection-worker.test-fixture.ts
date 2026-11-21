@@ -108,7 +108,7 @@ const fixtureRevocation = (gate: Pick<Fetcher, "fetch">): ConnectionAdapters["cl
           Option.isNone(input.grant.accessToken) ||
           !["test-grant", "failed-grant"].includes(Redacted.value(input.grant.accessToken.value))
         ) {
-          return yield* new ConnectionAuthorizationUnavailable();
+          return yield* new ConnectionAuthorizationUnavailable({ cause: undefined });
         }
 
         if (!input.observedTokens.includes("access_token")) {
@@ -122,8 +122,8 @@ const fixtureRevocation = (gate: Pick<Fetcher, "fetch">): ConnectionAdapters["cl
           gate.fetch("https://fixture.invalid/revoke?held=" + label)
         );
 
-        if (!reply.ok) return yield* new ConnectionAuthorizationUnavailable();
-      }).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable())),
+        if (!reply.ok) return yield* new ConnectionAuthorizationUnavailable({ cause: undefined });
+      }).pipe(Effect.mapError((cause) => new ConnectionAuthorizationUnavailable({ cause }))),
   });
 
 export class UserStore extends NativeUser {
@@ -170,7 +170,7 @@ export class UserStore extends NativeUser {
                 "&request_uri=urn:ietf:params:oauth:request_uri:test",
               expiresAtMilliseconds: input.expiresAtMilliseconds,
             };
-          }).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable())),
+          }).pipe(Effect.mapError((cause) => new ConnectionAuthorizationUnavailable({ cause }))),
       }),
       cleanup: fixtureRevocation(gate),
       activation: Option.some({
@@ -184,7 +184,9 @@ export class UserStore extends NativeUser {
               expiresAtMilliseconds: input.expiresAtMilliseconds,
             });
 
-            if (rejected) return yield* new ConnectionAuthorizationUnavailable();
+            if (rejected) {
+              return yield* new ConnectionAuthorizationUnavailable({ cause: undefined });
+            }
 
             return ["account-one"];
           }),
@@ -199,10 +201,12 @@ export class UserStore extends NativeUser {
               gate.fetch("https://fixture.invalid/page")
             );
 
-            if (!reply.ok) return yield* new ConnectionAuthorizationUnavailable();
+            if (!reply.ok) {
+              return yield* new ConnectionAuthorizationUnavailable({ cause: undefined });
+            }
 
             return yield* Effect.tryPromise(() => reply.json());
-          }).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable())),
+          }).pipe(Effect.mapError((cause) => new ConnectionAuthorizationUnavailable({ cause }))),
       }),
     };
   }

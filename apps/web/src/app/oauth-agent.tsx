@@ -1,13 +1,13 @@
 import { useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import { type JSX, useState } from "react";
 import { HostedAgentFeature, HostedAgentProvider } from "@/features/agent/feature";
 import { useSession } from "@/session/session-context";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 
 const freshValue = <A,>(state: CanonicalQueryState<A, unknown>): Option.Option<A> =>
-  state._tag === "Ready" && !state.waiting && Option.isNone(state.refreshFailure)
+  Predicate.isTagged(state, "Ready") && !state.waiting && Option.isNone(state.refreshFailure)
     ? Option.some(state.value)
     : Option.none();
 

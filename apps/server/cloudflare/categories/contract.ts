@@ -1,10 +1,6 @@
-import {
-  type CategoryId,
-  type CategoryKeyword,
-  type KeywordRuleId,
-} from "../../src/core/categories/contract";
+import { CategoryId, CategoryKeyword, KeywordRuleId } from "../../src/core/categories/contract";
 
-import { Data, type Option } from "effect";
+import { Data, type Option, Schema } from "effect";
 
 export class CategoriesUnavailable extends Data.TaggedError("CategoriesUnavailable")<{}> {}
 
@@ -21,16 +17,16 @@ export type CaptureCategoryInput = Readonly<{
   direction: "inflow" | "outflow";
 }>;
 
-export type KeywordRuleOutcome =
-  | Readonly<{
-      _tag: "KeywordRule";
-      operation: "categories.createKeywordRule" | "categories.updateKeywordRule";
-      ruleId: KeywordRuleId;
-      keyword: CategoryKeyword;
-      categoryId: CategoryId;
-    }>
-  | Readonly<{
-      _tag: "KeywordRule";
-      operation: "categories.deleteKeywordRule";
-      ruleId: KeywordRuleId;
-    }>;
+export const KeywordRuleChange = Schema.TaggedStruct("KeywordRule", {
+  operation: Schema.Literals(["categories.createKeywordRule", "categories.updateKeywordRule"]),
+  ruleId: KeywordRuleId,
+  keyword: CategoryKeyword,
+  categoryId: CategoryId,
+});
+
+export const KeywordRuleRemoval = Schema.TaggedStruct("KeywordRule", {
+  operation: Schema.Literal("categories.deleteKeywordRule"),
+  ruleId: KeywordRuleId,
+});
+
+export type KeywordRuleOutcome = typeof KeywordRuleChange.Type | typeof KeywordRuleRemoval.Type;

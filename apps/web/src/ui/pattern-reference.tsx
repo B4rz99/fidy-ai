@@ -1,5 +1,5 @@
 import { type JSX, type MouseEvent, useState } from "react";
-import { Option } from "effect";
+import { Option, Schema } from "effect";
 import { Cancel01Icon, PauseCircleIcon, Tick02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { SelectionScopeDialog } from "@/ui/components/selection-scope-dialog";
@@ -118,8 +118,10 @@ const CalendarExample = (): JSX.Element => {
   );
 };
 
+const isElement = Schema.is(Schema.instanceOf(Element));
+
 const isRowClick = (event: MouseEvent<HTMLTableRowElement>): boolean =>
-  event.target instanceof Element &&
+  isElement(event.target) &&
   event.currentTarget.contains(event.target) &&
   event.target.closest("button, a, [role=menuitemradio]") === null;
 

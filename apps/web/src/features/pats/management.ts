@@ -1,5 +1,5 @@
 import { RegistryContext, useAtomSet, useAtomValue } from "@effect/atom-react";
-import { Cause, Effect, Option, Predicate } from "effect";
+import { Cause, Data, Effect, Option, Predicate } from "effect";
 import { type AsyncResult, Atom, type AtomRegistry, Reactivity } from "effect/reactivity";
 import { type RefCallback, useCallback, useContext, useState } from "react";
 import { authenticationEndedEvent } from "@/session/authentication-events";
@@ -13,23 +13,31 @@ import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/can
 import { workspaceQueryRetention } from "@/transport/workspace-query";
 import { activePATReactivityKey } from "./presentation";
 
-type Target = Readonly<{ _tag: "One"; pat: ActivePATMetadata }> | Readonly<{ _tag: "All" }>;
+type Target = Data.TaggedEnum<{
+  One: { readonly pat: ActivePATMetadata };
+  All: {};
+}>;
 
-type Outcome =
-  | Readonly<{ _tag: "One"; shortId: TokenShortId }>
-  | Readonly<{ _tag: "All"; revokedCount: number }>
-  | Readonly<{
-      _tag: "Refused";
-      reason: "Authority" | "Consent" | "NotFound" | "Limited" | "Input";
-    }>
-  | Readonly<{ _tag: "Observed"; target: Target; active: boolean }>;
+const Target = Data.taggedEnum<Target>();
 
-export type PATManagementTask =
-  | Readonly<{ _tag: "Ready"; outcome: Option.Option<Outcome> }>
-  | Readonly<{ _tag: "Reviewing"; target: Target; outcome: Option.Option<Outcome> }>
-  | Readonly<{ _tag: "Revoking"; target: Target }>
-  | Readonly<{ _tag: "Uncertain"; target: Target }>
-  | Readonly<{ _tag: "Refreshing"; target: Target }>;
+type Outcome = Data.TaggedEnum<{
+  One: { readonly shortId: TokenShortId };
+  All: { readonly revokedCount: number };
+  Refused: { readonly reason: "Authority" | "Consent" | "NotFound" | "Limited" | "Input" };
+  Observed: { readonly target: Target; readonly active: boolean };
+}>;
+
+const Outcome = Data.taggedEnum<Outcome>();
+
+export type PATManagementTask = Data.TaggedEnum<{
+  Ready: { readonly outcome: Option.Option<Outcome> };
+  Reviewing: { readonly target: Target; readonly outcome: Option.Option<Outcome> };
+  Revoking: { readonly target: Target };
+  Uncertain: { readonly target: Target };
+  Refreshing: { readonly target: Target };
+}>;
+
+const PATManagementTask = Data.taggedEnum<PATManagementTask>();
 
 export type PATManagementActions = Readonly<{
   reviewOne: (shortId: TokenShortId) => void;
@@ -65,7 +73,7 @@ const listing: (client: FidyClient) => ListQuery = Atom.family((apiClient: FidyC
 
 type RevocationError = Effect.Error<ReturnType<Effect.Success<FidyClient>["pats"]["revokePAT"]>>;
 
-type Refusal = Extract<Outcome, { _tag: "Refused" }>;
+type Refusal = Data.TaggedEnum.Value<Outcome, "Refused">;
 
 const refusalReasons: Readonly<Record<RevocationError["_tag"], Refusal["reason"] | "Uncertain">> = {
   Unauthenticated: "Authority",
@@ -85,7 +93,7 @@ const refusalReasons: Readonly<Record<RevocationError["_tag"], Refusal["reason"]
 const refusal = (error: RevocationError): Option.Option<Refusal> => {
   const reason = refusalReasons[error._tag];
 
-  return reason === "Uncertain" ? Option.none() : Option.some({ _tag: "Refused", reason });
+  return reason === "Uncertain" ? Option.none() : Option.some(Outcome.Refused({ reason }));
 };
 
 type Command = Readonly<{
@@ -105,14 +113,15 @@ const revokeCommand = (apiClient: FidyClient): Atom.AtomResultFn<Command, void, 
             ? client.pats
                 .revokePAT({ params: { shortId: command.target.pat.shortId } })
                 .pipe(
-                  Effect.map((result): Outcome => ({ _tag: "One", shortId: result.data.shortId }))
+                  Effect.map((result): Outcome => Outcome.One({ shortId: result.data.shortId }))
                 )
-            : client.pats.revokeAllPATs({}).pipe(
-                Effect.map((result): Outcome => ({
-                  _tag: "All",
-                  revokedCount: result.data.revokedCount,
-                }))
-              ),
+            : client.pats
+                .revokeAllPATs({})
+                .pipe(
+                  Effect.map((result): Outcome =>
+                    Outcome.All({ revokedCount: result.data.revokedCount })
+                  )
+                ),
           [activePATReactivityKey]
         );
 
@@ -178,7 +187,7 @@ type Owner = {
   change: (next: PATManagementTask) => void;
 };
 
-const ready: PATManagementTask = { _tag: "Ready", outcome: Option.none() };
+const ready: PATManagementTask = PATManagementTask.Ready({ outcome: Option.none() });
 
 const makeOwner = (change: (next: PATManagementTask) => void): Owner => {
   const owner: Owner = {
@@ -218,15 +227,10 @@ const usable = ({ registry, query, observation }: Binding): boolean => {
 
 const review = (binding: Binding, target: Target): void => {
   if (!live(binding) || !usable(binding) || !Predicate.isTagged(binding.task, "Ready")) return;
-  binding.owner.change({ _tag: "Reviewing", target, outcome: binding.task.outcome });
+  binding.owner.change(PATManagementTask.Reviewing({ target, outcome: binding.task.outcome }));
 };
 
-const admission = (
-  binding: Binding,
-  tag: "Revoking" | "Refreshing",
-  target: Target
-): (() => boolean) => {
-  const pending: PATManagementTask = { _tag: tag, target };
+const admission = (binding: Binding, pending: PATManagementTask): (() => boolean) => {
   const generation = binding.owner.lifetime.generation;
   binding.owner.change(pending);
 
@@ -240,14 +244,14 @@ const confirm = (binding: Binding): void => {
   const { owner, task } = binding;
 
   if (!live(binding) || !usable(binding) || !Predicate.isTagged(task, "Reviewing")) return;
-  const current = admission(binding, "Revoking", task.target);
+  const current = admission(binding, PATManagementTask.Revoking({ target: task.target }));
   binding.revoke({
     target: task.target,
     completed: (outcome) => {
-      if (current()) owner.change({ _tag: "Ready", outcome: Option.some(outcome) });
+      if (current()) owner.change(PATManagementTask.Ready({ outcome: Option.some(outcome) }));
     },
     uncertain: () => {
-      if (current()) owner.change({ _tag: "Uncertain", target: task.target });
+      if (current()) owner.change(PATManagementTask.Uncertain({ target: task.target }));
     },
   });
 };
@@ -269,24 +273,26 @@ const refresh = (binding: Binding): void => {
     return;
   }
 
-  const current = admission(binding, "Refreshing", task.target);
+  const current = admission(binding, PATManagementTask.Refreshing({ target: task.target }));
   binding.refresh({
     completed: (pats) => {
       if (!current()) return;
       const target = task.target;
-      owner.change({
-        _tag: "Ready",
-        outcome: Option.some({
-          _tag: "Observed",
-          target,
-          active:
-            Predicate.isTagged(target, "One") &&
-            pats.some((pat) => pat.shortId === target.pat.shortId),
-        }),
-      });
+      owner.change(
+        PATManagementTask.Ready({
+          outcome: Option.some(
+            Outcome.Observed({
+              target,
+              active:
+                Predicate.isTagged(target, "One") &&
+                pats.some((pat) => pat.shortId === target.pat.shortId),
+            })
+          ),
+        })
+      );
     },
     failed: () => {
-      if (current()) owner.change({ _tag: "Uncertain", target: task.target });
+      if (current()) owner.change(PATManagementTask.Uncertain({ target: task.target }));
     },
   });
 };
@@ -298,12 +304,12 @@ const actions = (binding: Binding): PATManagementActions => ({
     if (!Predicate.isTagged(current, "Ready")) return;
     const pat = current.value.data.pats.find((candidate) => candidate.shortId === shortId);
 
-    if (pat !== undefined) review(binding, { _tag: "One", pat });
+    if (pat !== undefined) review(binding, Target.One({ pat }));
   },
-  reviewAll: () => review(binding, { _tag: "All" }),
+  reviewAll: () => review(binding, Target.All()),
   cancel: () => {
     if (live(binding) && Predicate.isTagged(binding.task, "Reviewing")) {
-      binding.owner.change({ _tag: "Ready", outcome: binding.task.outcome });
+      binding.owner.change(PATManagementTask.Ready({ outcome: binding.task.outcome }));
     }
   },
   confirm: () => confirm(binding),
@@ -330,14 +336,14 @@ const mount =
     };
   };
 
-export const usePATManagement = (
-  apiClient: FidyClient
-): Readonly<{
+type PATManagementController = Readonly<{
   query: CanonicalQueryState<ListValue, ListFailure>;
   task: PATManagementTask;
   actions: PATManagementActions;
   lifecycleRef: RefCallback<HTMLElement>;
-}> => {
+}>;
+
+export const usePATManagement = (apiClient: FidyClient): PATManagementController => {
   const registry = useContext(RegistryContext);
   const [queryAtom] = useState(() => listing(apiClient));
   const observation = useAtomValue(queryAtom);

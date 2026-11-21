@@ -55,17 +55,23 @@ const tenantClaims = new Map([
   ["foreignTenant", enterpriseTenant],
 ]);
 
-const providerClaims = (nonce: string, tid: string, scenario: string): Record<string, string> => {
+type BaseClaims = Readonly<{ nonce: string; ver: string; tid: string }>;
+
+type ProviderClaims = BaseClaims | (BaseClaims & Readonly<{ email: string }>);
+
+const providerClaims = (nonce: string, tid: string, scenario: string): ProviderClaims => {
   const claims = {
     nonce: scenario === "nonce" ? "wrong" : nonce,
     ver: scenario === "version" ? "1.0" : "2.0",
     tid: tenantClaims.get(scenario) ?? tid,
-    ...(scenario === "missingEmail"
-      ? {}
-      : { email: scenario === "changedEmail" ? "changed@example.test" : "shared@example.test" }),
   };
 
-  return claims;
+  if (scenario === "missingEmail") return claims;
+
+  return {
+    ...claims,
+    email: scenario === "changedEmail" ? "changed@example.test" : "shared@example.test",
+  };
 };
 
 const issuedToken = ({
@@ -75,7 +81,7 @@ const issuedToken = ({
   now,
   scenario,
 }: Readonly<{
-  claims: Record<string, string>;
+  claims: ProviderClaims;
   issuer: string;
   subject: string;
   now: number;
@@ -126,7 +132,8 @@ const acceptMail = Effect.fn(function* (request: Request) {
   )(yield* Effect.tryPromise(() => request.json()));
 
   for (const address of body.to) {
-    messages.set(address, [...(messages.get(address) ?? []), body.text]);
+    const delivered = messages.get(address) ?? [];
+    messages.set(address, [...delivered, body.text]);
   }
 
   if (body.to.includes("lost@example.test")) throw new Error("Lost provider reply");

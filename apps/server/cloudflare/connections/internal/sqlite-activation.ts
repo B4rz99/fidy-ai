@@ -1,8 +1,7 @@
 import { withStoreCapacity } from "../../runtime/sqlite/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Effect, Redacted, Schema } from "effect";
+import { Clock, Effect, Predicate, Redacted, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
-import { SecureRandom } from "effect/crypto";
 import { InstitutionId } from "../../../src/core/connections/contract";
 import { digestBytes, newId } from "../../secret-material/operations";
 import {
@@ -116,10 +115,14 @@ const settleAccounts = Effect.fn(function* (
       );
       yield* sql`UPDATE connection_grants SET state='cleanup_required' WHERE state='active' AND attempt_id<>${claim.id} AND attempt_id IN(SELECT id FROM connection_attempts WHERE connection_id=${claim.connectionId})`;
 
-      for (const reference of accounts) {
-        yield* sql`INSERT INTO connection_accounts(id,connection_id,provider_reference,grant_attempt_id) VALUES(${newId()},${claim.connectionId},${reference},${claim.id})
+      yield* Effect.forEach(
+        accounts,
+        Effect.fnUntraced(function* (reference) {
+          yield* sql`INSERT INTO connection_accounts(id,connection_id,provider_reference,grant_attempt_id) VALUES(${newId()},${claim.connectionId},${reference},${claim.id})
           ON CONFLICT(connection_id,provider_reference) DO UPDATE SET grant_attempt_id=excluded.grant_attempt_id`;
-      }
+        }),
+        { discard: true }
+      );
 
       yield* one(
         yield* sql`UPDATE connections SET state='Active',updated_at_ms=${now} WHERE id=${claim.connectionId} AND user_id=${who.userId} AND state='Connecting' RETURNING id`
@@ -138,10 +141,9 @@ export const activate = Effect.fn(function* (input: Activation) {
   yield* decodeGrantKey(key);
   const sql = yield* SqliteClient;
   const claim = yield* claimCallback(input);
-  const entropy = yield* SecureRandom.SecureRandom;
 
   const activation = Effect.gen(function* () {
-    if (callback.result._tag !== "Code") return yield* failed();
+    if (!Predicate.isTagged(callback.result, "Code")) return yield* failed();
 
     const intent = yield* Schema.decodeEffect(Schema.fromJsonString(ConnectionConsentIntent))(
       claim.intentJson
@@ -169,10 +171,7 @@ export const activate = Effect.fn(function* (input: Activation) {
             yield* one(
               yield* sql`UPDATE connection_grants SET state='quarantined',envelope=${envelope},expires_at_ms=${grant.expiresAtMilliseconds} WHERE attempt_id=${claim.id} AND state='claimed' AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Draining') RETURNING attempt_id`
             );
-          }).pipe(
-            Effect.provideService(SecureRandom.SecureRandom, entropy),
-            Effect.mapError(failed)
-          ),
+          }).pipe(Effect.mapError(failed)),
       })
       .pipe(Effect.flatMap(Schema.decodeUnknownEffect(accountsSchema)));
 

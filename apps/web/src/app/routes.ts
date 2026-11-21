@@ -1,3 +1,4 @@
+import { browserRuntime } from "@/transport/browser-runtime";
 import { TransactionCaptureFeature, TransactionSearch } from "@/features/transactions/feature";
 import { Effect, Option, Schema } from "effect";
 import { BudgetRoute, RecurringRoute } from "./destination-components";
@@ -126,7 +127,7 @@ const budgetsRoute = createRoute({
     )(search),
   loaderDeps: ({ search }) => ({ month: search.month }),
   loader: ({ context, deps, preload, abortController }) =>
-    Effect.runPromise(
+    browserRuntime.runPromise(
       Effect.gen(function* () {
         const { BudgetsFeature } = yield* Effect.tryPromise(
           () => import("@/features/budgets/feature")
@@ -169,7 +170,7 @@ const needsReviewRoute = createRoute({
   loader: {
     staleReloadMode: "background",
     handler: ({ context, deps, preload, abortController }) =>
-      Effect.runPromise(
+      browserRuntime.runPromise(
         Effect.gen(function* () {
           if (!preload) {
             retainPreparedWorkspaceMetadata({
@@ -213,7 +214,7 @@ const recurringPlansRoute = createRoute({
   loaderDeps: ({ search }) => ({ month: search.month }),
   preloadStaleTime: 0,
   loader: ({ context, deps, preload, abortController }) =>
-    Effect.runPromise(
+    browserRuntime.runPromise(
       Effect.gen(function* () {
         yield* Effect.tryPromise(() =>
           Promise.all([RecurringWorkspace.preload?.(), TransactionCaptureFeature.preload()])

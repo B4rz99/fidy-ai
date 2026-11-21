@@ -26,7 +26,7 @@ export const prepareProof = (
 
     const values = yield* Effect.try({
       try: () => ({ verifier: secret(), state: secret() }),
-      catch: () => new ConnectionAuthorizationUnavailable(),
+      catch: (cause) => new ConnectionAuthorizationUnavailable({ cause }),
     });
 
     const hash = (value: string): Effect.Effect<string, ConnectionAuthorizationUnavailable> =>
@@ -35,7 +35,7 @@ export const prepareProof = (
           crypto.subtle
             .digest("SHA-256", new TextEncoder().encode(value))
             .then((bytes) => Base64Url.encode(new Uint8Array(bytes))),
-        catch: () => new ConnectionAuthorizationUnavailable(),
+        catch: (cause) => new ConnectionAuthorizationUnavailable({ cause }),
       });
 
     return Option.some({
@@ -53,5 +53,5 @@ export const encodeConsentIntent = (
   Option.isNone(bank)
     ? Effect.succeed("{}")
     : Schema.encodeEffect(Schema.fromJsonString(ConnectionConsentIntent))(bank.value.intent).pipe(
-        Effect.mapError(() => new ConnectionAuthorizationUnavailable())
+        Effect.mapError((cause) => new ConnectionAuthorizationUnavailable({ cause }))
       );

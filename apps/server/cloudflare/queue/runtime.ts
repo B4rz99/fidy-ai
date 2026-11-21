@@ -4,7 +4,7 @@ import { QueueDeliveryUnavailable, dispatchCoreQueue } from "./internal/dispatch
 import { observeWorkerExecution } from "../runtime/telemetry/operations";
 import { Effect } from "effect";
 
-export const makeCoreQueue =
+export const coreQueueHandler =
   (telemetry: TelemetryService): CoreQueueHandler =>
   (batch, environment) =>
     dispatchCoreQueue({ batch, environment })

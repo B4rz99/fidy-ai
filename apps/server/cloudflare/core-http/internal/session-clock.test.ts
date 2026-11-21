@@ -16,6 +16,29 @@ const hard = created + 7776000000;
 const sessionColumns =
   "SELECT created_at_ms,fresh_until_ms,idle_expires_at_ms,hard_expires_at_ms,revoked_at_ms FROM web_sessions WHERE id=?";
 
+type Journey = Effect.Success<ReturnType<typeof makeNativeTransactionJourney>>;
+
+const malformedHostedRequest = Effect.fn(function* (journey: Journey, path: string) {
+  const response = yield* native(() =>
+    journey.send(
+      new Request("https://api.fidyapp.com" + path, {
+        method: "POST",
+        headers: {
+          origin: "https://app.fidyapp.com",
+          cookie: "__Host-fidy_session=" + alice.bearer,
+          "Fidy-Session-Binding": alice.session,
+          "content-type": "application/json",
+        },
+        body: "{",
+      })
+    )
+  );
+
+  expect(response.status, path).toBe(400);
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  expect(yield* native(() => response.json())).toEqual({ status: "validation_failed" });
+});
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "validates malformed hosted requests against the live invocation clock without extending the Session or admitting work",
@@ -43,30 +66,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         );
         const session = yield* sql(sessionColumns, alice.session);
 
-        for (const path of [
-          "/web/hosted-turns",
-          "/web/hosted-turns/progress",
-          "/web/hosted-turns/delivery",
-        ]) {
-          const response = yield* native(() =>
-            journey.send(
-              new Request("https://api.fidyapp.com" + path, {
-                method: "POST",
-                headers: {
-                  origin: "https://app.fidyapp.com",
-                  cookie: "__Host-fidy_session=" + alice.bearer,
-                  "Fidy-Session-Binding": alice.session,
-                  "content-type": "application/json",
-                },
-                body: "{",
-              })
-            )
-          );
-
-          expect(response.status, path).toBe(400);
-          expect(response.headers.get("cache-control")).toBe("no-store");
-          expect(yield* native(() => response.json())).toEqual({ status: "validation_failed" });
-        }
+        yield* Effect.forEach(
+          ["/web/hosted-turns", "/web/hosted-turns/progress", "/web/hosted-turns/delivery"],
+          (path) => malformedHostedRequest(journey, path),
+          { discard: true }
+        );
 
         expect(yield* sql(sessionColumns, alice.session)).toEqual(session);
         expect(

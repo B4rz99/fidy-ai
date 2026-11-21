@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Cause, Deferred, Effect, Exit, Fiber, Logger, Schema } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Logger, Option, Schema } from "effect";
 import { expect } from "vitest";
 import { TelemetryWorkRecord } from "../../src/shell/observability/contract";
 import { ScheduledWorkFailed } from "./contract";
@@ -65,7 +65,7 @@ it.effect("attempts independent retention after a failed activity before reporti
     ]).pipe(Effect.exit);
 
     expect(completed).toEqual(["audit", "staging"]);
-    assert.deepStrictEqual(result, Exit.fail(new ScheduledWorkFailed()));
+    assert.deepStrictEqual(result, Exit.fail(new ScheduledWorkFailed({ cause: Option.none() })));
   })
 );
 
@@ -102,7 +102,7 @@ it.effect("contains typed failures and defects in bounded logs and one failed Wo
     );
 
     expect(retained).toBe(true);
-    assert.deepStrictEqual(result, Exit.fail(new ScheduledWorkFailed()));
+    assert.deepStrictEqual(result, Exit.fail(new ScheduledWorkFailed({ cause: Option.none() })));
     expect(logs).toEqual([
       [
         {
@@ -206,7 +206,10 @@ it.effect("does not carry a prior invocation's failure into a successful schedul
       },
     ]);
 
-    assert.deepStrictEqual(yield* Effect.exit(schedule), Exit.fail(new ScheduledWorkFailed()));
+    assert.deepStrictEqual(
+      yield* Effect.exit(schedule),
+      Exit.fail(new ScheduledWorkFailed({ cause: Option.none() }))
+    );
     assert.deepStrictEqual(yield* Effect.exit(schedule), Exit.void);
     expect(attempts).toBe(2);
   })

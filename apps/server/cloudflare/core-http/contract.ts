@@ -41,7 +41,7 @@ export type CoreHttpEnvironment = ProviderConfiguration &
       WOMPI_DAVIPLATA_OTP_CONFIRM_URL: string;
       BROWSER_PAIRING_EMAIL_QUEUE: Queue;
       BILLING_COLLECTION_QUEUE: Queue;
-      HOSTED_WHATSAPP_QUEUE: Readonly<{ send: (body: unknown) => Promise<unknown> }>;
+      HOSTED_WHATSAPP_QUEUE: Pick<Queue, "send">;
       STATEMENT_STAGING_BUCKET: R2Bucket;
       EMAIL_BUCKET: R2Bucket;
     }>

@@ -5,8 +5,8 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
-import { Effect, Option, Schema } from "effect";
-import { type AsyncResult, Atom, Reactivity } from "effect/reactivity";
+import { Effect, Option, Predicate, Schema } from "effect";
+import { AsyncResult, Atom, Reactivity } from "effect/reactivity";
 import { type JSX, useState } from "react";
 import {
   type OAuthConnectionId,
@@ -63,9 +63,9 @@ const ManagementContent = ({
   revoke: (id: Option.Option<OAuthConnectionId>) => void;
   next: (id: OAuthConnectionId) => void;
 }>): JSX.Element => {
-  if (listing._tag === "Initial") return <PendingRead label="Cargando agentes" />;
+  if (Predicate.isTagged(listing, "Initial")) return <PendingRead label="Cargando agentes" />;
 
-  if (listing._tag === "Failure") {
+  if (Predicate.isTagged(listing, "Failure")) {
     return <ConnectionReadFailure failure={listing.failure} />;
   }
 
@@ -91,7 +91,8 @@ const ConnectionReadFailure = ({
   failure,
 }: Readonly<{ failure: CanonicalQueryFailure<unknown> }>): JSX.Element => {
   const unauthenticated =
-    failure._tag === "DeclaredFailure" && Schema.is(OAuthUnauthenticated)(failure.error);
+    Predicate.isTagged(failure, "DeclaredFailure") &&
+    Schema.is(OAuthUnauthenticated)(failure.error);
 
   return (
     <section>
@@ -112,7 +113,7 @@ const ConnectionReadFailure = ({
 const RevocationFeedback = ({
   result,
 }: Readonly<{ result: AsyncResult.AsyncResult<RevocationResult, never> }>): JSX.Element => {
-  if (result._tag !== "Success" || result.waiting) return <></>;
+  if (!AsyncResult.isSuccess(result) || result.waiting) return <></>;
 
   if (result.value === "identity-required") {
     return (
@@ -140,9 +141,9 @@ const RevocationFeedback = ({
 };
 
 const needsRetry = (listing: CanonicalQueryState<OAuthConnectionList, unknown>): boolean => {
-  if (listing._tag === "Failure") return true;
+  if (Predicate.isTagged(listing, "Failure")) return true;
 
-  return listing._tag === "Ready" && Option.isSome(listing.refreshFailure);
+  return Predicate.isTagged(listing, "Ready") && Option.isSome(listing.refreshFailure);
 };
 
 const ManagementHeading = (): JSX.Element => (
@@ -214,11 +215,11 @@ export const ManagementPage = ({
       <RevocationFeedback result={result} />
       <ManagementContent
         listing={listing}
-        busy={result.waiting || (result._tag === "Success" && result.value !== "revoked")}
+        busy={result.waiting || (AsyncResult.isSuccess(result) && result.value !== "revoked")}
         revoke={revoke}
         next={next}
       />
-      {needsRetry(listing) || (result._tag === "Success" && result.value === "failed") ? (
+      {needsRetry(listing) || (AsyncResult.isSuccess(result) && result.value === "failed") ? (
         <RefreshButton
           type="button"
           variant="outline"

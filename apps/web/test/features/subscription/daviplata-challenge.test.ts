@@ -1,5 +1,5 @@
 import { Data, Effect, Redacted } from "effect";
-import { type Mock, afterEach, expect, it, vi } from "vitest";
+import { type Mock, afterEach, assert, expect, it, vi } from "vitest";
 import {
   PaymentEnrollmentId,
   type PaymentSubmissionType,
@@ -9,7 +9,7 @@ import {
   type DaviplataProviderChallenge,
   type DaviplataProviderOutcome,
 } from "@/transport/wompi-daviplata";
-import { makeDaviplataChallenge } from "./daviplata-challenge";
+import { openDaviplataChallenge } from "@/features/subscription/daviplata-challenge";
 
 class TestBoundaryFailure extends Data.TaggedError("TestBoundaryFailure")<{}> {}
 
@@ -62,7 +62,7 @@ it("contains provider execution failure and wipes the OTP without submitting", (
   Effect.runPromise(
     Effect.gen(function* () {
       const input = fixture({ confirm: () => Effect.die(new Error("Synthetic provider failure")) });
-      const challenge = makeDaviplataChallenge(input);
+      const challenge = openDaviplataChallenge(input);
       const otp = Redacted.make("574829");
       expect(yield* fromPromise(() => challenge.confirm(otp))).toEqual({
         status: "uncertain",
@@ -82,7 +82,7 @@ it("disables recovery when a defective provider cannot inspect retained approval
       });
 
       input.submitApproved.mockRejectedValue(new TestBoundaryFailure());
-      const challenge = makeDaviplataChallenge(input);
+      const challenge = openDaviplataChallenge(input);
       expect(yield* fromPromise(() => challenge.confirm(Redacted.make("574829")))).toEqual({
         status: "uncertain",
         retrySubmission: false,
@@ -99,7 +99,7 @@ it("keeps approved submission busy until uncertainty settles before granting a s
       const input = fixture();
       const pending = Promise.withResolvers<PaymentSubmissionType>();
       input.submitApproved.mockReturnValueOnce(pending.promise);
-      const challenge = makeDaviplataChallenge(input);
+      const challenge = openDaviplataChallenge(input);
       const confirming = challenge.confirm(Redacted.make("574829"));
       yield* Effect.yieldNow;
       expect(yield* fromPromise(() => challenge.retrySubmission())).toEqual({ status: "busy" });
@@ -126,7 +126,7 @@ it("keeps a lost approved submission uncertain when its retry authority later ex
 
       const input = fixture({ retrySubmission: retry });
       input.submitApproved.mockRejectedValue(new TestBoundaryFailure());
-      const challenge = makeDaviplataChallenge(input);
+      const challenge = openDaviplataChallenge(input);
       expect(yield* fromPromise(() => challenge.confirm(Redacted.make("574829")))).toEqual({
         status: "uncertain",
         retrySubmission: true,
@@ -147,16 +147,15 @@ it("consumes supplied OTP immediately and fences a submitted result after dispos
       const input = fixture();
       const pending = Promise.withResolvers<PaymentSubmissionType>();
       input.submitApproved.mockReturnValue(pending.promise);
-      const challenge = makeDaviplataChallenge(input);
+      const challenge = openDaviplataChallenge(input);
       const otp = Redacted.make("574829");
       const confirming = challenge.confirm(otp);
       expect(() => Redacted.value(otp)).toThrow();
       yield* Effect.yieldNow;
       challenge.dispose();
       const ownedOtp = vi.mocked(input.provider.confirm).mock.calls[0]?.[0];
-      expect(ownedOtp).toBeDefined();
-
-      if (ownedOtp !== undefined) expect(() => Redacted.value(ownedOtp)).toThrow();
+      assert.isDefined(ownedOtp);
+      expect(() => Redacted.value(ownedOtp)).toThrow();
       pending.resolve(submission);
       expect(yield* fromPromise(() => confirming)).toEqual({ status: "refused" });
       expect(yield* fromPromise(() => challenge.retrySubmission())).toEqual({ status: "refused" });

@@ -1,23 +1,33 @@
-// @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
 import {
   RouterProvider,
   createMemoryHistory,
   createRootRoute,
+  createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { type Cause, Effect, Layer, Option, Schema } from "effect";
+import { type Cause, Effect, Layer, Match, Option, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { AtomRegistry } from "effect/reactivity";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
-import { makeFidyClient } from "@/transport/client";
-import { RecurringFeature } from "./feature";
+import { IanaTimeZone, makeFidyClient } from "@/transport/client";
+import { RecurringFeature } from "@/features/recurring/feature";
+import type { PlanInput } from "@/features/recurring/model";
+import { PlanForm } from "@/features/recurring/plan-form";
 
 const plans = [
-  { id: "24000000-0000-4000-8000-000000017231", name: "Arriendo de prueba", kind: "expense" },
-  { id: "24000000-0000-4000-8000-000000017232", name: "Ingreso de prueba", kind: "income" },
+  {
+    id: "24000000-0000-4000-8000-000000017231",
+    name: "Arriendo de prueba",
+    kind: "expense",
+  },
+  {
+    id: "24000000-0000-4000-8000-000000017232",
+    name: "Ingreso de prueba",
+    kind: "income",
+  },
 ].map(({ id, name, kind }) => ({
   id,
   pauses: [],
@@ -90,7 +100,7 @@ const searchFor = (container: HTMLElement, search: string): Promise<void> =>
   reactWork(() => {
     const input = container.querySelector('input[name="search"]');
 
-    if (!(input instanceof HTMLInputElement)) {
+    if (!Schema.is(Schema.instanceOf(HTMLInputElement))(input)) {
       throw new Error("Missing recurrentes search");
     }
 
@@ -176,9 +186,12 @@ const withWorkspace = (
       });
 
       const registry = AtomRegistry.make();
+      const parent = createRootRoute({ component: Workspace });
 
       const router = createRouter({
-        routeTree: createRootRoute({ component: Workspace }),
+        routeTree: parent.addChildren([
+          createRoute({ getParentRoute: () => parent, path: "/app/recurring" }),
+        ]),
         context: { apiClient, sessionBinding: "recurring-feature-test" },
         history: createMemoryHistory({ initialEntries: ["/app/recurring"] }),
       });
@@ -214,6 +227,9 @@ const withWorkspace = (
     })
   );
 
+const filteredScope =
+  "Resumen filtrado: solo incluye los recurrentes que coinciden con los filtros.";
+
 type WorkspaceCheck = Effect.Effect<void, Cause.UnknownError>;
 
 const checkFilters = (presentation: string, container: HTMLElement): WorkspaceCheck =>
@@ -227,6 +243,17 @@ const checkFilters = (presentation: string, container: HTMLElement): WorkspaceCh
         expect(container.textContent).toContain("Arriendo de prueba");
         expect(container.textContent).not.toContain("Ingreso de prueba");
         expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
+
+        Match.value(presentation).pipe(
+          Match.when("Todos los recurrentes", () => undefined),
+          Match.orElse(() => {
+            expect(container.textContent).toContain(filteredScope);
+            expect(container.textContent).toContain(
+              "Sin recurrentes que coincidan con los filtros"
+            );
+            expect(container.textContent).not.toContain("Sin recurrentes este mes");
+          })
+        );
       })
     );
     yield* Effect.tryPromise(() => searchFor(container, "Sin coincidencias"));
@@ -236,9 +263,12 @@ const checkFilters = (presentation: string, container: HTMLElement): WorkspaceCh
         expect(container.textContent).toContain("Sin resultados para estos filtros");
         expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
 
-        if (presentation === "Calendario") {
-          expect(container.querySelector('[aria-label="2026-10-31"]')).not.toBeNull();
-        }
+        Match.value(presentation).pipe(
+          Match.when("Calendario", () =>
+            expect(container.querySelector('[aria-label="2026-10-31"]')).not.toBeNull()
+          ),
+          Match.orElse(() => undefined)
+        );
       })
     );
     yield* Effect.tryPromise(() => click(container, "Limpiar"));
@@ -247,6 +277,12 @@ const checkFilters = (presentation: string, container: HTMLElement): WorkspaceCh
         expect(container.textContent).toContain("Arriendo de prueba");
         expect(container.textContent).toContain("Ingreso de prueba");
         expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
+        expect(container.textContent).not.toContain(filteredScope);
+
+        Match.value(presentation).pipe(
+          Match.when("Todos los recurrentes", () => undefined),
+          Match.orElse(() => expect(container.textContent).toContain("Sin recurrentes este mes"))
+        );
       })
     );
   });
@@ -261,7 +297,9 @@ const checkEarlierDisclosure = (container: HTMLElement): WorkspaceCheck =>
     const panel = (): HTMLDetailsElement => {
       const element = container.querySelector('[data-recurring-slot="previous"]');
 
-      if (!(element instanceof HTMLDetailsElement)) throw Error("Missing earlier-month section");
+      if (!Schema.is(Schema.instanceOf(HTMLDetailsElement))(element)) {
+        throw Error("Missing earlier-month section");
+      }
 
       return element;
     };
@@ -282,3 +320,200 @@ const checkEarlierDisclosure = (container: HTMLElement): WorkspaceCheck =>
 
 it("keeps the requested earlier month open after its fresh occurrences arrive", () =>
   withWorkspace(checkEarlierDisclosure));
+
+type RenderedPlanForm = Readonly<{
+  container: HTMLElement;
+  onSubmit: ReturnType<typeof vi.fn>;
+}>;
+
+const renderForm = (initial: Partial<PlanInput>): RenderedPlanForm => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const onSubmit = vi.fn();
+  act(() =>
+    createRoot(container).render(
+      createElement(PlanForm, {
+        initial: {
+          name: "Arriendo de prueba",
+          timeZone: IanaTimeZone.make("America/Bogota"),
+          firstDate: "2026-11-02",
+          ...initial,
+        },
+        categories: [],
+        disabled: false,
+        onSubmit,
+      })
+    )
+  );
+
+  return { container, onSubmit };
+};
+
+const save = (container: HTMLElement): void =>
+  act(() => container.querySelector("form")?.requestSubmit());
+
+const described = (element: unknown): string => {
+  const id = Schema.is(Schema.instanceOf(Element))(element)
+    ? element.getAttribute("aria-describedby")
+    : "";
+
+  return document.getElementById(id ?? "")?.textContent ?? "";
+};
+
+const typeInto = (input: HTMLInputElement, text: string): void =>
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, text);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+it("explains an out-of-range twice-monthly day at its field without the card-payment rule", () => {
+  const { container, onSubmit } = renderForm({
+    frequency: "twice-monthly",
+    monthDays: [15, "last"],
+  });
+
+  const firstDay = container.querySelector<HTMLInputElement>("#recurring-day1");
+
+  if (firstDay === null) throw new Error("Missing first day");
+  typeInto(firstDay, "32");
+  save(container);
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(firstDay);
+  expect(firstDay.getAttribute("aria-invalid")).toBe("true");
+  expect(described(firstDay)).toBe("Escribe un día del 1 al 31 o «último».");
+  expect(firstDay.value).toBe("32");
+  expect(container.textContent).not.toContain("tarjeta debe");
+  typeInto(firstDay, "1");
+  expect(firstDay.hasAttribute("aria-invalid")).toBe(false);
+});
+
+it("asks for two different twice-monthly days", () => {
+  const { container, onSubmit } = renderForm({
+    frequency: "twice-monthly",
+    monthDays: [15, 15],
+  });
+
+  save(container);
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(described(document.activeElement)).toBe("Elige un día diferente del primero.");
+  expect(document.activeElement?.id).toBe("recurring-day2");
+});
+
+it("identifies an end date that precedes the first date", () => {
+  const { container, onSubmit } = renderForm({ endDate: "2026-11-01" });
+  save(container);
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(document.activeElement?.id).toBe("recurring-endDate");
+  expect(described(document.activeElement)).toBe(
+    "La fecha final debe ser igual o posterior a la primera fecha."
+  );
+});
+
+it("explains the card-payment rule only for card payments that are not transfers", () => {
+  const { container, onSubmit } = renderForm({
+    cardPayment: true,
+    kind: "expense",
+  });
+
+  save(container);
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(document.activeElement?.id).toBe("recurring-cardPayment");
+  expect(described(document.activeElement)).toBe(
+    "Un pago de tarjeta debe tener el tipo Transferencia."
+  );
+});
+
+it("submits a valid twice-monthly plan with its last-day choice", () => {
+  const { container, onSubmit } = renderForm({
+    frequency: "twice-monthly",
+    monthDays: [15, "last"],
+  });
+
+  save(container);
+  expect(onSubmit).toHaveBeenCalledWith(
+    expect.objectContaining({
+      frequency: "twice-monthly",
+      monthDays: [15, "last"],
+    })
+  );
+});
+
+const panelElement = (): HTMLElement => {
+  const panel = document.querySelector('[role="dialog"]');
+
+  if (!Schema.is(Schema.instanceOf(HTMLElement))(panel)) throw new Error("Missing recurring panel");
+
+  return panel;
+};
+
+const panelInput = (id: string): HTMLInputElement => {
+  const input = panelElement().querySelector(`#${id}`);
+
+  if (!Schema.is(Schema.instanceOf(HTMLInputElement))(input)) throw new Error(`Missing ${id}`);
+
+  return input;
+};
+
+const nameField = (): HTMLInputElement => panelInput("recurring-name");
+
+const expectBlankCreation = (): Promise<void> =>
+  reactAssertion(() => {
+    expect(nameField().value).toBe("");
+    expect(panelElement().textContent).not.toContain("Borrador sin guardar");
+  });
+
+const openOccurrence = (container: HTMLElement): Promise<void> =>
+  reactWork(() =>
+    Array.from(container.querySelectorAll("button"))
+      .find((candidate) => candidate.textContent.includes("Ingreso de prueba"))
+      ?.click()
+  );
+
+const openCreation = (container: HTMLElement): WorkspaceCheck =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => click(container, "Nuevo recurrente"));
+    yield* Effect.tryPromise(() => reactAssertion(() => nameField()));
+  });
+
+const leaveDraft = (container: HTMLElement, name: string): WorkspaceCheck =>
+  Effect.gen(function* () {
+    yield* openCreation(container);
+
+    if (name !== "") {
+      typeInto(nameField(), name);
+      typeInto(panelInput("recurring-counterparty"), "Inmobiliaria Sur");
+    }
+
+    yield* Effect.tryPromise(() => openOccurrence(container));
+    yield* Effect.tryPromise(() =>
+      reactAssertion(() =>
+        expect(panelElement().querySelector("h2")?.textContent).toBe("Ingreso de prueba")
+      )
+    );
+    yield* openCreation(container);
+  });
+
+it("keeps a modified creation draft when another occurrence opens until it is discarded", () =>
+  withWorkspace((container) =>
+    Effect.gen(function* () {
+      yield* leaveDraft(container, "Arriendo oficina");
+      expect(nameField().value).toBe("Arriendo oficina");
+      expect(panelInput("recurring-counterparty").value).toBe("Inmobiliaria Sur");
+      expect(panelElement().textContent).toContain("Borrador sin guardar");
+      yield* Effect.tryPromise(() => click(panelElement(), "Descartar borrador"));
+      yield* Effect.tryPromise(expectBlankCreation);
+    })
+  ));
+
+it("opens a blank creation form after an untouched form or an explicit cancellation", () =>
+  withWorkspace((container) =>
+    Effect.gen(function* () {
+      yield* leaveDraft(container, "");
+      expect(panelElement().textContent).not.toContain("Borrador sin guardar");
+      typeInto(nameField(), "Arriendo oficina");
+      yield* Effect.tryPromise(() => click(panelElement(), "Cancelar"));
+      yield* openCreation(container);
+      yield* Effect.tryPromise(expectBlankCreation);
+    })
+  ));

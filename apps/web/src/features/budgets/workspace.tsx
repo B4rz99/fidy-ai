@@ -307,6 +307,7 @@ const Unbudgeted = ({
               contentLayout="wrap"
               variant="outline"
               disabled={controller.disabled}
+              aria-label={`Asignar presupuesto a ${category.label}`}
               onClick={() => controller.assignCategory(category)}
             >
               Asignar presupuesto

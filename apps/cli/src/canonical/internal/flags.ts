@@ -70,14 +70,22 @@ const scalarType = (node: JsonSchema.JsonSchema): Option.Option<ScalarFlag["type
 const numericConstraints = (node: JsonSchema.JsonSchema): JsonSchema.JsonSchema => {
   const members = Array.isArray(node.allOf) ? node.allOf.filter(Predicate.isObject) : [];
   const constraints = [node, ...members.map(numericConstraints)];
-  const minimum = constraints.map((constraint) => constraint.minimum).filter(Predicate.isNumber);
-  const maximum = constraints.map((constraint) => constraint.maximum).filter(Predicate.isNumber);
 
-  return {
-    ...node,
-    ...(minimum.length === 0 ? {} : { minimum: Math.max(...minimum) }),
-    ...(maximum.length === 0 ? {} : { maximum: Math.min(...maximum) }),
-  };
+  const minimum = constraints.flatMap((constraint) =>
+    Predicate.isNumber(constraint.minimum) ? [constraint.minimum] : []
+  );
+
+  const maximum = constraints.flatMap((constraint) =>
+    Predicate.isNumber(constraint.maximum) ? [constraint.maximum] : []
+  );
+
+  const bounded: JsonSchema.JsonSchema = { ...node };
+
+  if (minimum.length > 0) bounded.minimum = Math.max(...minimum);
+
+  if (maximum.length > 0) bounded.maximum = Math.min(...maximum);
+
+  return bounded;
 };
 
 type Candidate = { flag: ScalarFlag; parts: ReadonlyArray<string>; width: number };
@@ -200,12 +208,12 @@ export const flagHelp =
 export const assembleFlags = ({
   args,
   plan,
-}: Readonly<{ args: ReadonlyArray<string>; plan: FlagPlan }>): unknown => {
+}: Readonly<{ args: ReadonlyArray<string>; plan: FlagPlan }>): Schema.Json => {
   if (args.length % 2 !== 0 || plan.structured.some((field) => field.required)) {
     throw new Error("Structured input required");
   }
 
-  const supplied = new Map<string, unknown>();
+  const supplied = new Map<string, Schema.Json>();
 
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index];
@@ -222,27 +230,33 @@ export const assembleFlags = ({
     supplied.set(flag.name, parsed);
   }
 
-  const build = (path: ReadonlyArray<string>): unknown => {
-    const scalar = plan.flags.find((flag) => flag.path.join(".") === path.join("."));
-
-    if (scalar !== undefined) return supplied.get(scalar.name);
-
+  const build = (path: ReadonlyArray<string>): Schema.Json => {
     const activePaths = [
       ...plan.containers,
-      ...plan.flags.filter((flag) => supplied.has(flag.name)).map((flag) => flag.path),
+      ...plan.flags.flatMap((flag) => (supplied.has(flag.name) ? [flag.path] : [])),
     ];
 
     const keys = new Set(
-      activePaths
-        .filter(
-          (candidate) =>
-            candidate.length > path.length && path.every((part, index) => candidate[index] === part)
-        )
-        .map((candidate) => candidate[path.length])
+      activePaths.flatMap((candidate) =>
+        candidate.length > path.length && path.every((part, index) => candidate[index] === part)
+          ? [candidate[path.length]]
+          : []
+      )
     );
 
     return Object.fromEntries(
-      [...keys].filter(Predicate.isString).map((key) => [key, build([...path, key])])
+      [...keys].flatMap((key): Array<[string, Schema.Json]> => {
+        if (!Predicate.isString(key)) return [];
+
+        const child = [...path, key];
+        const scalar = plan.flags.find((flag) => flag.path.join(".") === child.join("."));
+
+        if (scalar === undefined) return [[key, build(child)]];
+
+        const value = supplied.get(scalar.name);
+
+        return value === undefined ? [] : [[key, value]];
+      })
     );
   };
 

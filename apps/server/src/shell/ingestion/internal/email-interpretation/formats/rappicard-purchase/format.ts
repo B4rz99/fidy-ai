@@ -37,13 +37,19 @@ export const format: NotificationEmailFormat = {
 
     if (occurredMatch === null) return Option.none();
 
+    const [, dateText, timeText] = occurredMatch;
+
+    if (dateText === undefined || timeText === undefined) {
+      throw new Error("RappiCard occurrence pattern captures date and time");
+    }
+
     return Option.all({ accountHints, amountText, authorization, counterparty }).pipe(
       Option.flatMap((evidence) =>
         makeInterpretation({
           ...evidence,
           document,
-          dateText: Option.getOrThrow(Option.fromNullishOr(occurredMatch[1])),
-          timeText: Option.getOrThrow(Option.fromNullishOr(occurredMatch[2])),
+          dateText,
+          timeText,
           amountStyle: "dot-grouped",
           dateStyle: "dash",
           context,

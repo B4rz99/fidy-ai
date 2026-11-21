@@ -37,63 +37,102 @@ export type WompiTransactionBody = Readonly<{
   readonly method: EnrollmentMethod;
 }>;
 
-export type OutboundHttpRequest =
-  | Readonly<{
-      readonly _tag: "KapsoMediaMetadata";
-      readonly mediaId: WhatsAppMediaId;
-      readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
-    }>
-  | Readonly<{ readonly _tag: "KapsoMediaDownload"; readonly token: Redacted.Redacted<string> }>
-  | Readonly<{
-      readonly _tag: "KapsoMessageStatus";
-      readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
-      readonly messageId: WhatsAppProviderMessageId;
-    }>
-  | Readonly<{
-      readonly _tag: "KapsoMessages";
-      readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
-      readonly body: string;
-    }>
-  | Readonly<{
-      readonly _tag: "ResendEmailDelivery";
-      readonly idempotencyKey: string;
-      readonly body: string;
-    }>
-  | Readonly<{ readonly _tag: "WompiMerchant" }>
-  | Readonly<{ readonly _tag: "WompiNequiSandboxToken"; readonly outcome: "approved" | "declined" }>
-  | Readonly<{
-      readonly _tag: "WompiDaviplataSandboxToken";
-      readonly outcome: "approved" | "declined";
-    }>
-  | Readonly<{
-      readonly _tag: "WompiDaviplataSandboxOtp";
-      readonly step: "send" | "confirm";
-      readonly authorizationId: Redacted.Redacted<string>;
-      readonly token: Redacted.Redacted<string>;
-    }>
-  | Readonly<{ readonly _tag: "WompiNequiApproval"; readonly token: Redacted.Redacted<string> }>
-  | Readonly<{ readonly _tag: "WompiDaviplataApproval"; readonly token: Redacted.Redacted<string> }>
-  | Readonly<{ readonly _tag: "WompiCreatePaymentSource"; readonly body: string }>
-  | Readonly<{ readonly _tag: "WompiVoidPaymentSource"; readonly sourceId: number }>
-  | Readonly<{ readonly _tag: "WompiVerifyPaymentSource"; readonly sourceId: number }>
-  | Readonly<{ readonly _tag: "WompiCreateTransaction"; readonly body: WompiTransactionBody }>
-  | Readonly<{ readonly _tag: "WompiFindTransaction"; readonly transactionId: string }>
-  | Readonly<{ readonly _tag: "WompiSandboxRefund"; readonly body: string }>
-  | Readonly<{ readonly _tag: "WompiSandboxCardVoid"; readonly transactionId: string }>
-  | Readonly<{ readonly _tag: "CloudflareAccessSupportRecovery"; readonly body: string }>
-  | Readonly<{ readonly _tag: "CloudflareAccessSigningKeys" }>;
+export type OutboundHttpRequest = Data.TaggedEnum<{
+  KapsoMediaMetadata: {
+    readonly mediaId: WhatsAppMediaId;
+    readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
+  };
+  KapsoMediaDownload: { readonly token: Redacted.Redacted<string> };
+  KapsoMessageStatus: {
+    readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
+    readonly messageId: WhatsAppProviderMessageId;
+  };
+  KapsoMessages: {
+    readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
+    readonly body: string;
+  };
+  ResendEmailDelivery: { readonly idempotencyKey: string; readonly body: string };
+  WompiMerchant: {};
+  WompiNequiSandboxToken: { readonly outcome: "approved" | "declined" };
+  WompiDaviplataSandboxToken: { readonly outcome: "approved" | "declined" };
+  WompiDaviplataSandboxOtp: {
+    readonly step: "send" | "confirm";
+    readonly authorizationId: Redacted.Redacted<string>;
+    readonly token: Redacted.Redacted<string>;
+  };
+  WompiNequiApproval: { readonly token: Redacted.Redacted<string> };
+  WompiDaviplataApproval: { readonly token: Redacted.Redacted<string> };
+  WompiCreatePaymentSource: { readonly body: string };
+  WompiVoidPaymentSource: { readonly sourceId: number };
+  WompiVerifyPaymentSource: { readonly sourceId: number };
+  WompiCreateTransaction: { readonly body: WompiTransactionBody };
+  WompiFindTransaction: { readonly transactionId: string };
+  WompiSandboxRefund: { readonly body: string };
+  WompiSandboxCardVoid: { readonly transactionId: string };
+  CloudflareAccessSupportRecovery: { readonly body: string };
+  CloudflareAccessSigningKeys: {};
+}>;
 
 export const OutboundHttpRequest = Data.taggedEnum<OutboundHttpRequest>();
 
+export type ProviderOidcHttpRequest = Data.TaggedEnum<{
+  SigningKeys: {};
+  TokenExchange: {
+    readonly code: Redacted.Redacted<string>;
+    readonly verifier: Redacted.Redacted<string>;
+  };
+}>;
+
+export const ProviderOidcHttpRequest = Data.taggedEnum<ProviderOidcHttpRequest>();
+
+type BancolombiaBankTokenRequest = {
+  readonly assertion: Redacted.Redacted<string>;
+  readonly token: Redacted.Redacted<string>;
+  readonly tokenType: "access_token" | "refresh_token";
+};
+
+export type BancolombiaSandboxHttpRequest = Data.TaggedEnum<{
+  Discovery: {};
+  Authenticate: { readonly assertion: Redacted.Redacted<string> };
+  RevokeBankToken: BancolombiaBankTokenRequest;
+  InspectBankToken: BancolombiaBankTokenRequest;
+  BankSigningKeys: {};
+  ExchangeBankCode: {
+    readonly assertion: Redacted.Redacted<string>;
+    readonly code: Redacted.Redacted<string>;
+    readonly verifier: Redacted.Redacted<string>;
+  };
+  ReadBankConsent: {
+    readonly bearer: Redacted.Redacted<string>;
+    readonly consentId: string;
+    readonly interactionId: string;
+  };
+  ReadBankAccounts: {
+    readonly bearer: Redacted.Redacted<string>;
+    readonly interactionId: string;
+    readonly page: Option.Option<number>;
+  };
+  CreateConsent: {
+    readonly bearer: Redacted.Redacted<string>;
+    readonly payload: Redacted.Redacted<string>;
+    readonly financialId: string;
+    readonly customerIpAddress: Option.Option<string>;
+    readonly interactionId: string;
+  };
+  PushAuthorization: {
+    readonly assertion: Redacted.Redacted<string>;
+    readonly clientId: string;
+    readonly consentId: string;
+    readonly state: string;
+    readonly challenge: string;
+  };
+}>;
+
+export const BancolombiaSandboxHttpRequest = Data.taggedEnum<BancolombiaSandboxHttpRequest>();
+
 export type ProviderOidcHttpService = Readonly<{
   execute: (
-    request:
-      | Readonly<{ _tag: "SigningKeys" }>
-      | Readonly<{
-          _tag: "TokenExchange";
-          code: Redacted.Redacted<string>;
-          verifier: Redacted.Redacted<string>;
-        }>
+    request: ProviderOidcHttpRequest
   ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure | Cause.TimeoutError>;
 }>;
 
@@ -103,50 +142,7 @@ export type CliReleaseHttpService = Readonly<{
 
 export type BancolombiaSandboxHttpService = Readonly<{
   execute: (
-    request:
-      | Readonly<{ _tag: "Discovery" }>
-      | Readonly<{ _tag: "Authenticate"; assertion: Redacted.Redacted<string> }>
-      | Readonly<{
-          _tag: "RevokeBankToken" | "InspectBankToken";
-          assertion: Redacted.Redacted<string>;
-          token: Redacted.Redacted<string>;
-          tokenType: "access_token" | "refresh_token";
-        }>
-      | Readonly<{ _tag: "BankSigningKeys" }>
-      | Readonly<{
-          _tag: "ExchangeBankCode";
-          assertion: Redacted.Redacted<string>;
-          code: Redacted.Redacted<string>;
-          verifier: Redacted.Redacted<string>;
-        }>
-      | Readonly<{
-          _tag: "ReadBankConsent";
-          bearer: Redacted.Redacted<string>;
-          consentId: string;
-          interactionId: string;
-        }>
-      | Readonly<{
-          _tag: "ReadBankAccounts";
-          bearer: Redacted.Redacted<string>;
-          interactionId: string;
-          page: Option.Option<number>;
-        }>
-      | Readonly<{
-          _tag: "CreateConsent";
-          bearer: Redacted.Redacted<string>;
-          payload: Redacted.Redacted<string>;
-          financialId: string;
-          customerIpAddress: Option.Option<string>;
-          interactionId: string;
-        }>
-      | Readonly<{
-          _tag: "PushAuthorization";
-          assertion: Redacted.Redacted<string>;
-          clientId: string;
-          consentId: string;
-          state: string;
-          challenge: string;
-        }>
+    request: BancolombiaSandboxHttpRequest
   ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure | Cause.TimeoutError>;
 }>;
 

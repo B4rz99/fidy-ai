@@ -56,10 +56,17 @@ export const normalizeDocumentText = (text: string): string =>
     .trim()
     .toLowerCase();
 
-const requiredNode = (node: Option.Option<Node>): Node => Option.getOrThrow(node);
+const requiredNode = (node: Option.Option<Node>): Node => {
+  if (Option.isNone(node)) throw new Error("Expected an email document node");
 
-const requiredPendingNode = (node: Option.Option<PendingNode>): PendingNode =>
-  Option.getOrThrow(node);
+  return node.value;
+};
+
+const requiredPendingNode = (node: Option.Option<PendingNode>): PendingNode => {
+  if (Option.isNone(node)) throw new Error("Expected a pending email document node");
+
+  return node.value;
+};
 
 const appendChildren = (element: Element, depth: number, pending: Array<PendingNode>): void => {
   const children = defaultTreeAdapter.getChildNodes(element);

@@ -8,6 +8,7 @@ import {
   ResourceLimited,
   Unavailable,
   createdStatus,
+  omittedTag,
 } from "~/shell/public-http/contract";
 import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 
@@ -16,7 +17,7 @@ export class MemoryCapacityExceededApi extends Schema.Error<
   Brand.Brand<"MemoryCapacityExceededApi">
 >("MemoryCapacityExceededApi")(
   {
-    _tag: Schema.tagDefaultOmit("MemoryCapacityExceededApi"),
+    ...omittedTag("MemoryCapacityExceededApi"),
     error: Schema.Struct({
       code: Schema.Literal("quota_exhausted"),
       message: Schema.NonEmptyString,

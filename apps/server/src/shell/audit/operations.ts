@@ -8,7 +8,7 @@ import {
 
 import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import type { OAuthAuthority } from "~/shell/oauth-agents/contract";
-import type { OwnedStatement } from "~/shell/owner-write/contract";
+import type { OwnedStatement, PreparedRead } from "~/shell/owner-write/contract";
 import {
   type AuditCredentialOperation,
   AuditUnavailable,
@@ -26,12 +26,7 @@ export { utcDayMilliseconds } from "./contract";
 
 export const prepareOAuthActivityPage = (
   input: Readonly<{ connections: OwnedStatement; guard: OwnedStatement }>
-): Readonly<{
-  statement: OwnedStatement;
-  decode: (
-    rows: unknown
-  ) => Effect.Effect<ReadonlyMap<string, OAuthRecentActivity>, AuditUnavailable>;
-}> => ({
+): PreparedRead<ReadonlyMap<string, OAuthRecentActivity>, AuditUnavailable> => ({
   statement: {
     sql: `SELECT connections.id AS connectionId,
       (SELECT json_group_array(json_object('id',id,'operation',operation,'outcome',outcome,'occurred_at_ms',occurred_at_ms))
@@ -79,7 +74,7 @@ export const prepareOAuthActivityPage = (
       );
 
       return new Map(entries);
-    }).pipe(Effect.catchCause(() => Effect.fail(new AuditUnavailable()))),
+    }).pipe(Effect.catchCause((cause) => Effect.fail(new AuditUnavailable({ cause })))),
 });
 
 export const recordOAuthCall = (
@@ -149,10 +144,7 @@ export const preparePATActivity = (
     current: number;
     authority: PATActivityAuthority;
   }>
-): Readonly<{
-  statement: OwnedStatement;
-  decode: (rows: unknown) => Effect.Effect<PATActivityHistory, AuditUnavailable>;
-}> => {
+): PreparedRead<PATActivityHistory, AuditUnavailable> => {
   const cutoff = input.current - auditRetentionDays * utcDayMilliseconds;
 
   return {
@@ -177,7 +169,7 @@ export const preparePATActivity = (
           hasMore: rows.length > maximumPATActivityEntries,
           retainedSince: DateTime.makeUnsafe(cutoff),
         });
-      }).pipe(Effect.mapError(() => new AuditUnavailable())),
+      }).pipe(Effect.mapError((cause) => new AuditUnavailable({ cause }))),
   };
 };
 

@@ -13,14 +13,16 @@ export const LoginRequest = StartPATPairingPayload;
 
 export type LoginRequest = typeof LoginRequest.Type;
 
-export type PublicProgress =
-  | Readonly<{
-      _tag: "ApprovalRequired";
-      publicCode: StartedPATPairing["publicCode"];
-      managementUrl: typeof managementUrl;
-      approvalUrl: string;
-    }>
-  | Readonly<{ _tag: "PollingDelayed"; retryAfterSeconds: number }>;
+export type PublicProgress = Data.TaggedEnum<{
+  ApprovalRequired: {
+    readonly publicCode: StartedPATPairing["publicCode"];
+    readonly managementUrl: typeof managementUrl;
+    readonly approvalUrl: string;
+  };
+  PollingDelayed: { readonly retryAfterSeconds: number };
+}>;
+
+export const PublicProgress = Data.taggedEnum<PublicProgress>();
 
 export class PollingDelayed extends Data.TaggedError("PollingDelayed")<{
   readonly retryAfterSeconds: number;

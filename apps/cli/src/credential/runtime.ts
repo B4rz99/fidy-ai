@@ -1,5 +1,15 @@
 import { TokenBearer, getTokenShortId } from "@fidy/server/client";
-import { ByteSize, Effect, FileSystem, Option, Redacted, Schema } from "effect";
+import {
+  ByteSize,
+  Context,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  Redacted,
+  Schema,
+} from "effect";
 import {
   CliFailure,
   type Credential,
@@ -25,9 +35,11 @@ const privateDirectoryMode = 0o700;
 
 const privateFileMode = 0o600;
 
-const storageUnavailable = (): CliFailure => new CliFailure({ reason: "StorageUnavailable" });
+const storageUnavailable = (): CliFailure =>
+  new CliFailure({ reason: "StorageUnavailable", cause: Option.none() });
 
-const inconsistent = (): CliFailure => new CliFailure({ reason: "StorageInconsistent" });
+const inconsistent = (): CliFailure =>
+  new CliFailure({ reason: "StorageInconsistent", cause: Option.none() });
 
 const grantCodec = Schema.fromJsonString(Schema.toCodecJson(SavedGrant));
 
@@ -37,7 +49,7 @@ const guardRuntime = <A>(work: Effect.Effect<A, CliFailure>): Effect.Effect<A, C
   Effect.suspend(() =>
     Bun.revision === supportedBunRevision
       ? work
-      : Effect.fail(new CliFailure({ reason: "UnsupportedRuntime" }))
+      : Effect.fail(new CliFailure({ reason: "UnsupportedRuntime", cause: Option.none() }))
   );
 
 export const bunSecrets: NativeSecrets = {
@@ -170,7 +182,7 @@ const writeGrant = Effect.fn(function* (
   yield* write.pipe(Effect.scoped, Effect.mapError(storageUnavailable));
 });
 
-export const makeCredentialStore = Effect.fn(function* (
+export const openCredentialStore = Effect.fn(function* (
   directory: string,
   secrets: NativeSecrets = bunSecrets
 ) {
@@ -200,7 +212,7 @@ export const makeCredentialStore = Effect.fn(function* (
       withLock(
         Effect.gen(function* () {
           if (Option.isSome(yield* load)) {
-            return yield* new CliFailure({ reason: "AlreadyLoggedIn" });
+            return yield* new CliFailure({ reason: "AlreadyLoggedIn", cause: Option.none() });
           }
 
           const text = yield* Schema.encodeEffect(grantCodec)(credential.grant).pipe(
@@ -238,3 +250,28 @@ export const makeCredentialStore = Effect.fn(function* (
 
   return { store, verifyStorage };
 });
+
+export class CredentialStorage extends Context.Service<
+  CredentialStorage,
+  Readonly<{ store: CredentialStore; verifyStorage: Effect.Effect<void, CliFailure> }>
+>()("@fidy/cli/credential/runtime/CredentialStorage") {
+  static readonly make = Effect.gen(function* () {
+    const home = yield* Schema.decodeUnknownEffect(Schema.NonEmptyString)(
+      process.platform === "win32" ? Bun.env.USERPROFILE : Bun.env.HOME
+    ).pipe(
+      Effect.mapError(
+        (cause) => new CliFailure({ reason: "StorageUnavailable", cause: Option.some(cause) })
+      )
+    );
+
+    const path = yield* Path.Path;
+
+    if (!path.isAbsolute(home)) {
+      return yield* new CliFailure({ reason: "StorageUnavailable", cause: Option.none() });
+    }
+
+    return yield* openCredentialStore(path.join(home, ".fidy", "cli"));
+  });
+
+  static readonly layer = Layer.effect(this, this.make);
+}

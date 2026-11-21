@@ -95,19 +95,21 @@ const assertAttributes = (tag: SaxesTagPlain): void => {
   }
 };
 
-const requiredXmlRoots: Readonly<Record<string, string>> = {
-  sheet: "workbook",
-  hyperlink: "worksheet",
-  col: "worksheet",
-  c: "worksheet",
-  f: "worksheet",
-  si: "sst",
-  sstItem: "sst",
-  xf: "styleSheet",
-  numFmt: "styleSheet",
-  metadataType: "metadata",
-  futureMetadata: "metadata",
-};
+const requiredXmlRoots = new Map(
+  Object.entries({
+    sheet: "workbook",
+    hyperlink: "worksheet",
+    col: "worksheet",
+    c: "worksheet",
+    f: "worksheet",
+    si: "sst",
+    sstItem: "sst",
+    xf: "styleSheet",
+    numFmt: "styleSheet",
+    metadataType: "metadata",
+    futureMetadata: "metadata",
+  })
+);
 
 const assertContentType = (tag: SaxesTagPlain): void => {
   const contentType = tag.attributes.ContentType ?? "";
@@ -143,7 +145,7 @@ const assertXmlRepresentation = (tag: SaxesTagPlain, root: string): void => {
   if (["comments", "comment", "ThreadedComments", "threadedComment"].includes(name)) limit();
 
   if (["externalLink", "externalBook"].includes(name)) limit();
-  const requiredRoot = requiredXmlRoots[name];
+  const requiredRoot = requiredXmlRoots.get(name);
 
   if (requiredRoot !== undefined && root !== requiredRoot) malformed();
 
@@ -373,9 +375,9 @@ const hyperlinkCoordinate = (source: string): WorksheetCoordinate => {
   return { column, row };
 };
 
-const hyperlinkEndpoints = (
-  source: string
-): Readonly<{ first: WorksheetCoordinate; last: WorksheetCoordinate }> => {
+type HyperlinkEndpoints = Readonly<{ first: WorksheetCoordinate; last: WorksheetCoordinate }>;
+
+const hyperlinkEndpoints = (source: string): HyperlinkEndpoints => {
   const parts = source.split(":");
 
   if (parts.length > 2) return malformed();

@@ -327,7 +327,7 @@ export const TelemetryExternalHttpMethod = Schema.Literals([
 
 export type TelemetryExternalHttpMethod = typeof TelemetryExternalHttpMethod.Type;
 
-const NoSpanMetadata = Schema.TaggedStruct("None", {});
+export const NoSpanMetadata = Schema.TaggedStruct("None", {});
 
 const HttpSpanMetadata = Schema.TaggedStruct("Http", {
   method: TelemetryHttpMethod,
@@ -346,7 +346,7 @@ const QueueSpanMetadata = Schema.TaggedStruct("Queue", {
   delayMilliseconds: Schema.Option(TelemetryDuration),
 });
 
-const ProviderSpanMetadata = Schema.TaggedStruct("Provider", {
+export const ProviderSpanMetadata = Schema.TaggedStruct("Provider", {
   provider: TelemetryCodeSchema.provider,
   attempt: TelemetryAttempt,
   status: Schema.Option(TelemetryHttpStatus),
@@ -441,13 +441,15 @@ export const DeclaredOutcome = Schema.Union([
 
 export type DeclaredOutcome = typeof DeclaredOutcome.Type;
 
+export const DefectFailure = Schema.TaggedStruct("Defect", {
+  component: TelemetryCodeSchema.component,
+  operation: TelemetryCodeSchema.operation,
+  error: TelemetryCodeSchema.error,
+  cause: Schema.Unknown,
+});
+
 export const ClassifiedFailure = Schema.Union([
-  Schema.TaggedStruct("Defect", {
-    component: TelemetryCodeSchema.component,
-    operation: TelemetryCodeSchema.operation,
-    error: TelemetryCodeSchema.error,
-    cause: Schema.Unknown,
-  }),
+  DefectFailure,
   Schema.TaggedStruct("ExhaustedOperationalFailure", {
     component: TelemetryCodeSchema.component,
     operation: TelemetryCodeSchema.operation,

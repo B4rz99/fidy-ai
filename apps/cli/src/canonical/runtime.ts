@@ -1,7 +1,7 @@
 import { FidyApi, type FidyApiGroups, makeTokenAuthorizationClientLive } from "@fidy/server/client";
-import { Effect, Layer, Redacted, Schema } from "effect";
+import { Effect, Layer, Option, Redacted, Schema } from "effect";
 import { HttpApi, HttpApiClient, type HttpApiEndpoint, type HttpApiGroup } from "effect/http-api";
-import { makeProtectedClient } from "../direct-client/runtime";
+import { protectedHttpClient } from "../direct-client/runtime";
 import { CliFailure, apiOrigin } from "../credential/contract";
 import type { CanonicalClient, CanonicalClientFactory } from "./contract";
 
@@ -20,12 +20,12 @@ type CanonicalGroup = HttpApiGroup.Constraint & {
   readonly endpoints: Readonly<Record<string, CanonicalEndpoint>>;
 };
 
-export const makeCanonicalClient: CanonicalClientFactory = Effect.fn(function* (options) {
+export const canonicalClientFactory: CanonicalClientFactory = Effect.fn(function* (options) {
   const authorization = yield* Layer.build(
     makeTokenAuthorizationClientLive(Redacted.value(options.credential.bearer))
   );
 
-  const httpClient = makeProtectedClient({
+  const httpClient = protectedHttpClient({
     client: options.httpClient,
     allowQuery: true,
     maximumResponseBytes: 1_048_576,
@@ -35,23 +35,24 @@ export const makeCanonicalClient: CanonicalClientFactory = Effect.fn(function* (
     captureTrace: options.captureTrace,
   });
 
-  const client: Record<string, CanonicalClient[string]> = {};
-
-  for (const group of Object.values(FidyApi.groups)) {
+  const entries = yield* Effect.forEach(Object.values(FidyApi.groups), (group) => {
     const declaration: CanonicalGroup = group;
 
     const api = HttpApi.make(FidyApi.identifier)
       .add(declaration)
       .annotateMerge(FidyApi.annotations);
 
-    const methods = yield* HttpApiClient.group(api, {
+    return HttpApiClient.group(api, {
       group: group.identifier,
       httpClient,
       baseUrl: apiOrigin,
-    }).pipe(Effect.provideContext(authorization));
+    }).pipe(
+      Effect.provideContext(authorization),
+      Effect.map((methods): [string, CanonicalClient[string]] => [group.identifier, methods])
+    );
+  });
 
-    client[group.identifier] = methods;
-  }
+  const client: Record<string, CanonicalClient[string]> = Object.fromEntries(entries);
 
   return client;
 });
@@ -75,7 +76,7 @@ export const makeInputReader = (
   Effect.fn(function* (path: string) {
     const stream = yield* Effect.try({
       try: () => open(path),
-      catch: () => new CliFailure({ reason: "InvalidInput" }),
+      catch: () => new CliFailure({ reason: "InvalidInput", cause: Option.none() }),
     });
 
     const chunks: Array<Uint8Array> = [];
@@ -84,7 +85,7 @@ export const makeInputReader = (
       const reader = yield* Effect.acquireRelease(
         Effect.try({
           try: () => stream.getReader(),
-          catch: () => new CliFailure({ reason: "InvalidInput" }),
+          catch: () => new CliFailure({ reason: "InvalidInput", cause: Option.none() }),
         }),
         releaseInputReader
       );
@@ -92,13 +93,15 @@ export const makeInputReader = (
       while (size <= maximumInputBytes) {
         const next = yield* Effect.tryPromise({
           try: () => reader.read(),
-          catch: () => new CliFailure({ reason: "InvalidInput" }),
+          catch: () => new CliFailure({ reason: "InvalidInput", cause: Option.none() }),
         });
 
         if (next.done) break;
 
         const bytes = yield* Schema.decodeUnknownEffect(Schema.Uint8Array)(next.value).pipe(
-          Effect.mapError(() => new CliFailure({ reason: "InvalidInput" }))
+          Effect.mapError(
+            (cause) => new CliFailure({ reason: "InvalidInput", cause: Option.some(cause) })
+          )
         );
 
         size += bytes.byteLength;
@@ -109,11 +112,14 @@ export const makeInputReader = (
       Effect.scoped,
       Effect.timeoutOrElse({
         duration: "15 seconds",
-        orElse: () => Effect.fail(new CliFailure({ reason: "InvalidInput" })),
+        orElse: () => Effect.fail(new CliFailure({ reason: "InvalidInput", cause: Option.none() })),
       })
     );
 
-    if (size > maximumInputBytes) return yield* new CliFailure({ reason: "InputTooLarge" });
+    if (size > maximumInputBytes) {
+      return yield* new CliFailure({ reason: "InputTooLarge", cause: Option.none() });
+    }
+
     const bytes = new Uint8Array(size);
     let offset = 0;
 
@@ -124,7 +130,7 @@ export const makeInputReader = (
 
     return yield* Effect.try({
       try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
-      catch: () => new CliFailure({ reason: "InvalidInput" }),
+      catch: () => new CliFailure({ reason: "InvalidInput", cause: Option.none() }),
     });
   });
 

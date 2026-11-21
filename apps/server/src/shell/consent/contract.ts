@@ -125,9 +125,10 @@ export type ConsentSubjectColumn =
   | "transactions.user_id"
   | "forwarded_email_receipts.user_id";
 
-export type ConsentSubject =
-  | Readonly<{ _tag: "User"; userId: string }>
-  | Readonly<{ _tag: "Owner"; column: ConsentSubjectColumn }>;
+export type ConsentSubject = Data.TaggedEnum<{
+  User: { readonly userId: string };
+  Owner: { readonly column: ConsentSubjectColumn };
+}>;
 
 export const ConsentSubject = Data.taggedEnum<ConsentSubject>();
 
@@ -145,11 +146,14 @@ export type ConsentAuthority = Readonly<{
   bindings: ReadonlyArray<string | number | Uint8Array>;
 }>;
 
-export type PATRevocationProtection =
-  | Readonly<{ _tag: "UserPAT"; sessionId: string; occurredAtMs: Option.Option<number> }>
-  | Readonly<{ _tag: "UserPairing"; sessionId: string }>
-  | Readonly<{ _tag: "ExpiredPAT" }>
-  | Readonly<{ _tag: "ExpiredPairing" }>;
+export type PATRevocationProtection = Data.TaggedEnum<{
+  UserPAT: { readonly sessionId: string; readonly occurredAtMs: Option.Option<number> };
+  UserPairing: { readonly sessionId: string };
+  ExpiredPAT: {};
+  ExpiredPairing: {};
+}>;
+
+export const PATRevocationProtection = Data.taggedEnum<PATRevocationProtection>();
 
 export type RevokeAllPairingConsentsInput = Readonly<{
   session: FreshSessionSubject;

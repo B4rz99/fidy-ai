@@ -1,6 +1,5 @@
 import { BigDecimal, Option, Schema } from "effect";
 import { type FormEvent, type JSX, useState } from "react";
-import { flushSync } from "react-dom";
 import { RecurringPlanInput } from "@/transport/client";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
@@ -74,16 +73,18 @@ export const PlanForm = ({
   const [invalid, setInvalid] = useState(false);
   const [problems, setProblems] = useState<ReadonlyArray<PlanProblem>>([]);
   const edited = (field: string): void =>
-    setProblems((current) => current.filter((problem) => !problem.clearedBy.includes(field)));
+    setProblems((current) =>
+      current.some((problem) => problem.clearedBy.includes(field))
+        ? current.filter((problem) => !problem.clearedBy.includes(field))
+        : current
+    );
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const found = findPlanProblems(planDraft(form));
     const parsed = found.length === 0 ? parsePlan(form, initial.timeZone) : Option.none();
-    flushSync(() => {
-      setProblems(found);
-      setInvalid(found.length === 0 && Option.isNone(parsed));
-    });
+    setProblems(found);
+    setInvalid(found.length === 0 && Option.isNone(parsed));
     const first = found[0];
     if (first !== undefined) {
       event.currentTarget.querySelector<HTMLElement>(`#recurring-${first.field}`)?.focus();

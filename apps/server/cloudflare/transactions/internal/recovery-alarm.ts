@@ -1,4 +1,6 @@
-import { Data, Effect } from "effect";
+import { Data, Effect, Layer, ManagedRuntime } from "effect";
+
+const boundaryRuntime = ManagedRuntime.make(Layer.empty);
 
 type Storage = Pick<DurableObjectStorage, "getAlarm" | "setAlarm" | "deleteAlarm">;
 
@@ -11,12 +13,12 @@ export class RecoveryAlarmUnavailable extends Data.TaggedError("RecoveryAlarmUna
 const nativeAlarm = <A>(run: () => Promise<A>): Effect.Effect<A, RecoveryAlarmUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new RecoveryAlarmUnavailable() });
 
-export const makeUserRecoveryAlarm = (
-  storage: Storage
-): Readonly<{
+type UserRecoveryAlarm = Readonly<{
   schedule: (dueAtMs: number) => Promise<void>;
   retireAndClear: () => Promise<RecoveryAlarmClear>;
-}> => {
+}>;
+
+export const makeUserRecoveryAlarm = (storage: Storage): UserRecoveryAlarm => {
   let pending: Promise<void> = Promise.resolve();
   let retired = false;
   const isRetired = (): boolean => retired;
@@ -34,7 +36,7 @@ export const makeUserRecoveryAlarm = (
   return {
     schedule: (dueAtMs) =>
       enqueue(() =>
-        Effect.runPromise(
+        boundaryRuntime.runPromise(
           Effect.gen(function* () {
             if (isRetired()) return;
             const existing = yield* nativeAlarm(() => storage.getAlarm());
@@ -49,7 +51,7 @@ export const makeUserRecoveryAlarm = (
       retired = true;
 
       return enqueue(() =>
-        Effect.runPromise(
+        boundaryRuntime.runPromise(
           Effect.gen(function* () {
             yield* nativeAlarm(() => storage.deleteAlarm());
 

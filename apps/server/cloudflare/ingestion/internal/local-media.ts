@@ -19,6 +19,8 @@ import { type LocalIngestionRequest, NativeMedia } from "../contract";
 import { claimIngestionCapacity, updateSharedCapacity } from "./email-capacity";
 import { mediaEvidenceLifetimeMs } from "./media-retention-policy";
 
+const isResponse = Schema.is(Schema.instanceOf(Response));
+
 type Inbound = typeof NativeMedia.Type;
 
 const endOfProviderSecond = 999;
@@ -133,7 +135,7 @@ type Publication = { input: Inbound; digest: string; current: number };
 const inspect = Effect.fn(function* ({ input, digest, current }: Publication) {
   const meter = yield* standing(input, current);
 
-  if (meter instanceof Response) return meter;
+  if (isResponse(meter)) return meter;
   const sql = yield* SqliteClient;
 
   const [published] =
@@ -162,7 +164,7 @@ const hold = Effect.fn(function* (
     Effect.gen(function* () {
       const admission = yield* inspect({ input, digest, current });
 
-      if (admission instanceof Response) return admission;
+      if (isResponse(admission)) return admission;
 
       const [slot] =
         yield* sql`SELECT id,input_digest,state FROM media_capacity_receipts WHERE user_id=${input.userId} AND portfolio=${input.portfolio} AND message=${input.message}`;
@@ -199,7 +201,7 @@ const publish = Effect.fn(function* ({ input, digest, current }: Publication, id
   const sql = yield* SqliteClient,
     meter = yield* inspect({ input, digest, current });
 
-  if (meter instanceof Response) return meter;
+  if (isResponse(meter)) return meter;
 
   const [claimed] =
     yield* sql`UPDATE media_capacity_receipts SET state='retained',due_ms=expires_at_ms WHERE id=${id} AND user_id=${input.userId} AND input_digest=${digest} AND state='storing' AND capacity_claimed=1 AND due_ms>${current} RETURNING id`;
@@ -252,7 +254,7 @@ export const admitLocalMedia = Effect.fn(function* ({
   const current = yield* Clock.currentTimeMillis;
   const id = yield* hold({ input, digest, current }, storage);
 
-  if (id instanceof Response) return id;
+  if (isResponse(id)) return id;
 
   if (
     !(yield* claimIngestionCapacity({ directory: env.DIRECTORY, purpose: "media" }, id, storage))

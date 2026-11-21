@@ -98,6 +98,9 @@ type ProofError =
 const fromPromise = <A>(run: (signal: AbortSignal) => Promise<A>): Effect.Effect<A, ProofIoError> =>
   Effect.tryPromise({ try: run, catch: (cause) => new ProofIoError({ cause }) });
 
+const fromInspector = <A, E>(inspection: Effect.Effect<A, E>): Effect.Effect<A, ProofIoError> =>
+  Effect.mapError(inspection, (cause) => new ProofIoError({ cause }));
+
 const runWrangler = (command: Array<string>, cwd: string): string => {
   const result = Bun.spawnSync(command, {
     cwd,
@@ -210,12 +213,12 @@ const profileSuccessfulConversion = (
   claimedContentType: string
 ): Effect.Effect<number, ProofError> =>
   Effect.gen(function* () {
-    const profile = yield* fromPromise((signal) =>
+    const profile = yield* fromInspector(
       profileWorkerRequest({
         debuggerUrl,
         sendRequest: (requestSignal) =>
           requestExtraction(body, requestSignal, { "content-type": claimedContentType }),
-        signal: Option.some(signal),
+        signal: Option.none(),
       })
     );
 
@@ -374,19 +377,19 @@ const runtimeProof = (options: ProofOptions): Effect.Effect<RuntimeProof, ProofE
       );
       yield* waitUntilReady;
 
-      const debuggerUrl = yield* fromPromise((signal) =>
-        inspectorTarget({ port: inspectorPort, signal: Option.some(signal) })
+      const debuggerUrl = yield* fromInspector(
+        inspectorTarget({ port: inspectorPort, signal: Option.none() })
       );
 
-      const baselineHeapBytes = yield* fromPromise((signal) =>
-        heapUsage({ debuggerUrl, signal: Option.some(signal) })
+      const baselineHeapBytes = yield* fromInspector(
+        heapUsage({ debuggerUrl, signal: Option.none() })
       );
 
       const conversions = yield* proveValidConversions(debuggerUrl, options.infrastructureRoot);
       yield* proveHostileInputs(options.infrastructureRoot, conversions.validImage);
 
-      const retainedHeapBytes = yield* fromPromise((signal) =>
-        heapUsage({ debuggerUrl, signal: Option.some(signal) })
+      const retainedHeapBytes = yield* fromInspector(
+        heapUsage({ debuggerUrl, signal: Option.none() })
       );
 
       if (

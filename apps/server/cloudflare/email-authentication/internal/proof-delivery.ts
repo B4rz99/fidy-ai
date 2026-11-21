@@ -40,7 +40,9 @@ export const sendClaimedProof = (
 
         const services = yield* Layer.build(
           EmailDelivery.layer.pipe(
-            Layer.provide(OutboundHttp.resend(Redacted.make(input.environment.RESEND_API_KEY))),
+            Layer.provide(
+              OutboundHttp.resendLayer(Redacted.make(input.environment.RESEND_API_KEY))
+            ),
             Layer.provide(OutboundHttpLive)
           )
         ).pipe(Effect.provideService(FetchHttpClient.Fetch, fetcher));

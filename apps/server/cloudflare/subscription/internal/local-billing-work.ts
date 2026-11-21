@@ -1,7 +1,7 @@
 import { reconcileLocalCandidates } from "./native-billing";
 import { processRenewal } from "./local-renewal";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Effect, Result, Schema } from "effect";
+import { Clock, Effect, Predicate, Result, Schema } from "effect";
 import { UserId } from "../../../src/core/identity/contract";
 import { BillingAttemptId } from "../../../src/core/subscription/contract";
 import { preserveStoreAlarm, withStoreCapacity } from "../../runtime/sqlite/operations";
@@ -16,7 +16,7 @@ const pageSize = 16;
 
 type Environment = NativeEnrollmentEnv & {
   BILLING_COLLECTION_QUEUE: {
-    send: (body: typeof LocalBillingCollection.Type) => Promise<unknown>;
+    send: (body: typeof LocalBillingCollection.Type) => Promise<QueueSendResponse | void>;
   };
 };
 
@@ -31,9 +31,7 @@ export const billingWake = Effect.fn(function* (storage: DurableObjectStorage) {
     (SELECT min(followup_due_at_ms) FROM billing_attempts WHERE NOT EXISTS(SELECT 1 FROM erasure_requests)) AS renewal,
     (SELECT min(next_check_ms) FROM billing_provider_transactions WHERE NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Draining')) AS verify`;
 
-  const deadlines = Object.values(row ?? {}).filter(
-    (value): value is number => typeof value === "number"
-  );
+  const deadlines = Object.values(row ?? {}).filter(Predicate.isNumber);
 
   return deadlines.length > 0 ? yield* preserveStoreAlarm(storage, Math.min(...deadlines)) : false;
 });

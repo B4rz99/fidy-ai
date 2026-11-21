@@ -75,7 +75,7 @@ const templateSenders = (
 
     const services = yield* Layer.build(
       TemplateSenders.layer.pipe(
-        Layer.provide(OutboundHttp.kapso(Redacted.make(environment.KAPSO_API_KEY))),
+        Layer.provide(OutboundHttp.kapsoLayer(Redacted.make(environment.KAPSO_API_KEY))),
         Layer.provide(OutboundHttpLive)
       )
     );

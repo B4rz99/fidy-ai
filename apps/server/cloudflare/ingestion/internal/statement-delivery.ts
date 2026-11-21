@@ -1,6 +1,6 @@
 import { sanitizeWorkTrace, workTraceHeaders } from "../../runtime/telemetry/operations";
 import type { WorkflowStepConfig } from "cloudflare:workers";
-import { Cause, Data, Effect, Exit, Option, Ref, Schema } from "effect";
+import { Cause, Data, Effect, Exit, Layer, ManagedRuntime, Option, Ref, Schema } from "effect";
 import {
   StatementCoordinatorActivity,
   StatementDeliveryUnavailable,
@@ -9,6 +9,8 @@ import {
   statementWorkflowRetention as retention,
 } from "../contract";
 import { maximumStatementChunkActivities } from "./statement-processing-limits";
+
+const boundaryRuntime = ManagedRuntime.make(Layer.empty);
 
 const Work = StatementWork;
 
@@ -144,22 +146,9 @@ const workflowState = (
   Effect.gen(function* () {
     const instance = yield* attempt(() => workflow.get(id));
 
-    const statusMethod =
-      typeof instance === "object" && instance !== null && "status" in instance
-        ? instance.status
-        : undefined;
+    const status = yield* attempt(() => instance.status());
 
-    if (typeof statusMethod !== "function") {
-      return yield* new StatementDeliveryUnavailable({ cause: "Workflow status unavailable" });
-    }
-
-    const status = yield* attempt(() => {
-      const result: unknown = statusMethod.call(instance);
-
-      return Promise.resolve(result);
-    });
-
-    return yield* Schema.decodeUnknownEffect(WorkflowState)(status).pipe(
+    return yield* Schema.decodeEffect(WorkflowState)(status).pipe(
       Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))
     );
   });
@@ -179,7 +168,7 @@ const coordinatedStatementStep = (
   work: typeof Work.Type,
   kind: "StatementWork" | "StatementFailed"
 ): Promise<boolean> =>
-  Effect.runPromise(
+  boundaryRuntime.runPromise(
     Effect.gen(function* () {
       const safeWork = yield* sanitizeWorkTrace(work);
       const traceHeaders = yield* workTraceHeaders(safeWork);
@@ -222,7 +211,7 @@ export const runStatementExtractionWorkflow = (
 
   if (Option.isNone(work)) return Promise.resolve();
 
-  return Effect.runPromise(
+  return boundaryRuntime.runPromise(
     Effect.gen(function* () {
       const nextIndex = yield* Ref.make(0);
 

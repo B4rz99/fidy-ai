@@ -1,7 +1,7 @@
 import { captureTraceHeaders } from "../../runtime/telemetry/operations";
 import { OutboundHttpRequest } from "../../../src/shell/outbound-http/contract";
 import { type JWKSCacheInput, createRemoteJWKSet, customFetch, jwksCache, jwtVerify } from "jose";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
 import { StartRefundInput } from "../../../src/core/subscription/contract";
 import { type OutboundHttpService } from "../../../src/shell/outbound-http/operations";
 import { RequestBodyPolicy } from "../../http/contract";
@@ -14,6 +14,8 @@ import {
   maximumRefundOperatorIdLength,
 } from "../contract";
 import { refundFailureResponse } from "./refund-http-response";
+
+const boundaryRuntime = ManagedRuntime.make(Layer.empty);
 
 const RefundReadTarget = Schema.Struct({
   userId: RefundRead.fields.userId,
@@ -51,7 +53,7 @@ const signingKeys = (issuer: string, http: OutboundHttpService, signal: AbortSig
   return createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`), {
     [jwksCache]: retained.data,
     [customFetch]: (_url, options): Promise<Response> =>
-      Effect.runPromise(
+      boundaryRuntime.runPromise(
         http.execute(OutboundHttpRequest.CloudflareAccessSigningKeys()).pipe(
           Effect.timeout("5 seconds"),
           Effect.map(

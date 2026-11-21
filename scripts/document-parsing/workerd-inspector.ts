@@ -40,10 +40,18 @@ const withInspectorDeadline = <A, E, R>(
     Effect.mapError((cause) => new InspectorIoError({ cause }))
   );
 
-const fetchTargets = (port: number): Effect.Effect<unknown, InspectorIoError> =>
+const fetchTargets = (
+  port: number,
+  signal: Option.Option<AbortSignal>
+): Effect.Effect<unknown, InspectorIoError> =>
   Effect.tryPromise({
     try: (requestSignal) =>
-      requestWorkerd({ method: "GET", port, path: "/json", signal: requestSignal }),
+      requestWorkerd({
+        method: "GET",
+        port,
+        path: "/json",
+        signal: AbortSignal.any([requestSignal, ...Option.toArray(signal)]),
+      }),
     catch: (cause) => new InspectorIoError({ cause }),
   }).pipe(
     Effect.flatMap((response) =>
@@ -57,23 +65,23 @@ const fetchTargets = (port: number): Effect.Effect<unknown, InspectorIoError> =>
 export const inspectorTarget = ({
   port,
   signal,
-}: Readonly<{ port: number; signal: Option.Option<AbortSignal> }>): Promise<string> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const targets = yield* Schema.decodeUnknownEffect(InspectorTargets)(
-        yield* fetchTargets(port)
-      );
+}: Readonly<{ port: number; signal: Option.Option<AbortSignal> }>): Effect.Effect<
+  string,
+  InspectorIoError
+> =>
+  Effect.gen(function* () {
+    const targets = yield* Schema.decodeUnknownEffect(InspectorTargets)(
+      yield* fetchTargets(port, signal)
+    );
 
-      const target = targets[0];
+    const target = targets[0];
 
-      if (target === undefined) {
-        return yield* new InspectorIoError({ cause: "Workerd inspector target is unavailable" });
-      }
+    if (target === undefined) {
+      return yield* new InspectorIoError({ cause: "Workerd inspector target is unavailable" });
+    }
 
-      return target.webSocketDebuggerUrl;
-    }).pipe(withInspectorDeadline),
-    { signal: Option.getOrUndefined(signal) }
-  );
+    return target.webSocketDebuggerUrl;
+  }).pipe(withInspectorDeadline);
 
 type InspectorContext<A> = {
   readonly socket: WebSocket;
@@ -260,50 +268,49 @@ export const profileWorkerRequest = ({
   debuggerUrl: string;
   sendRequest: (signal: AbortSignal) => Promise<Response>;
   signal: Option.Option<AbortSignal>;
-}>): Promise<ProfileResult> => {
+}>): Effect.Effect<ProfileResult, InspectorIoError> => {
   let response = Option.none<Response>();
 
   const releaseResponse = (): void => {
     if (Option.isSome(response)) cancelResponse(response.value);
   };
 
-  return Effect.runPromise(
-    inspectSocket(
-      {
-        debuggerUrl,
-        command: JSON.stringify({ id: 1, method: "Profiler.enable" }),
-        handler: (message, context) =>
-          handleProfileMessage(message, {
-            ...context,
-            sendRequest,
-            response,
-            setResponse: (value) => {
-              response = Option.some(value);
-            },
-          }),
-        onFailure: Option.some(releaseResponse),
-      },
-      Option.getOrUndefined(signal)
-    )
+  return inspectSocket(
+    {
+      debuggerUrl,
+      command: JSON.stringify({ id: 1, method: "Profiler.enable" }),
+      handler: (message, context) =>
+        handleProfileMessage(message, {
+          ...context,
+          sendRequest,
+          response,
+          setResponse: (value) => {
+            response = Option.some(value);
+          },
+        }),
+      onFailure: Option.some(releaseResponse),
+    },
+    Option.getOrUndefined(signal)
   );
 };
 
 export const heapUsage = ({
   debuggerUrl,
   signal,
-}: Readonly<{ debuggerUrl: string; signal: Option.Option<AbortSignal> }>): Promise<number> =>
-  Effect.runPromise(
-    inspectSocket(
-      {
-        debuggerUrl,
-        command: JSON.stringify({ id: 1, method: "Runtime.getHeapUsage" }),
-        onFailure: Option.none(),
-        handler: (message, { succeed }) => {
-          const usage = Schema.decodeOption(Schema.fromJsonString(HeapUsage))(message);
+}: Readonly<{ debuggerUrl: string; signal: Option.Option<AbortSignal> }>): Effect.Effect<
+  number,
+  InspectorIoError
+> =>
+  inspectSocket(
+    {
+      debuggerUrl,
+      command: JSON.stringify({ id: 1, method: "Runtime.getHeapUsage" }),
+      onFailure: Option.none(),
+      handler: (message, { succeed }) => {
+        const usage = Schema.decodeOption(Schema.fromJsonString(HeapUsage))(message);
 
-          if (Option.isSome(usage) && usage.value.id === 1) succeed(usage.value.result.usedSize);
-        },
+        if (Option.isSome(usage) && usage.value.id === 1) succeed(usage.value.result.usedSize);
       },
-      Option.getOrUndefined(signal)
-    )
+    },
+    Option.getOrUndefined(signal)
   );

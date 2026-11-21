@@ -29,10 +29,15 @@ const canonicalListing = Effect.fn(function* (runtime: Miniflare, path: string) 
   return yield* native(() => response.json());
 });
 
+type PublishedPriceTerms = Readonly<{
+  id: string;
+  money: Readonly<{ amount: string; currency: string }>;
+}>;
+
 const assertRenewalTerms = Effect.fn(function* (
   runtime: Miniflare,
   owner: Effect.Success<ReturnType<typeof seed>>,
-  later: Readonly<Record<string, unknown>>
+  later: PublishedPriceTerms
 ) {
   const stores = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
   const pricing = yield* native(() => runtime.getDurableObjectNamespace("PRICING", "core"));
@@ -567,7 +572,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const send = (
         path: string,
         method: string,
-        body?: object
+        body?: unknown
       ): Effect.Effect<MiniflareResponse> =>
         native(() =>
           runtime.dispatchFetch(api + path, {

@@ -1,4 +1,4 @@
-import { Effect, Exit, Option, Ref, Schema } from "effect";
+import { Effect, Exit, Layer, ManagedRuntime, Option, Ref, Schema } from "effect";
 import {
   BillingCollectionFailure,
   type BillingObservationWorkflow,
@@ -6,6 +6,8 @@ import {
   type BillingWorkflowActivity,
   LocalSourceCancellationWork,
 } from "../contract";
+
+const boundaryRuntime = ManagedRuntime.make(Layer.empty);
 
 const candidateCooldownMs = 60_000;
 
@@ -138,7 +140,7 @@ export const runLocalCancellationLoop = (
     work: typeof LocalSourceCancellationWork.Type;
   }
 ): Promise<void> =>
-  Effect.runPromise(
+  boundaryRuntime.runPromise(
     Effect.gen(function* () {
       const observe = input.observe;
 

@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, Predicate, Schema } from "effect";
 import { RefundAttempt, type RefundStartFailure } from "../../../src/core/subscription/contract";
 
 const statuses: Readonly<Record<RefundStartFailure, number>> = {
@@ -26,6 +26,6 @@ export const refundResultResponse = <R>(
     Effect.flatMap(Schema.encodeEffect(Schema.toCodecJson(RefundAttempt))),
     Effect.map((data) => Response.json({ data }, { status: input.status, headers })),
     Effect.catch((error) =>
-      Effect.succeed(refundFailureResponse(typeof error === "string" ? error : "unavailable"))
+      Effect.succeed(refundFailureResponse(Predicate.isString(error) ? error : "unavailable"))
     )
   );

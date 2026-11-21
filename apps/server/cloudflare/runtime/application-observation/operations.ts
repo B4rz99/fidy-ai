@@ -1,5 +1,5 @@
 import { dual } from "effect/Function";
-import { Cause, Data, Effect, Exit, Option, Predicate } from "effect";
+import { Cause, Data, Effect, Exit, Option, Predicate, Schema } from "effect";
 import {
   HostedInferenceError,
   type HostedInferenceFailureReason,
@@ -66,7 +66,7 @@ const classifiedModelFailure = (cause: Cause.Cause<unknown>): DeclaredOutcome =>
     return { outcome: "failed", error: Option.some("timeout"), retryable: false };
   }
 
-  if (Option.isNone(error) || !(error.value instanceof HostedInferenceError)) {
+  if (Option.isNone(error) || !Schema.is(Schema.instanceOf(HostedInferenceError))(error.value)) {
     return { outcome: "failed", error: Option.some("operational_failure"), retryable: false };
   }
 

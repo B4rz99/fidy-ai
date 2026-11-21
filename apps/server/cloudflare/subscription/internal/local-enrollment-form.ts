@@ -28,8 +28,10 @@ import {
   unauthorizedEnrollment,
   unavailableEnrollment,
 } from "./enrollment-session";
-import { makeWompiEnrollmentClient } from "./wompi-client";
+import { WompiEnrollmentClient } from "./wompi-client";
 import { type WompiTransportFactory, workerDigest } from "./wompi-runtime";
+
+const isResponse = Schema.is(Schema.instanceOf(Response));
 
 export const formCodec = Schema.fromJsonString(Schema.toCodecJson(PreparedPaymentEnrollment));
 
@@ -37,7 +39,7 @@ export const enrollmentWompi = Effect.fn(function* (
   env: NativeEnrollmentEnv,
   transport: WompiTransportFactory
 ) {
-  return makeWompiEnrollmentClient({
+  return WompiEnrollmentClient.fromOutboundHttp({
     publicKey: env.WOMPI_PUBLIC_KEY,
     digest: workerDigest,
     outboundHttp: yield* transport(env),
@@ -80,8 +82,15 @@ type Reservation = {
   deadline: number;
 };
 
+type OpenFormRow = Readonly<{
+  state: unknown;
+  price_id: unknown;
+  method: unknown;
+  environment: unknown;
+}>;
+
 const matchesOpenForm = (
-  prior: Readonly<Record<string, unknown>>,
+  prior: OpenFormRow,
   body: Preparation,
   env: NativeEnrollmentEnv
 ): boolean => {
@@ -105,7 +114,20 @@ const previousForm = Effect.fn(function* (input: Reservation) {
     yield* sql`SELECT * FROM payment_enrollments WHERE user_id=${session.user_id} AND state IN('preparing','prepared','creating','verifying')`;
 
   if (prior !== undefined) {
-    if (matchesOpenForm(prior, body, env)) return textReport(String(prior.form));
+    if (
+      matchesOpenForm(
+        {
+          state: prior.state,
+          price_id: prior.price_id,
+          method: prior.method,
+          environment: prior.environment,
+        },
+        body,
+        env
+      )
+    ) {
+      return textReport(String(prior.form));
+    }
 
     if (prior.state === "creating" || prior.state === "verifying") {
       return json({
@@ -208,7 +230,7 @@ const reserveForm = Effect.fn(function* (input: Reservation) {
   if (Number(capacity?.n) >= maximumPreparations) return limitedEnrollment();
   const payment = yield* selectPaymentSource(input);
 
-  if (payment instanceof Response) return payment;
+  if (isResponse(payment)) return payment;
   yield* sql`INSERT INTO payment_enrollments(id,user_id,environment,method,price_id,prepared_at_ms,deadline_ms,state,source_id,email) VALUES (${enrollmentId},${session.user_id},${env.WOMPI_ENVIRONMENT},${method},${priceId},${now},${deadline},'preparing',${payment.id},${payment.billingEmail})`;
 
   return { billingEmail: payment.billingEmail, paymentSourceMode: payment.paymentSourceMode };
@@ -256,7 +278,7 @@ export const prepareLocalForm = Effect.fn(function* (input: BrowserEnrollment) {
     deadline,
   }).pipe(withStoreCapacity("growth"));
 
-  if (reserved instanceof Response) return reserved;
+  if (isResponse(reserved)) return reserved;
 
   const form = yield* presentPrepared({
     input,
@@ -268,7 +290,7 @@ export const prepareLocalForm = Effect.fn(function* (input: BrowserEnrollment) {
     method,
   });
 
-  if (form instanceof Response) return form;
+  if (isResponse(form)) return form;
 
   return yield* saveForm(enrollmentId, form);
 });

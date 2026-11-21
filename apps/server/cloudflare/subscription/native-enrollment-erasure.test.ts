@@ -128,7 +128,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* native(() => provider.exec("SELECT issued FROM held_source"))).toEqual([
           { issued: 1 },
         ]);
-      }),
-    30000
+      })
   );
 });

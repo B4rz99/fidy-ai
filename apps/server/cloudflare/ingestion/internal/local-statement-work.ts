@@ -37,6 +37,8 @@ import {
 } from "./statement-processing-limits";
 import { maximumRetainedReviewEvidence } from "./statement-review-retention";
 
+const isResponse = Schema.is(Schema.instanceOf(Response));
+
 const createdStatus = 201;
 
 const processedStatus = 200;
@@ -341,7 +343,7 @@ export const localStatementActivity = Effect.fn(function* (
   if (row.value.total === null) {
     const stop = yield* materialize(work, row.value, bucket);
 
-    if (stop instanceof Response) return stop;
+    if (isResponse(stop)) return stop;
   }
 
   return yield* withStoreCapacity("growth")(finalize(work));

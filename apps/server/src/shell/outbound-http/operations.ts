@@ -135,7 +135,13 @@ export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpServ
 
   static readonly layer = Layer.effect(this, this.make);
 
-  static readonly kapso = (
+  static readonly accessSigningKeys = makeAccessSigningKeysOutboundHttp;
+
+  static readonly kapso = makeKapsoOutboundHttp;
+
+  static readonly wompi = makeWompiOutboundHttp;
+
+  static readonly kapsoLayer = (
     apiKey: Redacted.Redacted<string>
   ): Layer.Layer<OutboundHttp, never, HttpClient.HttpClient> =>
     Layer.effect(
@@ -145,7 +151,7 @@ export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpServ
       )
     );
 
-  static readonly resend = (
+  static readonly resendLayer = (
     apiKey: Redacted.Redacted<string>
   ): Layer.Layer<OutboundHttp, never, HttpClient.HttpClient> =>
     Layer.effect(

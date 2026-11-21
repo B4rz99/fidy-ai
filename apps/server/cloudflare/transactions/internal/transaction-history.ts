@@ -33,6 +33,11 @@ import {
   transactionUnavailable as unavailable,
 } from "../../canonical-work/operations";
 
+type BoundStatement = Readonly<{
+  sql: string;
+  bindings: ReadonlyArray<string | number | Uint8Array>;
+}>;
+
 export const TransactionOutput = Schema.toCodecJson(Transaction);
 
 const Row = Schema.Struct({
@@ -229,8 +234,10 @@ const listFilters = ({
     values.push(query.q.value, query.q.value);
   }
 
-  if (Option.isSome(query.cursor)) {
-    const [occurred, created, recordId] = Option.getOrThrow(decodeCursor(query.cursor.value));
+  const cursor = Option.flatMap(query.cursor, decodeCursor);
+
+  if (Option.isSome(cursor)) {
+    const [occurred, created, recordId] = cursor.value;
     conditions.push("(occurred_at_ms, created_at_ms, id) < (?, ?, ?) ");
     values.push(
       DateTime.toEpochMillis(DateTime.makeUnsafe(occurred)),
@@ -310,10 +317,7 @@ export const presentationQuery = ({
   userId,
   id,
   authority,
-}: PresentationSelection): Readonly<{
-  sql: string;
-  bindings: ReadonlyArray<string | number | Uint8Array>;
-}> => {
+}: PresentationSelection): BoundStatement => {
   const relation = effectiveTransactionRelation(userId);
   const guard = presentationGuard(authority);
 

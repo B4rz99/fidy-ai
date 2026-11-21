@@ -41,7 +41,7 @@ const category = "10000000-0000-4000-8000-000000000016";
 const bearer = (index: number): string =>
   index < 2 ? String(index + 1).repeat(43) : String(index + 1).padStart(43, "0");
 
-const request = (index: number, path = "/transactions", body?: object): Request =>
+const request = (index: number, path = "/transactions", body?: unknown): Request =>
   new Request(`https://core.internal${path}`, {
     method: body === undefined ? "GET" : "POST",
     headers: {
@@ -326,11 +326,11 @@ const nativeCountRows = (
   db: NativeJourney,
   sql: string,
   ...bindings: [] | [string]
-): Promise<unknown> =>
+): Promise<number> =>
   db
     .owner(bindings[0] ?? users[0] ?? "")
     .exec(sql, ...bindings)
-    .then(([row]) => row?.count);
+    .then(([row]) => Schema.decodeUnknownSync(Schema.Finite)(row?.count));
 
 const AuditedOperations = Schema.Array(
   Schema.Struct({ operation: Schema.String, outcome: Schema.String })
@@ -393,7 +393,7 @@ beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
 
 afterEach(() => vi.useRealTimers());
 
-const groupCorrectionRequest = (index: number, payload: object): Request => {
+const groupCorrectionRequest = (index: number, payload: unknown): Request => {
   const original = request(index, "/transactions/corrections", payload);
   const headers = new Headers(original.headers);
   headers.set("origin", "https://app.fidyapp.com");
@@ -756,7 +756,7 @@ it("rolls back the whole group when one selected row stops accepting its correct
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
-const postTransaction = (index: number, body: object): Request =>
+const postTransaction = (index: number, body: unknown): Request =>
   new Request("https://api.fidyapp.com/transactions", {
     method: "POST",
     headers: {
@@ -800,7 +800,7 @@ it("searches only the caller's FinancialRecord with bounded literal terms", () =
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
 
-      const send = (index: number, path: string, body?: object): Promise<Response> =>
+      const send = (index: number, path: string, body?: unknown): Promise<Response> =>
         db.send(
           new Request(`https://api.fidyapp.com${path}`, {
             method: body === undefined ? "GET" : "POST",
@@ -945,7 +945,7 @@ it("links one exact pair into one effective Transaction while retaining both ori
         )
       );
 
-      const send = (path: string, body?: object): Promise<Response> =>
+      const send = (path: string, body?: unknown): Promise<Response> =>
         db.send(
           new Request(`https://api.fidyapp.com${path}`, {
             method: body === undefined ? "GET" : "POST",
@@ -1148,7 +1148,7 @@ it("refuses ineligible pairs without writing any relation", () =>
         )
       );
 
-      const send = (body: object): Promise<Response> =>
+      const send = (body: unknown): Promise<Response> =>
         db.send(
           new Request("https://api.fidyapp.com/transactions/link", {
             method: "POST",
@@ -1251,7 +1251,7 @@ it("unlinks the exact pair, restores both originals, and remembers keep-separate
         )
       );
 
-      const send = (path: string, body: object): Promise<Response> =>
+      const send = (path: string, body: unknown): Promise<Response> =>
         db.send(
           new Request(`https://api.fidyapp.com${path}`, {
             method: "POST",
@@ -1461,7 +1461,7 @@ it("refuses duplicate, chained, and cross-User links without partial relation st
         ])
       );
 
-      const send = (index: number, path: string, body?: object): Promise<Response> =>
+      const send = (index: number, path: string, body?: unknown): Promise<Response> =>
         db.send(
           new Request(`https://api.fidyapp.com${path}`, {
             method: body === undefined ? "GET" : "POST",
@@ -1626,7 +1626,7 @@ it("keeps the effective Transaction consistent after corrections to either membe
         )
       );
 
-      const send = (path: string, method: string, body: object): Promise<Response> =>
+      const send = (path: string, method: string, body: unknown): Promise<Response> =>
         db.send(
           new Request(`https://api.fidyapp.com${path}`, {
             method,
@@ -1950,7 +1950,7 @@ it("links and unlinks under the caller's live credential scope and records only 
       yield* seedNativePAT({ db, userId: owner, token: readToken, scopes: ["read"], current });
       yield* seedNativePAT({ db, userId: owner, token: writeToken, scopes: ["write"], current });
 
-      const bearerRequest = (token: string, path: string, body?: object): Request =>
+      const bearerRequest = (token: string, path: string, body?: unknown): Request =>
         new Request(`https://api.fidyapp.com${path}`, {
           method: body === undefined ? "GET" : "POST",
           headers: {
@@ -2132,13 +2132,13 @@ it("corrects selected facts once, retains decisions and evidence, and rejects st
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
 
-      const methodFor = (path: string, body?: object): string => {
+      const methodFor = (path: string, body?: unknown): string => {
         if (body === undefined) return "GET";
 
         return path === "/transactions" ? "POST" : "PUT";
       };
 
-      const send = (index: number, path: string, body?: object): Promise<Response> =>
+      const send = (index: number, path: string, body?: unknown): Promise<Response> =>
         db.send(
           new Request(`https://api.fidyapp.com${path}`, {
             method: methodFor(path, body),
@@ -2301,7 +2301,7 @@ it("serializes competing corrections and rolls back evidence when the correction
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
 
-      const send = (path: string, method: string, body?: object): Promise<Response> =>
+      const send = (path: string, method: string, body?: unknown): Promise<Response> =>
         db.send(
           new Request(`https://api.fidyapp.com${path}`, {
             method,
@@ -2496,7 +2496,7 @@ it("rejects forged browser origins and malformed Money before any public mutatio
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
 
-      const post = (origin: string, data: object): Request =>
+      const post = (origin: string, data: unknown): Request =>
         new Request("https://api.fidyapp.com/transactions", {
           method: "POST",
           headers: {
@@ -5195,7 +5195,7 @@ it("records one metadata-only refusal for each malformed batch envelope", () =>
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
 
-      const rawBatch = (body: object): Request =>
+      const rawBatch = (body: unknown): Request =>
         new Request("https://api.fidyapp.com/operations/atomic-batch", {
           method: "POST",
           headers: {

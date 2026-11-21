@@ -10,8 +10,10 @@ import {
   type PendingSignal,
 } from "./contract";
 import { inspectQueue, inspectWorkflow } from "./internal/health-inspection";
-import { Effect, Exit, Option, Schema } from "effect";
+import { Effect, Exit, Layer, ManagedRuntime, Option, Schema } from "effect";
 import { WorkflowStatus, periodMs, staleMs } from "./internal/canary";
+
+const boundaryRuntime = ManagedRuntime.make(Layer.empty);
 
 const validateCanary = (payload: unknown, now: number): Effect.Effect<CanaryPayload> =>
   Effect.suspend(() => {
@@ -27,14 +29,14 @@ const validateCanary = (payload: unknown, now: number): Effect.Effect<CanaryPayl
 export const receiveCanary = (
   input: Readonly<{
     workflow: Readonly<{
-      create: (input: { id: string; params: CanaryPayload }) => Promise<unknown>;
-      get: (id: string) => Promise<{ status: () => Promise<unknown> }>;
+      create: (input: { id: string; params: CanaryPayload }) => Promise<WorkflowInstance | void>;
+      get: (id: string) => Promise<{ status: () => Promise<InstanceStatus> }>;
     }>;
     payload: unknown;
     now: number;
   }>
 ): Promise<void> =>
-  Effect.runPromise(
+  boundaryRuntime.runPromise(
     Effect.gen(function* () {
       const decoded = yield* validateCanary(input.payload, input.now);
       const id = `operational-canary-${Math.floor(decoded.sentAtMs / periodMs)}`;
@@ -67,7 +69,7 @@ export const completeCanary = ({
   payload,
   now,
 }: Readonly<{ payload: unknown; now: number }>): Promise<void> =>
-  Effect.runPromise(Effect.asVoid(validateCanary(payload, now)));
+  boundaryRuntime.runPromise(Effect.asVoid(validateCanary(payload, now)));
 
 export const sendCanary = ({
   queue,
@@ -82,7 +84,7 @@ export const sendCanary = ({
 
   if (now - sentAtMs >= minuteMs) return Promise.resolve();
 
-  return Effect.runPromise(
+  return boundaryRuntime.runPromise(
     Effect.tryPromise(() => queue.send({ version: 1, sentAtMs } satisfies CanaryPayload)).pipe(
       Effect.timeout("2 seconds"),
       Effect.asVoid

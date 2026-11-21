@@ -206,8 +206,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* native(() => db.exec("SELECT count(*) AS n FROM charge_posts"))).toEqual([
           { n: 1 },
         ]);
-      }),
-    30000
+      })
   );
   test.effect(
     "rechecks captured payment facts and signed generations at the exact User and recognizes same-second approval",

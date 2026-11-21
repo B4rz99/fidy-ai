@@ -122,6 +122,5 @@ it.live(
       }),
       { discard: true }
     );
-  }, Effect.scoped),
-  30000
+  }, Effect.scoped)
 );

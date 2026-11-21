@@ -8,6 +8,7 @@ import {
   TelemetryHttpStatus,
   TelemetryModelUsage,
   type TelemetryRelease,
+  type TelemetryService,
   type TelemetrySpan,
   TelemetrySpanId,
   TelemetryStrictDecoding,
@@ -15,7 +16,7 @@ import {
   type TelemetryWorkRecord,
   boundedTelemetryDuration,
 } from "../../../src/shell/observability/contract";
-import { projectHttpStatusClass } from "../../../src/shell/observability/operations";
+import { Telemetry, projectHttpStatusClass } from "../../../src/shell/observability/operations";
 import { WorkerTelemetryEvent } from "./contract";
 
 type ActiveSpan = {
@@ -327,3 +328,7 @@ export const makeWorkerTelemetryAdapter = (
     exportWork: sink.exportWork,
   };
 };
+
+export const workerTelemetryService = (
+  sink: Readonly<{ exportWork: (record: TelemetryWorkRecord) => void; exportEvent: EventSink }>
+): TelemetryService => Telemetry.fromAdapter(makeWorkerTelemetryAdapter(sink));

@@ -174,6 +174,9 @@ export class Telemetry extends Context.Service<Telemetry, TelemetryService>()(
   static readonly layer = <E, R>(
     resource: Effect.Effect<TelemetryResource, E, R>
   ): Layer.Layer<Telemetry, E, R> => Layer.effect(this, this.make(resource));
+
+  static readonly fromAdapter = (adapter: TelemetryAdapter): TelemetryService =>
+    makeTelemetryService(adapter);
 }
 
 const CurrentTelemetrySpan = Context.Reference<Option.Option<TelemetrySpan>>(

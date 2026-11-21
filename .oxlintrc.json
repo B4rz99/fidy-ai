@@ -808,28 +808,6 @@
     },
     {
       "files": [
-        "apps/server/cloudflare/ingestion/**",
-        "apps/server/cloudflare/runtime/**",
-        "apps/server/cloudflare/subscription/**",
-        "apps/server/cloudflare/transactions/**"
-      ],
-      "rules": {
-        "anti-slop-effect/no-service-constructor-imports": "off",
-        "anti-slop-effect/require-cause-when-narrowing": "off",
-        "anti-slop-effect/require-service-make-layer": "off",
-        "anti-slop/no-instanceof": "off",
-        "anti-slop/no-known-value-widening": "off",
-        "anti-slop/no-object-parameters": "off",
-        "anti-slop/no-runtime-typeof": "off",
-        "anti-slop/no-unknown-returns": "off",
-        "anti-slop/no-unsafe-dictionary-type": "off",
-        "enfect/avoid-option-getorthrow": "off",
-        "enfect/effect-run-in-body": "off",
-        "landmines/no-flake-masking": "off"
-      }
-    },
-    {
-      "files": [
         "apps/server/cloudflare/agent/internal/local-inference.ts",
         "apps/server/cloudflare/maintenance/watchdog-traversal.test.ts"
       ],
@@ -922,22 +900,6 @@
         "anti-slop/no-unsafe-dictionary-type": "off",
         "enfect/avoid-expect-in-if": "off",
         "enfect/yield-in-for-loop": "off",
-        "landmines/no-flake-masking": "off"
-      }
-    },
-    {
-      "files": [
-        "scripts/dev-browser.test.ts",
-        "scripts/document-parsing/workerd-inspector.ts",
-        "scripts/infra-performance/canonical-fixture/meter.test-fixture.mjs",
-        "scripts/infra-performance/reference/native.ts",
-        "scripts/pro/runtime.ts"
-      ],
-      "rules": {
-        "anti-slop-effect/no-service-constructor-imports": "off",
-        "anti-slop/no-reflect-get": "off",
-        "anti-slop/no-runtime-typeof": "off",
-        "enfect/effect-run-in-body": "off",
         "landmines/no-flake-masking": "off"
       }
     }

@@ -365,55 +365,52 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect.runIf(
     Effect.runSync(Config.String("FIDY_STORE_MIGRATION_MEASURE").pipe(Config.withDefault("0"))) ===
       "1"
-  )(
-    "measures empty and retained 100,000-Transaction User activation",
-    () =>
-      Effect.gen(function* () {
-        const activate = yield* probe;
+  )("measures empty and retained 100,000-Transaction User activation", () =>
+    Effect.gen(function* () {
+      const activate = yield* probe;
 
-        yield* Effect.forEach(
-          ["userOldest", "userCurrent"],
-          Effect.fnUntraced(function* (mode) {
-            const store = yield* activate(mode, "measurement");
-            const started = performance.now();
+      yield* Effect.forEach(
+        ["userOldest", "userCurrent"],
+        Effect.fnUntraced(function* (mode) {
+          const store = yield* activate(mode, "measurement");
+          const started = performance.now();
 
-            const sizes = yield* Schema.decodeUnknownEffect(
-              Schema.Struct({
-                initialBytes: Schema.Int,
-                peakBytes: Schema.Int,
-                finalBytes: Schema.Int,
-              })
-            )(yield* store.measure);
+          const sizes = yield* Schema.decodeUnknownEffect(
+            Schema.Struct({
+              initialBytes: Schema.Int,
+              peakBytes: Schema.Int,
+              finalBytes: Schema.Int,
+            })
+          )(yield* store.measure);
 
-            const durationMs = performance.now() - started;
+          const durationMs = performance.now() - started;
 
-            const transactions = yield* store.exec(
-              "SELECT count(*) AS transactions FROM transactions"
+          const transactions = yield* store.exec(
+            "SELECT count(*) AS transactions FROM transactions"
+          );
+
+          expect(transactions).toEqual([{ transactions: mode === "userOldest" ? 0 : 100000 }]);
+          expect(durationMs).toBeLessThan(15000);
+          expect(sizes.peakBytes).toBeLessThan(512 * 1024 * 1024);
+          const encode = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
+          process.stdout.write(
+            `MIGRATION_ACTIVATION ${yield* encode({ mode, transactions, durationMs, ...sizes })}\n`
+          );
+
+          if (mode === "userOldest") {
+            yield* store.exec(
+              "INSERT INTO users (id,service_market,locale,time_zone,created_at_ms) VALUES('10000000-0000-4000-8000-000000000051','CO','es-CO','America/Bogota',0)"
             );
-
-            expect(transactions).toEqual([{ transactions: mode === "userOldest" ? 0 : 100000 }]);
-            expect(durationMs).toBeLessThan(15000);
-            expect(sizes.peakBytes).toBeLessThan(512 * 1024 * 1024);
-            const encode = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
-            process.stdout.write(
-              `MIGRATION_ACTIVATION ${yield* encode({ mode, transactions, durationMs, ...sizes })}\n`
+            yield* store.exec(
+              "INSERT INTO categories(id,label,display_order) VALUES('10000000-0000-4000-8000-000000000001','Restaurantes',1)"
             );
-
-            if (mode === "userOldest") {
-              yield* store.exec(
-                "INSERT INTO users (id,service_market,locale,time_zone,created_at_ms) VALUES('10000000-0000-4000-8000-000000000051','CO','es-CO','America/Bogota',0)"
-              );
-              yield* store.exec(
-                "INSERT INTO categories(id,label,display_order) VALUES('10000000-0000-4000-8000-000000000001','Restaurantes',1)"
-              );
-              yield* store.exec(`WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<100000)
+            yield* store.exec(`WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<100000)
               INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms)
               SELECT printf('81000000-0000-4000-8000-%012d',i),'10000000-0000-4000-8000-000000000051','1000','COP','outflow','10000000-0000-4000-8000-000000000001',i,i FROM n`);
-            }
-          }, Effect.scoped),
-          { discard: true }
-        );
-      }),
-    120000
+          }
+        }, Effect.scoped),
+        { discard: true }
+      );
+    })
   );
 });

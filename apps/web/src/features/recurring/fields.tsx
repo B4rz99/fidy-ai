@@ -49,12 +49,14 @@ export const RecurringDateField = ({
   initial,
   timeZone,
   required,
+  note,
 }: Readonly<{
   name: string;
   label: string;
   initial: string;
   timeZone: string;
   required: boolean;
+  note: (value: string) => Option.Option<string>;
 }>): JSX.Element => {
   const [value, setValue] = useState(initial);
   const aria = usePlanFieldAria(name);
@@ -76,6 +78,9 @@ export const RecurringDateField = ({
           setValue(next);
         }}
       />
+      <output htmlFor={`recurring-${name}`} className="text-xs text-muted-foreground empty:hidden">
+        {Option.getOrElse(note(value), () => "")}
+      </output>
     </>
   );
 };

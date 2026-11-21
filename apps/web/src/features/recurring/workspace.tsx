@@ -1,5 +1,6 @@
 import { type RecurringNavigation, useRecurringNavigation } from "./navigation";
 import { emptyTransactionFilters } from "./transaction-filters";
+import { PlanningMonthContext } from "./planning-month";
 import {
   CreationDraftContext,
   type CreationDraftControl,
@@ -45,6 +46,7 @@ import {
   currentPlan,
   type planStatus,
   planToday,
+  planningStart,
 } from "./model";
 
 const OccurrenceDetails = lazyRouteComponent(() => import("./details"), "OccurrenceDetails");
@@ -125,13 +127,15 @@ const Editor = ({
   }
   if (panel.kind === "create") {
     return (
-      <CreatePlan
-        {...panel}
-        categories={categories}
-        disabled={disabled}
-        save={save}
-        created={created}
-      />
+      <PlanningMonthContext value={Option.some(view.month)}>
+        <CreatePlan
+          {...panel}
+          categories={categories}
+          disabled={disabled}
+          save={save}
+          created={created}
+        />
+      </PlanningMonthContext>
     );
   }
   if (panel.kind === "created") {
@@ -414,7 +418,7 @@ const useDraftingPanel = (
     restored: boolean
   ): void => setPanel(Option.some({ kind: "create", initial, seriesId: Option.none(), restored }));
   const blank = (): void =>
-    creation({ firstDate: props.view.today, timeZone: props.timeZone }, false);
+    creation({ firstDate: planningStart(props.view), timeZone: props.timeZone }, false);
   return {
     ...workspace,
     setPanel,

@@ -15,7 +15,8 @@ import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { IanaTimeZone, makeFidyClient } from "@/transport/client";
 import { RecurringFeature } from "./feature";
-import type { PlanInput } from "./model";
+import { type PlanInput, planningStart } from "./model";
+import { PlanningMonthContext } from "./planning-month";
 import { PlanForm } from "./plan-form";
 
 const plans = [
@@ -454,3 +455,43 @@ it("opens a blank creation form after an untouched form or an explicit cancellat
       yield* Effect.tryPromise(expectBlankCreation);
     })
   ));
+
+const planningNote = (firstDate: string): string => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  document.body.append(container);
+  act(() =>
+    createRoot(container).render(
+      createElement(
+        PlanningMonthContext,
+        { value: Option.some("2026-12") },
+        createElement(PlanForm, {
+          initial: { name: "Arriendo", timeZone: IanaTimeZone.make("America/Bogota"), firstDate },
+          categories: [],
+          disabled: false,
+          onSubmit: vi.fn(),
+        })
+      )
+    )
+  );
+  return container.querySelector('output[for="recurring-firstDate"]')?.textContent ?? "";
+};
+
+it("starts a new plan in the month being planned unless that month is the current one", () => {
+  expect(planningStart({ month: "2026-12", today: "2026-11-21" })).toBe("2026-12-01");
+  expect(planningStart({ month: "2026-10", today: "2026-11-21" })).toBe("2026-10-01");
+  expect(planningStart({ month: "2026-11", today: "2026-11-21" })).toBe("2026-11-21");
+});
+
+it("states when the first date falls outside the month being planned", () => {
+  expect(planningNote("2026-12-01")).toBe("");
+  expect(planningNote("2026-11-15")).toBe(
+    "Empieza antes de diciembre de 2026, así que también tendrá pagos en noviembre de 2026."
+  );
+  expect(planningNote("2026-10-05")).toBe(
+    "Empieza antes de diciembre de 2026, así que también tendrá pagos desde octubre de 2026."
+  );
+  expect(planningNote("2027-01-10")).toBe(
+    "Empieza después de diciembre de 2026, así que no aparecerá en este mes."
+  );
+});

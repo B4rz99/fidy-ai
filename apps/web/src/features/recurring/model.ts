@@ -92,6 +92,26 @@ export const shiftMonth = ({ month, step }: Readonly<{ month: string; step: numb
     DateTime.add(DateTime.makeUnsafe(`${month}-01`), { months: step })
   ).slice(0, "2026-01".length);
 
+export const planningStart = ({ month, today }: Pick<Workspace, "month" | "today">): string =>
+  today.startsWith(month) ? today : `${month}-01`;
+export const noDateNote = (): Option.Option<string> => Option.none();
+export const firstDateNote = ({
+  firstDate,
+  month,
+}: Readonly<{ firstDate: string; month: string }>): Option.Option<string> => {
+  const start = firstDate.slice(0, "2026-01".length);
+  if (start === "" || start === month) return Option.none();
+  if (start > month) {
+    return Option.some(
+      `Empieza después de ${monthLabel(month)}, así que no aparecerá en este mes.`
+    );
+  }
+  const span = start === shiftMonth({ month, step: -1 }) ? "en" : "desde";
+  return Option.some(
+    `Empieza antes de ${monthLabel(month)}, así que también tendrá pagos ${span} ${monthLabel(start)}.`
+  );
+};
+
 export const planFromTransaction = ({
   transaction,
   timeZone,

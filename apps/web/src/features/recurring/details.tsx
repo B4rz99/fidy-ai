@@ -20,6 +20,7 @@ import {
   type Workspace,
   expectedAmount,
   money,
+  noDateNote,
   statuses,
 } from "./model";
 
@@ -69,6 +70,7 @@ const PaymentForm = ({ item, save, disabled, today }: Props): JSX.Element => {
             initial={today}
             timeZone={item.plan.timeZone}
             required
+            note={noDateNote}
           />
         </Field>
         <AssociationFields item={item} />

@@ -3,6 +3,7 @@ import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smok
 import {
   type Deployment,
   type ReleasePort,
+  type StableRestoration,
   type StagedRelease,
   releaseSchemas,
 } from "./release-controller";
@@ -23,6 +24,11 @@ export type RollbackPort = ReleasePort &
 
 type PromotedDeployments = typeof RollbackReceipt.Type.promoted;
 type Traffic = Readonly<{ id: string; version: string }>;
+type TrafficRestoration = Readonly<{ stableId: string; previous: Traffic }>;
+const asDeployment = ({ id, version }: Traffic): Deployment => ({
+  id,
+  versions: [{ id: version, percentage: 100 }],
+});
 const sameTraffic = (current: Deployment, expected: Traffic): boolean =>
   current.id === expected.id &&
   current.versions.length === 1 &&
@@ -62,9 +68,20 @@ const observeRestoration = Effect.fn(function* (
 const routeStable = Effect.fn(function* (
   port: RollbackPort,
   name: string,
-  { stableId, previous }: { stableId: string; previous: Traffic }
+  {
+    stableId,
+    previous,
+    companion,
+  }: TrafficRestoration & { companion: Option.Option<StableRestoration["companion"]> }
 ) {
-  const reported = yield* port.deploy(name, [{ id: stableId, percentage: 100 }]).pipe(
+  const request =
+    port.restoreStable !== undefined && Option.isSome(companion)
+      ? port.restoreStable({
+          target: { name, stableVersionId: stableId, previous: asDeployment(previous) },
+          companion: companion.value,
+        })
+      : port.deploy(name, [{ id: stableId, percentage: 100 }]);
+  const reported = yield* request.pipe(
     Effect.asSome,
     Effect.catchIf(Schema.isSchemaError, () =>
       Effect.logInfo(
@@ -133,6 +150,7 @@ const restore = Effect.fn(function* (
   const restoredPublic = yield* routeStable(port, snapshot.public.name, {
     stableId: snapshot.public.stableVersionId,
     previous: publicBefore,
+    companion: Option.some({ name: snapshot.core.name, previous: asDeployment(coreBefore) }),
   });
   yield* requireTraffic(port, snapshot.public.name, {
     id: restoredPublic.id,
@@ -142,7 +160,16 @@ const restore = Effect.fn(function* (
   return yield* routeStable(port, snapshot.core.name, {
     stableId: snapshot.core.stableVersionId,
     previous: coreBefore,
+    companion: Option.some({ name: snapshot.public.name, previous: restoredPublic }),
   });
 });
 
-export const releaseRollback = { restore, routeStable };
+export const releaseRollback = {
+  restore,
+  routeStable: (
+    port: RollbackPort,
+    name: string,
+    input: TrafficRestoration
+  ): ReturnType<typeof routeStable> =>
+    routeStable(port, name, { ...input, companion: Option.none() }),
+};

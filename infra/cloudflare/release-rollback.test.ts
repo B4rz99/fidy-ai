@@ -148,6 +148,25 @@ describe("post-promotion code rollback", () => {
       })
     ));
 
+  it("binds each canonical compensation to the other Worker's exact current deployment", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const setup = fixture();
+        const port: RollbackPort = {
+          ...setup.port,
+          restoreStable: Effect.fn(function* ({ target, companion }) {
+            expect(target.previous).toEqual(yield* setup.port.current(target.name));
+            expect(companion.previous).toEqual(yield* setup.port.current(companion.name));
+            return yield* setup.port.deploy(target.name, [
+              { id: target.stableVersionId, percentage: 100 },
+            ]);
+          }),
+        };
+        yield* releaseRollback.restore(port, { release, promoted, compatible: true });
+        expect(setup.writes).toEqual([publicName, coreName]);
+      })
+    ));
+
   it("reads through the last promoted assignment after an accepted restoration without rewriting", () =>
     Effect.runPromise(
       Effect.gen(function* () {

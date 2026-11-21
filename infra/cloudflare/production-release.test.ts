@@ -6,6 +6,7 @@ import { it } from "@effect/vitest";
 import { describe, expect, vi } from "vitest";
 import { archivedDormant } from "./native-fallback-recovery";
 import {
+  canonicalRestorePort,
   configureReleaseObservability,
   decodeCaptureWorkerReceipts,
   decodePairingUploadReceipts,
@@ -530,6 +531,7 @@ it("keeps foreign failures and defects out of release CLI diagnostics", () => {
 });
 
 it.effect.each([
+  { code: 10220, diagnostic: "Cloudflare deployment rejected (HTTP 400; code 10220)" },
   { code: 10097, diagnostic: "Cloudflare deployment rejected (HTTP 400; code 10097)" },
   { code: "private-provider-code", diagnostic: "Cloudflare deployment rejected (HTTP 400)" },
   { code: -1, diagnostic: "Cloudflare deployment rejected (HTTP 400)" },
@@ -569,6 +571,123 @@ it.effect.each([
     if (Exit.isFailure(outcome)) {
       expect(releaseFailureMessage(outcome.cause)).toBe(diagnostic);
     }
+  })
+);
+
+it.effect.each([
+  "single refusal",
+  "ordinary success",
+  "different status",
+  "multiple codes",
+  "foreign target",
+  "closed proof failed",
+  "not deployable",
+  "live pair changed",
+  "history changed",
+  "trunk changed",
+] as const)("limits canonical compensation to the captured closed Worker after %s", (scenario) =>
+  Effect.gen(function* () {
+    const env = {
+      account: "0".repeat(32),
+      token: "private-provider-token",
+      revision,
+      repository: "test/fidy",
+      githubToken: "private-github-token",
+      file: "/unused-snapshot",
+      smokeProof: "0".repeat(64),
+      smokeAttestationFile: "/unused-attestation",
+    };
+    const restored = "aa0aa000-0000-4000-8000-00000000000a";
+    const candidate = "bb0bb000-0000-4000-8000-00000000000b";
+    const publicWorker = {
+      name: "prod-ingress",
+      deploymentId: publicVersion,
+      stableVersionId: publicVersion,
+    };
+    const coreWorker = {
+      name: "prod-core",
+      deploymentId: coreVersion,
+      stableVersionId: coreVersion,
+    };
+    const publicBefore = { id: publicVersion, versions: [{ id: candidate, percentage: 100 }] };
+    const coreBefore = { id: coreVersion, versions: [{ id: candidate, percentage: 100 }] };
+    const requests: Array<string> = [];
+    const response = {
+      success: true,
+      result: { id: restored, versions: [{ version_id: coreVersion, percentage: 100 }] },
+    };
+    const client = HttpClient.make((request) => {
+      const url = new URL(request.url);
+      requests.push(request.method + " " + url.pathname + url.search);
+      const body =
+        url.searchParams.has("force") || scenario === "ordinary success"
+          ? Response.json(response)
+          : Response.json(
+              {
+                success: false,
+                errors: [
+                  { code: 10220, message: "private-provider-body-and-token" },
+                  ...(scenario === "multiple codes" ? [{ code: 10097 }] : []),
+                ],
+              },
+              { status: scenario === "different status" ? 409 : 400 }
+            );
+      return Effect.succeed(HttpClientResponse.fromWeb(request, body));
+    });
+    const port = canonicalRestorePort({
+      port: {
+        ...releasePort({ env, client }),
+        trunk: () =>
+          Effect.sync(() =>
+            requests.length > 0 && scenario === "trunk changed" ? "b".repeat(40) : revision
+          ),
+        recentDeployments: (name) =>
+          Effect.sync(() => {
+            const current = name === publicWorker.name ? publicBefore : coreBefore;
+            const past = { id: restored, versions: [{ id: coreVersion, percentage: 100 }] };
+            if (requests.length === 0 || name !== publicWorker.name) return [current, past];
+            if (scenario === "live pair changed") return [{ ...current, id: restored }, past];
+            if (scenario === "history changed") return [current];
+            return [current, past];
+          }),
+        deployable: () => Effect.succeed(scenario !== "not deployable"),
+      },
+      env,
+      client,
+      snapshot: {
+        revision,
+        stableRevision: "c".repeat(40),
+        stableContractDigest: "0".repeat(64),
+        public: publicWorker,
+        core: coreWorker,
+      },
+      verifyClosedPair:
+        scenario === "closed proof failed"
+          ? Effect.fail(Error("Closed proof failed"))
+          : Effect.void,
+    });
+    const restoreStable = port.restoreStable;
+    if (restoreStable === undefined) {
+      return yield* Effect.fail(Error("Canonical restoration missing"));
+    }
+    const outcome = yield* Effect.exit(
+      restoreStable({
+        target: {
+          name: coreWorker.name,
+          stableVersionId: scenario === "foreign target" ? publicVersion : coreVersion,
+          previous: coreBefore,
+        },
+        companion: { name: publicWorker.name, previous: publicBefore },
+      })
+    );
+    expect(Exit.isSuccess(outcome)).toBe(
+      scenario === "single refusal" || scenario === "ordinary success"
+    );
+    const post =
+      "POST /client/v4/accounts/" + env.account + "/workers/scripts/prod-core/deployments";
+    const expected = scenario === "foreign target" ? [] : [post];
+    if (scenario === "single refusal") expected.push(post + "?force=true");
+    expect(requests).toEqual(expected);
   })
 );
 

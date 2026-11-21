@@ -651,13 +651,15 @@ const isPreflight = (request: Request, path: string, origin: Option.Option<strin
   request.method === "OPTIONS" && hasPreflight(path) && Option.isSome(origin);
 
 const disallowedSupportOrigin = (path: string, origin: Option.Option<string>): boolean =>
-  [
+  Option.isSome(origin) &&
+  ([
     supportRecoveryPath,
     erasureSupportPath,
     pricePublicationPath,
     sampleReviewPath,
     betaProPath,
-  ].includes(path) && Option.isSome(origin);
+  ].includes(path) ||
+    refundSupportPath(path));
 
 const isAllowedMethod = (request: Request, path: string): boolean =>
   allowedMethods(path).includes(request.method);

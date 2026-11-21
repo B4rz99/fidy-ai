@@ -14,6 +14,8 @@ import {
 import { validateKeywordRuleChange } from "../../../src/core/categories/operations";
 import { normalizeSearchText } from "../../../src/core/search/operations";
 import type { UserId } from "../../../src/core/identity/contract";
+import { CurrentSuggestionCaller } from "../../canonical-admission/contract";
+import type { SuggestedOperationCaller } from "../../../src/shell/canonical-operations/operations";
 import { toApiFailure } from "../../../src/shell/categories/operations";
 import { NotFound, ValidationFailed } from "../../../src/shell/public-http/contract";
 import { prepareLocalWrite } from "../../canonical-admission/operations";
@@ -44,11 +46,11 @@ export const localKeywordRules = Effect.fn(function* (user: UserId) {
     },
   };
 });
-const refusal = (failure: CategoryFailure): LocalMutationResult => {
-  const value = toApiFailure({
-    failure,
-    caller: { accessCaller: { _tag: "WebSession", fresh: false }, tier: "free" },
-  });
+const refusal = (
+  failure: CategoryFailure,
+  caller: SuggestedOperationCaller
+): LocalMutationResult => {
+  const value = toApiFailure({ failure, caller });
   return value._tag === "NotFound"
     ? {
         status: 404,
@@ -126,6 +128,7 @@ export const prepareLocalKeywordRule = Effect.fn(function* (
   user: UserId,
   current: number
 ) {
+  const suggestionCaller = yield* CurrentSuggestionCaller;
   const { operation, ruleId } = command;
   const sql = yield* SqliteClient;
   const rules = yield* rulesFor(user);
@@ -134,7 +137,7 @@ export const prepareLocalKeywordRule = Effect.fn(function* (
       ? command
       : { ...command, keyword: CategoryKeyword.make(normalizeSearchText(command.payload.keyword)) };
   const failure = yield* validateKeywordRuleChange({ rules, change });
-  if (Option.isSome(failure)) return refusal(failure.value);
+  if (Option.isSome(failure)) return refusal(failure.value, suggestionCaller);
   const target = "keyword-rule:" + ruleId;
   if (change.operation === "categories.deleteKeywordRule") {
     return keywordRemoval({ target, user, ruleId });
@@ -142,7 +145,7 @@ export const prepareLocalKeywordRule = Effect.fn(function* (
   const { keyword, payload } = change;
   const reference = yield* selectedCategory(user, payload.categoryId);
   if (Option.isNone(reference)) {
-    return refusal(new CategoryNotFound({ categoryId: payload.categoryId }));
+    return refusal(new CategoryNotFound({ categoryId: payload.categoryId }), suggestionCaller);
   }
   const revision = reference.value.revision;
   const fields = sql`id,keyword,category_id AS categoryId,created_at_ms AS createdAt,updated_at_ms AS updatedAt`;
@@ -165,7 +168,10 @@ export const prepareLocalKeywordRule = Effect.fn(function* (
         : yield* sql`UPDATE keyword_rules SET keyword=${keyword},category_id=${payload.categoryId},category_revision=${revision},updated_at_ms=${current} WHERE user_id=${user} AND id=${ruleId} RETURNING ${fields}`;
       if (changed.length !== 1) {
         if (create && (yield* rulesFor(user)).length >= maximumKeywordRulesPerUser) {
-          return refusal(new KeywordRuleLimitReached({ maximum: maximumKeywordRulesPerUser }));
+          return refusal(
+            new KeywordRuleLimitReached({ maximum: maximumKeywordRulesPerUser }),
+            suggestionCaller
+          );
         }
         return yield* new CategoriesUnavailable();
       }

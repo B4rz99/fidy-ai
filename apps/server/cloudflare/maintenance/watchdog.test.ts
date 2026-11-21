@@ -7,6 +7,54 @@ import { native, nativeBrowserPlatform, nativeUserPlatform } from "../user-store
 
 const user = "22530000-0000-4000-8000-000000000001";
 
+const coveredUser = "22550000-0000-4000-8000-000000000088";
+
+type MaintenanceStorage = Awaited<ReturnType<Miniflare["unsafeGetDurableObjectStorage"]>>;
+
+type MaintenanceNamespace = Awaited<ReturnType<Miniflare["getDurableObjectNamespace"]>>;
+
+const coverageAt = (
+  registry: MaintenanceStorage,
+  maintenanceNamespace: MaintenanceNamespace,
+  logs: readonly string[]
+): ((coverage: readonly [number, string]) => Effect.Effect<void>) =>
+  Effect.fnUntraced(function* ([age, severity]: readonly [number, string]) {
+    const now = yield* Clock.currentTimeMillis;
+    yield* native(() =>
+      registry.exec(
+        "UPDATE lifetime_registry SET registered_ms=? WHERE user_id=?",
+        now - age,
+        coveredUser
+      )
+    );
+    yield* native(() =>
+      registry.exec(
+        "UPDATE watchdog_progress SET minute=-1,scheduled=-1,started_ms=?,wrapped_at=?",
+        now - age,
+        now
+      )
+    );
+
+    const tick = yield* native(() =>
+      maintenanceNamespace
+        .getByName("core-maintenance-v1")
+        .fetch("https://maintenance.invalid/watchdog", {
+          method: "POST",
+          headers: { "x-maintenance-scheduled-at": String(now) },
+        })
+    );
+
+    expect(tick.status).toBe(204);
+    expect(
+      logs.some((line) =>
+        line.includes(
+          "fidy.operational component=watchdog operation=coverage state=wrapped severity=" +
+            severity
+        )
+      )
+    ).toBe(true);
+  });
+
 const maintenance = Effect.fn(function* (runtime: Miniflare) {
   const namespace = yield* native(() => runtime.getDurableObjectNamespace("MAINTENANCE", "core"));
 
@@ -93,8 +141,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           }),
           Effect.timeout("5 seconds")
         );
-      }),
-    25000
+      })
   );
   test.effect(
     "preserves an earlier repaired wake and inspects shared owners independently of unavailable continuations",
@@ -194,52 +241,21 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           runtime.getDurableObjectNamespace("MAINTENANCE", "core")
         );
 
-        const id = "22550000-0000-4000-8000-000000000088";
+        const id = coveredUser;
         yield* native(() =>
           registry.exec("INSERT INTO lifetime_registry(user_id,registered_ms) VALUES(?,1)", id)
         );
 
-        for (const [age, severity] of [
-          [299000, "none"],
-          [300000, "warning"],
-          [599000, "warning"],
-          [600000, "critical"],
-        ] as const) {
-          const now = yield* Clock.currentTimeMillis;
-          yield* native(() =>
-            registry.exec(
-              "UPDATE lifetime_registry SET registered_ms=? WHERE user_id=?",
-              now - age,
-              id
-            )
-          );
-          yield* native(() =>
-            registry.exec(
-              "UPDATE watchdog_progress SET minute=-1,scheduled=-1,started_ms=?,wrapped_at=?",
-              now - age,
-              now
-            )
-          );
-
-          const tick = yield* native(() =>
-            maintenanceNamespace
-              .getByName("core-maintenance-v1")
-              .fetch("https://maintenance.invalid/watchdog", {
-                method: "POST",
-                headers: { "x-maintenance-scheduled-at": String(now) },
-              })
-          );
-
-          expect(tick.status).toBe(204);
-          expect(
-            logs.some((line) =>
-              line.includes(
-                "fidy.operational component=watchdog operation=coverage state=wrapped severity=" +
-                  severity
-              )
-            )
-          ).toBe(true);
-        }
+        yield* Effect.forEach(
+          [
+            [299000, "none"],
+            [300000, "warning"],
+            [599000, "warning"],
+            [600000, "critical"],
+          ] as const,
+          coverageAt(registry, maintenanceNamespace, logs),
+          { discard: true }
+        );
 
         expect(
           logs.filter((line) => line.includes("fidy.operational")).some((line) => line.includes(id))

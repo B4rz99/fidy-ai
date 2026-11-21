@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Redacted } from "effect";
+import { Array as Arr, Context, Effect, Layer, Predicate, Redacted } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { Miniflare } from "miniflare";
 import { expect, it } from "vitest";
@@ -7,6 +7,10 @@ import {
   makeGoogleOutboundHttp,
   makeMicrosoftOutboundHttp,
 } from "../../src/shell/outbound-http/operations";
+import {
+  OutboundHttpRequest,
+  ProviderOidcHttpRequest,
+} from "../../src/shell/outbound-http/contract";
 
 const providerWorker = `export default { async fetch(request) {
   const input = await request.json();
@@ -48,13 +52,14 @@ const makeProviderFetch = (
         .dispatchFetch("http://provider", {
           method: "POST",
           body: JSON.stringify({
-            url: input instanceof Request ? input.url : input.toString(),
+            url: new Request(input).url,
             init: {
               method: init?.method,
               headers: init?.headers,
               redirect: init?.redirect,
-              body:
-                init?.body instanceof Uint8Array ? new TextDecoder().decode(init.body) : undefined,
+              body: Predicate.isUint8Array(init?.body)
+                ? new TextDecoder().decode(init.body)
+                : undefined,
             },
             status,
           }),
@@ -72,14 +77,50 @@ const makeProviderFetch = (
     { preconnect: (): void => undefined }
   );
 
+const checkProviderOidc = Effect.fn(function* (
+  runtime: Miniflare,
+  makeHttp: typeof makeGoogleOutboundHttp,
+  status: number
+) {
+  const observed = { calls: 0 };
+
+  const clients = yield* Layer.build(FetchHttpClient.layer).pipe(
+    Effect.provideService(FetchHttpClient.Fetch, makeProviderFetch(runtime, status, observed))
+  );
+
+  const http = makeHttp({
+    clientId: "synthetic-client",
+    clientSecret: Redacted.make("synthetic-secret"),
+    redirectUri: "https://api.fidyapp.com/providers/test/callback",
+    httpClient: Context.get(clients, HttpClient.HttpClient),
+  });
+
+  yield* Effect.forEach(
+    [
+      ProviderOidcHttpRequest.SigningKeys(),
+      ProviderOidcHttpRequest.TokenExchange({
+        code: Redacted.make("synthetic-code"),
+        verifier: Redacted.make("synthetic-verifier"),
+      }),
+    ],
+    Effect.fnUntraced(function* (request) {
+      expect((yield* http.execute(request)).status).toBe(status);
+    }),
+    { discard: true }
+  );
+
+  return observed.calls;
+}, Effect.scoped);
+
 it("Access recovery signing-key requests work in Workers without following redirects", () =>
   Effect.runPromise(
     Effect.acquireUseRelease(
       Effect.sync(createRuntime),
       (runtime) =>
         Effect.scoped(
-          Effect.gen(function* () {
-            for (const status of [200, 302]) {
+          Effect.forEach(
+            [200, 302],
+            Effect.fnUntraced(function* (status) {
               const observed = { calls: 0 };
 
               const clients = yield* Layer.build(FetchHttpClient.layer).pipe(
@@ -94,12 +135,13 @@ it("Access recovery signing-key requests work in Workers without following redir
                 httpClient: Context.get(clients, HttpClient.HttpClient),
               });
 
-              expect((yield* http.execute({ _tag: "CloudflareAccessSigningKeys" })).status).toBe(
-                status
-              );
+              expect(
+                (yield* http.execute(OutboundHttpRequest.CloudflareAccessSigningKeys())).status
+              ).toBe(status);
               expect(observed.calls).toBe(1);
-            }
-          })
+            }),
+            { discard: true }
+          )
         ),
       (runtime) => Effect.tryPromise(() => runtime.dispose()).pipe(Effect.orDie)
     )
@@ -112,36 +154,12 @@ it("Google and Microsoft OIDC requests work in Workers and return redirects with
       (runtime) =>
         Effect.scoped(
           Effect.gen(function* () {
-            for (const makeHttp of [makeGoogleOutboundHttp, makeMicrosoftOutboundHttp]) {
-              for (const status of [200, 302]) {
-                const observed = { calls: 0 };
-                const providerFetch = makeProviderFetch(runtime, status, observed);
+            const calls = yield* Effect.forEach(
+              Arr.cartesian([makeGoogleOutboundHttp, makeMicrosoftOutboundHttp], [200, 302]),
+              ([makeHttp, status]) => checkProviderOidc(runtime, makeHttp, status)
+            );
 
-                const clients = yield* Layer.build(FetchHttpClient.layer).pipe(
-                  Effect.provideService(FetchHttpClient.Fetch, providerFetch)
-                );
-
-                const http = makeHttp({
-                  clientId: "synthetic-client",
-                  clientSecret: Redacted.make("synthetic-secret"),
-                  redirectUri: "https://api.fidyapp.com/providers/test/callback",
-                  httpClient: Context.get(clients, HttpClient.HttpClient),
-                });
-
-                for (const request of [
-                  { _tag: "SigningKeys" },
-                  {
-                    _tag: "TokenExchange",
-                    code: Redacted.make("synthetic-code"),
-                    verifier: Redacted.make("synthetic-verifier"),
-                  },
-                ] as const) {
-                  expect((yield* http.execute(request)).status).toBe(status);
-                }
-
-                expect(observed.calls).toBe(2);
-              }
-            }
+            expect(calls).toEqual([2, 2, 2, 2]);
           })
         ),
       (runtime) => Effect.tryPromise(() => runtime.dispose()).pipe(Effect.orDie)

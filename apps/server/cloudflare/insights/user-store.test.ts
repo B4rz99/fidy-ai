@@ -159,7 +159,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               new Request("https://api.fidyapp.com" + path, {
                 method,
                 headers: { authorization: "Bearer " + token, "content-type": "application/json" },
-                ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+                body: body === undefined ? null : JSON.stringify(body),
               })
             )
           );

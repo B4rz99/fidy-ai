@@ -10,9 +10,9 @@ import {
   Redacted,
   Schema,
 } from "effect";
-import { HttpClient } from "effect/http";
+import type { HttpClient } from "effect/http";
 import { createLocalJWKSet, decodeJwt, jwtVerify } from "jose";
-import { makeMicrosoftOutboundHttp } from "../../../src/shell/outbound-http/operations";
+import { ProviderOidcHttp } from "../../../src/shell/outbound-http/operations";
 import type { ProviderOidcHttpService } from "../../../src/shell/outbound-http/contract";
 import { loadMicrosoftClientSecret } from "../../../src/shell/secret-material/operations";
 import type { Validation, VerifiedProviderIdentity } from "./token-contract";
@@ -89,11 +89,11 @@ const microsoftHttp = (
       )
     );
 
-    return makeMicrosoftOutboundHttp({
+    return yield* ProviderOidcHttp.make({
+      provider: "microsoft",
       clientId: input.environment.MICROSOFT_CLIENT_ID ?? "",
       clientSecret,
       redirectUri: input.environment.MICROSOFT_REDIRECT_URI ?? "",
-      httpClient: yield* HttpClient.HttpClient,
     });
   });
 

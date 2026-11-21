@@ -18,21 +18,32 @@ const registry = Effect.fn(function* (runtime: Miniflare) {
   const owner = namespace.getByName("core-maintenance-v1");
   const now = yield* Clock.currentTimeMillis;
 
-  return (
-    action: "register" | "fence" | "retire",
-    userId: string,
-    detail?: string | number
-  ): Effect.Effect<number> =>
+  const headers = (userId: string, issuedMs: number): Headers =>
+    new Headers({ "fidy-user-id": userId, "fidy-registration-issued-ms": String(issuedMs) });
+
+  const erasureHeaders = (userId: string, erasure: string): Headers => {
+    const fenced = headers(userId, now);
+    fenced.set("fidy-erasure-reference", erasure);
+
+    return fenced;
+  };
+
+  const send = (action: "register" | "fence" | "retire", sent: Headers): Effect.Effect<number> =>
     native(() =>
       owner.fetch("https://maintenance.invalid/lifetime/" + action, {
         method: "POST",
-        headers: {
-          "fidy-user-id": userId,
-          "fidy-registration-issued-ms": String(typeof detail === "number" ? detail : now),
-          ...(typeof detail === "string" ? { "fidy-erasure-reference": detail } : {}),
-        },
+        headers: sent,
       })
     ).pipe(Effect.map((response) => response.status));
+
+  return {
+    register: (userId: string, issuedMs = now): Effect.Effect<number> =>
+      send("register", headers(userId, issuedMs)),
+    fence: (userId: string, erasure: string): Effect.Effect<number> =>
+      send("fence", erasureHeaders(userId, erasure)),
+    retire: (userId: string, erasure: string): Effect.Effect<number> =>
+      send("retire", erasureHeaders(userId, erasure)),
+  };
 });
 
 const seedErasure = Effect.fn(function* (runtime: Miniflare) {
@@ -67,20 +78,20 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         Effect.gen(function* () {
           const runtime = yield* create();
           const call = yield* registry(runtime);
-          expect(yield* call("register", fresh, 1)).toBe(409);
-          expect(yield* call("register", original)).toBe(204);
-          expect(yield* call("register", original)).toBe(204);
-          expect(yield* call("retire", original, erasure)).toBe(409);
-          expect(yield* call("fence", original, erasure)).toBe(409);
+          expect(yield* call.register(fresh, 1)).toBe(409);
+          expect(yield* call.register(original)).toBe(204);
+          expect(yield* call.register(original)).toBe(204);
+          expect(yield* call.retire(original, erasure)).toBe(409);
+          expect(yield* call.fence(original, erasure)).toBe(409);
           yield* seedErasure(runtime);
-          expect(yield* call("fence", original, erasure)).toBe(204);
-          expect(yield* call("fence", original, other)).toBe(409);
-          expect(yield* call("register", original)).toBe(409);
+          expect(yield* call.fence(original, erasure)).toBe(204);
+          expect(yield* call.fence(original, other)).toBe(409);
+          expect(yield* call.register(original)).toBe(409);
         })
       );
       const runtime = yield* create();
       const call = yield* registry(runtime);
-      expect(yield* call("register", fresh)).toBe(204);
+      expect(yield* call.register(fresh)).toBe(204);
       const users = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
 
       const inactive = yield* native(() =>
@@ -117,8 +128,8 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       expect(yield* native(() => local.exec("SELECT lifetime_registered FROM users"))).toEqual([
         { lifetime_registered: 0 },
       ]);
-      expect(yield* call("retire", fresh, erasure)).toBe(409);
-      expect(yield* call("retire", original, other)).toBe(409);
+      expect(yield* call.retire(fresh, erasure)).toBe(409);
+      expect(yield* call.retire(original, other)).toBe(409);
 
       const store = yield* native(() =>
         runtime.unsafeGetDurableObjectStorage("core", "Maintenance", {
@@ -131,7 +142,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       );
 
       expect(yield* discoverable).toEqual([{ user_id: original }, { user_id: fresh }]);
-      expect(yield* call("retire", original, erasure)).toBe(409);
+      expect(yield* call.retire(original, erasure)).toBe(409);
 
       const independent = yield* native(() =>
         runtime.unsafeGetDurableObjectStorage("core", "Erasure", { name: "erasure-registry-v1" })
@@ -144,9 +155,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           erasure
         )
       );
-      expect(yield* call("retire", original, erasure)).toBe(204);
-      expect(yield* call("retire", original, erasure)).toBe(204);
-      expect(yield* call("register", original)).toBe(409);
+      expect(yield* call.retire(original, erasure)).toBe(204);
+      expect(yield* call.retire(original, erasure)).toBe(204);
+      expect(yield* call.register(original)).toBe(409);
       expect(yield* discoverable).toEqual([{ user_id: fresh }]);
       expect(
         yield* native(() =>

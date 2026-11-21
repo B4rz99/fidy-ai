@@ -2,6 +2,7 @@ import { webSignupDisclosure } from "../../src/shell/consent/operations";
 import { NodeFileSystem } from "@effect/platform-node";
 import { Effect, Schema } from "effect";
 import { it } from "@effect/vitest";
+import type { Miniflare } from "miniflare";
 import { expect } from "vitest";
 import { browser } from "../browser-bootstrap.test-fixture";
 import { native, nativeBrowserPlatform } from "../user-store.test-fixture";
@@ -52,6 +53,27 @@ const failures = [
   "BEFORE UPDATE OF outcome ON browser_handoffs",
 ] as const;
 
+const failEnrollment = (
+  store: Awaited<ReturnType<Miniflare["unsafeGetDurableObjectStorage"]>>,
+  complete: () => ReturnType<ReturnType<typeof browser>["post"]>
+): ((failure: string) => Effect.Effect<void>) =>
+  Effect.fnUntraced(function* (failure) {
+    yield* native(() =>
+      store.exec("CREATE TRIGGER fail_enroll " + failure + " BEGIN SELECT RAISE(IGNORE); END")
+    );
+    const res = yield* complete();
+    expect(res.status).toBe(unavailableStatus);
+    yield* native(() => res.arrayBuffer());
+    expect(
+      yield* native(() =>
+        store.exec(
+          "SELECT (SELECT count(*) FROM users) AS users,(SELECT count(*) FROM provider_credentials) AS credentials,(SELECT count(*) FROM consent_history) AS consents,(SELECT count(*) FROM backup_recovery_credentials) AS recovery"
+        )
+      )
+    ).toEqual([{ users: 0, credentials: 0, consents: 0, recovery: 0 }]);
+    yield* native(() => store.exec("DROP TRIGGER fail_enroll"));
+  });
+
 const rollbackEnrollment = Effect.fn(function* (provider: AuthenticationProvider) {
   const runtime = yield* (yield* nativeBrowserPlatform)();
   const { login, post } = browser(runtime);
@@ -86,22 +108,7 @@ const rollbackEnrollment = Effect.fn(function* (provider: AuthenticationProvider
 
   yield* native(() => directory.exec("DROP TRIGGER pause_recovery"));
 
-  for (const failure of failures) {
-    yield* native(() =>
-      store.exec("CREATE TRIGGER fail_enroll " + failure + " BEGIN SELECT RAISE(IGNORE); END")
-    );
-    const res = yield* complete();
-    expect(res.status).toBe(unavailableStatus);
-    yield* native(() => res.arrayBuffer());
-    expect(
-      yield* native(() =>
-        store.exec(
-          "SELECT (SELECT count(*) FROM users) AS users,(SELECT count(*) FROM provider_credentials) AS credentials,(SELECT count(*) FROM consent_history) AS consents,(SELECT count(*) FROM backup_recovery_credentials) AS recovery"
-        )
-      )
-    ).toEqual([{ users: 0, credentials: 0, consents: 0, recovery: 0 }]);
-    yield* native(() => store.exec("DROP TRIGGER fail_enroll"));
-  }
+  yield* Effect.forEach(failures, failEnrollment(store, complete), { discard: true });
 
   const success = yield* complete();
   expect(yield* native(() => success.json())).toMatchObject({ status: "created" });
@@ -129,20 +136,24 @@ const requireConsent = Effect.fn(function* (provider: AuthenticationProvider) {
   const proof = yield* pair;
   const start = `/web/providers/${provider}/start`;
 
-  for (const data of [
-    { ...proof, intent: "signup", consentRevision: "outdated" },
-    {
-      ...proof,
-      privateVerifier: "x".repeat(verifierLength),
-      intent: "signup",
-      consentRevision: webSignupDisclosure().revision,
-    },
-  ]) {
-    const refused = yield* post(start, data);
-    expect(refused.status).toBe(invalidStatus);
-    expect(refused.headers.get("set-cookie")).toBeNull();
-    yield* native(() => refused.arrayBuffer());
-  }
+  yield* Effect.forEach(
+    [
+      { ...proof, intent: "signup", consentRevision: "outdated" },
+      {
+        ...proof,
+        privateVerifier: "x".repeat(verifierLength),
+        intent: "signup",
+        consentRevision: webSignupDisclosure().revision,
+      },
+    ],
+    Effect.fnUntraced(function* (data) {
+      const refused = yield* post(start, data);
+      expect(refused.status).toBe(invalidStatus);
+      expect(refused.headers.get("set-cookie")).toBeNull();
+      yield* native(() => refused.arrayBuffer());
+    }),
+    { discard: true }
+  );
 
   const challenge = yield* begin(provider);
   expect(challenge.cookie).toContain("__Host-fidy_" + provider + "=");
@@ -170,29 +181,33 @@ const originalBrowser = Effect.fn(function* (provider: AuthenticationProvider) {
     runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
   );
 
-  for (const [destination, actualState, cookie] of [
-    [other, state, challenge.cookie],
-    [provider, state, ""],
-    [provider, "a".repeat(verifierLength), challenge.cookie],
-  ]) {
-    const callback = yield* native(() =>
-      runtime.dispatchFetch(
-        api +
-          "/providers/" +
-          destination +
-          "/callback?" +
-          new URLSearchParams({
-            state: actualState ?? "",
-            code: nonce + ".current.valid",
-          }).toString(),
-        { headers: { ...headers, cookie: cookie ?? "" }, redirect: "manual" }
-      )
-    );
+  yield* Effect.forEach(
+    [
+      [other, state, challenge.cookie],
+      [provider, state, ""],
+      [provider, "a".repeat(verifierLength), challenge.cookie],
+    ],
+    Effect.fnUntraced(function* ([destination, actualState, cookie]) {
+      const callback = yield* native(() =>
+        runtime.dispatchFetch(
+          api +
+            "/providers/" +
+            destination +
+            "/callback?" +
+            new URLSearchParams({
+              state: actualState ?? "",
+              code: nonce + ".current.valid",
+            }).toString(),
+          { headers: { ...headers, cookie: cookie ?? "" }, redirect: "manual" }
+        )
+      );
 
-    expect(callback.status).toBe(redirectStatus);
-    expect(callback.headers.get("set-cookie")).toBeNull();
-    yield* native(() => callback.arrayBuffer());
-  }
+      expect(callback.status).toBe(redirectStatus);
+      expect(callback.headers.get("set-cookie")).toBeNull();
+      yield* native(() => callback.arrayBuffer());
+    }),
+    { discard: true }
+  );
 
   expect(yield* native(() => directory.exec("SELECT state FROM provider_attempts"))).toEqual([
     { state: "pending" },

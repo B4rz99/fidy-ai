@@ -9,9 +9,9 @@ import {
   Redacted,
   Schema,
 } from "effect";
-import { HttpClient } from "effect/http";
+import type { HttpClient } from "effect/http";
 import { createLocalJWKSet, errors, jwtVerify } from "jose";
-import { makeGoogleOutboundHttp } from "../../../src/shell/outbound-http/operations";
+import { ProviderOidcHttp } from "../../../src/shell/outbound-http/operations";
 import type { ProviderOidcHttpService } from "../../../src/shell/outbound-http/contract";
 import { loadGoogleClientSecret } from "../../../src/shell/secret-material/operations";
 
@@ -110,21 +110,17 @@ const validClaims = ({
 
 const googleHttp = (
   environment: ProviderConfiguration
-): Effect.Effect<
-  ReturnType<typeof makeGoogleOutboundHttp>,
-  Config.ConfigError,
-  HttpClient.HttpClient
-> =>
+): Effect.Effect<ProviderOidcHttpService, Config.ConfigError, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const clientSecret = yield* loadGoogleClientSecret.pipe(
       Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown(environment))
     );
 
-    return makeGoogleOutboundHttp({
+    return yield* ProviderOidcHttp.make({
+      provider: "google",
       clientId: environment.GOOGLE_CLIENT_ID ?? "",
       clientSecret,
       redirectUri: environment.GOOGLE_REDIRECT_URI ?? "",
-      httpClient: yield* HttpClient.HttpClient,
     });
   });
 
@@ -143,12 +139,10 @@ const SigningKeys = Schema.Struct({
 });
 
 const signingKeys = (
-  http: ReturnType<typeof makeGoogleOutboundHttp>
+  http: ProviderOidcHttpService
 ): Effect.Effect<
   ReturnType<typeof createLocalJWKSet>,
-  | Effect.Error<ReturnType<ReturnType<typeof makeGoogleOutboundHttp>["execute"]>>
-  | Schema.SchemaError
-  | "invalid"
+  Effect.Error<ReturnType<ProviderOidcHttpService["execute"]>> | Schema.SchemaError | "invalid"
 > =>
   Effect.gen(function* () {
     const response = yield* http.execute(OidcRequest.SigningKeys());

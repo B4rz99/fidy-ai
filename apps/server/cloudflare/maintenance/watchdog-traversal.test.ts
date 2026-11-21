@@ -149,8 +149,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         yield* fixture.exec("UPDATE watchdog_progress SET minute=minute-1");
         expect(yield* fixture.tick(scheduled + 120000)).toBe(204);
         expect((yield* fixture.ledger).names.slice(8, 10)).toEqual([user(0), user(1)]);
-      }),
-    15000
+      })
   );
   test.effect("stops admission when an unexpected response body cannot finish cancellation", () =>
     Effect.gen(function* () {
@@ -225,83 +224,79 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           }),
           { discard: true }
         );
-      }),
-    35000
+      })
   );
-  test.effect(
-    "attempts every individual User in each rolling five-minute window",
+  test.effect("attempts every individual User in each rolling five-minute window", () =>
+    Effect.gen(function* () {
+      const create = yield* fleet();
+      const fixture = yield* create("fast");
+      yield* fixture.exec(
+        "WITH RECURSIVE ids(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM ids WHERE i<1000) INSERT INTO lifetime_registry(user_id) SELECT printf('22530000-0000-4000-8000-%012d',i) FROM ids"
+      );
+      const start = yield* Clock.currentTimeMillis;
+      const windows: string[][] = [];
+      let offset = 0;
+
+      yield* Effect.forEach(
+        Array.from({ length: 10 }, (_, minute) => minute),
+        Effect.fnUntraced(function* (minute) {
+          yield* fixture.exec("UPDATE watchdog_progress SET minute=minute-1");
+          expect(yield* fixture.tick(start + minute * 60000)).toBe(204);
+          const ledger = yield* fixture.ledger;
+          const names = ledger.names.slice(offset);
+          offset = ledger.names.length;
+          expect(names.slice(0, 3)).toEqual(["directory-v1", "pricing", "erasure-registry-v1"]);
+          expect(names.length).toBeLessThanOrEqual(259);
+          expect(ledger.peak).toBe(5);
+          windows.push(names.slice(3));
+        }),
+        { discard: true }
+      );
+
+      expect(
+        windows.slice(4).map((_, index) => new Set(windows.slice(index, index + 5).flat()).size)
+      ).toEqual([1000, 1000, 1000, 1000, 1000, 1000]);
+    })
+  );
+
+  test.effect.runIf(measureTick)(
+    "bounds a tick under sustained slow reply cleanup",
     () =>
       Effect.gen(function* () {
         const create = yield* fleet();
-        const fixture = yield* create("fast");
+        const fixture = yield* create("slow-cleanup");
         yield* fixture.exec(
-          "WITH RECURSIVE ids(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM ids WHERE i<1000) INSERT INTO lifetime_registry(user_id) SELECT printf('22530000-0000-4000-8000-%012d',i) FROM ids"
+          "WITH RECURSIVE ids(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM ids WHERE i<256) INSERT INTO lifetime_registry(user_id) SELECT printf('22530000-0000-4000-8000-%012d',i) FROM ids"
         );
         const start = yield* Clock.currentTimeMillis;
-        const windows: string[][] = [];
-        let offset = 0;
+        expect(yield* fixture.tick(start)).toBe(204);
+        const elapsed = (yield* Clock.currentTimeMillis) - start;
+        const ledger = yield* fixture.ledger;
 
-        yield* Effect.forEach(
-          Array.from({ length: 10 }, (_, minute) => minute),
-          Effect.fnUntraced(function* (minute) {
-            yield* fixture.exec("UPDATE watchdog_progress SET minute=minute-1");
-            expect(yield* fixture.tick(start + minute * 60000)).toBe(204);
-            const ledger = yield* fixture.ledger;
-            const names = ledger.names.slice(offset);
-            offset = ledger.names.length;
-            expect(names.slice(0, 3)).toEqual(["directory-v1", "pricing", "erasure-registry-v1"]);
-            expect(names.length).toBeLessThanOrEqual(259);
-            expect(ledger.peak).toBe(5);
-            windows.push(names.slice(3));
-
-            if (windows.length >= 5) expect(new Set(windows.slice(-5).flat()).size).toBe(1000);
-          }),
-          { discard: true }
+        const counts = yield* fixture.exec(
+          "SELECT admitted,attempted,observed,failed,unknown,repaired,wraps FROM watchdog_progress"
         );
+
+        yield* Effect.logInfo({ elapsed, peak: ledger.peak, aborted: ledger.aborted, counts });
+        const [result] = yield* fixture.exec("SELECT halt FROM watchdog_progress");
+        expect(result?.["halt"]).toBe("deadline");
+        expect(elapsed).toBeGreaterThan(53000);
+        expect(ledger.names.length).toBeLessThan(259);
+        expect(elapsed).toBeLessThan(56000);
+        expect(ledger.peak).toBe(5);
+        expect(ledger.aborted).toBe(ledger.names.length);
+        expect(counts).toEqual([
+          {
+            admitted: ledger.names.length,
+            attempted: ledger.names.length,
+            observed: 0,
+            failed: 0,
+            unknown: ledger.names.length,
+            repaired: 0,
+            wraps: 0,
+          },
+        ]);
       }),
-    30000
+    65000
   );
-
-  if (measureTick) {
-    test.effect(
-      "bounds a tick under sustained slow reply cleanup",
-      () =>
-        Effect.gen(function* () {
-          const create = yield* fleet();
-          const fixture = yield* create("slow-cleanup");
-          yield* fixture.exec(
-            "WITH RECURSIVE ids(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM ids WHERE i<256) INSERT INTO lifetime_registry(user_id) SELECT printf('22530000-0000-4000-8000-%012d',i) FROM ids"
-          );
-          const start = yield* Clock.currentTimeMillis;
-          expect(yield* fixture.tick(start)).toBe(204);
-          const elapsed = (yield* Clock.currentTimeMillis) - start;
-          const ledger = yield* fixture.ledger;
-
-          const counts = yield* fixture.exec(
-            "SELECT admitted,attempted,observed,failed,unknown,repaired,wraps FROM watchdog_progress"
-          );
-
-          yield* Effect.logInfo({ elapsed, peak: ledger.peak, aborted: ledger.aborted, counts });
-          const [result] = yield* fixture.exec("SELECT halt FROM watchdog_progress");
-          expect(result?.["halt"]).toBe("deadline");
-          expect(elapsed).toBeGreaterThan(53000);
-          expect(ledger.names.length).toBeLessThan(259);
-          expect(elapsed).toBeLessThan(56000);
-          expect(ledger.peak).toBe(5);
-          expect(ledger.aborted).toBe(ledger.names.length);
-          expect(counts).toEqual([
-            {
-              admitted: ledger.names.length,
-              attempted: ledger.names.length,
-              observed: 0,
-              failed: 0,
-              unknown: ledger.names.length,
-              repaired: 0,
-              wraps: 0,
-            },
-          ]);
-        }),
-      65000
-    );
-  }
 });

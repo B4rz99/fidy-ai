@@ -100,7 +100,7 @@ const signedReminderJourney = Effect.fnUntraced(function* (
         from_user_id: bsuid,
         type: "text",
         text: { body: text },
-        ...(reply === "" ? {} : { context: { id: reply } }),
+        context: reply === "" ? undefined : { id: reply },
       },
     });
   });
@@ -160,13 +160,13 @@ const signedReminderJourney = Effect.fnUntraced(function* (
   expect((yield* say("wamid.optin", "Sí", providerMessage)).status).toBe(200);
   expect((yield* say("wamid.optin", "Sí", providerMessage)).status).toBe(200);
 
-  if (kind === "manual-entry-reminder") {
+  yield* Effect.gen(function* () {
     expect(
       yield* owner.exec(
         "SELECT revision,json_extract(snapshot_json,'$.timing.hour') AS hour FROM reminder_schedules"
       )
     ).toEqual([{ revision: 1, hour: 18 }]);
-  }
+  }).pipe(Effect.when(Effect.succeed(kind === "manual-entry-reminder")));
 
   expect(
     yield* owner.exec(
@@ -177,7 +177,7 @@ const signedReminderJourney = Effect.fnUntraced(function* (
     yield* owner.exec("SELECT kind FROM proactive_grants WHERE revoked_at_ms IS NULL")
   ).toEqual([{ kind }]);
 
-  if (kind !== "manual-entry-reminder") {
+  yield* Effect.gen(function* () {
     expect(yield* owner.exec("SELECT count(*) n FROM reminder_schedules")).toEqual([{ n: 0 }]);
     expect(yield* owner.exec("SELECT portfolio,bsuid,endpoint FROM reminder_channels")).toEqual([
       { portfolio, bsuid, endpoint },
@@ -185,7 +185,7 @@ const signedReminderJourney = Effect.fnUntraced(function* (
     expect(
       (yield* say("wamid.cross-kind", foreignButton(kind, qualified) + ":revoke")).status
     ).toBe(422);
-  }
+  }).pipe(Effect.when(Effect.succeed(kind !== "manual-entry-reminder")));
 
   const deliverBudget = Effect.gen(function* () {
     const current = yield* DateTime.now,
@@ -194,7 +194,7 @@ const signedReminderJourney = Effect.fnUntraced(function* (
     const zone = offset === 0 ? "Etc/UTC" : "Etc/GMT" + (offset > 0 ? "-" : "+") + Math.abs(offset);
     yield* owner.exec("UPDATE users SET time_zone=?", zone);
 
-    const post = Effect.fn(function* (path: string, body: object) {
+    const post = Effect.fn(function* (path: string, body: Schema.Json) {
       return yield* native(() =>
         runtime.dispatchFetch("https://api.fidyapp.com" + path, {
           method: "POST",

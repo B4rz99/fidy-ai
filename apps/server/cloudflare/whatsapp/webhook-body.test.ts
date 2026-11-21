@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { Effect } from "effect";
+import { Duration, Effect } from "effect";
 import { maxWhatsAppWebhookBytes } from "../../src/shell/channels/whatsapp/contract";
 import { receiveWhatsAppWebhook } from "./runtime";
 
@@ -39,9 +39,12 @@ const probeOversizedBody = (): Promise<
 
   const deadline = new AbortController();
 
-  const pending = Effect.runPromise(Effect.sleep(100).pipe(Effect.as("pending" as const)), {
-    signal: deadline.signal,
-  });
+  const pending = Effect.runPromise(
+    Effect.sleep(Duration.millis(100)).pipe(Effect.as("pending" as const)),
+    {
+      signal: deadline.signal,
+    }
+  );
 
   return Promise.race([response, pending]).then((observed) => {
     finishCancellation();

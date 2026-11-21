@@ -1,4 +1,4 @@
-import { Clock, Config, Effect, Schema } from "effect";
+import { Clock, Config, Duration, Effect, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { expect, it } from "vitest";
 
@@ -15,7 +15,7 @@ const count = (db: Store, table: string): Promise<number> =>
 const waitForCount = Effect.fn(function* (db: Store, table: string, expected: number) {
   for (let attempt = 0; attempt < 200; attempt += 1) {
     if ((yield* Effect.tryPromise(() => count(db, table))) >= expected) return;
-    yield* Effect.sleep(100);
+    yield* Effect.sleep(Duration.millis(100));
   }
 
   throw new Error(`Native Queue did not settle ${table}`);

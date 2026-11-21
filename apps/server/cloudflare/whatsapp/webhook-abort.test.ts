@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { Effect } from "effect";
+import { Duration, Effect } from "effect";
 import { receiveWhatsAppWebhook } from "./runtime";
 
 const probeInterruptedBody = (): Promise<
@@ -54,9 +54,12 @@ const probeInterruptedBody = (): Promise<
     abort.abort();
     const deadline = new AbortController();
 
-    const pending = Effect.runPromise(Effect.sleep(100).pipe(Effect.as("pending" as const)), {
-      signal: deadline.signal,
-    });
+    const pending = Effect.runPromise(
+      Effect.sleep(Duration.millis(100)).pipe(Effect.as("pending" as const)),
+      {
+        signal: deadline.signal,
+      }
+    );
 
     return Promise.race([response, pending]).then((observed) => {
       finishCancellation();

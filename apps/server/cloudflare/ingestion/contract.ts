@@ -44,8 +44,8 @@ export type StatementWorkflow = Readonly<{
     id: string;
     params: typeof StatementWork.Type;
     retention: typeof statementWorkflowRetention;
-  }) => Promise<unknown>;
-  get: (id: string) => Promise<unknown>;
+  }) => Promise<WorkflowInstance | void>;
+  get: (id: string) => Promise<WorkflowInstance>;
 }>;
 
 export class StatementDeliveryUnavailable extends Data.TaggedError("StatementDeliveryUnavailable")<{

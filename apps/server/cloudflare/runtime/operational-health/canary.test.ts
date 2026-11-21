@@ -14,7 +14,7 @@ it.effect("validates private canaries before Workflow handoff and completion", (
 
         return Promise.resolve();
       },
-      get: (): Promise<{ status: () => Promise<unknown> }> =>
+      get: (): Promise<{ status: () => Promise<InstanceStatus> }> =>
         Promise.resolve({ status: () => Promise.resolve({ status: "complete" }) }),
     };
 

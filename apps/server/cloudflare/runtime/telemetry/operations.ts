@@ -1,7 +1,6 @@
 import {
   Telemetry,
   encodeTraceParent,
-  makeTelemetryService,
   projectHttpStatusClass,
 } from "../../../src/shell/observability/operations";
 import {
@@ -11,7 +10,7 @@ import {
   type WorkerTraceProjection,
   workerInternalTraceHeader,
 } from "./contract";
-import { makeWorkerTelemetryAdapter } from "./adapter";
+import { workerTelemetryService } from "./adapter";
 
 import {
   type DeclaredOutcome,
@@ -28,8 +27,20 @@ import {
   type TelemetryWorkDescriptor as WorkDescriptor,
   maximumTelemetryDurationMilliseconds,
 } from "../../../src/shell/observability/contract";
-import { Clock, Data, Effect, Logger, Option, Schema } from "effect";
+import {
+  Clock,
+  Data,
+  Effect,
+  Layer,
+  Logger,
+  ManagedRuntime,
+  Option,
+  Predicate,
+  Schema,
+} from "effect";
 import { dual } from "effect/Function";
+
+const boundaryRuntime = ManagedRuntime.make(Layer.empty);
 
 const SpanMetadata = Data.taggedEnum<SpanDescriptor["metadata"]>();
 
@@ -41,16 +52,14 @@ export const makeWorkerTelemetry = (
         exportEvent: (event: WorkerTelemetryEvent) => void;
       }>
 ): TelemetryService =>
-  makeTelemetryService(
-    makeWorkerTelemetryAdapter(
-      typeof sink === "function" ? { exportWork: sink, exportEvent: () => undefined } : sink
-    )
+  workerTelemetryService(
+    Predicate.isFunction(sink) ? { exportWork: sink, exportEvent: () => undefined } : sink
   );
 
 export const cloudflareWorkerTelemetry = makeWorkerTelemetry({
   exportWork: (record) => {
     const write = record.outcome === "failed" ? Effect.logError : Effect.log;
-    Effect.runSync(
+    boundaryRuntime.runSync(
       write({
         ...record,
         message: `fidy.work operation=${record.operation} outcome=${record.outcome} statusClass=${record.statusClass ?? "none"}`,
@@ -58,7 +67,7 @@ export const cloudflareWorkerTelemetry = makeWorkerTelemetry({
     );
   },
   exportEvent: (event) => {
-    Effect.runSync(
+    boundaryRuntime.runSync(
       Effect.log(
         event.event === "failure"
           ? {
@@ -324,10 +333,12 @@ const observeNativePromise = <A>(
           observation,
           observation.spanDescriptor
         ),
-      Effect.runPromise
+      boundaryRuntime.runPromise
     )
     .catch((failure: unknown) =>
-      Promise.reject(failure instanceof ObservedPromiseFailure ? failure.original : failure)
+      Promise.reject(
+        Schema.is(Schema.instanceOf(ObservedPromiseFailure))(failure) ? failure.original : failure
+      )
     );
 
 const observeWorkerPromiseWork = <A>(
@@ -516,7 +527,7 @@ export const captureWorkTrace: Effect.Effect<WorkerTraceProjection> = Effect.fla
     })
 );
 
-export const workTraceParent = (payload: unknown): unknown => {
+export const workTraceParent = (payload: unknown): WorkerTraceContinuation["parent"] => {
   try {
     return Option.match(Schema.decodeUnknownOption(WorkTraceEnvelope)(payload), {
       onNone: () => undefined,

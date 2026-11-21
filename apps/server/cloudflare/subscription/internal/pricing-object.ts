@@ -286,7 +286,8 @@ export const recoverPricing = Effect.fn(function* (
 
   yield* Effect.forEach(
     page,
-    (row) => recoverRegistration(users, row).pipe(Effect.result),
+    (row) =>
+      recoverRegistration(users, { request: row.request, fenced: row.fenced }).pipe(Effect.result),
 
     { concurrency: 4 }
   );
@@ -331,9 +332,11 @@ const acknowledgeRequest = Effect.fn(function* (request: Request) {
   return Option.isNone(body) ? new Response(null, { status: 400 }) : yield* acknowledge(body.value);
 });
 
+type RegistrationRow = Readonly<{ request: unknown; fenced: unknown }>;
+
 const recoverRegistration = Effect.fn(function* (
   users: DurableObjectNamespace,
-  row: Readonly<Record<string, unknown>>
+  row: RegistrationRow
 ) {
   const request = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(registration))(
     row.request

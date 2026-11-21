@@ -32,4 +32,7 @@ export const materialText = ({
     const email = yield* Effect.tryPromise(() => PostalMime.parse(bytes));
 
     return Option.fromUndefinedOr(email.text ?? email.html);
-  }).pipe(Effect.mapError(() => new ReviewUnavailable()));
+  }).pipe(
+    Effect.tapError(Effect.logDebug),
+    Effect.mapError(() => new ReviewUnavailable())
+  );

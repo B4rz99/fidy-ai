@@ -1,5 +1,5 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, DateTime, Effect, Option, Result, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Predicate, Result, Schema } from "effect";
 import { UserId } from "../../../src/core/identity/contract";
 import { BillingAttemptId, renewalGraceMs } from "../../../src/core/subscription/contract";
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
@@ -15,7 +15,7 @@ import {
 } from "../contract";
 import { Snapshot, billingAmount, matchesSnapshot, verifiedOutcome } from "./billing-transaction";
 import { nativeSettlementStatements } from "./billing-settlement";
-import { type WompiTransaction, makeWompiBillingClient } from "./wompi-billing-client";
+import { WompiBillingClient, type WompiTransaction } from "./wompi-billing-client";
 import {
   WompiBillingStatus,
   WompiSourceId,
@@ -170,7 +170,7 @@ const scheduleObservation = Effect.fn(function* ({
   const sql = yield* SqliteClient;
   const attempt = yield* auditedObservation(id);
 
-  if (typeof attempt?.followup_due_at_ms === "number") {
+  if (Predicate.isNumber(attempt?.followup_due_at_ms)) {
     yield* preserveStoreAlarm(storage, attempt.followup_due_at_ms);
   }
 
@@ -297,7 +297,7 @@ const collect = Effect.fn(function* (work: Work, { env, transport, storage }: Co
   if (captured.wompi_environment !== env.WOMPI_ENVIRONMENT) return blocked();
   yield* registerAttempt(env.DIRECTORY, work, captured);
 
-  const client = makeWompiBillingClient({
+  const client = WompiBillingClient.fromOutboundHttp({
     environment: env.WOMPI_ENVIRONMENT,
     outboundHttp: yield* transport(env),
   });
@@ -387,7 +387,7 @@ export const routeBillingEvent = Effect.fn(function* (
 ) {
   if (event.environment !== env.WOMPI_ENVIRONMENT) return;
 
-  const client = makeWompiBillingClient({
+  const client = WompiBillingClient.fromOutboundHttp({
     environment: env.WOMPI_ENVIRONMENT,
     outboundHttp: yield* transport(env),
   });
@@ -458,7 +458,7 @@ export const reconcileLocalCandidates = Effect.fn(function* (context: {
 
   if (due.length === 0) return;
 
-  const client = makeWompiBillingClient({
+  const client = WompiBillingClient.fromOutboundHttp({
     environment: env.WOMPI_ENVIRONMENT,
     outboundHttp: yield* transport(env),
   });

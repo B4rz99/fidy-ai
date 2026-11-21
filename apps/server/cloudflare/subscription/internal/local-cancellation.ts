@@ -100,7 +100,9 @@ export const dispatchCancellations = Effect.fnUntraced(function* (
   input: Readonly<{
     current: number;
     storage: DurableObjectStorage;
-    queue: Readonly<{ send: (work: typeof LocalSourceCancellationWork.Type) => Promise<unknown> }>;
+    queue: Readonly<{
+      send: (work: typeof LocalSourceCancellationWork.Type) => Promise<QueueSendResponse | void>;
+    }>;
   }>
 ) {
   const sql = yield* SqliteClient;

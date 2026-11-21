@@ -4,6 +4,12 @@ import { beginInitialBrowserRequest } from "@/transport/initial-request";
 import { browserApiOrigin } from "@/transport/origin";
 import { observeInitialBrowserRequest } from "@/session/initial-request";
 
+const reportStartupDefect = (error: "preparation_failed" | "render_uncaught"): void => {
+  import("@/transport/browser-defects")
+    .then(({ reportBrowserDefect }) => reportBrowserDefect(error))
+    .catch(() => undefined);
+};
+
 export const mountWebApplication = (): void => {
   if (tryMountProviderReturn()) return;
   const ready = Promise.withResolvers<void>();
@@ -23,7 +29,9 @@ export const mountWebApplication = (): void => {
     })
   );
 
-  preloadWebRouteCode(window.location.pathname).catch(() => undefined);
+  preloadWebRouteCode(window.location.pathname).catch(() =>
+    reportStartupDefect("preparation_failed")
+  );
   Promise.all([import("./render"), import("@/transport/initial-session")])
     .then(([{ mountWebApplication }, { beginInitialBrowserSession }]) => {
       const initial = beginInitialBrowserSession({ ...request, request });
@@ -39,9 +47,7 @@ export const mountWebApplication = (): void => {
       ready.promise.then(() => {
         const root = document.querySelector("#root") ?? document.body;
         request.cancel();
-        import("@/transport/browser-defects")
-          .then(({ reportBrowserDefect }) => reportBrowserDefect("render_uncaught"))
-          .catch(() => undefined);
+        reportStartupDefect("render_uncaught");
         const notice = document.createElement("p");
         notice.setAttribute("role", "alert");
         notice.textContent = "No pudimos iniciar la aplicación. Recarga para continuar.";

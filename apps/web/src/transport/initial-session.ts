@@ -1,5 +1,5 @@
 import type { InitialBrowserRequest } from "./initial-request";
-import { type Cause, Effect, Exit, Option } from "effect";
+import { type Cause, Effect, type Exit, Option } from "effect";
 import { type BrowserSessionObservation, loadBrowserSessionEntry } from "./session-entry";
 
 export type InitialSessionWork = Readonly<{
@@ -40,7 +40,7 @@ const preparedResult = (
 > =>
   Effect.suspend(() =>
     Option.match(completed(), {
-      onNone: () => Effect.tryPromise(() => result).pipe(Effect.orElseSucceed(Exit.fail)),
+      onNone: () => Effect.tryPromise(() => result).pipe(Effect.flatten, Effect.exit),
       onSome: Effect.succeed,
     })
   );

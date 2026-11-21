@@ -10,7 +10,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { ErasureRequest } from "./erasure-request";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
-import { DateTime, Effect, Option, Predicate } from "effect";
+import { Data, DateTime, Effect, Option, Predicate } from "effect";
 import { Atom, Reactivity } from "effect/reactivity";
 import { type JSX, type ReactNode, useState } from "react";
 import type { ProcessingConsentStatus, WebAuthClient } from "@/transport/client";
@@ -27,16 +27,17 @@ import { ConsentRenewal } from "./renewal";
 
 const consentKey = "processing-consent";
 
-const makeWithdrawal = (client: WebAuthClient): Atom.AtomResultFn<void, boolean, never> =>
+class WithdrawalUnconfirmed extends Data.TaggedError("WithdrawalUnconfirmed") {}
+
+const makeWithdrawal = (client: WebAuthClient): Atom.AtomResultFn<void, void, unknown> =>
   client.runtime.fn<void>()(() =>
     client.pipe(
       Effect.flatMap((api) => api.processingConsent.withdraw({ payload: { confirm: true } })),
       Effect.flatMap((receipt) =>
         receipt.status === "Revoked"
-          ? Reactivity.invalidate([consentKey]).pipe(Effect.as(true))
-          : Effect.succeed(false)
-      ),
-      Effect.catchCause(() => Effect.succeed(false))
+          ? Reactivity.invalidate([consentKey])
+          : Effect.fail(new WithdrawalUnconfirmed())
+      )
     )
   );
 
@@ -274,7 +275,7 @@ export const PrivacyFeature = (): JSX.Element => {
             withdraw={() => withdraw()}
           />
         </ConsentContent>
-        {Predicate.isTagged(result, "Success") && !result.value ? (
+        {Predicate.isTagged(result, "Failure") ? (
           <Alert variant="destructive" role="alert">
             <AlertTitle>No pudimos confirmar el resultado</AlertTitle>
             <AlertDescription>Consulta el estado antes de volver a intentarlo.</AlertDescription>

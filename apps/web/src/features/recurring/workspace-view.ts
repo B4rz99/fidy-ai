@@ -3,6 +3,7 @@ import { Option, Schema } from "effect";
 import { useState } from "react";
 import { RecurringFilters, RecurringMonth } from "@/transport/client";
 import type { Filters } from "./model";
+import { reportBrowserDefect } from "@/transport/browser-defects";
 
 const WorkspaceView = Schema.Struct({
   binding: Schema.String,
@@ -55,7 +56,7 @@ export const useRecurringWorkspaceView = (): RecurringWorkspaceViewControl => {
         resetScroll: false,
         state: (previous) => ({ ...previous, recurringWorkspace: next }),
       })
-      .catch(() => undefined);
+      .catch(() => reportBrowserDefect("navigation_failed"));
   };
 
   return {
@@ -70,7 +71,7 @@ export const useRecurringWorkspaceView = (): RecurringWorkspaceViewControl => {
             recurringView: undefined,
           }),
         })
-        .catch(() => undefined);
+        .catch(() => reportBrowserDefect("navigation_failed"));
     },
     filters: view.filters,
     previous: Option.fromUndefinedOr(view.previous),

@@ -2,7 +2,7 @@ import { File01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Disclosure } from "@/ui/components/disclosure";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { DateTime, Effect, Option, Predicate } from "effect";
+import { DateTime, Effect, Predicate } from "effect";
 import { type JSX, useState } from "react";
 import type { ProcessingAuthorization, WebAuthClient } from "@/transport/client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
@@ -38,11 +38,7 @@ const AuthorizationRecord = ({
 export const AuthorizationCopy = ({ client }: Readonly<{ client: WebAuthClient }>): JSX.Element => {
   const [operation] = useState(() =>
     client.runtime.fn<void>()(() =>
-      client.pipe(
-        Effect.flatMap((api) => api.processingConsent.authorization()),
-        Effect.asSome,
-        Effect.catchCause(() => Effect.succeedNone)
-      )
+      client.pipe(Effect.flatMap((api) => api.processingConsent.authorization()))
     )
   );
 
@@ -72,10 +68,10 @@ export const AuthorizationCopy = ({ client }: Readonly<{ client: WebAuthClient }
               {result.waiting ? "Consultando prueba…" : "Consultar prueba"}
             </Button>
           </div>
-          {Predicate.isTagged(result, "Success") && Option.isSome(result.value) ? (
-            <AuthorizationRecord value={result.value.value} />
+          {Predicate.isTagged(result, "Success") ? (
+            <AuthorizationRecord value={result.value} />
           ) : null}
-          {Predicate.isTagged(result, "Success") && Option.isNone(result.value) ? (
+          {Predicate.isTagged(result, "Failure") ? (
             <Alert variant="destructive" role="alert">
               <AlertTitle>No pudimos consultar la prueba</AlertTitle>
               <AlertDescription>

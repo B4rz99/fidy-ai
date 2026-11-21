@@ -1,17 +1,15 @@
 import type { APIRoute } from "astro";
 import { getCollection } from "astro:content";
+import { Array as EffectArray, Result, Schema } from "effect";
+import { ReferencePage } from "../lib/reference-contract";
 
 export const GET: APIRoute = async () => {
   const entries = (await getCollection("docs"))
     .filter((entry) => !entry.data.draft)
     .sort((left, right) => left.id.localeCompare(right.id));
 
-  const guide = entries.filter(
-    (entry) => !entry.id.startsWith("reference/") && entry.id !== "referencia/esquemas"
-  );
-
-  const reference = entries.filter(
-    (entry) => entry.id.startsWith("reference/") || entry.id === "referencia/esquemas"
+  const [reference, guide] = EffectArray.partition(entries, (entry) =>
+    Schema.is(ReferencePage)(entry.id) ? Result.succeed(entry) : Result.fail(entry)
   );
 
   const links = (pages: typeof entries): string =>

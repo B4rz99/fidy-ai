@@ -1231,9 +1231,9 @@ html:has(.fidy-landing) {
   color: light-dark(#626759, var(--night-muted));
   margin-top: 10px;
 }
-.fidy-landing .story-demo[data-instant="true"] .story-reply,
-.fidy-landing .story-demo[data-instant="true"] .story-row,
-.fidy-landing .story-demo[data-instant="true"] .story-progress {
+.fidy-landing .story-demo[data-transition="instant"] .story-reply,
+.fidy-landing .story-demo[data-transition="instant"] .story-row,
+.fidy-landing .story-demo[data-transition="instant"] .story-progress {
   transition: none;
 }
 @media (max-width: 1050px) {
@@ -1745,7 +1745,7 @@ html:has(.fidy-landing) {
 .fidy-landing .price-options:has(button:nth-child(3)[aria-pressed="true"]) .price-pill {
   transform: translateX(200%);
 }
-.fidy-landing .price-card[data-instant="true"] .price-pill {
+.fidy-landing .price-card[data-transition="instant"] .price-pill {
   transition: none;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1765,7 +1765,7 @@ html:has(.fidy-landing) {
   .fidy-landing .price-options button[aria-pressed="true"]::before {
     opacity: 1;
   }
-  .fidy-landing .price-card[data-instant="true"] .price-options button::before {
+  .fidy-landing .price-card[data-transition="instant"] .price-options button::before {
     transition: none;
   }
 }
@@ -2766,7 +2766,7 @@ html:has(.fidy-landing) {
 .fidy-landing .story-demo[data-recorded="true"] .story-status {
   transition-delay: 660ms;
 }
-.fidy-landing .story-demo[data-instant="true"] .story-status {
+.fidy-landing .story-demo[data-transition="instant"] .story-status {
   transition: none;
 }
 
@@ -2913,7 +2913,7 @@ html:has(.fidy-landing) {
 .fidy-landing .story-demo[data-recorded="true"] :is(.story-progress, .story-value > span) {
   transition-delay: 440ms;
 }
-.fidy-landing .story-demo[data-instant="true"] .story-value > span {
+.fidy-landing .story-demo[data-transition="instant"] .story-value > span {
   transition: none;
 }
 .fidy-landing .price-value {
@@ -2932,7 +2932,7 @@ html:has(.fidy-landing) {
 .fidy-landing .price-frame[data-visible="true"] {
   opacity: 1;
 }
-.fidy-landing .price-card[data-instant="true"] .price-frame {
+.fidy-landing .price-card[data-transition="instant"] .price-frame {
   transition: none;
 }
 .fidy-landing .channel-story {

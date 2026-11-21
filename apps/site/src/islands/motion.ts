@@ -71,39 +71,41 @@ const revealHero = (target: Element): ReadonlyArray<Animation> => {
   );
 };
 
-const revealSection = (target: Element): ReadonlyArray<Animation> => {
-  if (target.matches(".coin")) {
-    return flipCoin(target);
-  }
+const revealEntrance = (target: Element): ReadonlyArray<Animation> =>
+  supportsScrollMotion()
+    ? []
+    : [enter({ element: target, delay: 0, duration: entranceDuration, distance: "4%" })];
 
-  if (target.matches(".hero-copy")) {
-    return revealHero(target);
-  }
+const sectionReveals: ReadonlyArray<{
+  selector: string;
+  reveal: (target: Element) => ReadonlyArray<Animation>;
+}> = [
+  { selector: ".coin", reveal: flipCoin },
+  { selector: ".hero-copy", reveal: revealHero },
+  {
+    selector: ".agent-system",
+    reveal: (target) =>
+      [...target.querySelectorAll(".agent-entry")].map((card, index) =>
+        enter({
+          element: card,
+          duration: cardDuration,
+          delay: index * cardStagger,
+          distance: "8px",
+        })
+      ),
+  },
+  {
+    selector: "#demo",
+    reveal: (target) => [
+      enter({ element: target, delay: 0, duration: demoDuration, distance: "3%" }),
+    ],
+  },
+];
 
-  if (target.matches(".agent-system")) {
-    return [...target.querySelectorAll(".agent-entry")].map((card, index) =>
-      enter({
-        element: card,
-        duration: cardDuration,
-        delay: index * cardStagger,
-        distance: "8px",
-      })
-    );
-  }
-
-  const isDemo = target.id === "demo";
-
-  if (!isDemo && supportsScrollMotion()) return [];
-
-  return [
-    enter({
-      element: target,
-      delay: 0,
-      duration: isDemo ? demoDuration : entranceDuration,
-      distance: isDemo ? "3%" : "4%",
-    }),
-  ];
-};
+const revealSection = (target: Element): ReadonlyArray<Animation> =>
+  (sectionReveals.find(({ selector }) => target.matches(selector))?.reveal ?? revealEntrance)(
+    target
+  );
 
 export const mountMotion = (root: HTMLDivElement): (() => void) => {
   const preference = window.matchMedia("(prefers-reduced-motion: reduce)");

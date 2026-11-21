@@ -58,7 +58,7 @@ const seedImport = (context, statement) => {
 const bindingOrigins = (context, node) => {
   const symbol = context.checker.getSymbolAtLocation(node);
 
-  return symbol === undefined ? [] : [...(context.bindings.get(symbol) ?? [])];
+  return symbol === undefined ? [] : Array.from(context.bindings.get(symbol) ?? []);
 };
 
 /** @param {import("typescript").Expression} expression - Parentheses or assertions preserve binding identity. */
@@ -172,7 +172,7 @@ const transparentValue = (context, expression) =>
 const shorthandOrigins = (context, property) => {
   const symbol = context.checker.getShorthandAssignmentValueSymbol(property);
 
-  return symbol === undefined ? [] : [...(context.bindings.get(symbol) ?? [])];
+  return symbol === undefined ? [] : Array.from(context.bindings.get(symbol) ?? []);
 };
 
 /** @param {Provenance} context - Module-local provenance. @param {import("typescript").ObjectLiteralElementLike} property - A value exposed by an object literal. @returns {ReadonlyArray<string>} */
@@ -253,13 +253,17 @@ const isPrivateMember = (member) =>
       true);
 
 /** @param {Provenance} context - Module-local provenance. @param {import("typescript").PropertyDeclaration} field - Published value and explicit field type. @returns {ReadonlyArray<string>} */
-const fieldOrigins = (context, field) => [
-  ...bindingOrigins(context, field.name),
-  ...(field.initializer === undefined ? [] : valueOrigins(context, field.initializer)),
-  ...(field.type === undefined
-    ? []
-    : typeOrigins(context, field.type, isCallable(context, field.initializer))),
-];
+const fieldOrigins = (context, field) => {
+  const origins = [...bindingOrigins(context, field.name)];
+
+  if (field.initializer !== undefined) origins.push(...valueOrigins(context, field.initializer));
+
+  if (field.type !== undefined) {
+    origins.push(...typeOrigins(context, field.type, isCallable(context, field.initializer)));
+  }
+
+  return origins;
+};
 
 /** @param {Provenance} context - Module-local provenance. @param {import("typescript").ConstructorDeclaration} constructor - Parameter properties are fields as well as constructor inputs. */
 const constructorOrigins = (context, constructor) => [
@@ -301,8 +305,8 @@ const classMemberOrigins = (context, member) => {
 /** @param {Provenance} context - Module-local provenance. @param {import("typescript").ClassLikeDeclaration} declaration - A class publication includes its accessible members. @returns {ReadonlyArray<string>} */
 const classOrigins = (context, declaration) => [
   ...declaration.members.flatMap((member) => classMemberOrigins(context, member)),
-  ...(declaration.heritageClauses?.flatMap((heritage) => typeOrigins(context, heritage)) ?? []),
-  ...(declaration.typeParameters?.flatMap((parameter) => typeOrigins(context, parameter)) ?? []),
+  ...(declaration.heritageClauses ?? []).flatMap((heritage) => typeOrigins(context, heritage)),
+  ...(declaration.typeParameters ?? []).flatMap((parameter) => typeOrigins(context, parameter)),
 ];
 
 /** @param {Provenance} context - Module-local provenance. @param {import("typescript").Expression} expression - Outward container values. @returns {ReadonlyArray<string>} */
@@ -406,7 +410,11 @@ const identifierReferences = (context, name, seen) => {
 
   if (declaration === undefined) return [];
   const visited = new Set([...seen, symbol]);
-  const values = [...declaredInitializers(declaration), ...(context.assignments.get(symbol) ?? [])];
+
+  const values = [
+    ...declaredInitializers(declaration),
+    ...Array.from(context.assignments.get(symbol) ?? []),
+  ];
 
   return [
     { root: declaration, path: [] },
@@ -431,7 +439,9 @@ const containerReferences = (context, expression, seen = new Set()) => {
     const references = memberWriteReferences(context, expression, seen);
     const literal = localContainer(context, expression, seen);
 
-    return [...references, ...(literal === undefined ? [] : [{ root: literal, path: [] }])];
+    if (literal === undefined) return references;
+
+    return [...references, { root: literal, path: [] }];
   }
 
   return selectedContainerReferences(context, expression, seen);
@@ -461,7 +471,8 @@ const memberWriteReferences = (context, member, seen = new Set()) => {
 };
 
 /** @param {MemberKey} key - Array methods alter numeric entries, not metadata such as length. */
-const isArrayIndex = (key) => typeof key === "string" && /^(?:0|[1-9][0-9]*)$/u.test(key);
+const isArrayIndex = (key) =>
+  key !== undefined && key !== arrayIndex && /^(?:0|[1-9][0-9]*)$/u.test(key);
 
 /** @param {MemberKey} first - Selected member. @param {MemberKey} second - Written member. */
 const intersectingKeys = (first, second) => {
@@ -643,10 +654,10 @@ const signatureOrigins = (context, signature) => {
   const types = [
     signature.type,
     ...signature.parameters.map((parameter) => parameter.type),
-    ...(signature.typeParameters?.flatMap((parameter) => [
+    ...(signature.typeParameters ?? []).flatMap((parameter) => [
       parameter.constraint,
       parameter.default,
-    ]) ?? []),
+    ]),
   ];
 
   return types.flatMap((type) => (type === undefined ? [] : typeOrigins(context, type, true)));
@@ -674,12 +685,11 @@ const callableOrigins = (context, declaration) => {
 
   if (declaration.body === undefined) return origins;
 
-  return [
-    ...origins,
-    ...(ts.isBlock(declaration.body)
-      ? returnOrigins(context, declaration.body)
-      : valueOrigins(context, declaration.body)),
-  ];
+  const bodyOrigins = ts.isBlock(declaration.body)
+    ? returnOrigins(context, declaration.body)
+    : valueOrigins(context, declaration.body);
+
+  return [...origins, ...bodyOrigins];
 };
 
 /** @param {Provenance} context - Module-local provenance. @param {import("typescript").Expression | undefined} expression - Candidate wrapper implementation. @returns {boolean} */
@@ -1030,7 +1040,7 @@ const exportOrigins = (context, statement) => {
   return statement.exportClause.elements.flatMap((element) => {
     const symbol = context.checker.getExportSpecifierLocalTargetSymbol(element);
 
-    return symbol === undefined ? [] : [...(context.bindings.get(symbol) ?? [])];
+    return symbol === undefined ? [] : Array.from(context.bindings.get(symbol) ?? []);
   });
 };
 

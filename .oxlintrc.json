@@ -1148,17 +1148,6 @@
         "enfect/yield-in-for-loop": "off",
         "landmines/no-flake-masking": "off"
       }
-    },
-    {
-      "files": ["apps/docs/**", "apps/site/**", "tools/depcruise/**", "tools/mcp-inspector/**"],
-      "rules": {
-        "anti-slop/no-array-filter-map": "off",
-        "anti-slop/no-conditional-spread": "off",
-        "anti-slop/no-instanceof": "off",
-        "anti-slop/no-known-value-widening": "off",
-        "anti-slop/no-runtime-typeof": "off",
-        "anti-slop/no-unknown-returns": "off"
-      }
     }
   ]
 }

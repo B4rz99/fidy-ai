@@ -2,6 +2,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { cruise } from "dependency-cruiser";
+import { Predicate } from "effect";
 import extractDepcruiseConfig from "dependency-cruiser/config-utl/extract-depcruise-config";
 import extractTSConfig from "dependency-cruiser/config-utl/extract-ts-config";
 
@@ -112,7 +113,7 @@ export const loadGraph = async (directory, roots, validate = true) => {
   try {
     const { output } = await cruise(sourceRoots, { ruleSet, validate }, undefined, { tsConfig });
 
-    if (typeof output === "string") throw new Error("Expected a dependency-cruiser graph object");
+    if (Predicate.isString(output)) throw new Error("Expected a dependency-cruiser graph object");
     assertCruisedSomething(output);
     assertCompleteGraph(output, packageRoot, sourceRoots);
     const unresolved = unresolvedDependencies(output);

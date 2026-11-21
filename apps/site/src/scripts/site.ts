@@ -94,9 +94,9 @@ for (const summary of document.querySelectorAll("summary")) {
 
 const menu = document.querySelector<HTMLElement>(".compact-navigation");
 
-document.querySelector(".nav-toggle")?.addEventListener("click", (event) => {
+document.querySelector<HTMLElement>(".nav-toggle")?.addEventListener("click", (event) => {
   if (menu !== null) {
-    menu.dataset.motion = event instanceof MouseEvent && event.detail !== 0 ? "pointer" : "instant";
+    menu.dataset.motion = event.detail !== 0 ? "pointer" : "instant";
   }
 });
 

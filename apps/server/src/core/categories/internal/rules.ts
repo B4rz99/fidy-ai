@@ -56,7 +56,7 @@ export const hasKeywordRule = ({
   return Effect.succeed(
     rules.some(
       (rule) =>
-        !(excluding._tag === "Some" && excluding.value === rule.id) &&
+        !Option.exists(excluding, (id) => id === rule.id) &&
         normalizeCategoryKeyword(rule.keyword) === normalized
     )
   );

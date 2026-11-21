@@ -1,5 +1,14 @@
-// @vitest-environment jsdom
-import { BigDecimal, DateTime, Deferred, Effect, Layer, Option, Redacted, Schema } from "effect";
+import {
+  BigDecimal,
+  DateTime,
+  Deferred,
+  Effect,
+  Layer,
+  Option,
+  Predicate,
+  Redacted,
+  Schema,
+} from "effect";
 import { Atom, AtomRegistry } from "effect/reactivity";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { UnknownJsonString } from "@/schema-compatibility";
@@ -18,9 +27,13 @@ import {
   type EnrollmentGateway,
   type PaymentSubmission,
   type PreparedEnrollment,
-  makeEnrollmentGateway,
-} from "./enrollment-gateway";
-import { type EnrollmentInteraction, makeEnrollmentInteraction } from "./interaction";
+  createEnrollmentGateway,
+} from "@/features/subscription/enrollment-gateway";
+import {
+  type EnrollmentInteraction,
+  PaymentFlowView,
+  createEnrollmentInteraction,
+} from "@/features/subscription/interaction";
 
 type DisclosureContract = PreparedEnrollment["contracts"][keyof PreparedEnrollment["contracts"]];
 
@@ -121,7 +134,7 @@ const fixture = (): Fixture => {
   const registry = AtomRegistry.make();
   const authorizationLock = Atom.make(false);
 
-  const atom = makeEnrollmentInteraction({
+  const atom = createEnrollmentInteraction({
     gateway: Option.some(gateway),
     offers: [enrollment.price, enrollment.price, enrollment.price],
     authorizationLock,
@@ -391,8 +404,9 @@ const recoveryHttp = (fixture: RecoveryFixture): HttpClient.HttpClient =>
       else if (path.endsWith("/prepare")) {
         response = Response.json(yield* Schema.encodeEffect(PaymentEnrollment)(fixture.enrollment));
       } else if (path.endsWith("/submit")) {
-        const text =
-          request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "";
+        const text = Predicate.isTagged(request.body, "Uint8Array")
+          ? new TextDecoder().decode(request.body.body)
+          : "";
 
         const body = yield* Schema.decodeEffect(UnknownJsonString)(text);
         const submission = yield* Schema.decodeUnknownEffect(SubmissionRequest)(body);
@@ -423,7 +437,7 @@ const mountRecovery = (
 ): (() => EnrollmentInteraction) => {
   const registry = AtomRegistry.make();
 
-  const atom = makeEnrollmentInteraction({
+  const atom = createEnrollmentInteraction({
     gateway: Option.some(gateway),
     offers: [enrollment.price, enrollment.price, enrollment.price],
     authorizationLock: Atom.make(false),
@@ -436,73 +450,71 @@ const mountRecovery = (
   return () => registry.get(atom);
 };
 
-for (const status of ["available", "verifying"] as const) {
-  it.effect(
-    `recovers a lost submission acknowledgment from ${status} with the original request and BillingAttempt`,
-    () =>
-      Effect.gen(function* () {
-        vi.useFakeTimers();
-        vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
-        const input = recoveryFixture(status);
+it.effect.each(["available", "verifying"] as const)(
+  "recovers a lost submission acknowledgment from %s with the original request and BillingAttempt",
+  (status) =>
+    Effect.gen(function* () {
+      vi.useFakeTimers();
+      vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+      const input = recoveryFixture(status);
 
-        const provider = vi.fn(() =>
-          Promise.resolve(Response.json({ data: { id: "tok_test_synthetic", brand: "VISA" } }))
-        );
+      const provider = vi.fn(() =>
+        Promise.resolve(Response.json({ data: { id: "tok_test_synthetic", brand: "VISA" } }))
+      );
 
-        vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", provider);
 
-        const client = yield* Effect.acquireRelease(
-          Effect.sync(() =>
-            makeSubscriptionEnrollmentClient({
-              apiOrigin: "https://api.test.fidyapp.com",
-              httpClient: Layer.succeed(HttpClient.HttpClient, recoveryHttp(input)),
-            })
-          ),
-          (client) => Effect.tryPromise(() => client.dispose()).pipe(Effect.orDie)
-        );
+      const client = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          makeSubscriptionEnrollmentClient({
+            apiOrigin: "https://api.test.fidyapp.com",
+            httpClient: Layer.succeed(HttpClient.HttpClient, recoveryHttp(input)),
+          })
+        ),
+        (client) => Effect.tryPromise(() => client.dispose()).pipe(Effect.orDie)
+      );
 
-        const view = mountRecovery(makeEnrollmentGateway(client), input.enrollment);
-        yield* advance(0);
-        view().selectPrice(input.enrollment.price.id);
-        view().continueToPayment();
-        yield* advance(0);
-        view().submit("synthetic@example.invalid", {
-          number: "4242424242424242",
-          cvc: "123",
-          expirationMonth: "12",
-          expirationYear: "2030",
-          cardholderName: "Synthetic Person",
-          signal: Option.none(),
-        });
-        yield* advance(0);
-        expect(view().needsRecovery).toBe(true);
-        view().refresh();
-        yield* advance(0);
-        expect(view().needsRecovery).toBe(true);
-        expect(view().disabled).toBe(true);
-        input.failResume = false;
-        view().refresh();
-        yield* advance(0);
-        expect(view().needsRecovery).toBe(false);
-        expect(view().disabled).toBe(true);
-        expect(Option.map(view().enrollment, (flow) => flow.value)).toEqual(
-          Option.some(input.submission)
-        );
-        yield* advance(1_000);
-        expect(input.reads).toBe(1);
-        expect(provider).toHaveBeenCalledTimes(1);
-        expect(input.requests.map((request) => request.paymentSourceMode)).toEqual([
-          "create",
-          "reuse",
-          "reuse",
-        ]);
-        expect(new Set(input.requests.map((request) => request.paymentRequestId)).size).toBe(1);
-        expect(input.requests.slice(1).every((request) => request.cardToken === undefined)).toBe(
-          true
-        );
-      })
-  );
-}
+      const view = mountRecovery(createEnrollmentGateway(client), input.enrollment);
+      yield* advance(0);
+      view().selectPrice(input.enrollment.price.id);
+      view().continueToPayment();
+      yield* advance(0);
+      view().submit("synthetic@example.invalid", {
+        number: "4242424242424242",
+        cvc: "123",
+        expirationMonth: "12",
+        expirationYear: "2030",
+        cardholderName: "Synthetic Person",
+        signal: Option.none(),
+      });
+      yield* advance(0);
+      expect(view().needsRecovery).toBe(true);
+      view().refresh();
+      yield* advance(0);
+      expect(view().needsRecovery).toBe(true);
+      expect(view().disabled).toBe(true);
+      input.failResume = false;
+      view().refresh();
+      yield* advance(0);
+      expect(view().needsRecovery).toBe(false);
+      expect(view().disabled).toBe(true);
+      expect(Option.map(view().enrollment, (flow) => flow.value)).toEqual(
+        Option.some(input.submission)
+      );
+      yield* advance(1_000);
+      expect(input.reads).toBe(1);
+      expect(provider).toHaveBeenCalledTimes(1);
+      expect(input.requests.map((request) => request.paymentSourceMode)).toEqual([
+        "create",
+        "reuse",
+        "reuse",
+      ]);
+      expect(new Set(input.requests.map((request) => request.paymentRequestId)).size).toBe(1);
+      expect(input.requests.slice(1).every((request) => request.cardToken === undefined)).toBe(
+        true
+      );
+    })
+);
 
 it.effect(
   "retains uncertainty when admitted enrollment recovery is missing or addresses another enrollment",
@@ -762,7 +774,7 @@ it.effect(
       expect(input.view().checkoutPrice).toEqual(Option.some(input.enrollment.price));
       expect(input.view().disabled).toBe(true);
       expect(input.view().enrollment).toEqual(
-        Option.some({ _tag: "Enrollment", value: available })
+        Option.some(PaymentFlowView.Enrollment({ value: available }))
       );
       expect(input.view().changeSelection()).toBe(false);
       expect(input.gateway.prepare).toHaveBeenCalledTimes(1);
@@ -770,8 +782,9 @@ it.effect(
     })
 );
 
-for (const rejection of ["invalid-email", "expired", "busy", "disposed", "unprepared"] as const) {
-  it.effect(`clears rejected Nequi phone material when submission is ${rejection}`, () =>
+it.effect.each(["invalid-email", "expired", "busy", "disposed", "unprepared"] as const)(
+  "clears rejected Nequi phone material when submission is %s",
+  (rejection) =>
     Effect.gen(function* () {
       const input = fixture();
 
@@ -804,5 +817,4 @@ for (const rejection of ["invalid-email", "expired", "busy", "disposed", "unprep
       expect(fields.clearPhone).toHaveBeenCalledTimes(1);
       expect(() => Redacted.value(fields.phoneNumber)).toThrow();
     })
-  );
-}
+);

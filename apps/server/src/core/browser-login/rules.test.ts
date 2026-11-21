@@ -5,6 +5,8 @@ import {
   BrowserLoginPublicCode,
   BrowserLoginPublicCodeInput,
   BrowserLoginPublicCodeSymbols,
+  BrowserLoginRedemptionDecision,
+  PendingBrowserLoginProofDecision,
   browserLoginPublicCodeAlphabet,
 } from "./contract";
 import {
@@ -35,7 +37,7 @@ it("accepts a matching verifier for a pending pairing", () => {
       expiresAt: pendingProofExpiresAt,
       attemptedAt: pendingProofAttemptedAt,
     })
-  ).toEqual({ _tag: "Accept" });
+  ).toEqual(PendingBrowserLoginProofDecision.Accept());
 });
 
 it("invalidates a pending pairing after the fifth wrong verifier", () => {
@@ -47,7 +49,12 @@ it("invalidates a pending pairing after the fifth wrong verifier", () => {
       expiresAt: pendingProofExpiresAt,
       attemptedAt: pendingProofAttemptedAt,
     })
-  ).toEqual({ _tag: "WrongVerifier", wrongVerifierAttempts: 5, lifecycle: "invalidated" });
+  ).toEqual(
+    PendingBrowserLoginProofDecision.WrongVerifier({
+      wrongVerifierAttempts: 5,
+      lifecycle: "invalidated",
+    })
+  );
 });
 
 it("rejects unavailable and expired pairings while retaining a live wrong-verifier attempt", () => {
@@ -58,21 +65,22 @@ it("rejects unavailable and expired pairings while retaining a live wrong-verifi
     attemptedAt: pendingProofAttemptedAt,
   } as const;
 
-  expect(decidePendingBrowserLoginProof({ ...input, lifecycle: "ready" })).toEqual({
-    _tag: "Invalid",
-  });
+  expect(decidePendingBrowserLoginProof({ ...input, lifecycle: "ready" })).toEqual(
+    PendingBrowserLoginProofDecision.Invalid()
+  );
   expect(
     decidePendingBrowserLoginProof({
       ...input,
       lifecycle: "pending_approval",
       attemptedAt: pendingProofExpiresAt,
     })
-  ).toEqual({ _tag: "Expired" });
-  expect(decidePendingBrowserLoginProof({ ...input, lifecycle: "pending_approval" })).toEqual({
-    _tag: "WrongVerifier",
-    wrongVerifierAttempts: 1,
-    lifecycle: "pending_approval",
-  });
+  ).toEqual(PendingBrowserLoginProofDecision.Expired());
+  expect(decidePendingBrowserLoginProof({ ...input, lifecycle: "pending_approval" })).toEqual(
+    PendingBrowserLoginProofDecision.WrongVerifier({
+      wrongVerifierAttempts: 1,
+      lifecycle: "pending_approval",
+    })
+  );
 });
 
 it("normalizes lowercase, surrounding ASCII whitespace, and an omitted display hyphen", () => {
@@ -161,16 +169,18 @@ it("owns the wrong-verifier attempt and lifecycle transition", () => {
     attemptedAt: DateTime.makeUnsafe("2026-03-01T12:00:05.000Z"),
   } as const;
 
-  expect(decideBrowserLoginRedemption({ ...base, wrongVerifierAttempts: 3 })).toEqual({
-    _tag: "WrongVerifier",
-    wrongVerifierAttempts: 4,
-    lifecycle: "ready",
-  });
-  expect(decideBrowserLoginRedemption({ ...base, wrongVerifierAttempts: 4 })).toEqual({
-    _tag: "WrongVerifier",
-    wrongVerifierAttempts: 5,
-    lifecycle: "invalidated",
-  });
+  expect(decideBrowserLoginRedemption({ ...base, wrongVerifierAttempts: 3 })).toEqual(
+    BrowserLoginRedemptionDecision.WrongVerifier({
+      wrongVerifierAttempts: 4,
+      lifecycle: "ready",
+    })
+  );
+  expect(decideBrowserLoginRedemption({ ...base, wrongVerifierAttempts: 4 })).toEqual(
+    BrowserLoginRedemptionDecision.WrongVerifier({
+      wrongVerifierAttempts: 5,
+      lifecycle: "invalidated",
+    })
+  );
 });
 
 it("expires an active pairing before evaluating its verifier", () => {
@@ -186,7 +196,7 @@ it("expires an active pairing before evaluating its verifier", () => {
       expiresAt,
       attemptedAt: expiresAt,
     })
-  ).toEqual({ _tag: "Expired" });
+  ).toEqual(BrowserLoginRedemptionDecision.Expired());
 });
 
 it("rejects every non-active pairing lifecycle before redemption", () => {
@@ -202,7 +212,9 @@ it("rejects every non-active pairing lifecycle before redemption", () => {
   } as const;
 
   for (const lifecycle of ["expired", "superseded", "consumed", "invalidated"] as const) {
-    expect(decideBrowserLoginRedemption({ ...base, lifecycle })).toEqual({ _tag: "Invalid" });
+    expect(decideBrowserLoginRedemption({ ...base, lifecycle })).toEqual(
+      BrowserLoginRedemptionDecision.Invalid()
+    );
   }
 });
 
@@ -219,7 +231,7 @@ it("consumes a ready pairing after a matching verifier", () => {
       expiresAt,
       attemptedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
     })
-  ).toEqual({ _tag: "Consume" });
+  ).toEqual(BrowserLoginRedemptionDecision.Consume());
 });
 
 it("accepts a correct pending poll at the exact minimum interval", () => {
@@ -237,11 +249,12 @@ it("accepts a correct pending poll at the exact minimum interval", () => {
       expiresAt,
       attemptedAt: exactIntervalPollAt,
     })
-  ).toEqual({
-    _tag: "Pending",
-    acceptedAt: exactIntervalPollAt,
-    minimumPollIntervalSeconds: 5,
-  });
+  ).toEqual(
+    BrowserLoginRedemptionDecision.Pending({
+      acceptedAt: exactIntervalPollAt,
+      minimumPollIntervalSeconds: 5,
+    })
+  );
 });
 
 it("accepts the first correct pending poll and slows every repeated too-fast poll by five seconds", () => {
@@ -258,7 +271,12 @@ it("accepts the first correct pending poll and slows every repeated too-fast pol
       expiresAt,
       attemptedAt: firstPollAt,
     })
-  ).toEqual({ _tag: "Pending", acceptedAt: firstPollAt, minimumPollIntervalSeconds: 5 });
+  ).toEqual(
+    BrowserLoginRedemptionDecision.Pending({
+      acceptedAt: firstPollAt,
+      minimumPollIntervalSeconds: 5,
+    })
+  );
 
   expect(
     decideBrowserLoginRedemption({
@@ -270,7 +288,12 @@ it("accepts the first correct pending poll and slows every repeated too-fast pol
       expiresAt,
       attemptedAt: DateTime.addDuration(firstPollAt, "2 seconds"),
     })
-  ).toEqual({ _tag: "SlowDown", minimumPollIntervalSeconds: 10, retryAfterSeconds: 8 });
+  ).toEqual(
+    BrowserLoginRedemptionDecision.SlowDown({
+      minimumPollIntervalSeconds: 10,
+      retryAfterSeconds: 8,
+    })
+  );
 });
 
 it("encodes a decoded public code back to its canonical wire spelling", () => {

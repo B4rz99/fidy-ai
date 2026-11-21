@@ -8,6 +8,7 @@ on:
       - refactor/596-websession-owner-operations
       - feat/publish-categories
       - "stack/580/**"
+      - feat/anti-slop
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

@@ -1,4 +1,4 @@
-import { type DateTime, Schema, SchemaTransformation } from "effect";
+import { Data, type DateTime, Schema, SchemaTransformation } from "effect";
 
 const maximumEmailAddressLength = 254;
 
@@ -51,11 +51,14 @@ export const browserPairingEmailRetryAfterSeconds = 60;
 
 export type EmailReplacementRequestDecision = "Start" | "ReplaceExpired" | "UseExisting" | "Reject";
 
-export type ProofAttemptDecision =
-  | Readonly<{ _tag: "Accept" }>
-  | Readonly<{ _tag: "Wrong"; wrongAttempts: number }>
-  | Readonly<{ _tag: "Delete" }>
-  | Readonly<{ _tag: "Expired" }>;
+export type ProofAttemptDecision = Data.TaggedEnum<{
+  Accept: {};
+  Wrong: { readonly wrongAttempts: number };
+  Delete: {};
+  Expired: {};
+}>;
+
+export const ProofAttemptDecision = Data.taggedEnum<ProofAttemptDecision>();
 
 export type ProofAttemptInput = Readonly<{
   digestMatches: boolean;

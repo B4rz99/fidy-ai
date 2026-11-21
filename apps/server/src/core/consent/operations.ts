@@ -1,79 +1,82 @@
-import { DateTime, Effect, Option } from "effect";
-import type {
-  ConsentInboundContent,
-  ConsentIngressExchange,
-  ConsentIngressMessage,
+import { DateTime, Effect, Match, Option, Predicate } from "effect";
+import {
+  ApprovedUnclaimedExpiryPATRevocation,
+  AuthenticatedWebPATRevocation,
+  type ConsentInboundContent,
+  type ConsentIngressExchange,
+  type ConsentIngressMessage,
   ConsentReplyDecision,
-  PATRevocationDisclosure,
-  PATRevocationOrigin,
+  FixedLifetimeExpiryPATRevocation,
+  type PATRevocationDisclosure,
+  type PATRevocationDisclosures,
+  type PATRevocationOrigin,
   PendingConsentDraft,
-  PendingConsentInput,
+  type PendingConsentInput,
 } from "./contract";
 import { acceptedReplies, declinedReplies, normalizeReply } from "~/core/consent/internal/replies";
 
 const patRevocationRevision = "pat-revocation-2026-09";
 
-const patRevocationDisclosures = {
-  "user-revoke-one": {
-    _tag: "AuthenticatedWeb",
+const patRevocationDisclosures: PATRevocationDisclosures = {
+  "user-revoke-one": AuthenticatedWebPATRevocation.make({
     revision: patRevocationRevision,
     text: "User revoked this PAT.",
-  },
-  "user-revoke-all": {
-    _tag: "AuthenticatedWeb",
+  }),
+  "user-revoke-all": AuthenticatedWebPATRevocation.make({
     revision: patRevocationRevision,
     text: "User revoked all active PATs.",
-  },
-  "user-revoke-unclaimed": {
-    _tag: "AuthenticatedWeb",
+  }),
+  "user-revoke-unclaimed": AuthenticatedWebPATRevocation.make({
     revision: patRevocationRevision,
     text: "User revoked all unclaimed PAT approvals.",
-  },
-  "approved-unclaimed-expiry": {
-    _tag: "AutomaticPolicy",
+  }),
+  "approved-unclaimed-expiry": ApprovedUnclaimedExpiryPATRevocation.make({
     revision: patRevocationRevision,
     text: "Unclaimed PAT approval expired under the fixed claim deadline.",
     policyReason: "pat-approved-unclaimed-expiry",
-  },
-  "fixed-lifetime-expiry": {
-    _tag: "AutomaticPolicy",
+  }),
+  "fixed-lifetime-expiry": FixedLifetimeExpiryPATRevocation.make({
     revision: patRevocationRevision,
     text: "PAT expired at the fixed lifetime deadline.",
     policyReason: "pat-fixed-lifetime-expiry",
-  },
-} as const satisfies Record<PATRevocationOrigin, PATRevocationDisclosure>;
+  }),
+};
+
+const decideTextReply = (reply: string): ConsentReplyDecision => {
+  if (declinedReplies.has(reply)) return ConsentReplyDecision.Declined();
+
+  if (acceptedReplies.has(reply)) return ConsentReplyDecision.Accepted();
+
+  return ConsentReplyDecision.Clarify();
+};
 
 export const decideConsentReply = (
   content: ConsentInboundContent
-): Effect.Effect<ConsentReplyDecision> => {
-  if (content._tag === "Choice") {
-    return Effect.succeed(
-      content.choice === "accept" ? { _tag: "Accepted" } : { _tag: "Declined" }
-    );
-  }
-
-  const reply = normalizeReply(content.text);
-
-  if (declinedReplies.has(reply)) return Effect.succeed({ _tag: "Declined" });
-
-  if (acceptedReplies.has(reply)) return Effect.succeed({ _tag: "Accepted" });
-
-  return Effect.succeed({ _tag: "Clarify" });
-};
+): Effect.Effect<ConsentReplyDecision> =>
+  Effect.succeed(
+    Match.value(content).pipe(
+      Match.tagsExhaustive({
+        Choice: ({ choice }) =>
+          choice === "accept" ? ConsentReplyDecision.Accepted() : ConsentReplyDecision.Declined(),
+        Text: ({ text }) => decideTextReply(normalizeReply(text)),
+      })
+    )
+  );
 
 export const makePendingConsentDraft = (
   input: PendingConsentInput
 ): Effect.Effect<PendingConsentDraft> =>
-  Effect.succeed({
-    _tag: "AwaitingDisclosureDelivery",
-    ...input,
-    disclosure: {
-      ...input.disclosure,
-      purposes: [...input.disclosure.purposes],
-      dataCategories: [...input.disclosure.dataCategories],
-    },
-    expiresAt: DateTime.add(input.createdAt, { hours: 24 }),
-  });
+  Effect.succeed(
+    PendingConsentDraft.AwaitingDisclosureDelivery({
+      ...input,
+      disclosure: {
+        ...input.disclosure,
+        purposes: [...input.disclosure.purposes],
+        dataCategories: [...input.disclosure.dataCategories],
+      },
+      expiresAt: DateTime.add(input.createdAt, { hours: 24 }),
+    })
+  );
 
 export const hasPendingConsentExpired = (
   input: Readonly<{
@@ -87,7 +90,7 @@ export const canRecordConsentIngressDecision = ({
   exchange,
   message,
 }: Readonly<{ exchange: ConsentIngressExchange; message: ConsentIngressMessage }>): boolean =>
-  exchange.phase._tag === "AwaitingDecision" &&
+  Predicate.isTagged(exchange.phase, "AwaitingDecision") &&
   message.occurredAtMs > exchange.phase.disclosedAtMs &&
   message.occurredAtMs > exchange.phase.decisionNotBeforeMs &&
   exchange.businessPhoneNumberId === message.businessPhoneNumberId &&
@@ -116,7 +119,7 @@ export const classifyConsentIngressReplay = ({
 };
 
 export const isConsentIngressDecisionPhase = (exchange: ConsentIngressExchange): boolean =>
-  exchange.phase._tag !== "BeforeDelivery";
+  !Predicate.isTagged(exchange.phase, "BeforeDelivery");
 
 export const decidePATRevocation = <Origin extends PATRevocationOrigin>(
   origin: Origin

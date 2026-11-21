@@ -216,6 +216,9 @@ const withWorkspace = (
     })
   );
 
+const filteredScope =
+  "Resumen filtrado: solo incluye los recurrentes que coinciden con los filtros.";
+
 type WorkspaceCheck = Effect.Effect<void, Cause.UnknownError>;
 
 const checkFilters = (presentation: string, container: HTMLElement): WorkspaceCheck =>
@@ -229,6 +232,12 @@ const checkFilters = (presentation: string, container: HTMLElement): WorkspaceCh
         expect(container.textContent).toContain("Arriendo de prueba");
         expect(container.textContent).not.toContain("Ingreso de prueba");
         expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
+
+        if (presentation !== "Todos los recurrentes") {
+          expect(container.textContent).toContain(filteredScope);
+          expect(container.textContent).toContain("Sin recurrentes que coincidan con los filtros");
+          expect(container.textContent).not.toContain("Sin recurrentes este mes");
+        }
       })
     );
     yield* Effect.tryPromise(() => searchFor(container, "Sin coincidencias"));
@@ -249,6 +258,11 @@ const checkFilters = (presentation: string, container: HTMLElement): WorkspaceCh
         expect(container.textContent).toContain("Arriendo de prueba");
         expect(container.textContent).toContain("Ingreso de prueba");
         expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
+        expect(container.textContent).not.toContain(filteredScope);
+
+        if (presentation !== "Todos los recurrentes") {
+          expect(container.textContent).toContain("Sin recurrentes este mes");
+        }
       })
     );
   });

@@ -1,7 +1,8 @@
-import { ClaimedPATPairing, StartedPATPairing } from "@fidy/server/client";
+import { StartedPATPairing } from "@fidy/server/client";
 import { Effect, Schema } from "effect";
 import { type Credential } from "../../src/credential/contract";
 import { type LoginDependencies } from "../../src/login/contract";
+import { decodeIssuedPAT } from "../support/pat";
 
 const secretCharacterCount = 43;
 
@@ -9,10 +10,9 @@ export const privateProof = "p".repeat(secretCharacterCount);
 
 export const rawBearer = `fin_abcd1234_${"s".repeat(secretCharacterCount)}`;
 
-export const issued = Schema.decodeSync(Schema.toCodecJson(ClaimedPATPairing))({
+export const issued = decodeIssuedPAT({
   bearer: rawBearer,
   pat: {
-    _tag: "PAT",
     id: "01900000-0000-4000-8000-000000000001",
     shortId: "abcd1234",
     recipientLabel: "Mi agente",

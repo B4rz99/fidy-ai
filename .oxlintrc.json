@@ -986,19 +986,6 @@
     },
     {
       "files": [
-        "apps/cli/test/allowance-entry.ts",
-        "apps/cli/test/canonical/canonical.test-fixture.ts",
-        "apps/cli/test/command/operations.test.ts",
-        "apps/cli/test/credential/runtime.test.ts",
-        "apps/cli/test/login/login.test-fixture.ts",
-        "apps/cli/test/native-store.ts"
-      ],
-      "rules": {
-        "anti-slop-effect/no-manual-tagged-construction": "off"
-      }
-    },
-    {
-      "files": [
         "scripts/dev-browser.test.ts",
         "scripts/document-parsing/workerd-inspector.ts",
         "scripts/infra-performance/canonical-fixture/meter.test-fixture.mjs",

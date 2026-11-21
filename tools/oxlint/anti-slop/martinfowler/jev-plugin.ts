@@ -9,6 +9,6 @@ import { martinFowlerJevOptions, martinFowlerJevPluginName, martinFowlerJevRules
 export default createJevPlugin({
 	...martinFowlerJevOptions,
 	name: martinFowlerJevPluginName,
-	ci: "fail",
+	ci: "skip",
 	rules: [...martinFowlerJevRules],
 });

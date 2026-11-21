@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import type { PerformanceMember } from "../../../apps/server/cloudflare/release-isolation/contract";
 import { serveFixture } from "./bridge";
 import { Config, Effect, Redacted } from "effect";
@@ -30,6 +31,21 @@ const optionalCoreBindings = (
 
   return bindings;
 };
+
+const meterModule = Effect.tryPromise(() =>
+  Bun.build({
+    entrypoints: [fileURLToPath(new URL("./meter.test-fixture.mjs", import.meta.url))],
+    format: "esm",
+    target: "browser",
+    throw: true,
+  })
+).pipe(
+  Effect.flatMap(({ outputs: [meter] }) =>
+    meter === undefined
+      ? Effect.fail(Error("Native meter bundle is empty"))
+      : Effect.tryPromise(() => meter.text())
+  )
+);
 
 const meteredManifest = Effect.fnUntraced(function* (module: string, name: string) {
   const manifest = yield* workerManifest(module);
@@ -75,9 +91,7 @@ const meteredManifest = Effect.fnUntraced(function* (module: string, name: strin
       "production.mjs": manifest.modules["index.mjs"],
       "meter.mjs": {
         type: "esm" as const,
-        contents: yield* Effect.tryPromise(() =>
-          Bun.file(new URL("./meter.test-fixture.mjs", import.meta.url)).text()
-        ),
+        contents: yield* meterModule,
       },
     },
   };

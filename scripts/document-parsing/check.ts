@@ -285,22 +285,29 @@ try {
     )
   );
 
-  const debuggerUrl = await inspectorTarget({ port: inspectorPort, signal: Option.none() });
-  const baselineHeapBytes = await heapUsage({ debuggerUrl, signal: Option.none() });
+  const debuggerUrl = await Effect.runPromise(
+    inspectorTarget({ port: inspectorPort, signal: Option.none() })
+  );
+
+  const baselineHeapBytes = await Effect.runPromise(
+    heapUsage({ debuggerUrl, signal: Option.none() })
+  );
 
   const rows = Array.from(
     { length: 20_000 },
     (_, index) => `2026-01-01,${index},bounded representative row ${index}`
   );
 
-  const csvProfile = await profileWorkerRequest({
-    debuggerUrl,
-    signal: Option.none(),
-    sendRequest: (signal) =>
-      requestStatement(`Date,Amount,Description\n${rows.join("\n")}`, signal, {
-        "content-type": "application/pdf",
-      }),
-  });
+  const csvProfile = await Effect.runPromise(
+    profileWorkerRequest({
+      debuggerUrl,
+      signal: Option.none(),
+      sendRequest: (signal) =>
+        requestStatement(`Date,Amount,Description\n${rows.join("\n")}`, signal, {
+          "content-type": "application/pdf",
+        }),
+    })
+  );
 
   const response = csvProfile.response;
   const parsed = Schema.decodeUnknownSync(ParseResult)(await response.json());
@@ -464,12 +471,14 @@ try {
     "Statement"
   );
 
-  const xlsxProfile = await profileWorkerRequest({
-    debuggerUrl,
-    signal: Option.none(),
-    sendRequest: (signal) =>
-      requestStatement(workbookBytes(representativeWorkbook, "xlsx"), signal),
-  });
+  const xlsxProfile = await Effect.runPromise(
+    profileWorkerRequest({
+      debuggerUrl,
+      signal: Option.none(),
+      sendRequest: (signal) =>
+        requestStatement(workbookBytes(representativeWorkbook, "xlsx"), signal),
+    })
+  );
 
   const xlsxResponse = xlsxProfile.response;
   const parsedXlsx = Schema.decodeUnknownSync(ParseResult)(await xlsxResponse.json());
@@ -486,7 +495,9 @@ try {
     throw new Error("XLSX parsing exceeds the configured Worker CPU limit");
   }
 
-  const retainedHeapBytes = await heapUsage({ debuggerUrl, signal: Option.none() });
+  const retainedHeapBytes = await Effect.runPromise(
+    heapUsage({ debuggerUrl, signal: Option.none() })
+  );
 
   if (retainedHeapBytes > maximumMemoryBytes) {
     throw new Error("Document parser exceeds the Worker memory limit");

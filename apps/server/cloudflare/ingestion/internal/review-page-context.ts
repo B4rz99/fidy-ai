@@ -54,16 +54,17 @@ export const projectContext = ({
     onNone: () => ({}),
     onSome: (receivedAt) => ({ receivedAt: DateTime.formatIso(receivedAt) }),
   }),
-  ...(row.expires_at_ms > transactionNow()
-    ? Option.match(row.excerpt, {
-        onNone: () => ({}),
-        onSome: (text) => ({
-          excerpt: text
-            .replace(/[\p{Cc}\u202a-\u202e\u2066-\u2069]/gu, " ")
-            .replace(/\s+/gu, " ")
-            .trim()
-            .slice(0, maximumReviewExcerptCharacters),
-        }),
-      })
-    : {}),
+  ...Option.match(
+    Option.filter(row.excerpt, () => row.expires_at_ms > transactionNow()),
+    {
+      onNone: () => ({}),
+      onSome: (text) => ({
+        excerpt: text
+          .replace(/[\p{Cc}\u202a-\u202e\u2066-\u2069]/gu, " ")
+          .replace(/\s+/gu, " ")
+          .trim()
+          .slice(0, maximumReviewExcerptCharacters),
+      }),
+    }
+  ),
 });

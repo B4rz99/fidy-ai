@@ -87,18 +87,22 @@ export const reconcileOriginals = Effect.fn(function* (
     yield* sql`SELECT nonce,bucket,object_key FROM original_writers ORDER BY checked_ms,nonce LIMIT ${pageSize}`
   );
 
-  for (const writer of writers) {
-    if (!writer.object_key.startsWith(userPrivateObjectPrefix(user))) {
-      return yield* new PrivateObjectUnavailable();
-    }
+  yield* Effect.forEach(
+    writers,
+    Effect.fnUntraced(function* (writer) {
+      if (!writer.object_key.startsWith(userPrivateObjectPrefix(user))) {
+        return yield* new PrivateObjectUnavailable();
+      }
 
-    const bucket = writer.bucket === "email" ? env.EMAIL_BUCKET : env.STATEMENT_STAGING_BUCKET;
-    const head = yield* Effect.tryPromise(() => bucket.head(writer.object_key));
+      const bucket = writer.bucket === "email" ? env.EMAIL_BUCKET : env.STATEMENT_STAGING_BUCKET;
+      const head = yield* Effect.tryPromise(() => bucket.head(writer.object_key));
 
-    if (head?.customMetadata?.writer === writer.nonce) {
-      yield* sql`DELETE FROM original_writers WHERE nonce=${writer.nonce}`;
-    } else {
-      yield* sql`UPDATE original_writers SET checked_ms=coalesce((SELECT max(checked_ms) FROM original_writers),0)+1 WHERE nonce=${writer.nonce}`;
-    }
-  }
+      if (head?.customMetadata?.writer === writer.nonce) {
+        yield* sql`DELETE FROM original_writers WHERE nonce=${writer.nonce}`;
+      } else {
+        yield* sql`UPDATE original_writers SET checked_ms=coalesce((SELECT max(checked_ms) FROM original_writers),0)+1 WHERE nonce=${writer.nonce}`;
+      }
+    }),
+    { discard: true }
+  );
 });

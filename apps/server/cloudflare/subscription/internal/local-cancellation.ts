@@ -1,4 +1,5 @@
 import { preserveStoreAlarm, withStoreCapacity } from "../../runtime/sqlite/operations";
+import { OutboundHttpRequest } from "../../../src/shell/outbound-http/contract";
 import { Clock, DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { BillingCollectionFailure, type LocalSourceCancellationWork } from "../contract";
@@ -115,10 +116,14 @@ export const dispatchCancellations = Effect.fnUntraced(function* (
 
       const rows = yield* Schema.decodeUnknownEffect(Schema.Array(DueRow))(page);
 
-      for (const row of rows) {
-        yield* sql`UPDATE subscription_cancellations SET next_offer_at_ms=${input.current + offerCooldownMs}
+      yield* Effect.forEach(
+        rows,
+        Effect.fnUntraced(function* (row) {
+          yield* sql`UPDATE subscription_cancellations SET next_offer_at_ms=${input.current + offerCooldownMs}
         WHERE paid_attempt_id=${row.paid_attempt_id}`;
-      }
+        }),
+        { discard: true }
+      );
 
       yield* repairCancellationAlarm(input.storage);
 
@@ -194,7 +199,7 @@ export const observeCancellation = Effect.fnUntraced(function* (
 
   if (source.void_started_at_ms === null) {
     yield* input.http
-      .execute({ _tag: "WompiVoidPaymentSource", sourceId: source.wompi_source_id })
+      .execute(OutboundHttpRequest.WompiVoidPaymentSource({ sourceId: source.wompi_source_id }))
       .pipe(Effect.ignore);
   }
 

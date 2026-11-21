@@ -1,5 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import type { Miniflare } from "miniflare";
@@ -239,7 +239,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
                 cookie: `__Host-fidy_session=${alice.bearer}`,
                 "content-type": "application/json",
               },
-              ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+              ...Option.match(Option.fromUndefinedOr(body), {
+                onNone: () => ({}),
+                onSome: (body) => ({ body: JSON.stringify(body) }),
+              }),
             }
           )
         );
@@ -371,12 +374,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const target = Math.ceil(ceiling * 0.85);
         const chunk = 256 * 1024;
 
-        for (let remaining = target - healthyBytes; remaining > 0; remaining -= chunk) {
-          yield* owner.exec(
-            "INSERT INTO storage_pressure VALUES(zeroblob(?))",
-            Math.min(chunk, remaining)
-          );
-        }
+        const pressure = target - healthyBytes;
+
+        yield* Effect.forEach(
+          Array.from({ length: Math.max(0, Math.ceil(pressure / chunk)) }, (_, index) =>
+            Math.min(chunk, pressure - index * chunk)
+          ),
+          (size) => owner.exec("INSERT INTO storage_pressure VALUES(zeroblob(?))", size),
+          { discard: true }
+        );
 
         const pressureBytes = yield* userStoreBytes(runtime, alice.user);
         expect(pressureBytes).toBeGreaterThanOrEqual(ceiling * 0.8);
@@ -593,34 +599,34 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           shortId: "abcdefgh",
         });
 
-        for (const table of [
-          "source_attestations",
-          "audit_entries",
-          "canonical_request_receipts",
-        ]) {
-          yield* owner.exec(
-            `CREATE TRIGGER fail_capture BEFORE INSERT ON ${table} BEGIN SELECT RAISE(ABORT,'fixture'); END`
-          );
-          const interrupted = yield* patCapture(runtime, bearer, "before-commit");
-          expect(interrupted.status).toBe(503);
-          expect(interrupted.headers.get("fidy-canonical-remaining")).toBeNull();
-          expect(
+        yield* Effect.forEach(
+          ["source_attestations", "audit_entries", "canonical_request_receipts"],
+          Effect.fnUntraced(function* (table) {
             yield* owner.exec(
-              "SELECT (SELECT count(*) FROM transactions) AS movements,(SELECT count(*) FROM transaction_projection_leaf) AS projected,(SELECT count(*) FROM source_attestations) AS sources,(SELECT count(*) FROM commercial_allowance_consumptions) AS spent,(SELECT count(*) FROM audit_entries) AS audited,(SELECT count(*) FROM canonical_request_receipts) AS completed,(SELECT last_used_at_ms FROM pats) AS used"
-            )
-          ).toEqual([
-            {
-              movements: 1,
-              projected: 1,
-              sources: 0,
-              spent: 0,
-              audited: 0,
-              completed: 0,
-              used: null,
-            },
-          ]);
-          yield* owner.exec("DROP TRIGGER fail_capture");
-        }
+              `CREATE TRIGGER fail_capture BEFORE INSERT ON ${table} BEGIN SELECT RAISE(ABORT,'fixture'); END`
+            );
+            const interrupted = yield* patCapture(runtime, bearer, "before-commit");
+            expect(interrupted.status).toBe(503);
+            expect(interrupted.headers.get("fidy-canonical-remaining")).toBeNull();
+            expect(
+              yield* owner.exec(
+                "SELECT (SELECT count(*) FROM transactions) AS movements,(SELECT count(*) FROM transaction_projection_leaf) AS projected,(SELECT count(*) FROM source_attestations) AS sources,(SELECT count(*) FROM commercial_allowance_consumptions) AS spent,(SELECT count(*) FROM audit_entries) AS audited,(SELECT count(*) FROM canonical_request_receipts) AS completed,(SELECT last_used_at_ms FROM pats) AS used"
+              )
+            ).toEqual([
+              {
+                movements: 1,
+                projected: 1,
+                sources: 0,
+                spent: 0,
+                audited: 0,
+                completed: 0,
+                used: null,
+              },
+            ]);
+            yield* owner.exec("DROP TRIGGER fail_capture");
+          }),
+          { discard: true }
+        );
 
         expect((yield* patCapture(runtime, bearer, "before-commit")).status).toBe(201);
         expect(
@@ -722,14 +728,18 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const bad = yield* patCapture(runtime, foreign.slice(0, -1) + "z", key);
         expect(bad.status).toBe(401);
 
-        for (const owner of [first, second]) {
-          expect(
-            yield* owner.exec("SELECT count(*) AS charged FROM commercial_allowance_consumptions")
-          ).toEqual([{ charged: 1 }]);
-          expect(
-            yield* owner.exec("SELECT count(*) AS receipts FROM canonical_request_receipts")
-          ).toEqual([{ receipts: 1 }]);
-        }
+        yield* Effect.forEach(
+          [first, second],
+          Effect.fnUntraced(function* (owner) {
+            expect(
+              yield* owner.exec("SELECT count(*) AS charged FROM commercial_allowance_consumptions")
+            ).toEqual([{ charged: 1 }]);
+            expect(
+              yield* owner.exec("SELECT count(*) AS receipts FROM canonical_request_receipts")
+            ).toEqual([{ receipts: 1 }]);
+          }),
+          { discard: true }
+        );
       })
   );
   test.effect(
@@ -923,14 +933,18 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         );
         expect((yield* history(runtime, bob)).status).toBe(401);
 
-        for (const owner of [aliceStore, bobStore]) {
-          expect(yield* owner.exec("SELECT COUNT(*) AS count FROM audit_entries")).toEqual([
-            { count: 0 },
-          ]);
-          expect(
-            yield* owner.exec("SELECT COUNT(*) AS count FROM canonical_request_buckets")
-          ).toEqual([{ count: 0 }]);
-        }
+        yield* Effect.forEach(
+          [aliceStore, bobStore],
+          Effect.fnUntraced(function* (owner) {
+            expect(yield* owner.exec("SELECT COUNT(*) AS count FROM audit_entries")).toEqual([
+              { count: 0 },
+            ]);
+            expect(
+              yield* owner.exec("SELECT COUNT(*) AS count FROM canonical_request_buckets")
+            ).toEqual([{ count: 0 }]);
+          }),
+          { discard: true }
+        );
       })
   );
 
@@ -1030,7 +1044,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     })
   );
 
-  for (const readiness of ["ready", "rebuilding", "absent"]) {
+  const projectionReadiness = ["ready", "rebuilding", "absent"];
+
+  const testProjectionReadiness = (readiness: (typeof projectionReadiness)[number]): void => {
     test.effect(`reads complete effective facts with a ${readiness} projection`, () =>
       Effect.gen(function* () {
         const create = yield* nativeUserPlatform;
@@ -1100,15 +1116,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect((yield* history(runtime, alice, "?limit=invalid")).status).toBe(400);
         expect((yield* history(runtime, alice, "?limit=2&limit=3")).status).toBe(400);
 
-        if (readiness === "ready") {
+        yield* Effect.gen(function* () {
           yield* exec("UPDATE transaction_projection_leaf SET amount='invalid-money'");
           const malformed = yield* history(runtime);
           expect(malformed.status).toBe(503);
           expect(yield* exec("SELECT count(*) AS total FROM audit_entries")).toEqual([
             { total: 3 },
           ]);
-        }
+        }).pipe(Effect.when(Effect.succeed(readiness === "ready")));
       })
     );
-  }
+  };
+
+  projectionReadiness.forEach(testProjectionReadiness);
 });

@@ -18,9 +18,7 @@ const entranceTargets =
 const ease = "cubic-bezier(0.23, 1, 0.32, 1)";
 
 const supportsScrollMotion = (): boolean =>
-  typeof CSS !== "undefined" &&
-  typeof CSS.supports === "function" &&
-  CSS.supports("animation-timeline: view()");
+  typeof CSS !== "undefined" && "supports" in CSS && CSS.supports("animation-timeline: view()");
 
 export const enter = ({
   element,

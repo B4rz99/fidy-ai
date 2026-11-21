@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { expect } from "vitest";
 import { alice, bob, seed } from "../financial-user-store.test-fixture";
 import { native, nativeBillingPlatform } from "../user-store.test-fixture";
@@ -37,9 +37,10 @@ const setup = Effect.fn(function* (bsuid: string = "CO.13491208655302741918") {
         timestamp: String(Math.floor(owner.now / 1000)),
         type: caption === undefined ? "audio" : "image",
         from_user_id: bsuid,
-        ...(caption === undefined
-          ? { audio: { id: "media_voice_sample" } }
-          : { image: { id: "media_fidy_example_1", caption } }),
+        ...Option.match(Option.fromUndefinedOr(caption), {
+          onNone: () => ({ audio: { id: "media_voice_sample" } }),
+          onSome: (text) => ({ image: { id: "media_fidy_example_1", caption: text } }),
+        }),
       },
       conversation: { business_scoped_user_id: bsuid },
       phone_number_id: portfolio,
@@ -94,9 +95,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           data: {
             status: "needs-review",
             reason: "extraction-unavailable",
-            allowance: { _tag: "Limited", consumed: 1, remaining: 1 },
+            allowance: { consumed: 1, remaining: 1 },
           },
         });
+        expect(result).toHaveProperty("data.allowance._tag", "Limited");
         const replay = yield* deliver("wamid.media1", "original");
         expect(yield* native(() => replay.json())).toEqual(result);
         expect((yield* deliver("wamid.media1", "changed")).status).toBe(409);
@@ -154,16 +156,20 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect((yield* deliver("wamid.voice1")).status).toBe(429);
         yield* grant;
 
-        for (const message of [
-          "wamid.voice1",
-          "wamid.voice1",
-          "wamid.voice2",
-          "wamid.voice3",
-          "wamid.voice4",
-          "wamid.voice5",
-        ]) {
-          expect((yield* deliver(message)).status).toBe(200);
-        }
+        yield* Effect.forEach(
+          [
+            "wamid.voice1",
+            "wamid.voice1",
+            "wamid.voice2",
+            "wamid.voice3",
+            "wamid.voice4",
+            "wamid.voice5",
+          ],
+          Effect.fnUntraced(function* (message) {
+            expect((yield* deliver(message)).status).toBe(200);
+          }),
+          { discard: true }
+        );
 
         expect((yield* deliver("wamid.voice6")).status).toBe(429);
 

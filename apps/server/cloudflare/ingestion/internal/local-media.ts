@@ -7,6 +7,7 @@ import { AllowanceMeter, freeAllowanceLimits } from "../../../src/core/quotas/co
 import { allowancePeriod, projectQuotaStatus } from "../../../src/core/quotas/operations";
 import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
+import { ConsentSubject } from "../../../src/shell/consent/contract";
 import { allowanceConsumptionCount } from "../../quotas/operations";
 import {
   preserveStoreAlarm,
@@ -46,7 +47,7 @@ const failure = (code: string, status: number): Response =>
       },
       next: [],
     },
-    { status, headers: { ...noStore, ...(code === "rate_limited" ? { "retry-after": "1" } : {}) } }
+    { status, headers: code === "rate_limited" ? { ...noStore, "retry-after": "1" } : noStore }
   );
 
 const standing = Effect.fn(function* (input: Inbound, current: number) {
@@ -54,7 +55,7 @@ const standing = Effect.fn(function* (input: Inbound, current: number) {
     sql = yield* SqliteClient;
 
   const live = protectConsentStatement({
-    subject: { _tag: "User", userId: user },
+    subject: ConsentSubject.User({ userId: user }),
     requirement: "active",
     statement: {
       sql: "SELECT 1 FROM users WHERE id=? AND whatsapp_portfolio_id=? AND whatsapp_bsuid=? AND whatsapp_verified_at_ms<=? AND NOT EXISTS(SELECT 1 FROM erasure_requests)",
@@ -276,9 +277,13 @@ export const releaseDueMedia = Effect.fn(function* (
     sql`UPDATE media_capacity_receipts SET state='discarding' WHERE id IN(SELECT id FROM media_capacity_receipts WHERE ${filter} ORDER BY due_ms LIMIT ${pageSize}) RETURNING id`
   );
 
-  for (const row of work) {
-    const id = yield* Schema.decodeUnknownEffect(Schema.String)(row.id);
-    yield* updateSharedCapacity({ directory, purpose: "media" }, id, "Release");
-    yield* sql`DELETE FROM media_capacity_receipts WHERE id=${id} AND state='discarding'`;
-  }
+  yield* Effect.forEach(
+    work,
+    Effect.fnUntraced(function* (row) {
+      const id = yield* Schema.decodeUnknownEffect(Schema.String)(row.id);
+      yield* updateSharedCapacity({ directory, purpose: "media" }, id, "Release");
+      yield* sql`DELETE FROM media_capacity_receipts WHERE id=${id} AND state='discarding'`;
+    }),
+    { discard: true }
+  );
 });

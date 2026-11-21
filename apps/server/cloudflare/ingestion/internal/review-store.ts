@@ -78,18 +78,19 @@ export const projectReviewSummary = ({
     );
 
     return yield* Schema.decodeEffect(Schema.toCodecJson(ReviewSummary))({
-      ...(preview[0] === undefined
-        ? {}
-        : {
-            preview: {
-              counterparty: preview[0].counterparty,
-              amount: preview[0].amount,
-              ...Option.match(preview[0].currency, {
-                onNone: () => ({}),
-                onSome: (currency) => ({ currency }),
-              }),
-            },
-          }),
+      ...Option.match(Option.fromUndefinedOr(preview[0]), {
+        onNone: () => ({}),
+        onSome: (first) => ({
+          preview: {
+            counterparty: first.counterparty,
+            amount: first.amount,
+            ...Option.match(first.currency, {
+              onNone: () => ({}),
+              onSome: (currency) => ({ currency }),
+            }),
+          },
+        }),
+      }),
       revision: row.revision,
       id: row.id,
       source: row.source,

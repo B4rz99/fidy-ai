@@ -52,7 +52,7 @@ const codeTheme = {
 <script>
   const codePanels = document.querySelectorAll<HTMLElement>(".reference-json pre");
 
-  const updateOverflow = (panel: HTMLElement): void => {
+  const updateOverflow = (panel: Element): void => {
     const footer = panel
       .closest(".reference-json")
       ?.querySelector<HTMLElement>(".reference-json-footer");
@@ -67,9 +67,7 @@ const codeTheme = {
   };
 
   const resizeObserver = new ResizeObserver((entries) => {
-    entries.forEach(({ target }) => {
-      if (target instanceof HTMLElement) updateOverflow(target);
-    });
+    entries.forEach(({ target }) => updateOverflow(target));
   });
 
   codePanels.forEach((panel) => {

@@ -65,7 +65,7 @@ import {
   isRefundWork as recognizesRefund,
 } from "./internal/refund-workflow";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { Cause, Clock, Context, Effect, Layer, Option, Result, Schema } from "effect";
+import { Cause, Clock, Context, Effect, Layer, Match, Option, Result, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import {
   makeAccessSigningKeysOutboundHttp,
@@ -457,14 +457,17 @@ const workflowId = Effect.fnUntraced(function* (
     | typeof LocalRefundWork.Type
     | typeof WompiBillingEvent.Type
 ) {
-  switch (work._tag) {
-    case "WompiBillingEvent":
-      return yield* callbackWorkflowId(work);
-    case "RunUserRefund":
-      return "refund-" + work.userId + "-" + work.refundAttemptId + "-" + work.verification;
-    case "CollectUserBillingAttempt":
-      return "collect-" + work.userId + "-" + work.attemptId;
-  }
+  return yield* Match.value(work).pipe(
+    Match.tagsExhaustive({
+      WompiBillingEvent: (work) => callbackWorkflowId(work),
+      RunUserRefund: (work) =>
+        Effect.succeed(
+          "refund-" + work.userId + "-" + work.refundAttemptId + "-" + work.verification
+        ),
+      CollectUserBillingAttempt: (work) =>
+        Effect.succeed("collect-" + work.userId + "-" + work.attemptId),
+    })
+  );
 });
 
 export const offerNativeBillingWork = Effect.fn(function* (

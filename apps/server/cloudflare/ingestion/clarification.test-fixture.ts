@@ -71,14 +71,14 @@ const checkCompleted = Effect.fnUntraced(function* (
     )
   ).toEqual([{ outcome: "CanonicalOperationFailed" }, { outcome: "Succeeded" }]);
 
-  if (batched) {
+  yield* Effect.gen(function* () {
     expect(
       yield* owner.exec("SELECT operation,outcome FROM hosted_batch_child_audit ORDER BY position")
     ).toEqual([
       { operation: "ingestion.skipNeedsReviewItem", outcome: "success" },
       { operation: "dashboard.initializeDashboard", outcome: "success" },
     ]);
-  }
+  }).pipe(Effect.when(Effect.succeed(batched)));
 });
 
 export const completeHostedClarification = Effect.fnUntraced(function* (

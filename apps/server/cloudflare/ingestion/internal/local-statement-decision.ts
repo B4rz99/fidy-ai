@@ -5,6 +5,7 @@ import { Clock, Effect, Option, Schema } from "effect";
 import { UserContext, type UserId } from "../../../src/core/identity/contract";
 import type { TransactionExtraction } from "../../../src/core/transactions/contract";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
+import { ConsentSubject } from "../../../src/shell/consent/contract";
 import { prepareSourcedCapture } from "../../transactions/operations";
 import { prepareLocalWrite } from "../../canonical-admission/operations";
 import { CanonicalAdmissionUnavailable } from "../../canonical-admission/contract";
@@ -44,7 +45,7 @@ const eligible = Effect.fn(function* (
     : [];
 
   const guard = protectConsentStatement({
-    subject: { _tag: "User", userId: user },
+    subject: ConsentSubject.User({ userId: user }),
     requirement: "active",
     statement: {
       sql: `SELECT id FROM statement_submissions WHERE user_id=? AND id=? AND clarification_state='awaiting' AND clarification_expires_at_ms>? AND (${predicate})`,

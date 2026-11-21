@@ -1,4 +1,5 @@
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
+import { OutboundHttpRequest } from "../../../src/shell/outbound-http/contract";
 import {
   Config,
   Context,
@@ -117,17 +118,18 @@ const makeCreateTransaction = (
   Effect.fn("Wompi.createTransaction")(
     function* (input) {
       const response = yield* outboundHttp
-        .execute({
-          _tag: "WompiCreateTransaction",
-          body: {
-            amountInCents: input.amountInCents,
-            currency: input.currency,
-            billingEmail: input.billingEmail,
-            sourceId: input.sourceId,
-            reference: input.reference,
-            method: input.method,
-          },
-        })
+        .execute(
+          OutboundHttpRequest.WompiCreateTransaction({
+            body: {
+              amountInCents: input.amountInCents,
+              currency: input.currency,
+              billingEmail: input.billingEmail,
+              sourceId: input.sourceId,
+              reference: input.reference,
+              method: input.method,
+            },
+          })
+        )
         .pipe(Effect.timeout("14 seconds"));
 
       if (
@@ -158,10 +160,7 @@ const makeFindTransaction = (
   Effect.fn("Wompi.findTransaction")(
     function* (transactionId) {
       const response = yield* outboundHttp
-        .execute({
-          _tag: "WompiFindTransaction",
-          transactionId,
-        })
+        .execute(OutboundHttpRequest.WompiFindTransaction({ transactionId }))
         .pipe(Effect.timeout("14 seconds"));
 
       if (

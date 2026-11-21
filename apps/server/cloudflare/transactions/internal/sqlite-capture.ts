@@ -29,7 +29,7 @@ export const localTransactionRefusal = ({
   status,
   outcome: code,
   body: {
-    error: { code, message, ...(code === "validation_failed" ? { fields: [] } : {}) },
+    error: code === "validation_failed" ? { code, message, fields: [] } : { code, message },
     next: [],
   },
 });
@@ -38,9 +38,12 @@ const captureDecisions = (input: CreateTransactionInput): Readonly<Record<string
   money: true,
   direction: true,
   occurredAt: true,
-  ...(Option.isSome(input.categoryId) ? { categoryId: true } : {}),
-  ...(Option.isSome(input.counterparty) ? { counterparty: true } : {}),
-  ...(Option.isSome(input.notes) ? { notes: true } : {}),
+  ...Option.match(input.categoryId, { onNone: () => ({}), onSome: () => ({ categoryId: true }) }),
+  ...Option.match(input.counterparty, {
+    onNone: () => ({}),
+    onSome: () => ({ counterparty: true }),
+  }),
+  ...Option.match(input.notes, { onNone: () => ({}), onSome: () => ({ notes: true }) }),
 });
 
 type CaptureSource = Readonly<{ context: UserContext; revision: string }> &

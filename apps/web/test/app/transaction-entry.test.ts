@@ -14,6 +14,7 @@ import { SessionContext } from "@/session/session-context";
 import { transactionEntryConsent } from "@/session/transaction-entry";
 import { initialApplicationValues } from "@/app/initial-values";
 import { createWebRouter } from "@/app/routes";
+import { preloadDashboardView } from "@/features/dashboard/code";
 
 const observedAt = Date.parse("2026-11-08T12:00:00Z");
 
@@ -46,6 +47,7 @@ beforeAll(() =>
       yield* Effect.tryPromise(() => import("@/app/transactions-page"));
       yield* Effect.tryPromise(() => TransactionListFeature.preload());
       yield* Effect.tryPromise(() => PrivacyTransactionFeature.preload());
+      yield* Effect.tryPromise(() => preloadDashboardView());
     })
   )
 );

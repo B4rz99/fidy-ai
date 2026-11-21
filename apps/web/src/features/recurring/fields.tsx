@@ -5,6 +5,7 @@ import { CalendarField } from "@/ui/components/calendar-field";
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-dropdown";
 import { usePlanFieldAria, usePlanFieldEdited } from "./plan-validation";
+import { currencyChoices } from "@/ui/currency-choices";
 
 type ChoiceProps = Readonly<{
   name: string;
@@ -95,7 +96,7 @@ export const CurrencyField = ({ initial }: Readonly<{ initial: string }>): JSX.E
         id="recurring-currency"
         label="Moneda"
         value={value}
-        options={Currency.literals.map((currency) => ({ value: currency, label: currency }))}
+        options={currencyChoices(Currency.literals)}
         disabled={false}
         width="full"
         onChange={setValue}

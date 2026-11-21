@@ -1,16 +1,16 @@
-import { Clock, Deferred, Effect, Layer, Option } from "effect";
+import { Array as Arr, Clock, Deferred, Effect, Layer, Option } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
 import { expect, vi } from "vitest";
-import { readFreshQuery } from "./fresh-query";
-import { makeFidyClient } from "./client";
+import { readFreshQuery } from "@/transport/fresh-query";
+import { makeFidyClient } from "@/transport/client";
 import {
   revalidateWorkspaceQuery,
   workspaceCategoriesQuery,
   workspaceMetadataInitialValue,
   workspaceProfileQuery,
-} from "./workspace-query";
+} from "@/transport/workspace-query";
 
 const metadataResponse = (label: string): Response =>
   new Response(
@@ -203,10 +203,14 @@ it.live("keeps mounted taxonomy atoms stable through collection and an equivalen
       yield* AtomRegistry.getResult(registry, view);
       expect(reads).toBe(1);
 
-      for (let turn = 0; turn < 5; turn += 1) {
-        yield* Effect.sleep("20 millis");
-        Bun.gc(true);
-      }
+      yield* Effect.forEach(
+        Arr.range(0, 4),
+        Effect.fnUntraced(function* () {
+          yield* Effect.sleep("20 millis");
+          Bun.gc(true);
+        }),
+        { discard: true }
+      );
 
       const now = yield* Clock.currentTimeMillis;
       vi.spyOn(Date, "now").mockReturnValue(now + 6000);

@@ -1,13 +1,11 @@
-// @vitest-environment jsdom
-
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Schema } from "effect";
+import { Cause, Effect, Exit, Option, Schema } from "effect";
 import { afterEach, beforeEach, vi } from "vitest";
 import {
   installBrowserDefectListeners,
   makeBrowserDefectReporter,
   observeBrowserDecode,
-} from "./browser-defects";
+} from "@/transport/browser-defects";
 
 const diagnosticConsole = console;
 
@@ -41,7 +39,7 @@ describe("browser defect diagnostics", () => {
 
         const { installBrowserDefectListeners: install, reportBrowserDefect: report } =
           yield* Effect.tryPromise({
-            try: () => import("./browser-defects"),
+            try: () => import("@/transport/browser-defects"),
             catch: () => "test_module_unavailable" as const,
           });
 
@@ -114,7 +112,7 @@ describe("browser defect diagnostics", () => {
       expect(originalError._tag).toBe("Some");
       expect(observedError._tag).toBe("Some");
 
-      if (originalError._tag !== "Some" || observedError._tag !== "Some") return;
+      if (!Option.isSome(originalError) || !Option.isSome(observedError)) return;
       expect(observedError.value).toBe(originalError.value);
       expect(diagnosticConsole.info).toHaveBeenCalledExactlyOnceWith("fidy.browser.defect", {
         component: "browser",

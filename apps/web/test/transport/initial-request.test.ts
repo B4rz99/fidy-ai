@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { Effect, Exit, Option } from "effect";
-import { beginInitialBrowserRequest, initialRequestFetch } from "./initial-request";
-import { loadBrowserSessionEntry } from "./session-entry";
+import { beginInitialBrowserRequest, initialRequestFetch } from "@/transport/initial-request";
+import { loadBrowserSessionEntry } from "@/transport/session-entry";
 
 afterEach(() => vi.unstubAllGlobals());
 

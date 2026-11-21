@@ -2,8 +2,8 @@ import { Deferred, Effect, Fiber, Layer } from "effect";
 import { Atom, AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
 import { expect, vi } from "vitest";
-import { makeFreshQuery, readFreshQuery } from "./fresh-query";
-import { retireQueryLifetime } from "./query-lifetime";
+import { freshQuery, readFreshQuery } from "@/transport/fresh-query";
+import { retireQueryLifetime } from "@/transport/query-lifetime";
 
 it.live(
   "strict recovery starts a new loader and accepts equal fresh facts instead of an older pending read",
@@ -14,7 +14,7 @@ it.live(
       let reads = 0;
       let finished = false;
 
-      const query = makeFreshQuery({
+      const query = freshQuery({
         runtime: Atom.runtime(Layer.empty),
         load: Effect.gen(function* () {
           reads += 1;
@@ -58,7 +58,7 @@ it.live(
     Effect.gen(function* () {
       let failed = false;
 
-      const query = makeFreshQuery({
+      const query = freshQuery({
         runtime: Atom.runtime(Layer.empty),
         load: Effect.suspend(() =>
           failed ? Effect.fail("refused") : Effect.succeed("same facts")
@@ -83,7 +83,7 @@ it.live("superseded loader completion cannot certify the requested recovery", ()
     const held = yield* Deferred.make<void>();
     let reads = 0;
 
-    const query = makeFreshQuery({
+    const query = freshQuery({
       runtime: Atom.runtime(Layer.empty),
       load: Effect.gen(function* () {
         reads += 1;
@@ -110,7 +110,7 @@ it.live("a replaced authentication registry never adopts the prior registry's co
   Effect.gen(function* () {
     const held = yield* Deferred.make<void>();
 
-    const query = makeFreshQuery({
+    const query = freshQuery({
       runtime: Atom.runtime(Layer.empty),
       load: Deferred.await(held),
     });
@@ -136,7 +136,7 @@ it.live(
   "runtime acquisition failure settles strict recovery without claiming a loader success",
   () =>
     Effect.gen(function* () {
-      const query = makeFreshQuery({
+      const query = freshQuery({
         runtime: Atom.runtime(Layer.effectDiscard(Effect.fail("unavailable"))),
         load: Effect.succeed("facts"),
       });
@@ -156,7 +156,7 @@ it.live("logical retirement settles pending strict reads before registry disposa
     const held = yield* Deferred.make<void>();
     let reads = 0;
 
-    const query = makeFreshQuery({
+    const query = freshQuery({
       runtime: Atom.runtime(Layer.empty),
       load: Effect.gen(function* () {
         reads += 1;
@@ -189,7 +189,7 @@ it.live("an interrupted fresh loader cannot certify recovery from retained succe
   Effect.gen(function* () {
     let interrupted = false;
 
-    const query = makeFreshQuery({
+    const query = freshQuery({
       runtime: Atom.runtime(Layer.empty),
       load: Effect.suspend(() =>
         interrupted ? Effect.interrupt : Effect.succeed("retained facts")

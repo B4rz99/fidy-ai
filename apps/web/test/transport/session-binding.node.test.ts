@@ -1,4 +1,3 @@
-// @vitest-environment node
 import { Context, Deferred, Effect, Exit, Fiber, Layer } from "effect";
 import {
   FetchHttpClient,
@@ -10,11 +9,14 @@ import {
 import { expect, it } from "@effect/vitest";
 import { vi } from "vitest";
 import { TestClock } from "effect/testing";
-import { bindBrowserSession, coordinateBrowserRequests } from "./session-binding";
-import { loadBrowserSessionBinding } from "./session-entry";
-import { browserHttpClientLayer } from "./browser-http-policy";
+import { bindBrowserSession, coordinateBrowserRequests } from "@/transport/session-binding";
+import { loadBrowserSessionBinding } from "@/transport/session-entry";
+import { browserHttpClientLayer } from "@/transport/browser-http-policy";
 
-for (const interrupted of [false, true]) {
+const httpClientOf = (context: Context.Context<HttpClient.HttpClient>): HttpClient.HttpClient =>
+  Context.get(context, HttpClient.HttpClient);
+
+[false, true].forEach((interrupted) => {
   it.effect(
     `respects retry pacing and settles after ${interrupted ? "cancellation" : "completion"}`,
     () => {
@@ -65,21 +67,19 @@ for (const interrupted of [false, true]) {
         yield* TestClock.adjust("1 millis");
         expect(attempts).toBe(1);
 
-        if (interrupted) {
-          yield* Fiber.interrupt(work);
-          yield* TestClock.adjust("1 second");
-          expect(attempts).toBe(1);
-        } else {
-          yield* TestClock.adjust("1 second");
-          expect((yield* Fiber.join(work)).status).toBe(200);
-          expect(attempts).toBe(2);
-        }
+        if (interrupted) yield* Fiber.interrupt(work);
+        yield* TestClock.adjust("1 second");
+        const settled = yield* Fiber.await(work);
+        expect(Exit.isSuccess(settled) ? settled.value.status : "interrupted").toBe(
+          interrupted ? "interrupted" : 200
+        );
+        expect(attempts).toBe(interrupted ? 1 : 2);
       }).pipe(Effect.scoped);
     }
   );
-}
+});
 
-for (const aborted of [false, true]) {
+[false, true].forEach((aborted) => {
   it.effect(
     `shares request capacity across clients and ${aborted ? "cancels queued work on logout" : "releases queued work"}`,
     () => {
@@ -117,7 +117,7 @@ for (const aborted of [false, true]) {
                 browserHttpClientLayer("canonical", "https://api.test.fidyapp.com")
               ),
             })
-          ).pipe(Effect.map((context) => Context.get(context, HttpClient.HttpClient)))
+          ).pipe(Effect.map(httpClientOf))
         );
 
         const first = clients[0];
@@ -147,7 +147,7 @@ for (const aborted of [false, true]) {
       }).pipe(Effect.scoped);
     }
   );
-}
+});
 
 it.effect("retires a streamed response and refuses further requests from the old session", () => {
   const lifetime = new AbortController();
@@ -208,11 +208,11 @@ it.effect("retires a streamed response and refuses further requests from the old
   }).pipe(Effect.scoped);
 });
 
-for (const scenario of [
+[
   { binding: "session-a", status: 200, rechecks: 0 },
   { binding: "session-a", status: 401, rechecks: 1 },
   { binding: "none", status: 401, rechecks: 0 },
-]) {
+].forEach((scenario) => {
   it.effect(
     `handles ${scenario.status} for ${scenario.binding} without replaying a mutation or changing request identity`,
     () => {
@@ -258,7 +258,7 @@ for (const scenario of [
       }).pipe(Effect.scoped);
     }
   );
-}
+});
 
 it.effect("bootstraps a session identity and signed-out identity through credentialed HTTP", () => {
   const fetch = vi

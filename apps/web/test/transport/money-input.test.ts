@@ -1,6 +1,11 @@
 import { BigDecimal, Option } from "effect";
 import { expect, it } from "vitest";
-import { formatMoneyInput, moneyInputError, moneyInputHint, parseMoneyInput } from "./money-input";
+import {
+  formatMoneyInput,
+  moneyInputError,
+  moneyInputHint,
+  parseMoneyInput,
+} from "@/transport/money-input";
 
 it("interprets Colombian thousands grouping as whole pesos", () => {
   const money = Option.getOrThrow(parseMoneyInput({ text: "12.500", currency: "COP" }));

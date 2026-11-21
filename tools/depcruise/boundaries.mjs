@@ -13,7 +13,7 @@ const compositionRoots = new Set([
   "../cli/src/direct-client/runtime.ts",
   "../cli/test/direct-client/resources.test.ts",
   "../web/src/transport/browser-http-policy.ts",
-  "../web/src/transport/client.test.ts",
+  "../web/test/transport/client.node.test.ts",
   "../../scripts/pro/runtime.ts",
   "src/client.ts",
   "src/browser-bootstrap.ts",

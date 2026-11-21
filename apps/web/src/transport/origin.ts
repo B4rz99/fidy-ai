@@ -1,9 +1,10 @@
+import { Predicate } from "effect";
 import { installedOrigins, isHttpOrigin } from "@fidy/server/browser-transport";
 
 const originConfigurationMessage = "VITE_API_ORIGIN must be an HTTP origin";
 
 export const parseApiOrigin = (configured: unknown): string => {
-  if (typeof configured !== "string" || configured.length === 0) {
+  if (!Predicate.isString(configured) || configured.length === 0) {
     throw new Error(originConfigurationMessage);
   }
 

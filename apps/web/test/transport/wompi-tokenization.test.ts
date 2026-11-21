@@ -6,7 +6,7 @@ import {
   CardTokenizationFailed,
   type WompiFetch,
   tokenizeCardWithWompi,
-} from "./wompi-tokenization";
+} from "@/transport/wompi-tokenization";
 
 const holdFetch = (signal: AbortSignal): Promise<Response> =>
   Effect.runPromise(Effect.never, { signal });
@@ -281,11 +281,7 @@ describe("Wompi browser tokenization", () => {
       const exit = yield* Fiber.join(fiber);
       expect(Exit.isFailure(exit)).toBe(true);
 
-      if (Exit.isFailure(exit)) {
-        expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toBeInstanceOf(
-          CardTokenizationFailed
-        );
-      }
+      expect(Exit.findErrorOption(exit)).toEqual(Option.some(new CardTokenizationFailed()));
 
       expect(Option.getOrThrow(signal).aborted).toBe(true);
     }).pipe(Effect.scoped)
@@ -333,11 +329,7 @@ describe("Wompi browser tokenization", () => {
         const exit = yield* Fiber.join(fiber);
         expect(Exit.isFailure(exit)).toBe(true);
 
-        if (Exit.isFailure(exit)) {
-          expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toBeInstanceOf(
-            CardTokenizationFailed
-          );
-        }
+        expect(Exit.findErrorOption(exit)).toEqual(Option.some(new CardTokenizationFailed()));
 
         expect(cancelled).toBe(true);
         expect(response.body?.locked).toBe(false);

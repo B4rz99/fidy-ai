@@ -1,9 +1,7 @@
-// @vitest-environment jsdom
-
 import { Option } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
 import { PATLifetimeDays, PATRecipientLabel, PATScopes } from "@/transport/client";
-import { preservePATDraft, resumePATDraft } from "./reauthentication-draft";
+import { preservePATDraft, resumePATDraft } from "@/features/pats/reauthentication-draft";
 
 const userId = "10000000-0000-4000-8000-000000000001";
 

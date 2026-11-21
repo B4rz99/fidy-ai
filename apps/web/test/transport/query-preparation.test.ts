@@ -2,7 +2,7 @@ import { Deferred, Effect, Option } from "effect";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
 import { expect, vi } from "vitest";
-import { prepareQuery } from "./query-preparation";
+import { prepareQuery } from "@/transport/query-preparation";
 
 it.live("fresh entry rereads a retained result and leaves failures available to the view", () =>
   Effect.gen(function* () {

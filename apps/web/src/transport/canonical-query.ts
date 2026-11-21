@@ -1,66 +1,74 @@
-import { Cause, Option } from "effect";
+import { Cause, Data, Option } from "effect";
 import { AsyncResult } from "effect/reactivity";
 
-export type CanonicalQueryFailure<E> =
-  | Readonly<{ _tag: "DeclaredFailure"; error: E }>
-  | Readonly<{ _tag: "BoundaryFailure" }>
-  | Readonly<{ _tag: "Interrupted" }>;
+export type CanonicalQueryFailure<E> = Data.TaggedEnum<{
+  DeclaredFailure: { readonly error: E };
+  BoundaryFailure: {};
+  Interrupted: {};
+}>;
 
-export type CanonicalQueryState<A, E> =
-  | Readonly<{ _tag: "Initial"; waiting: boolean }>
-  | Readonly<{
-      _tag: "Ready";
-      value: A;
-      waiting: boolean;
-      refreshFailure: Option.Option<CanonicalQueryFailure<E>>;
-    }>
-  | Readonly<{
-      _tag: "Failure";
-      failure: CanonicalQueryFailure<E>;
-      waiting: boolean;
-    }>;
+const failures = <E>(): Data.TaggedEnum.Constructor<CanonicalQueryFailure<E>> =>
+  Data.taggedEnum<CanonicalQueryFailure<E>>();
+
+export type CanonicalQueryState<A, E> = Data.TaggedEnum<{
+  Initial: { readonly waiting: boolean };
+  Ready: {
+    readonly value: A;
+    readonly waiting: boolean;
+    readonly refreshFailure: Option.Option<CanonicalQueryFailure<E>>;
+  };
+  Failure: {
+    readonly failure: CanonicalQueryFailure<E>;
+    readonly waiting: boolean;
+  };
+}>;
+
+const states = <A, E>(): Data.TaggedEnum.Constructor<CanonicalQueryState<A, E>> =>
+  Data.taggedEnum<CanonicalQueryState<A, E>>();
 
 const classifyFailure = <A, E>(result: AsyncResult.Failure<A, E>): CanonicalQueryFailure<E> => {
-  if (Cause.hasInterruptsOnly(result.cause)) return { _tag: "Interrupted" };
+  const failure = failures<E>();
+
+  if (Cause.hasInterruptsOnly(result.cause)) return failure.Interrupted();
 
   if (Cause.hasDies(result.cause) || Cause.hasInterrupts(result.cause)) {
-    return { _tag: "BoundaryFailure" };
+    return failure.BoundaryFailure();
   }
 
   const error: Option.Option<E> = Cause.findErrorOption(result.cause);
 
   return Option.match(error, {
-    onNone: () => ({ _tag: "BoundaryFailure" }),
-    onSome: (error) => ({ _tag: "DeclaredFailure", error }),
+    onNone: () => failure.BoundaryFailure(),
+    onSome: (error) => failure.DeclaredFailure({ error }),
   });
 };
 
 export const presentCanonicalQuery = <A, E>(
   result: AsyncResult.AsyncResult<A, E>
-): CanonicalQueryState<A, E> =>
-  AsyncResult.match(result, {
-    onInitial: (initial) => ({ _tag: "Initial", waiting: initial.waiting }),
-    onSuccess: (success) => ({
-      _tag: "Ready",
-      value: success.value,
-      waiting: success.waiting,
-      refreshFailure: Option.none(),
-    }),
-    onFailure: (failure) => {
+): CanonicalQueryState<A, E> => {
+  const state = states<A, E>();
+
+  return AsyncResult.match(result, {
+    onInitial: (initial): CanonicalQueryState<A, E> => state.Initial({ waiting: initial.waiting }),
+    onSuccess: (success): CanonicalQueryState<A, E> =>
+      state.Ready({
+        value: success.value,
+        waiting: success.waiting,
+        refreshFailure: Option.none<CanonicalQueryFailure<E>>(),
+      }),
+    onFailure: (failure): CanonicalQueryState<A, E> => {
       const classified = classifyFailure(failure);
 
       return Option.match(failure.previousSuccess, {
-        onNone: () => ({
-          _tag: "Failure" as const,
-          failure: classified,
-          waiting: failure.waiting,
-        }),
-        onSome: (previous) => ({
-          _tag: "Ready" as const,
-          value: previous.value,
-          waiting: failure.waiting,
-          refreshFailure: Option.some(classified),
-        }),
+        onNone: (): CanonicalQueryState<A, E> =>
+          state.Failure({ failure: classified, waiting: failure.waiting }),
+        onSome: (previous): CanonicalQueryState<A, E> =>
+          state.Ready({
+            value: previous.value,
+            waiting: failure.waiting,
+            refreshFailure: Option.some(classified),
+          }),
       });
     },
   });
+};

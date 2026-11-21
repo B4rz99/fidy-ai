@@ -1,10 +1,8 @@
-// @vitest-environment jsdom
-
 import { it as effectIt } from "@effect/vitest";
 import { Clock, Effect, Exit, Fiber, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, expect, it, vi } from "vitest";
-import { startDaviplataWithWompi } from "./wompi-daviplata";
+import { startDaviplataWithWompi } from "@/transport/wompi-daviplata";
 
 const approvedUrl = "https://sandbox.wompi.co/synthetic/send";
 
@@ -144,7 +142,9 @@ it("separates approved-submission recovery from OTP actions and refuses recovery
       challenge.dispose();
       expect((yield* challenge.retrySubmission()).status).toBe("refused");
 
-      if (approval.status === "approved") expect(() => Redacted.value(approval.token)).toThrow();
+      expect(() =>
+        Redacted.value(approval.status === "approved" ? approval.token : Redacted.make("absent"))
+      ).toThrow();
     })
   ));
 
@@ -189,23 +189,20 @@ it.each([
         provider.mockResolvedValueOnce(otpResponse(status, foreignBearer, foreignPk));
         const started = yield* Effect.exit(start(provider));
 
-        if (stage === "SEND") {
-          expect(Exit.isFailure(started)).toBe(true);
-        } else {
-          if (!Exit.isSuccess(started)) {
-            throw new Error("Expected the legitimate initial send to succeed");
-          }
-
-          const challenge = started.value;
-          const otp = Redacted.make("574829");
-          expect(yield* challenge.confirm(otp)).toEqual({ status: "uncertain" });
-          expect(() => Redacted.value(otp)).toThrow();
-          const subsequentOtp = Redacted.make("111111");
-          expect(yield* challenge.confirm(subsequentOtp)).toEqual({ status: "refused" });
-          expect(yield* challenge.resend()).toEqual({ status: "refused" });
-          expect(yield* challenge.retrySubmission()).toEqual({ status: "refused" });
-          expect(() => Redacted.value(subsequentOtp)).toThrow();
-        }
+        expect(Exit.isFailure(started)).toBe(stage === "SEND");
+        yield* Exit.match(started, {
+          onFailure: () => Effect.void,
+          onSuccess: Effect.fnUntraced(function* (challenge) {
+            const otp = Redacted.make("574829");
+            expect(yield* challenge.confirm(otp)).toEqual({ status: "uncertain" });
+            expect(() => Redacted.value(otp)).toThrow();
+            const subsequentOtp = Redacted.make("111111");
+            expect(yield* challenge.confirm(subsequentOtp)).toEqual({ status: "refused" });
+            expect(yield* challenge.resend()).toEqual({ status: "refused" });
+            expect(yield* challenge.retrySubmission()).toEqual({ status: "refused" });
+            expect(() => Redacted.value(subsequentOtp)).toThrow();
+          }),
+        });
 
         yield* Effect.yieldNow;
         expect(provider).toHaveBeenCalledTimes(stage === "SEND" ? 2 : 3);
@@ -236,15 +233,12 @@ it("fingerprints one-use authority with SHA-256, clears borrowed digest buffers,
 
       for (const [algorithm, bytes] of digest.mock.calls) {
         expect(algorithm).toBe("SHA-256");
-        expect(ArrayBuffer.isView(bytes)).toBe(true);
-
-        if (ArrayBuffer.isView(bytes)) {
-          expect(
+        expect(
+          ArrayBuffer.isView(bytes) &&
             new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength).every(
               (byte) => byte === 0
             )
-          ).toBe(true);
-        }
+        ).toBe(true);
       }
 
       expect(Object.keys(approval).sort()).toEqual(["status", "token"]);

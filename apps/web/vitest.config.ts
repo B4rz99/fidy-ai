@@ -18,7 +18,12 @@ export default defineConfig({
         test: {
           name: "node",
           environment: "node",
-          include: ["src/**/*.test.ts", "cloudflare/**/*.test.ts", "scripts/**/*.test.ts"],
+          include: [
+            "src/**/*.test.ts",
+            "cloudflare/**/*.test.ts",
+            "scripts/**/*.test.ts",
+            "test/**/*.node.test.ts",
+          ],
         },
       },
       {
@@ -27,6 +32,7 @@ export default defineConfig({
           name: "dom",
           environment: "jsdom",
           include: ["test/**/*.test.ts"],
+          exclude: ["test/**/*.node.test.ts"],
         },
       },
     ],

@@ -1,14 +1,17 @@
-import { DateTime, Effect, Layer, Option, Schema } from "effect";
+import { Data, DateTime, Effect, Layer, Option, Predicate, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
 import { afterEach, expect, vi } from "vitest";
 import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
-import { makeFreshQuery } from "@/transport/fresh-query";
+import { freshQuery } from "@/transport/fresh-query";
 import { makeFidyClient } from "@/transport/client";
-import { type TransactionCorrections, makeTransactionCorrections } from "./corrections";
-import { transactionFirstPage } from "./query";
-import { type HistoryState, transactionHistory } from "./history";
+import {
+  type TransactionCorrections,
+  transactionCorrections,
+} from "@/features/transactions/corrections";
+import { transactionFirstPage } from "@/features/transactions/query";
+import { type HistoryState, transactionHistory } from "@/features/transactions/history";
 
 const firstId = "25000000-0000-4000-8000-000000000001";
 
@@ -44,11 +47,29 @@ const advance = Effect.fnUntraced(function* (milliseconds: number = 0) {
   yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(milliseconds));
 });
 
+class ValidationFailedBody extends Data.TaggedClass("ValidationFailed")<{
+  error: Readonly<{ code: string; message: string; fields: ReadonlyArray<never> }>;
+  next: ReadonlyArray<never>;
+}> {}
+
+type FixturePage = Readonly<{
+  data: ReadonlyArray<typeof initialRecord>;
+  next: ReadonlyArray<
+    Readonly<{
+      tool: string;
+      hint: string;
+      args: Readonly<{ query: Readonly<{ from: string; to: string; cursor: string }> }>;
+    }>
+  >;
+}>;
+
+const encodeFixture = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
+
 const readFixturePage = (
   records: ReadonlyArray<typeof initialRecord>,
   paginated: boolean,
   later: boolean
-): unknown => ({
+): FixturePage => ({
   data: paginated ? records.slice(later ? 1 : 0, later ? 2 : 1) : records,
   next:
     paginated && !later
@@ -97,8 +118,14 @@ const fixtureDetail = Effect.fnUntraced(function* (
   };
 });
 
-const savedFixtureData = (path: string, records: ReadonlyArray<typeof initialRecord>): unknown =>
-  path.endsWith("/corrections") ? { updated: records.length } : records[0];
+const encodeSavedFixture = (
+  path: string,
+  records: ReadonlyArray<typeof initialRecord>
+): ReturnType<typeof encodeFixture> =>
+  encodeFixture({
+    data: path.endsWith("/corrections") ? { updated: records.length } : records[0],
+    next: [],
+  });
 
 const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
   vi.useFakeTimers();
@@ -112,14 +139,15 @@ const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
   const http = HttpClient.make((request) =>
     Effect.gen(function* () {
       const path = new URL(request.url).pathname;
-      let data: unknown;
+      let body = "";
       let status = 200;
 
       if (request.method !== "GET") {
         sent.push({
           path,
-          body:
-            request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "",
+          body: Predicate.isTagged(request.body, "Uint8Array")
+            ? new TextDecoder().decode(request.body.body)
+            : "",
         });
         yield* Effect.sleep(behavior.delay);
 
@@ -127,16 +155,14 @@ const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
 
         if (behavior.write === "rejected") {
           status = 400;
-          data = {
-            _tag: "ValidationFailed",
-            error: { code: "validation_failed", message: "Invalid", fields: [] },
-            next: [],
-          };
+          body = yield* encodeFixture(
+            new ValidationFailedBody({
+              error: { code: "validation_failed", message: "Invalid", fields: [] },
+              next: [],
+            })
+          );
         } else {
-          data = {
-            data: savedFixtureData(path, records),
-            next: [],
-          };
+          body = yield* encodeSavedFixture(path, records);
         }
       } else {
         yield* Effect.sleep(behavior.readDelay);
@@ -145,22 +171,24 @@ const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
 
         if (path.startsWith("/transactions/")) {
           const response = yield* fixtureDetail(path, detail, lookups);
-          data = response.data;
+          body = yield* encodeFixture(response.data);
           status = response.status;
         } else {
-          data = path.endsWith("categories")
-            ? { data: [{ id: categoryId, label: "Restaurantes" }], next: [] }
-            : readFixturePage(
-                records,
-                paginated,
-                request.urlParams.params.some(([key]) => key === "cursor")
-              );
+          body = yield* encodeFixture(
+            path.endsWith("categories")
+              ? { data: [{ id: categoryId, label: "Restaurantes" }], next: [] }
+              : readFixturePage(
+                  records,
+                  paginated,
+                  request.urlParams.params.some(([key]) => key === "cursor")
+                )
+          );
         }
       }
 
       return HttpClientResponse.fromWeb(
         request,
-        new Response(yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(data), {
+        new Response(body, {
           status,
           headers: { "content-type": "application/json" },
         })
@@ -183,7 +211,7 @@ const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
 
   const firstPage = transactionFirstPage({ client, period });
 
-  const categories = makeFreshQuery({
+  const categories = freshQuery({
     runtime: client.runtime,
     load: Effect.gen(function* () {
       const api = yield* client;
@@ -201,7 +229,7 @@ const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
     locate: Option.none(),
   });
 
-  const atom = makeTransactionCorrections({
+  const atom = transactionCorrections({
     client,
     firstPage,
     categories,
@@ -299,7 +327,7 @@ it.effect("rejected recovery retains later history pages until their fresh reads
     yield* advance();
     const history = test.history().query;
 
-    if (history._tag !== "Ready") throw new Error("Missing history");
+    if (!Predicate.isTagged(history, "Ready")) throw new Error("Missing history");
     const later = history.value.data[1];
 
     if (later === undefined) throw new Error("Missing later Transaction");
@@ -314,7 +342,8 @@ it.effect("rejected recovery retains later history pages until their fresh reads
     yield* advance();
     const pending = test.history().query;
     expect(
-      pending._tag === "Ready" && pending.value.data.some((item) => item.id === secondId)
+      Predicate.isTagged(pending, "Ready") &&
+        pending.value.data.some((item) => item.id === secondId)
     ).toBe(true);
     yield* advance(50);
     expect(test.view().locked).toBe(true);
@@ -322,7 +351,8 @@ it.effect("rejected recovery retains later history pages until their fresh reads
     expect(test.view().locked).toBe(false);
     const refreshed = test.history().query;
     expect(
-      refreshed._tag === "Ready" && refreshed.value.data.some((item) => item.id === secondId)
+      Predicate.isTagged(refreshed, "Ready") &&
+        refreshed.value.data.some((item) => item.id === secondId)
     ).toBe(true);
     expect(test.sent).toHaveLength(1);
   })
@@ -480,7 +510,7 @@ it.live("reading and disposing history does not initialize the correction transp
       locate: Option.none(),
     });
 
-    const corrections = makeTransactionCorrections({
+    const corrections = transactionCorrections({
       client,
       firstPage,
       categories,
@@ -589,7 +619,7 @@ it.effect("recovery waits for a moved identity and refuses stale captured action
   })
 );
 
-for (const outcome of ["missing", "failure"] as const) {
+(["missing", "failure"] as const).forEach((outcome) => {
   it.effect(`unknown deletion recovery requires decoded identity evidence: ${outcome}`, () =>
     Effect.gen(function* () {
       const test = yield* fixture();
@@ -614,7 +644,7 @@ for (const outcome of ["missing", "failure"] as const) {
       expect(test.sent).toHaveLength(1);
     })
   );
-}
+});
 
 it.effect(
   "explicit workspace reset retires captured Correction admission without unlocking an unknown write",

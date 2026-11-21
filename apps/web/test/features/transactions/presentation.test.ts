@@ -5,7 +5,7 @@ import {
   type TransactionPresentationRecord,
   deriveCurrentMonthPeriod,
   presentTransactionRows,
-} from "./presentation";
+} from "@/features/transactions/presentation";
 
 const category: TransactionPresentationCategory = {
   id: "24000000-0000-4000-8000-000000000001",

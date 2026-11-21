@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { browserApiOrigin, parseApiOrigin } from "./origin";
+import { browserApiOrigin, parseApiOrigin } from "@/transport/origin";
 
 describe("browser API origin", () => {
   it("accepts an explicit HTTP origin", () => {

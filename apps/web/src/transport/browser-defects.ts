@@ -1,4 +1,5 @@
-import { Cause, Console, Effect, Exit, Schema } from "effect";
+import { Cause, Console, Effect, Exit, Option, Result, Schema } from "effect";
+import { browserRuntime } from "./browser-runtime";
 
 export type BrowserDefect =
   | "render_uncaught"
@@ -19,7 +20,7 @@ export const makeBrowserDefectReporter = (): ((error: BrowserDefect) => void) =>
     exported++;
 
     try {
-      Effect.runSync(
+      browserRuntime.runSync(
         Console.info("fidy.browser.defect", {
           component: "browser",
           operation: "browser.defect",
@@ -42,9 +43,9 @@ export const observeBrowserDecode = <A, E, R>(
         const error = Cause.findErrorOption(exit.cause);
         const defect = Cause.findDefect(exit.cause);
 
-        if (error._tag === "Some" && Schema.isSchemaError(error.value)) {
+        if (Option.isSome(error) && Schema.isSchemaError(error.value)) {
           reportBrowserDefect("invalid_response");
-        } else if (defect._tag === "Success") reportBrowserDefect("client_defect");
+        } else if (Result.isSuccess(defect)) reportBrowserDefect("client_defect");
       })
     )
   );

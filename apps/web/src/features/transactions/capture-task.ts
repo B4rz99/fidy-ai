@@ -203,7 +203,7 @@ const submit = (owner: Owner, submission: Submission): void => {
 
     if (!owner.active || owner.generation !== generation) return;
 
-    if (outcome._tag === "Failure") {
+    if (Predicate.isTagged(outcome, "Failure")) {
       if (Cause.hasInterruptsOnly(outcome.cause)) return;
       owner.status = refused(outcome.cause) ? "rejected" : "unknown";
 
@@ -262,7 +262,7 @@ type RetainedCapture = Readonly<{
   release: () => void;
 }>;
 
-export const makeCaptureRetention = (): Atom.Atom<CaptureRetention> =>
+export const captureRetention = (): Atom.Atom<CaptureRetention> =>
   Atom.make((get) => {
     let current: Option.Option<RetainedCapture> = Option.none();
     get.addFinalizer(() => Option.map(current, (retained) => retained.release()));

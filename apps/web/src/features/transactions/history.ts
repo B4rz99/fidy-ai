@@ -1,4 +1,4 @@
-import { Data, DateTime, Effect, Option, Schema } from "effect";
+import { Data, DateTime, Effect, Option, Predicate, Schema } from "effect";
 import { HttpClientError } from "effect/http";
 import { type AsyncResult, Atom } from "effect/reactivity";
 import {
@@ -90,9 +90,9 @@ const nextCursor = (page: TransactionPage, period: HistoryInput): Option.Option<
 const pendingContinuation = (
   current: CanonicalQueryState<TransactionPage, unknown>
 ): HistoryState["continuation"] => {
-  if (current._tag === "Failure") return "failure";
+  if (Predicate.isTagged(current, "Failure")) return "failure";
 
-  if (current._tag !== "Ready") return "loading";
+  if (!Predicate.isTagged(current, "Ready")) return "loading";
 
   if (Option.isSome(current.refreshFailure)) return "failure";
 
@@ -156,7 +156,7 @@ const browse = ({ first, navigation, period, locate, read }: Browse): BrowsedHis
         return { ...result(continuation), retryPage: Option.some(current.atom) };
       }
 
-      if (current.query._tag !== "Ready") throw new Error("Missing Transaction page");
+      if (!Predicate.isTagged(current.query, "Ready")) throw new Error("Missing Transaction page");
       current.query.value.data.forEach((transaction) => {
         if (ids.has(transaction.id)) return;
         ids.add(transaction.id);
@@ -193,12 +193,12 @@ const pageQuery = (apiClient: FidyClient, period: HistoryInput, cursor: string):
 
 const isHistoryFailed = (current: BrowsedHistory): boolean =>
   current.continuation === "failure" ||
-  (current.query._tag === "Ready" && Option.isSome(current.query.refreshFailure));
+  (Predicate.isTagged(current.query, "Ready") && Option.isSome(current.query.refreshFailure));
 
 const isHistoryPending = (current: BrowsedHistory): boolean =>
   current.continuation === "loading" ||
   isHistoryFailed(current) ||
-  (current.query._tag === "Ready" && current.query.waiting);
+  (Predicate.isTagged(current.query, "Ready") && current.query.waiting);
 
 const retainLoadedHistory = (
   current: BrowsedHistory,
@@ -206,9 +206,9 @@ const retainLoadedHistory = (
   requestedPages: number
 ): BrowsedHistory => {
   if (
-    current.query._tag !== "Ready" ||
+    !Predicate.isTagged(current.query, "Ready") ||
     Option.isNone(previous) ||
-    previous.value.query._tag !== "Ready" ||
+    !Predicate.isTagged(previous.value.query, "Ready") ||
     Math.min(requestedPages, previous.value.loadedPages) <= current.loadedPages ||
     !isHistoryPending(current)
   ) {
@@ -238,11 +238,11 @@ const locationState = (
 ): HistoryState["location"] => {
   if (Option.isNone(locate)) return "None";
 
-  if (current.query._tag === "Failure") {
+  if (Predicate.isTagged(current.query, "Failure")) {
     return "ContinuationFailed";
   }
 
-  if (current.query._tag !== "Ready") return "Locating";
+  if (!Predicate.isTagged(current.query, "Ready")) return "Locating";
 
   return readyLocation(current.query, current.continuation, locate.value);
 };
@@ -356,7 +356,7 @@ export const transactionHistory = ({
     const current = get(navigation);
     const first = presentCanonicalQuery(get(firstPage));
 
-    if (first._tag !== "Ready") {
+    if (!Predicate.isTagged(first, "Ready")) {
       return {
         generation: current.generation,
         loadedPages: 0,

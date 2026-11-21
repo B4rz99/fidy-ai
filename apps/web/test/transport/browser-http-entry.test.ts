@@ -1,4 +1,3 @@
-// @vitest-environment node
 import { Context, Deferred, Effect, Fiber, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import {
@@ -8,7 +7,7 @@ import {
   HttpClientResponse,
 } from "effect/http";
 import { expect, it } from "@effect/vitest";
-import { browserHttpClientLayer } from "./browser-http-policy";
+import { browserHttpClientLayer } from "@/transport/browser-http-policy";
 
 it.effect("paces a declared unadmitted mutation without loading the bootstrap API", () =>
   Effect.gen(function* () {

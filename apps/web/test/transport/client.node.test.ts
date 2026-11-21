@@ -1,10 +1,10 @@
-// @vitest-environment node
-
 import { ownNativeResponse } from "@fidy/server/native-http";
 
 import {
+  Array as Arr,
   Cause,
   Context,
+  Data,
   DateTime,
   Deferred,
   Effect,
@@ -12,7 +12,9 @@ import {
   Fiber,
   Function,
   Layer,
+  Match,
   Option,
+  Predicate,
   Redacted,
   Result,
   Schema,
@@ -30,21 +32,25 @@ import {
 import { AsyncResult, AtomRegistry } from "effect/reactivity";
 import { describe, expect, it } from "@effect/vitest";
 import { vi } from "vitest";
-import { type BrowserHttpBoundary, browserHttpClientLayer } from "./browser-http-policy";
-import { presentCanonicalQuery } from "./canonical-query";
+import { type BrowserHttpBoundary, browserHttpClientLayer } from "@/transport/browser-http-policy";
+import {
+  type CanonicalQueryFailure,
+  type CanonicalQueryState,
+  presentCanonicalQuery,
+} from "@/transport/canonical-query";
 import {
   ManualPATRequestId,
   PATRecipientLabel,
   makeFidyClient,
   makeSubscriptionEnrollmentClient,
   makeWebAuthClient,
-} from "./client";
-import { SubmitForExtractionInput } from "@fidy/server/client";
+} from "@/transport/client";
+import { type IssuedPAT, SubmitForExtractionInput } from "@fidy/server/client";
 import {
   HostedTurnProgressRequest,
   HostedTurnRequest,
   makeHostedTurnClient,
-} from "./hosted-turn-client";
+} from "@/transport/hosted-turn-client";
 
 const responseJson = (
   request: HttpClientRequestType.HttpClientRequest,
@@ -71,10 +77,49 @@ const makeHttpClient = (
     never
   >((effect) => Effect.flatMap(effect, handler), Effect.succeed);
 
-const requestBodyText = (request: HttpClientRequestType.HttpClientRequest): string =>
-  request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "";
+type CanonicalPhase<A, E> = Readonly<{
+  phase: CanonicalQueryState<A, E>["_tag"];
+  waiting: boolean;
+}>;
 
-const queuedStatementSubmissionBody = (): unknown => ({
+const canonicalPhase = <A, E>(result: AsyncResult.AsyncResult<A, E>): CanonicalPhase<A, E> => {
+  const state = presentCanonicalQuery(result);
+
+  return { phase: state._tag, waiting: state.waiting };
+};
+
+const canonicalFailurePhase = <A, E>(
+  result: AsyncResult.AsyncResult<A, E>
+): Option.Option<CanonicalQueryFailure<E>["_tag"]> =>
+  Match.value(presentCanonicalQuery(result)).pipe(
+    Match.tagsExhaustive({
+      Initial: () => Option.none(),
+      Ready: (state) => Option.map(state.refreshFailure, (failure) => failure._tag),
+      Failure: (state) => Option.some(state.failure._tag),
+    })
+  );
+
+const canonicalReadyValue = <A, E>(result: AsyncResult.AsyncResult<A, E>): Option.Option<A> =>
+  Match.value(presentCanonicalQuery(result)).pipe(
+    Match.tag("Ready", (state) => Option.some(state.value)),
+    Match.orElse(() => Option.none())
+  );
+
+class NativeLifetimeTestFailed extends Data.TaggedError("NativeLifetimeTestFailed")<{
+  readonly cause: unknown;
+}> {}
+
+const fetchResolving = (response: Response): typeof globalThis.fetch =>
+  Object.assign(() => Promise.resolve(response), globalThis.fetch);
+
+const requestBodyOf = (
+  request: HttpClientRequestType.HttpClientRequest
+): HttpClientRequestType.HttpClientRequest["body"] => request.body;
+
+const requestBodyText = (request: HttpClientRequestType.HttpClientRequest): string =>
+  Predicate.isTagged(request.body, "Uint8Array") ? new TextDecoder().decode(request.body.body) : "";
+
+const queuedStatementSubmissionBody = {
   data: {
     id: "f1d1a000-0000-4000-8000-000000000401",
     parserRevision: "statement-parser-v1",
@@ -83,7 +128,7 @@ const queuedStatementSubmissionBody = (): unknown => ({
     submittedAt: "2026-09-24T00:00:00.000Z",
   },
   next: [],
-});
+};
 
 const SentStatementSubmission = Schema.Struct({
   idempotencyKey: Schema.String,
@@ -131,10 +176,18 @@ const boundaryExitKind = (
   throw new Error("Expected an HTTP or Schema boundary defect");
 };
 
-const manualPATDisclosureBody = (bearer: string): unknown => ({
+type PATDisclosureBody = Readonly<{
+  data: typeof IssuedPAT.Encoded;
+  next: ReadonlyArray<never>;
+}>;
+
+class PATWireBody extends Data.TaggedClass("PAT")<
+  Omit<(typeof IssuedPAT.Encoded)["pat"], "_tag"> & Readonly<{ idleExpiresAt: string }>
+> {}
+
+const manualPATDisclosureBody = (bearer: string): PATDisclosureBody => ({
   data: {
-    pat: {
-      _tag: "PAT",
+    pat: new PATWireBody({
       id: "f1d1a000-0000-4000-8000-000000000248",
       shortId: "created1",
       recipientLabel: "Automatización casa",
@@ -145,7 +198,7 @@ const manualPATDisclosureBody = (bearer: string): unknown => ({
       createdAt: "2026-08-10T12:00:00Z",
       expiresAt: "2026-11-08T12:00:00Z",
       idleExpiresAt: "2026-11-08T12:00:00Z",
-    },
+    }),
     bearer,
   },
   next: [],
@@ -183,6 +236,15 @@ describe("subscription enrollment transport", () => {
     })
   );
 });
+
+const unreplayedRefusals = [
+  { boundary: "canonical", status: 503, code: "unavailable", retry: "1" },
+  { boundary: "canonical", status: 429, code: "quota_exhausted", retry: "1" },
+  { boundary: "canonical", status: 429, code: "rate_limited", retry: "invalid" },
+  { boundary: "canonical", status: 429, code: "rate_limited", retry: "3600" },
+  { boundary: "web-auth", status: 429, code: "rate_limited", retry: "1" },
+  { boundary: "enrollment", status: 429, code: "rate_limited", retry: "1" },
+] as const;
 
 describe("browser HTTP policy", () => {
   it.effect("bounds a burst of canonical transfers before the server has to refuse them", () =>
@@ -301,15 +363,16 @@ describe("browser HTTP policy", () => {
     })
   );
 
-  it.effect("uses only the original remaining boundary budget after preparation", () =>
-    Effect.gen(function* () {
-      for (const { boundary, path, remainingSeconds } of [
-        { boundary: "canonical", path: "/categories", remainingSeconds: 13 },
-        { boundary: "web-auth", path: "/web/consent", remainingSeconds: 8 },
-        { boundary: "web-auth", path: "/web/connections/begin", remainingSeconds: 33 },
-        { boundary: "enrollment", path: "/enroll", remainingSeconds: 18 },
-        { boundary: "hosted-turn", path: "/turn", remainingSeconds: 133 },
-      ] as const) {
+  it.effect.each([
+    { boundary: "canonical", path: "/categories", remainingSeconds: 13 },
+    { boundary: "web-auth", path: "/web/consent", remainingSeconds: 8 },
+    { boundary: "web-auth", path: "/web/connections/begin", remainingSeconds: 33 },
+    { boundary: "enrollment", path: "/enroll", remainingSeconds: 18 },
+    { boundary: "hosted-turn", path: "/turn", remainingSeconds: 133 },
+  ] as const)(
+    "uses only the original remaining boundary budget after preparation for $boundary $path",
+    ({ boundary, path, remainingSeconds }) =>
+      Effect.gen(function* () {
         const preparing = Deferred.makeUnsafe<void>();
         const prepared = Deferred.makeUnsafe<void>();
         const transferring = Deferred.makeUnsafe<void>();
@@ -351,8 +414,7 @@ describe("browser HTTP policy", () => {
         yield* TestClock.adjust("1 second");
         expect(interrupted).toBe(true);
         expect(Exit.isFailure(yield* Fiber.join(work))).toBe(true);
-      }
-    })
+      })
   );
 
   it.effect("counts transfer queue time inside the original canonical deadline", () =>
@@ -417,15 +479,19 @@ describe("browser HTTP policy", () => {
         { concurrency: "unbounded" }
       ).pipe(Effect.forkChild);
 
-      for (let wave = 0; wave < 4; wave++) {
-        yield* TestClock.adjust("1 millis");
-        expect(attempts).toBe((wave + 1) * 2);
+      yield* Effect.forEach(
+        Arr.range(0, 3),
+        Effect.fnUntraced(function* (wave) {
+          yield* TestClock.adjust("1 millis");
+          expect(attempts).toBe((wave + 1) * 2);
 
-        for (const controller of controllers.slice(wave * 2, wave * 2 + 2)) {
-          controller.enqueue(new TextEncoder().encode("{}"));
-          controller.close();
-        }
-      }
+          for (const controller of controllers.slice(wave * 2, wave * 2 + 2)) {
+            controller.enqueue(new TextEncoder().encode("{}"));
+            controller.close();
+          }
+        }),
+        { discard: true }
+      );
 
       expect(yield* Fiber.join(burst)).toHaveLength(8);
     })
@@ -470,13 +536,14 @@ describe("browser HTTP policy", () => {
     })
   );
 
-  it.effect("retries eligible operations only after a declared unadmitted resource refusal", () =>
-    Effect.gen(function* () {
-      for (const [method, boundary, path] of [
-        ["POST", "canonical", "/dashboard/initialize"],
-        ["POST", "web-auth", "/web/connections/begin"],
-        ["GET", "web-auth", "/web/consent"],
-      ] as const) {
+  it.effect.each([
+    ["POST", "canonical", "/dashboard/initialize"],
+    ["POST", "web-auth", "/web/connections/begin"],
+    ["GET", "web-auth", "/web/consent"],
+  ] as const)(
+    "retries eligible operations only after a declared unadmitted resource refusal for %s %s %s",
+    ([method, boundary, path]) =>
+      Effect.gen(function* () {
         const started = Deferred.makeUnsafe<void>();
         let attempts = 0;
 
@@ -512,8 +579,7 @@ describe("browser HTTP policy", () => {
         expect(result.status).toBe(200);
         expect(yield* result.json).toEqual({ data: "accepted", next: [] });
         expect(attempts).toBe(2);
-      }
-    })
+      })
   );
 
   it.effect(
@@ -545,9 +611,9 @@ describe("browser HTTP policy", () => {
         const work = yield* Effect.forkChild(client.get(`${policyTestOrigin}/dashboard/view`));
         yield* Deferred.await(started);
 
-        for (let index = 0; index < 6; index++) {
-          yield* TestClock.adjust("1 second");
-        }
+        yield* Effect.forEach(Arr.range(0, 5), () => TestClock.adjust("1 second"), {
+          discard: true,
+        });
 
         const result = yield* Fiber.join(work);
         expect(result.status).toBe(429);
@@ -556,9 +622,10 @@ describe("browser HTTP policy", () => {
       })
   );
 
-  it.effect("keeps resource pacing inside the original deadline and interruption lifetime", () =>
-    Effect.gen(function* () {
-      for (const interrupted of [false, true]) {
+  it.effect.each([false, true])(
+    "keeps resource pacing inside the original deadline and interruption lifetime (interrupted: %s)",
+    (interrupted) =>
+      Effect.gen(function* () {
         let attempts = 0;
         const started = Deferred.makeUnsafe<void>();
 
@@ -585,62 +652,46 @@ describe("browser HTTP policy", () => {
 
         yield* Deferred.await(started);
 
-        if (interrupted) {
-          yield* Fiber.interrupt(work);
-          yield* TestClock.adjust("15 seconds");
-          expect(attempts).toBe(1);
-        } else {
-          yield* TestClock.adjust("15 seconds");
-          const exit = yield* Fiber.await(work);
-          expect(Exit.isFailure(exit)).toBe(true);
-          expect(attempts).toBeLessThanOrEqual(3);
-        }
-      }
-    })
-  );
-
-  it.effect(
-    "does not replay uncertain mutations, commercial exhaustion or noncanonical refusals",
-    () =>
-      Effect.gen(function* () {
-        const cases = [
-          { boundary: "canonical", status: 503, code: "unavailable", retry: "1" },
-          { boundary: "canonical", status: 429, code: "quota_exhausted", retry: "1" },
-          { boundary: "canonical", status: 429, code: "rate_limited", retry: "invalid" },
-          { boundary: "canonical", status: 429, code: "rate_limited", retry: "3600" },
-          { boundary: "web-auth", status: 429, code: "rate_limited", retry: "1" },
-          { boundary: "enrollment", status: 429, code: "rate_limited", retry: "1" },
-        ] as const;
-
-        for (const entry of cases) {
-          let attempts = 0;
-          const body = { error: { code: entry.code, message: "Retry later." }, next: [] };
-
-          const base = makeHttpClient((request) => {
-            attempts++;
-
-            return Effect.succeed(
-              HttpClientResponse.fromWeb(
-                request,
-                Response.json(body, {
-                  status: entry.status,
-                  headers: { "retry-after": entry.retry },
-                })
-              )
-            );
-          });
-
-          const client = yield* makePolicyTestClient(
-            Layer.succeed(HttpClient.HttpClient, base),
-            entry.boundary
-          );
-
-          const result = yield* client.post(`${policyTestOrigin}/work`);
-          expect(yield* result.json).toEqual(body);
-          expect(attempts).toBe(1);
-        }
+        if (interrupted) yield* Fiber.interrupt(work);
+        yield* TestClock.adjust("15 seconds");
+        expect(Exit.isFailure(yield* Fiber.await(work))).toBe(true);
+        expect(attempts).toBeGreaterThanOrEqual(1);
+        expect(attempts).toBeLessThanOrEqual(interrupted ? 1 : 3);
       })
   );
+
+  it.effect.each(unreplayedRefusals)(
+    "does not replay uncertain mutations, commercial exhaustion or noncanonical refusals for $boundary $status $code $retry",
+    (entry) =>
+      Effect.gen(function* () {
+        let attempts = 0;
+        const body = { error: { code: entry.code, message: "Retry later." }, next: [] };
+
+        const base = makeHttpClient((request) => {
+          attempts++;
+
+          return Effect.succeed(
+            HttpClientResponse.fromWeb(
+              request,
+              Response.json(body, {
+                status: entry.status,
+                headers: { "retry-after": entry.retry },
+              })
+            )
+          );
+        });
+
+        const client = yield* makePolicyTestClient(
+          Layer.succeed(HttpClient.HttpClient, base),
+          entry.boundary
+        );
+
+        const result = yield* client.post(`${policyTestOrigin}/work`);
+        expect(yield* result.json).toEqual(body);
+        expect(attempts).toBe(1);
+      })
+  );
+
   it.effect("terminates a request when its browser deadline expires", () =>
     Effect.gen(function* () {
       const neverClient = makeHttpClient(() => Effect.never);
@@ -961,12 +1012,16 @@ describe("browser HTTP policy", () => {
         { preconnect: globalThis.fetch.preconnect }
       );
 
-      for (const boundary of ["canonical", "web-auth", "enrollment"] as const) {
-        const client = yield* makePolicyTestClient(FetchHttpClient.layer, boundary);
-        yield* client
-          .get("https://api.test.fidyapp.com/policy")
-          .pipe(Effect.provideService(FetchHttpClient.Fetch, fakeFetch));
-      }
+      yield* Effect.forEach(
+        ["canonical", "web-auth", "enrollment"] as const,
+        Effect.fnUntraced(function* (boundary) {
+          const client = yield* makePolicyTestClient(FetchHttpClient.layer, boundary);
+          yield* client
+            .get("https://api.test.fidyapp.com/policy")
+            .pipe(Effect.provideService(FetchHttpClient.Fetch, fakeFetch));
+        }),
+        { discard: true }
+      );
 
       expect(requestOptions).toHaveLength(3);
 
@@ -1070,10 +1125,8 @@ describe("canonical browser transport", () => {
         expect(Exit.isFailure(malformedExit)).toBe(true);
         expect(Exit.isFailure(transportExit)).toBe(true);
 
-        if (Exit.isFailure(malformedExit) && Exit.isFailure(transportExit)) {
-          expect(boundaryExitKind(malformedExit)).toBe("schema-defect");
-          expect(boundaryExitKind(transportExit)).toBe("http-defect");
-        }
+        expect(boundaryExitKind(malformedExit)).toBe("schema-defect");
+        expect(boundaryExitKind(transportExit)).toBe("http-defect");
       } finally {
         unmountMalformed();
         malformedRegistry.dispose();
@@ -1172,7 +1225,7 @@ describe("canonical browser transport", () => {
       const httpClient = makeHttpClient((request) => {
         requests.push({ body: requestBodyText(request), url: request.url });
 
-        return Effect.succeed(responseJson(request, queuedStatementSubmissionBody(), 202));
+        return Effect.succeed(responseJson(request, queuedStatementSubmissionBody, 202));
       });
 
       const client = makeFidyClient({
@@ -1305,17 +1358,11 @@ describe("canonical browser transport", () => {
 
       try {
         yield* AtomRegistry.getResult(registry, atom);
-        expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
-          _tag: "Ready",
-          waiting: false,
-        });
+        expect(canonicalPhase(registry.get(atom))).toEqual({ phase: "Ready", waiting: false });
 
         registry.refresh(atom);
         yield* waitForAssertion(() => expect(requestCount).toBe(2));
-        expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
-          _tag: "Ready",
-          waiting: true,
-        });
+        expect(canonicalPhase(registry.get(atom))).toEqual({ phase: "Ready", waiting: true });
 
         const failedRefresh = yield* Effect.forkChild(
           Effect.result(AtomRegistry.getResult(registry, atom)),
@@ -1339,20 +1386,14 @@ describe("canonical browser transport", () => {
         );
         yield* Fiber.join(failedRefresh);
         yield* waitForAssertion(() => expect(AsyncResult.isFailure(registry.get(atom))).toBe(true));
-        expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
-          _tag: "Ready",
-          waiting: false,
-          refreshFailure: { _tag: "Some", value: { _tag: "DeclaredFailure" } },
-        });
+        expect(canonicalPhase(registry.get(atom))).toEqual({ phase: "Ready", waiting: false });
+        expect(canonicalFailurePhase(registry.get(atom))).toEqual(Option.some("DeclaredFailure"));
 
         registry.refresh(atom);
         yield* waitForAssertion(() => expect(requestCount).toBe(3));
         yield* waitForAssertion(() => expect(AsyncResult.isSuccess(registry.get(atom))).toBe(true));
         yield* AtomRegistry.getResult(registry, atom);
-        expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
-          _tag: "Ready",
-          waiting: false,
-        });
+        expect(canonicalPhase(registry.get(atom))).toEqual({ phase: "Ready", waiting: false });
       } finally {
         unmount();
         registry.dispose();
@@ -1393,17 +1434,11 @@ describe("canonical browser transport", () => {
 
         try {
           yield* Effect.exit(AtomRegistry.getResult(registry, atom));
-          expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
-            _tag: "Failure",
-            waiting: false,
-          });
+          expect(canonicalPhase(registry.get(atom))).toEqual({ phase: "Failure", waiting: false });
           expect(requests).toBe(1);
           registry.refresh(atom);
           yield* waitForAssertion(() => expect(requests).toBe(2));
-          expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
-            _tag: "Failure",
-            waiting: true,
-          });
+          expect(canonicalPhase(registry.get(atom))).toEqual({ phase: "Failure", waiting: true });
           yield* Deferred.succeed(
             recovery,
             responseJson(Option.getOrThrow(pendingRequest), { status: "Granted", withdrawal: null })
@@ -1412,12 +1447,11 @@ describe("canonical browser transport", () => {
             expect(AsyncResult.isSuccess(registry.get(atom))).toBe(true)
           );
           yield* AtomRegistry.getResult(registry, atom);
-          expect(presentCanonicalQuery(registry.get(atom))).toEqual({
-            _tag: "Ready",
-            value: { status: "Granted", withdrawal: null },
-            waiting: false,
-            refreshFailure: Option.none(),
-          });
+          expect(canonicalPhase(registry.get(atom))).toEqual({ phase: "Ready", waiting: false });
+          expect(canonicalFailurePhase(registry.get(atom))).toEqual(Option.none());
+          expect(canonicalReadyValue(registry.get(atom))).toEqual(
+            Option.some({ status: "Granted", withdrawal: null })
+          );
           expect(requests).toBe(2);
         } finally {
           unmount();
@@ -1452,10 +1486,8 @@ describe("canonical browser transport", () => {
 
       try {
         yield* Effect.result(AtomRegistry.getResult(registry, atom));
-        expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
-          _tag: "Failure",
-          failure: { _tag: "DeclaredFailure" },
-        });
+        expect(canonicalPhase(registry.get(atom)).phase).toBe("Failure");
+        expect(canonicalFailurePhase(registry.get(atom))).toEqual(Option.some("DeclaredFailure"));
       } finally {
         unmount();
         registry.dispose();
@@ -1466,8 +1498,9 @@ describe("canonical browser transport", () => {
   it.effect.each([
     ["defect", Effect.die("private decoder defect"), "BoundaryFailure"],
     ["interruption", Effect.interrupt, "Interrupted"],
-  ] as const)("classifies a real initial %s without exposing its Cause", ([_label, request, tag]) =>
-    Effect.gen(function* () {
+  ] as const)(
+    "classifies a real initial %s without exposing its Cause",
+    Effect.fnUntraced(function* ([_label, request, tag]) {
       const httpClient = makeHttpClient(() => request);
 
       const client = makeFidyClient({
@@ -1482,10 +1515,8 @@ describe("canonical browser transport", () => {
       try {
         yield* Effect.exit(Effect.result(AtomRegistry.getResult(registry, atom)));
         yield* waitForAssertion(() => expect(AsyncResult.isFailure(registry.get(atom))).toBe(true));
-        expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
-          _tag: "Failure",
-          failure: { _tag: tag },
-        });
+        expect(canonicalPhase(registry.get(atom)).phase).toBe("Failure");
+        expect(canonicalFailurePhase(registry.get(atom))).toEqual(Option.some(tag));
       } finally {
         unmount();
         registry.dispose();
@@ -1510,14 +1541,12 @@ describe("canonical browser transport", () => {
         const priorRegistry = AtomRegistry.make();
         const priorUnmount = priorRegistry.mount(atom);
         yield* AtomRegistry.getResult(priorRegistry, atom);
-        expect(presentCanonicalQuery(priorRegistry.get(atom))._tag).toBe("Ready");
+        expect(canonicalPhase(priorRegistry.get(atom)).phase).toBe("Ready");
         priorUnmount();
         priorRegistry.dispose();
 
         const replacementRegistry = AtomRegistry.make();
-        expect(presentCanonicalQuery(replacementRegistry.get(atom))).toMatchObject({
-          _tag: "Initial",
-        });
+        expect(canonicalPhase(replacementRegistry.get(atom)).phase).toBe("Initial");
         replacementRegistry.dispose();
       })
   );
@@ -1665,37 +1694,38 @@ describe("native browser response lifetime", () => {
         )
       );
 
-      for (const payload of ["first request", "second request"]) {
-        let cancellations = 0;
+      yield* Effect.forEach(
+        ["first request", "second request"],
+        Effect.fnUntraced(function* (payload) {
+          let cancellations = 0;
 
-        const body = new ReadableStream<Uint8Array>({
-          start(controller): void {
-            controller.enqueue(new Uint8Array(65_537));
-          },
-          cancel(): Promise<void> {
-            cancellations++;
+          const body = new ReadableStream<Uint8Array>({
+            start(controller): void {
+              controller.enqueue(new Uint8Array(65_537));
+            },
+            cancel(): Promise<void> {
+              cancellations++;
 
-            return Promise.withResolvers<void>().promise;
-          },
-        });
+              return Promise.withResolvers<void>().promise;
+            },
+          });
 
-        const replacementFetch = Object.assign(
-          () => Promise.resolve(new Response(body)),
-          globalThis.fetch
-        );
+          const replacementFetch = fetchResolving(new Response(body));
 
-        const exit = yield* client
-          .post(`${policyTestOrigin}/work`, {
-            body: yield* HttpClientRequest.bodyJson(HttpClientRequest.post("/"), { payload }).pipe(
-              Effect.map((request) => request.body)
-            ),
-          })
-          .pipe(Effect.provideService(FetchHttpClient.Fetch, replacementFetch), Effect.exit);
+          const exit = yield* client
+            .post(`${policyTestOrigin}/work`, {
+              body: yield* HttpClientRequest.bodyJson(HttpClientRequest.post("/"), {
+                payload,
+              }).pipe(Effect.map(requestBodyOf)),
+            })
+            .pipe(Effect.provideService(FetchHttpClient.Fetch, replacementFetch), Effect.exit);
 
-        expect(Exit.isFailure(exit)).toBe(true);
-        expect(cancellations).toBe(1);
-        expect(body.locked).toBe(false);
-      }
+          expect(Exit.isFailure(exit)).toBe(true);
+          expect(cancellations).toBe(1);
+          expect(body.locked).toBe(false);
+        }),
+        { discard: true }
+      );
 
       expect(unexpectedRequests).toBe(0);
     })
@@ -1719,10 +1749,7 @@ describe("native browser response lifetime", () => {
 
       try {
         const context = yield* Layer.build(registry.get(client.runtime.layer)).pipe(
-          Effect.provideService(
-            FetchHttpClient.Fetch,
-            Object.assign(() => Promise.resolve(response), globalThis.fetch)
-          ),
+          Effect.provideService(FetchHttpClient.Fetch, fetchResolving(response)),
           Effect.scoped
         );
 
@@ -1806,10 +1833,7 @@ describe("native browser response lifetime", () => {
       });
 
       const client = yield* makePolicyTestClient(FetchHttpClient.layer, "web-auth").pipe(
-        Effect.provideService(
-          FetchHttpClient.Fetch,
-          Object.assign(() => Promise.resolve(new Response(body)), globalThis.fetch)
-        )
+        Effect.provideService(FetchHttpClient.Fetch, fetchResolving(new Response(body)))
       );
 
       const exit = yield* client.post(`${policyTestOrigin}/work`).pipe(Effect.exit);
@@ -1820,58 +1844,51 @@ describe("native browser response lifetime", () => {
     })
   );
 
-  for (const mode of [
-    "overflow",
-    "declared-overflow",
-    "redirect",
-    "success",
-    "read-error",
-  ] as const) {
-    it.effect(`releases the native reader for ${mode} without waiting for cancellation`, () =>
-      Effect.gen(function* () {
-        let cancellations = 0;
+  (["overflow", "declared-overflow", "redirect", "success", "read-error"] as const).forEach(
+    (mode) => {
+      it.effect(`releases the native reader for ${mode} without waiting for cancellation`, () =>
+        Effect.gen(function* () {
+          let cancellations = 0;
 
-        const body = new ReadableStream<Uint8Array>({
-          start(controller): void {
-            if (mode === "overflow") controller.enqueue(new Uint8Array(65_537));
+          const body = new ReadableStream<Uint8Array>({
+            start(controller): void {
+              if (mode === "overflow") controller.enqueue(new Uint8Array(65_537));
 
-            if (mode === "success") {
-              controller.enqueue(new Uint8Array());
-              controller.enqueue(new TextEncoder().encode("{}"));
-              controller.close();
-            }
+              if (mode === "success") {
+                controller.enqueue(new Uint8Array());
+                controller.enqueue(new TextEncoder().encode("{}"));
+                controller.close();
+              }
 
-            if (mode === "read-error") controller.error(new Error("private body error"));
-          },
-          cancel(): Promise<void> {
-            cancellations++;
+              if (mode === "read-error") controller.error(new Error("private body error"));
+            },
+            cancel(): Promise<void> {
+              cancellations++;
 
-            return Promise.withResolvers<void>().promise;
-          },
-        });
+              return Promise.withResolvers<void>().promise;
+            },
+          });
 
-        const response = new Response(body, {
-          status: mode === "redirect" ? 302 : 200,
-          headers: mode === "declared-overflow" ? { "content-length": "65537" } : {},
-        });
+          const response = new Response(body, {
+            status: mode === "redirect" ? 302 : 200,
+            headers: mode === "declared-overflow" ? { "content-length": "65537" } : {},
+          });
 
-        const client = yield* makePolicyTestClient(FetchHttpClient.layer, "web-auth").pipe(
-          Effect.provideService(
-            FetchHttpClient.Fetch,
-            Object.assign(() => Promise.resolve(response), globalThis.fetch)
-          )
-        );
+          const client = yield* makePolicyTestClient(FetchHttpClient.layer, "web-auth").pipe(
+            Effect.provideService(FetchHttpClient.Fetch, fetchResolving(response))
+          );
 
-        const exit = yield* client.post(`${policyTestOrigin}/work`).pipe(Effect.exit);
-        expect(Exit.isSuccess(exit)).toBe(mode === "success");
-        expect(body.locked).toBe(false);
+          const exit = yield* client.post(`${policyTestOrigin}/work`).pipe(Effect.exit);
+          expect(Exit.isSuccess(exit)).toBe(mode === "success");
+          expect(body.locked).toBe(false);
 
-        if (mode !== "success" && mode !== "read-error") expect(cancellations).toBe(1);
-      })
-    );
-  }
+          expect(mode === "success" || mode === "read-error" || cancellations === 1).toBe(true);
+        })
+      );
+    }
+  );
 
-  for (const mode of ["timeout", "interruption"] as const) {
+  (["timeout", "interruption"] as const).forEach((mode) => {
     it.effect(`settles ${mode} while native cancellation remains pending`, () =>
       Effect.gen(function* () {
         const started = Deferred.makeUnsafe<void>();
@@ -1892,10 +1909,7 @@ describe("native browser response lifetime", () => {
         );
 
         const client = yield* makePolicyTestClient(FetchHttpClient.layer, "web-auth").pipe(
-          Effect.provideService(
-            FetchHttpClient.Fetch,
-            Object.assign(() => Promise.resolve(new Response(body)), globalThis.fetch)
-          )
+          Effect.provideService(FetchHttpClient.Fetch, fetchResolving(new Response(body)))
         );
 
         const fiber = yield* Effect.forkChild(client.post(`${policyTestOrigin}/work`));
@@ -1909,7 +1923,7 @@ describe("native browser response lifetime", () => {
         expect(body.locked).toBe(false);
       })
     );
-  }
+  });
 });
 
 it.effect("fails an outstanding response read on abort even when native cancel throws", () => {
@@ -1941,15 +1955,15 @@ it.effect("fails an outstanding response read on abort even when native cancel t
     abort.abort("private abort reason");
     yield* Effect.tryPromise({
       try: () => failed,
-      catch: (error: unknown) => ({ _tag: "NativeLifetimeTestFailed" as const, cause: error }),
+      catch: (cause: unknown) => new NativeLifetimeTestFailed({ cause }),
     });
     expect(body.locked).toBe(false);
     expect(cancellations).toBe(1);
   });
 });
 
-for (const cleanup of ["throw", "reject", "pending"] as const) {
-  for (const late of ["chunk", "eof", "error"] as const) {
+(["throw", "reject", "pending"] as const).forEach((cleanup) => {
+  (["chunk", "eof", "error"] as const).forEach((late) => {
     it.effect(`keeps abort final after late ${late} with ${cleanup} cleanup`, () => {
       const abort = new AbortController();
 
@@ -2001,12 +2015,12 @@ for (const cleanup of ["throw", "reject", "pending"] as const) {
         const failed = expect(pending).rejects.toThrow("Response body aborted");
         yield* Effect.tryPromise({
           try: () => started.promise,
-          catch: (error: unknown) => ({ _tag: "NativeLifetimeTestFailed" as const, cause: error }),
+          catch: (cause: unknown) => new NativeLifetimeTestFailed({ cause }),
         });
         abort.abort("private abort reason");
         yield* Effect.tryPromise({
           try: () => failed,
-          catch: (error: unknown) => ({ _tag: "NativeLifetimeTestFailed" as const, cause: error }),
+          catch: (cause: unknown) => new NativeLifetimeTestFailed({ cause }),
         });
 
         if (late === "error") nativeRead.reject(new Error("private late error"));
@@ -2020,12 +2034,12 @@ for (const cleanup of ["throw", "reject", "pending"] as const) {
 
         yield* Effect.tryPromise({
           try: () => expect(reader.read()).rejects.toThrow("Response body aborted"),
-          catch: (error: unknown) => ({ _tag: "NativeLifetimeTestFailed" as const, cause: error }),
+          catch: (cause: unknown) => new NativeLifetimeTestFailed({ cause }),
         });
         expect(body.locked).toBe(false);
         expect(cancellations).toBe(1);
         expect(releases).toBe(1);
       });
     });
-  }
-}
+  });
+});

@@ -28,7 +28,7 @@ export const readProviderList = Effect.fn(function* <Value>(
 ) {
   const rows: Value[] = [];
 
-  const shape = Schema.Struct({
+  const inventoryPage = Schema.Struct({
     success: Schema.Literal(true),
     result: Schema.Array(item),
     result_info: Schema.optional(Page),
@@ -36,7 +36,7 @@ export const readProviderList = Effect.fn(function* <Value>(
 
   for (let page = 1; page <= limit; page++) {
     const url = pageUrl(path, page);
-    const body = yield* Schema.decodeUnknownEffect(shape)(yield* read(url));
+    const body = yield* Schema.decodeUnknownEffect(inventoryPage)(yield* read(url));
 
     if (!consistent(page, body.result_info?.page)) {
       return yield* Effect.fail(Error("Provider returned an unexpected inventory page"));

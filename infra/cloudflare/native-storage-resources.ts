@@ -1,3 +1,4 @@
+import { BunRuntime } from "@effect/platform-bun";
 import {
   SuccessorSource,
   applyScopedNativePlan,
@@ -658,7 +659,7 @@ if (import.meta.main) {
       : ordinary
   ).pipe(Effect.provide(Alchemist.layer()), Effect.scoped);
 
-  await Effect.runPromise(
+  BunRuntime.runMain(
     program.pipe(
       Effect.catchCause((cause) =>
         Effect.sync(() => {

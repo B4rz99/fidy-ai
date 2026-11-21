@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { HttpClient, HttpClientRequest } from "effect/http";
+import { HttpClientRequest } from "effect/http";
 import { accountingFixture } from "./native-fixture-signer";
 import { releaseEvidence } from "./production-release";
 
@@ -40,15 +40,14 @@ const liveConsumer = Schema.Struct({
 
 export const confirmInterruptedSmokeConsumer = Effect.gen(function* () {
   const { account, token } = releaseEvidence.config();
-  const client = yield* HttpClient.HttpClient;
 
   const queueUrl =
     "https://api.cloudflare.com/client/v4/accounts/" + account + "/queues/" + queueId;
 
   const read = Effect.fn(function* (url: string) {
-    return yield* releaseEvidence
-      .providerJson(HttpClientRequest.get(url, { headers: { authorization: "Bearer " + token } }))
-      .pipe(Effect.provideService(HttpClient.HttpClient, client));
+    return yield* releaseEvidence.providerJson(
+      HttpClientRequest.get(url, { headers: { authorization: "Bearer " + token } })
+    );
   });
 
   yield* Schema.decodeUnknownEffect(liveQueue)(yield* read(queueUrl));

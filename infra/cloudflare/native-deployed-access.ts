@@ -226,9 +226,9 @@ const summarizeRoutes = (configured: readonly string[], hosts: readonly string[]
   [
     ...new Set(
       configured.flatMap((uri) =>
-        hosts
-          .filter((host) => addressesHost(uri, [host]))
-          .map((host) => host + " " + classifyRoute(uri))
+        hosts.flatMap((host) =>
+          addressesHost(uri, [host]) ? [host + " " + classifyRoute(uri)] : []
+        )
       )
     ),
   ].toSorted();

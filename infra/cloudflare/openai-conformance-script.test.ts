@@ -381,6 +381,7 @@ describe.concurrent("native conformance lifecycle", () => {
                 OPENAI_API_KEY: "synthetic-fixture-key",
                 OPENAI_CONFORMANCE_TIMEOUT_SECONDS: timeout,
               },
+              forceKillAfter: "1 second",
               stdin: "ignore",
               stdout: "pipe",
               stderr: "pipe",

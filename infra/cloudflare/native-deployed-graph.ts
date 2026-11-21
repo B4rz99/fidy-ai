@@ -288,7 +288,7 @@ const buckets = Effect.fn(function* (read: Read) {
 
   let cursor = "";
 
-  const shape = Schema.Struct({
+  const bucketPage = Schema.Struct({
     success: Schema.Literal(true),
     result: Schema.Struct({ buckets: Schema.Array(named) }),
     result_info: Schema.Struct({ cursor: Schema.optional(Schema.NullOr(Schema.String)) }),
@@ -298,7 +298,7 @@ const buckets = Effect.fn(function* (read: Read) {
     const query = new URLSearchParams({ name_contains: prefix, per_page: String(limit) });
 
     if (cursor.length > 0) query.set("cursor", cursor);
-    const body = yield* Schema.decodeUnknownEffect(shape)(yield* read("r2/buckets?" + query));
+    const body = yield* Schema.decodeUnknownEffect(bucketPage)(yield* read("r2/buckets?" + query));
     result.push(...body.result.buckets.map((bucket) => bucket.name));
     cursor = body.result_info.cursor ?? "";
 

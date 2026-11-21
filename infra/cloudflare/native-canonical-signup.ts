@@ -122,7 +122,7 @@ const idsDigest = (ids: readonly string[]): string =>
   new Bun.CryptoHasher("sha256").update(ids.toSorted().join("\n")).digest("hex");
 
 const populatedUsers = (objects: ReadonlyMap<string, boolean>): readonly string[] =>
-  [...objects.entries()].filter(([, populated]) => populated).map(([id]) => id);
+  [...objects.entries()].flatMap(([id, populated]) => (populated ? [id] : []));
 
 export const signupUserCensus = (
   objects: ReadonlyMap<string, boolean>

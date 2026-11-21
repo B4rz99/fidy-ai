@@ -1,4 +1,4 @@
-import { Clock, Config, Effect, FileSystem, Schedule, Schema } from "effect";
+import { Clock, Config, Effect, FileSystem, Schedule, Schema, Stream } from "effect";
 import { type FleetOrdinal, type TenState, fleetOrdinals, runTenFleet } from "./native-ten-fleet";
 import type { FleetPilotBrowser } from "./native-fleet-pilot";
 import type { UserObjects } from "./native-erasure-evidence";
@@ -133,7 +133,7 @@ const restore = Effect.fn(function* (release: Release, source: Source) {
         requestedPilotUsers: Schema.Literal(fleetOrdinals.length),
       })
     )
-  )(yield* fs.readFileString(release.path));
+  )(yield* fs.stream(release.path).pipe(Stream.decodeText(), Stream.mkString));
 
   if (
     saved.members.some((item, index) => item.ordinal !== fleetOrdinals[index]) ||

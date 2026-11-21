@@ -933,4 +933,43 @@ describe("zero-traffic Worker release", () => {
       })
     )
   );
+
+  it.effect(
+    "passes exact staged public and promoted Core assignments to canonical restoration",
+    () =>
+      advanceReleaseClock(
+        Effect.gen(function* () {
+          const fixture = harness();
+          const release = yield* staged(fixture.port);
+          fixture.fail(`${publicName}:100`);
+          const port: ReleasePort = {
+            ...fixture.port,
+            restoreStable: Effect.fn(function* ({ target, companion }) {
+              expect(target.name).toBe(coreName);
+              expect(target.stableVersionId).toBe(versions.coreStable);
+              expect(target.previous.versions).toEqual([
+                { id: versions.coreCandidate, percentage: 100 },
+              ]);
+              expect(companion.name).toBe(publicName);
+              expect(companion.previous.id).toBe(release.publicDeploymentId);
+              expect(companion.previous.versions).toEqual([
+                { id: versions.publicStable, percentage: 100 },
+                { id: versions.publicCandidate, percentage: 0 },
+              ]);
+              return yield* fixture.port.deploy(target.name, [
+                { id: target.stableVersionId, percentage: 100 },
+              ]);
+            }),
+          };
+          yield* failure(
+            releaseController.promoteRelease(port, release, {
+              exactPairPassed: true,
+              middlePairPassed: true,
+              rollbackEligible: true,
+            }),
+            "restored"
+          );
+        })
+      )
+  );
 });

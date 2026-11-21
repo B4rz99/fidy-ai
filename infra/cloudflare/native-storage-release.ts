@@ -104,6 +104,7 @@ import {
   type ProductionReleaseConfig as Config,
   ReleaseFailure,
   WorkerVersionReadUnavailable,
+  canonicalRestorePort,
   configureReleaseObservability,
   fixtureVerifier,
   releaseCommand,
@@ -2595,7 +2596,29 @@ const promoteCanonicalSignup = Effect.fn(function* (
   );
   const descriptions = yield* canonicalOpeningStorage(env, client, release);
   yield* probeSignupStorage(env, client, { release, descriptions });
-  const promoted = yield* releaseController.promoteRelease(port, release, {
+  const { snapshot } = release;
+  const canonicalPort = canonicalRestorePort({
+    port: releaseEvidence.rollbackPort(port, env, client),
+    env,
+    client,
+    snapshot,
+    verifyClosedPair: Effect.gen(function* () {
+      const { source } = yield* readCanonicalTransfer;
+      if (
+        snapshot.stableRevision !== source.revision ||
+        snapshot.core.stableVersionId !== source.versions.core ||
+        snapshot.public.stableVersionId !== source.versions.ingress ||
+        snapshot.core.deploymentId !== source.deployments.core ||
+        snapshot.public.deploymentId !== source.deployments.ingress
+      ) {
+        return yield* new ReleaseFailure({
+          message: "Canonical restoration differs from the authenticated closed transfer",
+        });
+      }
+      yield* canonicalOpeningStorage(env, client, release);
+    }),
+  });
+  const promoted = yield* releaseController.promoteRelease(canonicalPort, release, {
     exactPairPassed: true,
     middlePairPassed: true,
     rollbackEligible: true,
@@ -2607,7 +2630,7 @@ const promoteCanonicalSignup = Effect.fn(function* (
     ),
     Effect.onError(() =>
       releaseRollback
-        .restore(releaseEvidence.rollbackPort(port, env, client), {
+        .restore(canonicalPort, {
           release,
           promoted,
           compatible: true,

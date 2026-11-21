@@ -2689,7 +2689,8 @@ const readOpenedCanonical = Effect.fn(function* (
   yield* proveRecoveryCorePrivate(env, client, installationNames.Core);
   yield* requireLiveSignupDirectory(env, client, release).pipe(
     Effect.timeout("5 seconds"),
-    Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 25 }),
+    Effect.retry({ schedule: Schedule.spaced("10 seconds"), times: 35 }),
+    Effect.timeout("6 minutes"),
     checkCanonicalPrerequisite("live signup Directory")
   );
   return { hosts, source, zoneId };

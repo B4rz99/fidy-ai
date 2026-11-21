@@ -72,15 +72,14 @@ const checkSnapshot = (
       findings.push(`${name}: differing snapshot must be marked historical`);
     }
 
-    for (const path of source.sourcePaths) {
-      if (
-        !(yield* Effect.tryPromise(() => Bun.file(`${root}/${path}`).exists()).pipe(Effect.orDie))
-      ) {
-        findings.push(`${name}: missing source path ${path}`);
-      }
-    }
+    const missingPathFindings = yield* Effect.forEach(source.sourcePaths, (path) =>
+      Effect.tryPromise(() => Bun.file(`${root}/${path}`).exists()).pipe(
+        Effect.orDie,
+        Effect.map((exists) => (exists ? [] : [`${name}: missing source path ${path}`]))
+      )
+    );
 
-    return findings;
+    return [...findings, ...missingPathFindings.flat()];
   });
 
 const checkPin = (
@@ -113,19 +112,25 @@ const checkPatches = (
       .filter((path) => !source.patches.some((patch) => patch.path === path))
       .map((path) => `${name}: unreviewed selected patch ${path}`);
 
-    for (const patch of source.patches) {
-      if (!selectedPatches.includes(patch.path)) {
-        findings.push(`${name}: patch is no longer selected: ${patch.path}`);
-      }
+    const patchFindings = yield* Effect.forEach(source.patches, (patch) =>
+      readText(patch.path).pipe(
+        Effect.map((content) => {
+          const reviewed: Array<string> = [];
 
-      const content = yield* readText(patch.path);
+          if (!selectedPatches.includes(patch.path)) {
+            reviewed.push(`${name}: patch is no longer selected: ${patch.path}`);
+          }
 
-      if (new Bun.CryptoHasher("sha256").update(content).digest("hex") !== patch.sha256) {
-        findings.push(`${name}: patch content changed: ${patch.path}`);
-      }
-    }
+          if (new Bun.CryptoHasher("sha256").update(content).digest("hex") !== patch.sha256) {
+            reviewed.push(`${name}: patch content changed: ${patch.path}`);
+          }
 
-    return findings;
+          return reviewed;
+        })
+      )
+    );
+
+    return [...findings, ...patchFindings.flat()];
   });
 
 const checkSource = (
@@ -141,33 +146,37 @@ const checkSource = (
   });
 
 const localFileTargets = (content: string): ReadonlyArray<string> =>
-  [...content.matchAll(/\[[^\]]*\]\(([^)]+)\)/gu)]
+  content
+    .matchAll(/\[[^\]]*\]\(([^)]+)\)/gu)
     .map((match) => match[1]?.split("#")[0] ?? "")
     .filter((target) => target.length > 0)
-    .filter((target) => !/^[a-z][a-z\d+.-]*:/iu.test(target));
+    .filter((target) => !/^[a-z][a-z\d+.-]*:/iu.test(target))
+    .toArray();
+
+const brokenLinkFindings = (file: string, content: string): Effect.Effect<ReadonlyArray<string>> =>
+  Effect.forEach(localFileTargets(content), (target) =>
+    Effect.tryPromise(() => Bun.file(`${root}/.patterns/${target}`).exists()).pipe(
+      Effect.orDie,
+      Effect.map((exists) => (exists ? [] : [`${file}: broken local link ${target}`]))
+    )
+  ).pipe(Effect.map((findings) => findings.flat()));
 
 const checkPatternLinks = Effect.gen(function* () {
-  const findings: Array<string> = [];
   const index = yield* readText(".patterns/INDEX.md");
   const files = [...new Bun.Glob("*.md").scanSync(`${root}/.patterns`)];
 
-  for (const file of files) {
-    if (file !== "INDEX.md" && !index.includes(`](${file})`)) {
-      findings.push(`${file}: missing INDEX.md entry`);
-    }
+  const findings = yield* Effect.forEach(files, (file) =>
+    readText(`.patterns/${file}`).pipe(
+      Effect.flatMap((content) => brokenLinkFindings(file, content)),
+      Effect.map((linkFindings) =>
+        file !== "INDEX.md" && !index.includes(`](${file})`)
+          ? [`${file}: missing INDEX.md entry`, ...linkFindings]
+          : linkFindings
+      )
+    )
+  );
 
-    const content = yield* readText(`.patterns/${file}`);
-
-    for (const target of localFileTargets(content)) {
-      const path = `${root}/.patterns/${target}`;
-
-      if (!(yield* Effect.tryPromise(() => Bun.file(path).exists()).pipe(Effect.orDie))) {
-        findings.push(`${file}: broken local link ${target}`);
-      }
-    }
-  }
-
-  return findings;
+  return findings.flat();
 });
 
 const main = Effect.gen(function* () {

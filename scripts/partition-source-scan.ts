@@ -1,9 +1,16 @@
 #!/usr/bin/env bun
+import { Predicate } from "effect";
+
+type SourceScanPlan = Readonly<{ count: number; sca: number }>;
+
+type SourcePolicy = Readonly<{ policy: object; sast: object; exclude: ReadonlyArray<string> }>;
+
+type SourceSelection = Readonly<{ index: number; count: number }>;
 
 export const sourceScanPlan = ({
   native,
   sca,
-}: Readonly<{ native: boolean; sca: boolean }>): Readonly<{ count: number; sca: number }> => ({
+}: Readonly<{ native: boolean; sca: boolean }>): SourceScanPlan => ({
   count: 1 + Number(native) + Number(sca),
   sca: 2 + Number(native),
 });
@@ -41,7 +48,7 @@ export const partitionSourceFiles = ({
 };
 
 const rootPolicy = (value: unknown): object & Readonly<{ sast: unknown }> => {
-  if (typeof value !== "object" || value === null || !("sast" in value)) {
+  if (!Predicate.hasProperty(value, "sast")) {
     throw new Error("Missing source scan policy");
   }
 
@@ -49,21 +56,14 @@ const rootPolicy = (value: unknown): object & Readonly<{ sast: unknown }> => {
 };
 
 const sastPolicy = (value: unknown): object & Readonly<{ include: unknown; exclude: unknown }> => {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !("include" in value) ||
-    !("exclude" in value)
-  ) {
+  if (!Predicate.hasProperty(value, "include") || !Predicate.hasProperty(value, "exclude")) {
     throw new Error("Missing source scan scope");
   }
 
   return value;
 };
 
-const readPolicy = (
-  value: unknown
-): Readonly<{ policy: object; sast: object; exclude: ReadonlyArray<string> }> => {
+const readPolicy = (value: unknown): SourcePolicy => {
   const policy = rootPolicy(value);
   const sast = sastPolicy(policy.sast);
 
@@ -78,7 +78,7 @@ const readPolicy = (
     throw new Error("Review partitioning when source includes change");
   }
 
-  if (!Array.isArray(exclude) || !exclude.every((path: unknown) => typeof path === "string")) {
+  if (!Array.isArray(exclude) || !exclude.every(Predicate.isString)) {
     throw new Error("Invalid source exclusions");
   }
 
@@ -123,7 +123,7 @@ const maximumPartitions = 3;
 const validPartitionCount = (count: number): boolean =>
   [minimumPartitions, minimumPartitions + 1, maximumPartitions].includes(count);
 
-const sourceSelection = (selection: string): Readonly<{ index: number; count: number }> => {
+const sourceSelection = (selection: string): SourceSelection => {
   const [index = 0, count = 0, extra] = selection.split("/").map(Number);
 
   if (

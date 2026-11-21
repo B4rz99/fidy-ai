@@ -148,10 +148,7 @@ const usableBudgets = async (page, totals) => {
           return (
             fields?.length === count &&
             [...fields].every(
-              (item) =>
-                item instanceof HTMLInputElement &&
-                /^100[.]?000(?:,00)?$/u.test(item.value) &&
-                item.getClientRects().length > 0
+              (item) => /^100[.]?000(?:,00)?$/u.test(item.value) && item.getClientRects().length > 0
             )
           );
         },

@@ -28,11 +28,13 @@ const commandCodec = Schema.fromJsonString(CaseCommand);
 
 const caseCodec = Schema.fromJsonString(TitularCase);
 
+const isRegisterFailure = Schema.is(RegisterFailure);
+
 const nativeCall = <A>(run: () => A): Effect.Effect<A, RegisterFailure> =>
   Effect.try({
     try: run,
     catch: (cause) =>
-      cause instanceof RegisterFailure ? cause : new RegisterFailure({ reason: "Unavailable" }),
+      isRegisterFailure(cause) ? cause : RegisterFailure.make({ reason: "Unavailable", cause }),
   });
 
 const isRepositoryPath = Effect.fn(function* (directory: string) {
@@ -62,7 +64,7 @@ const checkDirectory = Effect.fn(function* (root: string, uid: number) {
     !ownedPermissions({ info: folder, uid, mode: privateDirectoryMode }) ||
     (yield* fs.realPath(root)) !== root
   ) {
-    return yield* new RegisterFailure({ reason: "UnsafeStorage" });
+    return yield* RegisterFailure.make({ reason: "UnsafeStorage" });
   }
 });
 
@@ -80,11 +82,11 @@ const prepareFile = Effect.fn(function* (root: string, uid: number) {
     !ownedPermissions({ info: file, uid, mode: privateFileMode }) ||
     !Option.contains(1n)(file.nlink)
   ) {
-    return yield* new RegisterFailure({ reason: "UnsafeStorage" });
+    return yield* RegisterFailure.make({ reason: "UnsafeStorage" });
   }
 
   if (file.size > BigInt(maximumBytes) || (yield* fs.realPath(target)) !== target) {
-    return yield* new RegisterFailure({ reason: "UnsafeStorage" });
+    return yield* RegisterFailure.make({ reason: "UnsafeStorage" });
   }
 
   return { path: target, created: created || file.size === 0n };
@@ -97,7 +99,7 @@ const privateStorage = Effect.fn(function* (directory: string) {
   const uid = yield* Effect.sync(() => Option.fromNullishOr(process.getuid?.()));
 
   if (Option.isNone(uid) || (yield* isRepositoryPath(root))) {
-    return yield* new RegisterFailure({ reason: "UnsafeStorage" });
+    return yield* RegisterFailure.make({ reason: "UnsafeStorage" });
   }
 
   if (!(yield* fs.exists(root))) yield* fs.makeDirectory(root, { mode: privateDirectoryMode });
@@ -123,9 +125,9 @@ const initialize = (db: Database, created: boolean): void => {
 const openRegister = Effect.fn(function* (directory: string) {
   const storage = yield* privateStorage(directory).pipe(
     Effect.mapError((failure) =>
-      failure._tag === "RegisterFailure"
+      isRegisterFailure(failure)
         ? failure
-        : new RegisterFailure({ reason: "UnsafeStorage" })
+        : RegisterFailure.make({ reason: "UnsafeStorage", cause: failure })
     )
   );
 
@@ -147,7 +149,7 @@ const openRegister = Effect.fn(function* (directory: string) {
 const decodeSnapshot = (row: unknown): Effect.Effect<TitularCase, RegisterFailure> =>
   Schema.decodeUnknownEffect(Schema.Struct({ snapshot: Schema.String }))(row).pipe(
     Effect.flatMap((value) => Schema.decodeEffect(caseCodec)(value.snapshot)),
-    Effect.mapError(() => new RegisterFailure({ reason: "Unavailable" }))
+    Effect.mapError((cause) => RegisterFailure.make({ reason: "Unavailable", cause }))
   );
 
 const findCase = (
@@ -173,14 +175,14 @@ const replay = (
 
     const stored = yield* Schema.decodeUnknownEffect(
       Schema.Struct({ command: Schema.String, snapshot: Schema.String })
-    )(row).pipe(Effect.mapError(() => new RegisterFailure({ reason: "Unavailable" })));
+    )(row).pipe(Effect.mapError((cause) => RegisterFailure.make({ reason: "Unavailable", cause })));
 
     const encoded = yield* Schema.encodeEffect(commandCodec)(input.command).pipe(
-      Effect.mapError(() => new RegisterFailure({ reason: "InvalidInput" }))
+      Effect.mapError((cause) => RegisterFailure.make({ reason: "InvalidInput", cause }))
     );
 
     if (stored.command !== encoded) {
-      return yield* new RegisterFailure({ reason: "Conflict" });
+      return yield* RegisterFailure.make({ reason: "Conflict" });
     }
 
     return Option.some(yield* decodeSnapshot(stored));
@@ -204,7 +206,7 @@ const storeCommand = (
       counts.events >= maximumEvents ||
       (input.command.action === "Receive" && counts.cases >= maximumCases)
     ) {
-      throw new RegisterFailure({ reason: "Unavailable" });
+      throw RegisterFailure.make({ reason: "Unavailable" });
     }
 
     const snapshot = Schema.encodeSync(caseCodec)(input.next);
@@ -273,7 +275,7 @@ export const runCaseRegister = Effect.fn(function* (
 ) {
   const request = yield* Schema.decodeUnknownEffect(RegisterRequest, { onExcessProperty: "error" })(
     input.request
-  ).pipe(Effect.mapError(() => new RegisterFailure({ reason: "InvalidInput" })));
+  ).pipe(Effect.mapError((cause) => RegisterFailure.make({ reason: "InvalidInput", cause })));
 
   const atMs = yield* Clock.currentTimeMillis;
 
@@ -287,7 +289,7 @@ export const runCaseRegister = Effect.fn(function* (
 
         const value = yield* findCase({ db, caseId: request.caseId });
 
-        if (Option.isNone(value)) return yield* new RegisterFailure({ reason: "InvalidInput" });
+        if (Option.isNone(value)) return yield* RegisterFailure.make({ reason: "InvalidInput" });
 
         return report(value.value);
       }),

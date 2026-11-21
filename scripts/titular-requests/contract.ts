@@ -1,4 +1,4 @@
-import { Data, Schema } from "effect";
+import { Schema } from "effect";
 
 export const EvidenceReference = Schema.String.check(Schema.isUUID());
 
@@ -183,6 +183,16 @@ export const CaseReceipt = Schema.Struct({
 
 export type CaseReceipt = typeof CaseReceipt.Type;
 
-export class RegisterFailure extends Data.TaggedError("RegisterFailure")<{
-  reason: "InvalidInput" | "Conflict" | "InvalidTransition" | "UnsafeStorage" | "Unavailable";
-}> {}
+export class RegisterFailure extends Schema.TaggedError<
+  RegisterFailure,
+  { readonly brand: unique symbol }
+>()("RegisterFailure", {
+  reason: Schema.Literals([
+    "InvalidInput",
+    "Conflict",
+    "InvalidTransition",
+    "UnsafeStorage",
+    "Unavailable",
+  ]),
+  cause: Schema.optional(Schema.Unknown),
+}) {}

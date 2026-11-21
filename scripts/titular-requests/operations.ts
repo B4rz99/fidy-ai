@@ -8,7 +8,7 @@ const localDate = (atMs: number): string =>
   DateTime.formatIsoDate(DateTime.setZone(DateTime.makeUnsafe(atMs), bogotaZone));
 
 const refuse = (): Effect.Effect<never, RegisterFailure> =>
-  Effect.fail(new RegisterFailure({ reason: "InvalidTransition" }));
+  Effect.fail(RegisterFailure.make({ reason: "InvalidTransition" }));
 
 type TransitionCommand = Exclude<CaseCommand, { action: "Receive" }>;
 
@@ -298,7 +298,7 @@ const currentRevision = ({
     previous.value.caseId !== command.caseId ||
     previous.value.revision !== command.revision
   ) {
-    return Effect.fail(new RegisterFailure({ reason: "Conflict" }));
+    return Effect.fail(RegisterFailure.make({ reason: "Conflict" }));
   }
 
   return Effect.succeed(previous.value);
@@ -311,7 +311,7 @@ export const applyCaseCommand = Effect.fn(function* (
 
   if (command.action === "Receive") {
     return yield* Option.isSome(previous)
-      ? Effect.fail(new RegisterFailure({ reason: "Conflict" }))
+      ? Effect.fail(RegisterFailure.make({ reason: "Conflict" }))
       : receive({ command, atMs });
   }
 

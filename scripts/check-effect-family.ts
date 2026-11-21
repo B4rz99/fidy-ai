@@ -75,8 +75,10 @@ const directPins = (
 ): ReadonlyArray<Finding> =>
   manifests.flatMap(({ path, value }) =>
     [...Object.entries(value.dependencies ?? {}), ...Object.entries(value.devDependencies ?? {})]
+      .values()
       .filter(([name]) => isCoordinatedEffectPackage(name))
       .map(([packageName, version]) => ({ packageName, version, location: path }))
+      .toArray()
   );
 
 type PackageIdentity = {

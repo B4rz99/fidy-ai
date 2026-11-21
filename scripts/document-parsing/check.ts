@@ -310,9 +310,12 @@ try {
   );
 
   const response = csvProfile.response;
+
+  if (!response.ok) throw new Error("Document parser failed the bounded workerd fixture");
+
   const parsed = Schema.decodeUnknownSync(ParseResult)(await response.json());
 
-  if (!response.ok || parsed.format !== "csv" || parsed.rowCount !== rows.length) {
+  if (parsed.format !== "csv" || parsed.rowCount !== rows.length) {
     throw new Error("Document parser failed the bounded workerd fixture");
   }
 
@@ -351,18 +354,17 @@ try {
             requestStatement(document.body, signal, document.headers)
           );
 
+          const failure = new DocumentParsingCheckFailure({
+            message: `Document parser did not fail closed for ${document.label}`,
+          });
+
+          if (unsupportedResponse.status !== unprocessableContentStatus) return yield* failure;
+
           const rejected = yield* Schema.decodeUnknownEffect(RejectedResult)(
             yield* Effect.tryPromise(() => unsupportedResponse.json())
           );
 
-          if (
-            unsupportedResponse.status !== unprocessableContentStatus ||
-            rejected.reason !== "unsupported-format"
-          ) {
-            return yield* new DocumentParsingCheckFailure({
-              message: `Document parser did not fail closed for ${document.label}`,
-            });
-          }
+          if (rejected.reason !== "unsupported-format") return yield* failure;
         }),
       { concurrency: 1, discard: true }
     )
@@ -382,15 +384,17 @@ try {
             requestStatement(body, signal)
           );
 
+          const failure = new DocumentParsingCheckFailure({
+            message: `Workerd did not safely parse hostile workbook structure: ${fixture}`,
+          });
+
+          if (!activeResponse.ok) return yield* failure;
+
           const activeResult = yield* Schema.decodeUnknownEffect(ParseResult)(
             yield* Effect.tryPromise(() => activeResponse.json())
           );
 
-          if (!activeResponse.ok || activeResult.format !== "xlsx") {
-            return yield* new DocumentParsingCheckFailure({
-              message: `Workerd did not safely parse hostile workbook structure: ${fixture}`,
-            });
-          }
+          if (activeResult.format !== "xlsx") return yield* failure;
         }),
       { concurrency: 1, discard: true }
     )
@@ -437,18 +441,17 @@ try {
             requestStatement(hostile.body, signal)
           );
 
+          const failure = new DocumentParsingCheckFailure({
+            message: `Workerd did not reject ${hostile.label}`,
+          });
+
+          if (hostileResponse.status !== hostile.expectedStatus) return yield* failure;
+
           const rejected = yield* Schema.decodeUnknownEffect(RejectedResult)(
             yield* Effect.tryPromise(() => hostileResponse.json())
           );
 
-          if (
-            hostileResponse.status !== hostile.expectedStatus ||
-            rejected.reason !== hostile.expectedReason
-          ) {
-            return yield* new DocumentParsingCheckFailure({
-              message: `Workerd did not reject ${hostile.label}`,
-            });
-          }
+          if (rejected.reason !== hostile.expectedReason) return yield* failure;
         }),
       { concurrency: 1, discard: true }
     )
@@ -481,13 +484,14 @@ try {
   );
 
   const xlsxResponse = xlsxProfile.response;
+
+  if (!xlsxResponse.ok) {
+    throw new Error("Document parser failed the near-limit XLSX workerd fixture");
+  }
+
   const parsedXlsx = Schema.decodeUnknownSync(ParseResult)(await xlsxResponse.json());
 
-  if (
-    !xlsxResponse.ok ||
-    parsedXlsx.format !== "xlsx" ||
-    parsedXlsx.rowCount !== representativeXlsxRows
-  ) {
+  if (parsedXlsx.format !== "xlsx" || parsedXlsx.rowCount !== representativeXlsxRows) {
     throw new Error("Document parser failed the near-limit XLSX workerd fixture");
   }
 

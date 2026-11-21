@@ -97,11 +97,15 @@ const runtimeFailure = Schema.Struct({
   cloudflareErrorCode: Schema.optional(Schema.String),
 });
 
-const decodeResponse = Schema.decodeUnknownSync(Schema.Union([workResult, parsedOnly, rejected]));
+const decodeAccepted = Schema.decodeUnknownSync(Schema.Union([workResult, parsedOnly]));
+
+const decodeRejected = Schema.decodeUnknownSync(rejected);
 
 const readProofResponse = Effect.fn(function* (response: Response) {
   if (response.headers.get("content-type")?.includes("application/json") === true) {
-    return decodeResponse(yield* Effect.tryPromise(() => response.json()));
+    const decode = response.ok ? decodeAccepted : decodeRejected;
+
+    return decode(yield* Effect.tryPromise(() => response.json()));
   }
 
   const body = yield* Effect.tryPromise(() => response.text());
@@ -325,7 +329,7 @@ const probeReady = Effect.fn(function* (target: Option.Option<HostedWorkerProof>
   });
   const value = yield* Effect.tryPromise(() => reply.json());
   yield* Effect.try(() => {
-    const parsed = decodeResponse(value);
+    const parsed = remote ? decodeRejected(value) : decodeAccepted(value);
 
     const ready = remote
       ? parsed.outcome === "rejected" && parsed.reason === "malformed-file"

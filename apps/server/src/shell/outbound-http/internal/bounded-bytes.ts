@@ -1,4 +1,8 @@
-import { Effect, Option, Stream } from "effect";
+import { Data, Effect, Stream } from "effect";
+
+export class BoundedBytesExceeded extends Data.TaggedError("BoundedBytesExceeded")<{
+  readonly maximumBytes: number;
+}> {}
 
 export const collectBoundedBytes = Effect.fn(function* <E, R>(
   stream: Stream.Stream<Uint8Array, E, R>,
@@ -22,7 +26,7 @@ export const collectBoundedBytes = Effect.fn(function* <E, R>(
     })
   );
 
-  if (byteLength > maximumBytes) return Option.none<Uint8Array>();
+  if (byteLength > maximumBytes) return yield* new BoundedBytesExceeded({ maximumBytes });
   const bytes = new Uint8Array(byteLength);
   let offset = 0;
 
@@ -31,5 +35,5 @@ export const collectBoundedBytes = Effect.fn(function* <E, R>(
     offset += chunk.byteLength;
   }
 
-  return Option.some(bytes);
+  return bytes;
 });

@@ -142,6 +142,9 @@ const matchesCanonicalUnavailable = Effect.fn(function* (response: Response) {
       })
     ),
     Effect.timeoutOption("2 seconds"),
+    Effect.tapError((error) =>
+      Effect.logWarning("Canonical unavailable body was unreadable", { reason: error._tag })
+    ),
     Effect.orElseSucceed(() => Option.none())
   );
 

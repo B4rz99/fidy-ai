@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit, Match, Option, Schema, Stream } from "effect";
+import { Cause, Effect, Exit, Match, Option, Predicate, Schema, Stream } from "effect";
 import {
   Headers,
   HttpClient,
@@ -22,7 +22,7 @@ import {
   projectExternalHttpRequest,
   projectExternalHttpResponse,
 } from "~/shell/observability/operations";
-import { collectBoundedBytes } from "./bounded-bytes";
+import { BoundedBytesExceeded, collectBoundedBytes } from "./bounded-bytes";
 import { OutboundHttpFailure, type OutboundHttpResponse } from "~/shell/outbound-http/contract";
 
 type OutboundHttpProvider = Exclude<TelemetryCode<"provider">, "cloudflare-workers">;
@@ -126,28 +126,27 @@ const collectResponse = (
 
   const read =
     declaredLength > maximumBytes
-      ? Effect.scoped(Stream.toPull(response.stream).pipe(Effect.as(Option.none<Uint8Array>())))
+      ? Effect.scoped(
+          Stream.toPull(response.stream).pipe(
+            Effect.andThen(Effect.fail(new BoundedBytesExceeded({ maximumBytes })))
+          )
+        )
       : collectBoundedBytes(response.stream, maximumBytes);
 
   return read.pipe(
     Effect.catchReason("HttpClientError", "EmptyBodyError", () =>
-      Effect.succeedSome<Uint8Array>(new Uint8Array(0))
+      Effect.succeed(new Uint8Array(0))
     ),
-    Effect.mapError(() => responseBodyFailure(response.status, responseHeaders)),
-    Effect.flatMap(
-      Option.match({
-        onNone: () =>
-          Effect.fail(
-            new OutboundHttpFailure({
-              reason: "response-too-large",
-              responseStatus: Option.some(response.status),
-              responseHeaders,
-            })
-          ),
-        onSome: (body) =>
-          Effect.succeed({ status: response.status, headers: responseHeaders, body }),
-      })
-    )
+    Effect.mapError((error) =>
+      Predicate.isTagged(error, "BoundedBytesExceeded")
+        ? new OutboundHttpFailure({
+            reason: "response-too-large",
+            responseStatus: Option.some(response.status),
+            responseHeaders,
+          })
+        : responseBodyFailure(response.status, responseHeaders)
+    ),
+    Effect.map((body) => ({ status: response.status, headers: responseHeaders, body }))
   );
 };
 

@@ -6,6 +6,7 @@ import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Data from "effect/Data";
 import * as Layer from "effect/Layer";
@@ -34,9 +35,11 @@ const inspect = Effect.gen(function* () {
   return workerDriftReport(snapshot.repairPlan.native).join("\n");
 }).pipe(
   Effect.timeout("45 seconds"),
-  Effect.catchCause(() =>
-    Effect.succeed(
-      "Worker drift fields: Core unavailable\nWorker drift fields: Ingress unavailable"
+  Effect.catchCause((cause) =>
+    Effect.logWarning("Worker drift inspection failed", {
+      interrupted: Cause.hasInterrupts(cause),
+    }).pipe(
+      Effect.as("Worker drift fields: Core unavailable\nWorker drift fields: Ingress unavailable")
     )
   )
 );

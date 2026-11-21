@@ -78,7 +78,10 @@ const trusted = (): boolean => (macOS ? trustedByMacOS() : trustedByLinux());
 
 const serviceGroup = Effect.fn(function* () {
   const fs = yield* FileSystem.FileSystem;
-  const group = yield* fs.readFileString(serviceGroupFile).pipe(Effect.orElseSucceed(() => ""));
+
+  const group = yield* fs
+    .readFileString(serviceGroupFile)
+    .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed("")));
 
   return /^[1-9][0-9]*$/u.test(group.trim()) ? group.trim() : undefined;
 });

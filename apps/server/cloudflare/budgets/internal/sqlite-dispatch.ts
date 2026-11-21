@@ -94,4 +94,13 @@ const dispatch = Effect.fn(function* (unit: Unit) {
 export const dispatchLocalBudget = (
   unit: Unit
 ): Effect.Effect<Response, never, Effect.Services<ReturnType<typeof runLocalMutation>>> =>
-  dispatch(unit).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())));
+  dispatch(unit).pipe(
+    Effect.tapCause(() =>
+      Effect.logWarning({
+        component: "budgets",
+        operation: "dispatchLocalBudget",
+        outcome: "unavailable",
+      })
+    ),
+    Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+  );

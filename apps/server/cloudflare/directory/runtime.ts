@@ -207,6 +207,13 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     if (request.url === scopeDirectoryUrl) {
       return this.runtime.runPromise(
         inspectDirectoryScope(request, this.env.ERASURE).pipe(
+          Effect.tapCause(() =>
+            Effect.logWarning({
+              component: "directory",
+              operation: "inspectDirectoryScope",
+              outcome: "unavailable",
+            })
+          ),
           Effect.catchCause(() => Effect.succeed(unavailable()))
         )
       );
@@ -215,6 +222,13 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     if (request.url === participantCleanupUrl) {
       return this.runtime.runPromise(
         handleSharedCleanup(request, this.env.ERASURE, cleanDirectoryCase).pipe(
+          Effect.tapCause(() =>
+            Effect.logWarning({
+              component: "directory",
+              operation: "handleSharedCleanup",
+              outcome: "unavailable",
+            })
+          ),
           Effect.catchCause(() => Effect.succeed(unavailable()))
         )
       );
@@ -223,6 +237,13 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     if (request.url === participantDrainedUrl) {
       return this.runtime.runPromise(
         participantDrain(request, outstandingDirectoryHandoffs).pipe(
+          Effect.tapCause(() =>
+            Effect.logWarning({
+              component: "directory",
+              operation: "participantDrain",
+              outcome: "unavailable",
+            })
+          ),
           Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
         )
       );
@@ -231,6 +252,13 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     {
       return this.runtime.runPromise(
         fenceErasureParticipant(request, this.env.USER_STORE, this.ctx.storage).pipe(
+          Effect.tapCause(() =>
+            Effect.logWarning({
+              component: "directory",
+              operation: "fenceErasureParticipant",
+              outcome: "unavailable",
+            })
+          ),
           Effect.catchCause(() => Effect.succeed(unavailable()))
         )
       );
@@ -273,7 +301,16 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
             request,
             closedHostEnvironment({ request, environment: this.env, boundary: "core" })
           )
-      ).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
+      ).pipe(
+        Effect.tapCause(() =>
+          Effect.logWarning({
+            component: "directory",
+            operation: "directoryRequest",
+            outcome: "unavailable",
+          })
+        ),
+        Effect.catchCause(() => Effect.succeed(unavailable()))
+      )
     );
   }
 }

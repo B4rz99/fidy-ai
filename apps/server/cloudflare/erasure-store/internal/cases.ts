@@ -96,6 +96,13 @@ const fenceParticipant = Effect.fn(function* (
   ).pipe(
     Effect.map((response) => response.status === acknowledged),
     Effect.timeout("5 seconds"),
+    Effect.tapError(() =>
+      Effect.logWarning({
+        component: "erasure-store",
+        operation: "fenceParticipant",
+        outcome: "unfenced",
+      })
+    ),
     Effect.orElseSucceed(() => false)
   );
 
@@ -167,10 +174,23 @@ export const advanceErasureCases = Effect.fn(function* (
     })
   );
 
-  yield* Effect.forEach(page, (record) => advanceCase(record, env).pipe(Effect.result), {
-    concurrency: 4,
-    discard: true,
-  });
+  yield* Effect.forEach(
+    page,
+    (record) =>
+      advanceCase(record, env).pipe(
+        Effect.catch(() =>
+          Effect.logWarning({
+            component: "erasure-store",
+            operation: "advanceCase",
+            outcome: "deferred",
+          })
+        )
+      ),
+    {
+      concurrency: 4,
+      discard: true,
+    }
+  );
 });
 
 export const confirmLifetimeCase = Effect.fn(function* (request: Request) {

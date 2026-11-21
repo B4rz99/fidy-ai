@@ -503,5 +503,12 @@ export const runLocalBatch = Effect.fn(
       })
     );
   },
+  Effect.tapCause(() =>
+    Effect.logWarning({
+      component: "canonical-admission",
+      operation: "atomicBatch",
+      outcome: "unavailable",
+    })
+  ),
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );

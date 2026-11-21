@@ -87,7 +87,16 @@ const routeCookie = ({
         signal: AbortSignal.any([request.signal, signal]),
       })
     );
-  }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())));
+  }).pipe(
+    Effect.tapCause(() =>
+      Effect.logWarning({
+        component: "directory",
+        operation: "routeSession",
+        outcome: "unavailable",
+      })
+    ),
+    Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+  );
 
 export const routeSessionRequest = (input: SessionRequest): Effect.Effect<Response> =>
   routeCookie({ ...input, browserHandoff: false });
@@ -151,6 +160,13 @@ export const routePATRequest = Effect.fn(
 
     return response.status === unauthorizedStatus ? yield* refused : response;
   },
+  Effect.tapCause(() =>
+    Effect.logWarning({
+      component: "directory",
+      operation: "routePATRequest",
+      outcome: "unavailable",
+    })
+  ),
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
 
@@ -165,7 +181,16 @@ export const routeBootstrapRequest = ({
     if (environment.DIRECTORY === undefined) throw new Error("Directory unavailable");
 
     return environment.DIRECTORY.getByName(directoryName).fetch(new Request(request, { signal }));
-  }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())));
+  }).pipe(
+    Effect.tapCause(() =>
+      Effect.logWarning({
+        component: "directory",
+        operation: "routeBootstrapRequest",
+        outcome: "unavailable",
+      })
+    ),
+    Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+  );
 
 const browserContextRefusal = ({
   request,
@@ -238,6 +263,13 @@ export const routeBrowserSession = Effect.fn(
       USER_STORE.getByName(route.userId).fetch(new Request(request, { headers, signal }))
     );
   },
+  Effect.tapCause(() =>
+    Effect.logWarning({
+      component: "directory",
+      operation: "routeBrowserSession",
+      outcome: "unavailable",
+    })
+  ),
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
 
@@ -266,6 +298,13 @@ export const currentMountedBinding = Effect.fn(
 
     return proof.binding === expected ? Option.none<Response>() : Option.some(noAuthority());
   },
+  Effect.tapCause(() =>
+    Effect.logWarning({
+      component: "directory",
+      operation: "currentMountedBinding",
+      outcome: "unavailable",
+    })
+  ),
   Effect.catchCause(() => Effect.succeedSome(canonicalAdmissionUnavailable()))
 );
 

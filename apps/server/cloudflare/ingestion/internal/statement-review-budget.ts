@@ -173,20 +173,8 @@ export const materializedHeaderBytes = (headers: ReadonlyArray<string>): number 
   );
 
 export const materializedStatementBytes = (rows: ReadonlyArray<ParsedStatementRow>): number => {
-  const sizes = new Map<string, number>();
-
-  const size = (value: string): number => {
-    const previous = sizes.get(value);
-
-    if (previous !== undefined) {
-      return previous;
-    }
-
-    const bytes = stringBytes(value, true, maximumMaterializedStatementBytes);
-    sizes.set(value, bytes);
-
-    return bytes;
-  };
+  const size = (value: string): number =>
+    stringBytes(value, true, maximumMaterializedStatementBytes);
 
   return arrayBytes(
     rows,
@@ -243,17 +231,7 @@ const recordBytes = (values: ReadonlyArray<StoredValue>): number => {
 export const statementReviewAdmission = (
   context: ReviewContext
 ): ((row: NeedsReviewStatementRow) => boolean) => {
-  const sizes = new Map<string, number>();
-
-  const size = (value: string): number => {
-    const existing = sizes.get(value);
-
-    if (existing !== undefined) return existing;
-    const bytes = stringBytes(value, true);
-    sizes.set(value, bytes);
-
-    return bytes;
-  };
+  const size = (value: string): number => stringBytes(value, true);
 
   const text = (value: string): StoredValue => textValue(stringBytes(value, false));
 

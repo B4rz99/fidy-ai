@@ -90,5 +90,12 @@ export const applyBetaUserCommand = Effect.fn(
       })
     );
   },
+  Effect.tapError(() =>
+    Effect.logWarning({
+      component: "beta-pro",
+      operation: "applyBetaUserCommand",
+      outcome: "unavailable",
+    })
+  ),
   Effect.orElseSucceed(() => refused(betaStatus.unavailable))
 );

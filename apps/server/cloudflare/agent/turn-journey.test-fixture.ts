@@ -1,4 +1,4 @@
-import { Clock, Effect, Schedule, Schema } from "effect";
+import { Clock, Data, Effect, Schedule, Schema } from "effect";
 import { expect } from "vitest";
 import { HostedTurnProcessing, HostedTurnProposal } from "../../src/shell/agent/contract";
 import { DisclosureSnapshot } from "../../src/shell/consent/contract";
@@ -13,11 +13,15 @@ import { native } from "../user-store.test-fixture";
 
 const httpAccepted = 202;
 
+class ProposalPending extends Data.TaggedError("ProposalPending")<{ status: number }> {}
+
 const observeProposal = Effect.fn(function* (
   post: (path: string, body: unknown) => Effect.Effect<Response>,
   turnId: string
 ) {
   const res = yield* post("/progress", { turnId });
+
+  if (!res.ok) return yield* new ProposalPending({ status: res.status });
 
   return yield* Schema.decodeUnknownEffect(HostedTurnProposal)(yield* native(() => res.json()));
 });

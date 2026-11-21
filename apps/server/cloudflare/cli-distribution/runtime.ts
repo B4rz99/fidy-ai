@@ -35,6 +35,13 @@ const latestVersion = Effect.gen(function* () {
   });
 }).pipe(
   Effect.timeout("15 seconds"),
+  Effect.tapError(() =>
+    Effect.logWarning({
+      component: "cli-distribution",
+      operation: "latestVersion",
+      outcome: "unavailable",
+    })
+  ),
   Effect.orElseSucceed(
     () =>
       new Response("CLI release unavailable.\n", {

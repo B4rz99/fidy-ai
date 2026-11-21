@@ -120,5 +120,12 @@ export const reviewRequest = Effect.fn(
 
     return yield* dispatch(command.value, environment, { operator: operator.value, now });
   },
+  Effect.tapError(() =>
+    Effect.logWarning({
+      component: "ingestion",
+      operation: "sampleOperator",
+      outcome: "unavailable",
+    })
+  ),
   Effect.orElseSucceed(() => sampleReply(sampleStatus.unavailable))
 );

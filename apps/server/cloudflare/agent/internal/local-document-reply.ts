@@ -16,12 +16,12 @@ export const waitForDocument = Effect.fn(function* (
 ) {
   const sql = yield* SqliteClient;
 
-  const [waiting] =
-    yield* sql`SELECT i.turn_id FROM hosted_whatsapp_inbound i JOIN statement_documents d ON d.user_id=i.user_id AND d.message=i.message AND d.portfolio=i.portfolio LEFT JOIN statement_submissions s ON s.id=d.id AND s.user_id=i.user_id WHERE i.turn_id=${turn.id} AND i.user_id=${turn.user_id} AND i.media_id IS NOT NULL AND d.unsupported=0 AND d.disposition=0 AND (s.id IS NULL OR s.status IN ('queued','processing'))`;
-
-  if (waiting === undefined) return false;
   const next = Math.min(now + recheckMs, turn.deadline_ms);
-  yield* sql`UPDATE hosted_whatsapp_inbound SET offer_ms=${next} WHERE turn_id=${turn.id}`;
+
+  const waiting =
+    yield* sql`UPDATE hosted_whatsapp_inbound AS i SET offer_ms=${next} WHERE i.turn_id=${turn.id} AND i.user_id=${turn.user_id} AND i.media_id IS NOT NULL AND EXISTS(SELECT 1 FROM statement_documents d LEFT JOIN statement_submissions s ON s.id=d.id AND s.user_id=i.user_id WHERE d.user_id=i.user_id AND d.message=i.message AND d.portfolio=i.portfolio AND d.unsupported=0 AND d.disposition=0 AND (s.id IS NULL OR s.status IN ('queued','processing'))) RETURNING turn_id`;
+
+  if (waiting.length === 0) return false;
   yield* preserveStoreAlarm(storage, next);
 
   return true;

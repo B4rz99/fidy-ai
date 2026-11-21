@@ -196,7 +196,16 @@ export const registryRequest = (
     const result = yield* execute(input.registry, decoded.value);
 
     return Response.json(result, { headers: { "cache-control": "no-store" } });
-  }).pipe(Effect.orElseSucceed(() => new Response(null, { status: 503 })));
+  }).pipe(
+    Effect.tapError(() =>
+      Effect.logWarning({
+        component: "erasure",
+        operation: "registryCommand",
+        outcome: "unavailable",
+      })
+    ),
+    Effect.orElseSucceed(() => new Response(null, { status: 503 }))
+  );
 
 const remoteRequest = <Reply extends Schema.ConstraintDecoder<unknown>>(
   target: Pick<Fetcher, "fetch">,

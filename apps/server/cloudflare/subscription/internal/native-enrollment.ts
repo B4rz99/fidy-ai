@@ -94,14 +94,10 @@ const readForm = Effect.fn(function* (user: string, id: string) {
 
   const status = row.state === "prepared" ? "expired" : row.state;
 
+  const body = { status, enrollmentId: id, method: row.method, priceId: row.price_id };
+
   return json({
-    body: {
-      status,
-      enrollmentId: id,
-      method: row.method,
-      priceId: row.price_id,
-      ...(status === "refused" ? { reason: row.reason } : {}),
-    },
+    body: status === "refused" ? { ...body, reason: row.reason } : body,
     status: 200,
   });
 });

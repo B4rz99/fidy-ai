@@ -1,9 +1,20 @@
 import { type SecureRandom } from "effect/crypto";
 import { BunCrypto, BunFileSystem } from "@effect/platform-bun";
 import { join } from "node:path";
-import { Effect, Fiber, FileSystem, Layer, Option, type PlatformError, Schema } from "effect";
-import { describe, expect, it } from "vitest";
-import { type NativeMode, nativeLogin, nativeTools } from "./production-native";
+import {
+  Duration,
+  Effect,
+  Fiber,
+  FileSystem,
+  Layer,
+  Option,
+  type PlatformError,
+  Result,
+  Schedule,
+  Schema,
+} from "effect";
+import { assert, describe, expect, it } from "vitest";
+import { nativeLogin, nativeTools } from "./production-native";
 
 const processAlive = (pid: number): Effect.Effect<boolean> =>
   Effect.try({
@@ -130,14 +141,23 @@ const run = <A, E>(
     )
   );
 
+const awaitPath = (
+  fs: FileSystem.FileSystem,
+  path: string
+): Effect.Effect<boolean, PlatformError.PlatformError> =>
+  fs.exists(path).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced(Duration.millis(readinessDelay)),
+      until: (exists) => exists,
+      times: readinessAttempts - 1,
+    })
+  );
+
 const callbackFixture = Effect.fn(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;
   const authorization = join(root, "claude-authorize-url.txt");
 
-  for (let attempt = 0; attempt < readinessAttempts; attempt++) {
-    if (yield* fs.exists(authorization)) break;
-    yield* Effect.sleep(readinessDelay);
-  }
+  yield* awaitPath(fs, authorization);
 
   expect(yield* fs.exists(authorization)).toBe(true);
   yield* fs.writeFileString(
@@ -255,43 +275,57 @@ describe("isolated native MCP proof boundary", () => {
         })
       )
     ));
-  it.each(["incomplete", "wrong-refusal", "missing-tool", "malformed"])(
+  it.each(["incomplete", "missing-tool", "malformed"])(
     "rejects %s instead of claiming proof",
     (mode) =>
       run(
         withClient(mode, ({ root, binary }) =>
           Effect.gen(function* () {
-            const phase: NativeMode = mode === "wrong-refusal" ? "headless" : "refresh";
-
             const result = yield* Effect.result(
               nativeTools({
                 host: "claude",
                 binary,
                 root,
-                mode: phase,
+                mode: "refresh",
                 namespace: "synthetic-test",
                 mcpUrl: Option.none(),
               })
             );
 
-            expect(result._tag).toBe("Failure");
-
-            if (mode === "wrong-refusal" && result._tag === "Failure") {
-              expect(Option.getOrThrow(result.failure.diagnostics)).toMatchObject({
-                requested: 1,
-                received: 1,
-                invoked: 1,
-                resultsValid: false,
-                formValid: true,
-                failedTool: "deleteBudget",
-                nextTool: "none",
-                errorCode: "unavailable",
-              });
-            }
+            expect(Result.isFailure(result)).toBe(true);
           })
         )
       )
   );
+  it("rejects wrong-refusal instead of claiming proof", () =>
+    run(
+      withClient("wrong-refusal", ({ root, binary }) =>
+        Effect.gen(function* () {
+          const result = yield* Effect.result(
+            nativeTools({
+              host: "claude",
+              binary,
+              root,
+              mode: "headless",
+              namespace: "synthetic-test",
+              mcpUrl: Option.none(),
+            })
+          );
+
+          assert(Result.isFailure(result));
+          expect(Option.getOrThrow(result.failure.diagnostics)).toMatchObject({
+            requested: 1,
+            received: 1,
+            invoked: 1,
+            resultsValid: false,
+            formValid: true,
+            failedTool: "deleteBudget",
+            nextTool: "none",
+            errorCode: "unavailable",
+          });
+        })
+      )
+    ));
   it("stops the owned native process when verification is interrupted", () =>
     run(
       withClient("hang", ({ root, binary }) =>
@@ -312,10 +346,7 @@ describe("isolated native MCP proof boundary", () => {
 
             const path = join(root, "child-pid.json");
 
-            for (let attempt = 0; attempt < readinessAttempts; attempt++) {
-              if (yield* fs.exists(path)) break;
-              yield* Effect.sleep(readinessDelay);
-            }
+            yield* awaitPath(fs, path);
 
             const pid = decodePid(yield* fs.readFileString(path));
             yield* Fiber.interrupt(fiber);

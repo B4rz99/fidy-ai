@@ -271,8 +271,8 @@ const noTypeCast = {
 const staticMemberName = (node) => {
   if (!node.computed && node.property.type === "Identifier") return node.property.name;
 
-  if (node.property.type === "Literal" && typeof node.property.value === "string") {
-    return node.property.value;
+  if (node.property.type === "Literal" && /^["']/u.test(node.property.raw ?? "")) {
+    return String(node.property.value);
   }
 
   return undefined;
@@ -300,8 +300,6 @@ const noEscapeHatch = {
       },
       ImportDeclaration(node) {
         const source = node.source.value;
-
-        if (typeof source !== "string") return;
 
         if (source !== "effect" && !source.startsWith("effect/")) return;
 
@@ -547,7 +545,7 @@ const cryptoModuleLocals = (statement) => {
   if (statement.type !== "ImportDeclaration") return [];
   const source = statement.source.value;
 
-  if (typeof source !== "string" || !CRYPTO_SOURCES.has(source)) return [];
+  if (!CRYPTO_SOURCES.has(source)) return [];
 
   return statement.specifiers.filter(isWholeModuleImport).map((specifier) => specifier.local.name);
 };
@@ -602,7 +600,7 @@ const noAmbientNondeterminism = {
       ImportDeclaration(node) {
         const source = node.source.value;
 
-        if (typeof source !== "string" || !CRYPTO_SOURCES.has(source)) return;
+        if (!CRYPTO_SOURCES.has(source)) return;
 
         for (const specifier of node.specifiers) {
           if (specifier.type !== "ImportSpecifier") continue;

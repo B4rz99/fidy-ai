@@ -24,9 +24,11 @@ import {
   WompiEnrollmentClient,
   WompiSourceCreationFailed,
   WompiSourceLookupFailed,
+  WompiSourceResult,
 } from "./wompi-client";
 
 import assert from "node:assert/strict";
+import { OutboundHttpRequest } from "../../../src/shell/outbound-http/contract";
 
 const exampleKey = (visibility: "pub" | "prv", environment: "prod" | "test"): string =>
   [visibility, environment, "f1d7c0de".repeat(3)].join("_");
@@ -160,7 +162,7 @@ layer(
       expect(
         Exit.isFailure(
           yield* Effect.exit(
-            outbound.execute({ _tag: "WompiNequiSandboxToken", outcome: "approved" })
+            outbound.execute(OutboundHttpRequest.WompiNequiSandboxToken({ outcome: "approved" }))
           )
         )
       ).toBe(true);
@@ -216,7 +218,9 @@ const loadContracts = Effect.gen(function* () {
   return yield* wompi.contracts(DateTime.makeUnsafe("2026-04-01T00:00:00.000Z"));
 });
 
-for (const status of ["PENDING", "APPROVED"] as const) {
+const nequiTokenStatuses = ["PENDING", "APPROVED"] as const;
+
+const describeNequiTokenStatus = (status: (typeof nequiTokenStatuses)[number]): void => {
   const transport = testOutboundTransportLayer((request) => {
     expect(request.url).toBe("https://sandbox.wompi.co/v1/tokens/nequi/nequi_test_authorization");
     expect(request.headers.authorization).toBe(`Bearer ${sandboxPublicKey}`);
@@ -251,7 +255,9 @@ for (const status of ["PENDING", "APPROVED"] as const) {
       })
     );
   });
-}
+};
+
+nequiTokenStatuses.forEach(describeNequiTokenStatus);
 
 const verifyPaymentSource = Effect.gen(function* () {
   const wompi = yield* WompiEnrollmentClient;
@@ -276,7 +282,9 @@ layer(clientLayer(new Response('{"data":{"id":3891,"status":"AVAILABLE"}}', { st
 })("Wompi available source adapter", (it) => {
   it.effect("derives safe contract evidence and creates one available source", () =>
     Effect.gen(function* () {
-      expect(yield* createPaymentSource).toEqual({ _tag: "Available", sourceId: 3891 });
+      expect(yield* createPaymentSource).toEqual(
+        WompiSourceResult.Available({ sourceId: WompiSourceId.make(3891) })
+      );
     })
   );
 });
@@ -302,14 +310,19 @@ layer(
   );
 });
 
-for (const [label, response] of [
+const sourceVerificationFailures = [
   ["provider refusal", new Response("not found", { status: 404 })],
   ["malformed provider projection", new Response('{"data":{"id":3891}}', { status: 200 })],
   [
     "oversized provider projection",
     new Response("x", { status: 200, headers: { "content-length": "16385" } }),
   ],
-] as const) {
+] as const;
+
+const describeSourceVerificationFailure = ([
+  label,
+  response,
+]: (typeof sourceVerificationFailures)[number]): void => {
   layer(clientLayer(response), { excludeTestServices: true })(
     `Wompi source verification ${label}`,
     (it) => {
@@ -320,7 +333,9 @@ for (const [label, response] of [
       );
     }
   );
-}
+};
+
+sourceVerificationFailures.forEach(describeSourceVerificationFailure);
 
 layer(clientLayer(new Response("unused")), { excludeTestServices: true })(
   "Wompi provider contract revision evidence",
@@ -339,12 +354,17 @@ layer(clientLayer(new Response("unused")), { excludeTestServices: true })(
   }
 );
 
-for (const [label, acceptanceToken] of [
+const invalidAcceptanceTokens = [
   ["missing claims segment", "invalid"],
   ["invalid claims encoding", "header.%.signature"],
   ["malformed claims", "header.e30.signature"],
   ["mismatched claims permalink", personalDataAcceptanceToken],
-] as const) {
+] as const;
+
+const describeInvalidAcceptanceToken = ([
+  label,
+  acceptanceToken,
+]: (typeof invalidAcceptanceTokens)[number]): void => {
   layer(
     clientLayerWithConfig(
       new Response("unused"),
@@ -359,7 +379,9 @@ for (const [label, acceptanceToken] of [
       })
     );
   });
-}
+};
+
+invalidAcceptanceTokens.forEach(describeInvalidAcceptanceToken);
 
 layer(clientLayer(new Response("declined secret", { status: 422 })), {
   excludeTestServices: true,
@@ -394,7 +416,9 @@ layer(clientLayer(new Response(null, { status: 101 })), {
   );
 });
 
-for (const status of [302, 307, 308]) {
+const redirectStatuses = [302, 307, 308];
+
+const describeRedirect = (status: (typeof redirectStatuses)[number]): void => {
   layer(clientLayer(new Response("private redirect body", { status })), {
     excludeTestServices: true,
   })(`Wompi ${status} redirect adapter`, (it) => {
@@ -414,7 +438,9 @@ for (const status of [302, 307, 308]) {
       })
     );
   });
-}
+};
+
+redirectStatuses.forEach(describeRedirect);
 
 layer(clientLayer(new Response("not-json", { status: 201 })), {
   excludeTestServices: true,
@@ -444,7 +470,7 @@ layer(clientLayer(new Response('{"data":{"id":3891,"status":"DECLINED"}}', { sta
 })("Wompi declined source adapter", (it) => {
   it.effect("maps a declined source without retaining provider details", () =>
     Effect.gen(function* () {
-      expect(yield* createPaymentSource).toEqual({ _tag: "Refused" });
+      expect(yield* createPaymentSource).toEqual(WompiSourceResult.Refused());
     })
   );
 });
@@ -454,7 +480,7 @@ layer(clientLayer(new Response('{"data":{"id":3891,"status":"ERROR"}}', { status
 })("Wompi errored source adapter", (it) => {
   it.effect("maps a definitive provider error to refusal", () =>
     Effect.gen(function* () {
-      expect(yield* createPaymentSource).toEqual({ _tag: "Refused" });
+      expect(yield* createPaymentSource).toEqual(WompiSourceResult.Refused());
     })
   );
 });
@@ -464,7 +490,9 @@ layer(clientLayer(new Response('{"data":{"id":3891,"status":"PENDING"}}', { stat
 })("Wompi pending source adapter", (it) => {
   it.effect("retains the private identity of a pending source for authenticated verification", () =>
     Effect.gen(function* () {
-      expect(yield* createPaymentSource).toEqual({ _tag: "Verifying", sourceId: 3891 });
+      expect(yield* createPaymentSource).toEqual(
+        WompiSourceResult.Verifying({ sourceId: WompiSourceId.make(3891) })
+      );
     })
   );
 });
@@ -480,10 +508,15 @@ layer(clientLayer(new Response("provider secret", { status: 503 })), {
   );
 });
 
-for (const [status, certainty] of [
+const oversizedSourceResponses = [
   [400, "rejected"],
   [201, "ambiguous"],
-] as const) {
+] as const;
+
+const describeOversizedSourceResponse = ([
+  status,
+  certainty,
+]: (typeof oversizedSourceResponses)[number]): void => {
   layer(clientLayer(new Response("x", { status, headers: { "content-length": "16385" } })), {
     excludeTestServices: true,
   })(`Wompi oversized ${status} source adapter`, (it) => {
@@ -494,7 +527,9 @@ for (const [status, certainty] of [
       })
     );
   });
-}
+};
+
+oversizedSourceResponses.forEach(describeOversizedSourceResponse);
 
 layer(
   clientLayerWithConfig(new Response("contract"), new Response(null, { status: 101 }), config),
@@ -558,7 +593,9 @@ layer(
 )("Wompi production environment adapter", (it) => {
   it.effect("accepts matching production key prefixes", () =>
     Effect.gen(function* () {
-      expect(yield* createPaymentSource).toEqual({ _tag: "Available", sourceId: 3891 });
+      expect(yield* createPaymentSource).toEqual(
+        WompiSourceResult.Available({ sourceId: WompiSourceId.make(3891) })
+      );
     })
   );
 });
@@ -572,11 +609,17 @@ const layerWithConfig = (
     configLayer
   );
 
-for (const [name, configLayer, candidate] of [
+const invalidKeyConfigs = [
   ["public prefix", mismatchedPublicConfig, sandboxPublicKey],
   ["private prefix", mismatchedPrivateConfig, productionPrivateKey],
   ["private shape", invalidPrivateConfig, invalidPrivateKeyCandidate],
-] as const) {
+] as const;
+
+const describeInvalidKeyConfig = ([
+  name,
+  configLayer,
+  candidate,
+]: (typeof invalidKeyConfigs)[number]): void => {
   it.effect(`rejects an invalid ${name} without echoing the candidate`, () => {
     const runtime = ManagedRuntime.make(layerWithConfig(configLayer));
 
@@ -594,4 +637,6 @@ for (const [name, configLayer, candidate] of [
       () => Effect.tryPromise(() => runtime.dispose())
     );
   });
-}
+};
+
+invalidKeyConfigs.forEach(describeInvalidKeyConfig);

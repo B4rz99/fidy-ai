@@ -14,7 +14,7 @@ import {
   expectNotInspected,
   renderedFailure,
 } from "../../../src/shell/testing/credential-evidence-harness";
-import { WompiBillingClient } from "./wompi-billing-client";
+import { WompiBillingClient, WompiTransactionCreationFailed } from "./wompi-billing-client";
 
 const privateKeyFixture = `prv_test_${"f1d7c0de".repeat(3)}`;
 
@@ -233,10 +233,8 @@ layer(
     Effect.gen(function* () {
       const wompi = yield* WompiBillingClient;
       const failure = yield* Effect.flip(wompi.createTransaction(creationInput));
-      expect(failure).toMatchObject({
-        _tag: "WompiTransactionCreationFailed",
-        certainty: "rejected",
-      });
+      expect(failure).toBeInstanceOf(WompiTransactionCreationFailed);
+      expect(failure).toMatchObject({ certainty: "rejected" });
       const rendered = yield* renderedFailure(failure);
       expect(rendered).not.toContain(integritySecretFixture);
       expect(rendered).not.toContain(privateKeyFixture);
@@ -277,7 +275,9 @@ layer(
   );
 });
 
-for (const status of [404, 408, 429] as const) {
+const retryableRefusalStatuses = [404, 408, 429] as const;
+
+const describeRetryableRefusal = (status: (typeof retryableRefusalStatuses)[number]): void => {
   layer(
     clientLayer(() => new Response("provider refusal", { status })),
     {
@@ -292,7 +292,9 @@ for (const status of [404, 408, 429] as const) {
       })
     );
   });
-}
+};
+
+retryableRefusalStatuses.forEach(describeRetryableRefusal);
 
 layer(
   clientLayer(() => Response.error()),
@@ -341,7 +343,7 @@ const invalidConfiguration = (privateKey: string, integritySecret: string): type
     })
   );
 
-for (const [name, variable, privateKey, integritySecret] of [
+const invalidSecretCases = [
   [
     "private-key shape",
     "WOMPI_PRIVATE_KEY",
@@ -366,7 +368,14 @@ for (const [name, variable, privateKey, integritySecret] of [
     privateKeyFixture,
     `prod_integrity_${"f1d7c0de".repeat(3)}`,
   ],
-] as const) {
+] as const;
+
+const describeInvalidSecret = ([
+  name,
+  variable,
+  privateKey,
+  integritySecret,
+]: (typeof invalidSecretCases)[number]): void => {
   it.effect(`rejects invalid Wompi ${name} without echoing the candidate`, () =>
     Effect.gen(function* () {
       const failure = yield* exitFailure(
@@ -388,7 +397,9 @@ for (const [name, variable, privateKey, integritySecret] of [
       expect(rendered).toContain(variable);
     })
   );
-}
+};
+
+invalidSecretCases.forEach(describeInvalidSecret);
 
 it.effect("rejects missing Wompi credentials with value-safe diagnostics", () =>
   Effect.gen(function* () {

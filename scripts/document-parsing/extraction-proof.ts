@@ -85,7 +85,15 @@ export type ExtractionProof = BuiltProof &
 
 class ProofIoError extends Data.TaggedError("ProofIoError")<{ readonly cause: unknown }> {}
 
-type ProofError = ProofIoError | Schema.SchemaError | Cause.TimeoutError;
+class ExtractionEvidenceFailure extends Data.TaggedError("ExtractionEvidenceFailure")<{
+  readonly message: string;
+}> {}
+
+type ProofError =
+  | ProofIoError
+  | ExtractionEvidenceFailure
+  | Schema.SchemaError
+  | Cause.TimeoutError;
 
 const fromPromise = <A>(run: (signal: AbortSignal) => Promise<A>): Effect.Effect<A, ProofIoError> =>
   Effect.tryPromise({ try: run, catch: (cause) => new ProofIoError({ cause }) });
@@ -157,7 +165,9 @@ const buildProof = (
       !bundleOutput.includes("env.AI") ||
       !bundleOutput.includes("AI")
     ) {
-      throw new Error("Workers AI extraction bundle, binding, or startup evidence is invalid");
+      return yield* new ExtractionEvidenceFailure({
+        message: "Workers AI extraction bundle, binding, or startup evidence is invalid",
+      });
     }
 
     return { bundleBytes, startupMilliseconds, uploadBytes };
@@ -173,22 +183,26 @@ const requestExtraction = (
 const requestReadiness = (signal: AbortSignal): Promise<Response> =>
   requestExtraction("not a document", signal);
 
-const waitUntilReady = Effect.gen(function* () {
-  for (let attempt = 0; attempt < readinessAttempts; attempt += 1) {
-    const ready = yield* fromPromise(requestReadiness).pipe(
-      Effect.flatMap((response) =>
-        fromPromise(() => response.body?.cancel() ?? Promise.resolve()).pipe(
-          Effect.as(response.status === unprocessableContentStatus)
+const readinessProbe = fromPromise(requestReadiness).pipe(
+  Effect.flatMap((response) =>
+    fromPromise(() => response.body?.cancel() ?? Promise.resolve()).pipe(
+      Effect.as(response.status === unprocessableContentStatus)
+    )
+  ),
+  Effect.catch(() => Effect.sleep(readinessRetryMilliseconds).pipe(Effect.as(false)))
+);
+
+const waitUntilReady = readinessProbe.pipe(
+  Effect.repeat({ until: (ready) => ready, times: readinessAttempts - 1 }),
+  Effect.flatMap((ready) =>
+    ready
+      ? Effect.void
+      : Effect.fail(
+          new ExtractionEvidenceFailure({ message: "Document extraction workerd did not start" })
         )
-      ),
-      Effect.catch(() => Effect.sleep(readinessRetryMilliseconds).pipe(Effect.as(false)))
-    );
-
-    if (ready) return;
-  }
-
-  throw new Error("Document extraction workerd did not start");
-}).pipe(Effect.timeout("15 seconds"));
+  ),
+  Effect.timeout("15 seconds")
+);
 
 const profileSuccessfulConversion = (
   debuggerUrl: string,
@@ -196,29 +210,40 @@ const profileSuccessfulConversion = (
   claimedContentType: string
 ): Effect.Effect<number, ProofError> =>
   Effect.gen(function* () {
-    for (let attempt = 0; attempt < conversionAttempts; attempt += 1) {
-      const profile = yield* fromPromise((signal) =>
-        profileWorkerRequest({
-          debuggerUrl,
-          sendRequest: (requestSignal) =>
-            requestExtraction(body, requestSignal, { "content-type": claimedContentType }),
-          signal: Option.some(signal),
-        })
+    const profile = yield* fromPromise((signal) =>
+      profileWorkerRequest({
+        debuggerUrl,
+        sendRequest: (requestSignal) =>
+          requestExtraction(body, requestSignal, { "content-type": claimedContentType }),
+        signal: Option.some(signal),
+      })
+    );
+
+    if (profile.response.ok) {
+      const converted = yield* Schema.decodeUnknownEffect(ConvertedResult)(
+        yield* fromPromise(() => profile.response.json())
       );
 
-      if (profile.response.ok) {
-        const converted = yield* Schema.decodeUnknownEffect(ConvertedResult)(
-          yield* fromPromise(() => profile.response.json())
-        );
-
-        if (converted.outputBytes > 0) return profile.cpuMilliseconds;
-      } else {
-        yield* fromPromise(() => profile.response.body?.cancel() ?? Promise.resolve());
-      }
+      if (converted.outputBytes > 0) return Option.some(profile.cpuMilliseconds);
+    } else {
+      yield* fromPromise(() => profile.response.body?.cancel() ?? Promise.resolve());
     }
 
-    throw new Error("Workers AI did not convert a valid fixture through workerd");
-  });
+    return Option.none<number>();
+  }).pipe(
+    Effect.repeat({ until: Option.isSome, times: conversionAttempts - 1 }),
+    Effect.flatMap(
+      Option.match({
+        onNone: () =>
+          Effect.fail(
+            new ExtractionEvidenceFailure({
+              message: "Workers AI did not convert a valid fixture through workerd",
+            })
+          ),
+        onSome: Effect.succeed,
+      })
+    )
+  );
 
 const proveValidConversions = (
   debuggerUrl: string,
@@ -255,17 +280,34 @@ const proveValidConversions = (
     return { imageCpuMilliseconds, pdfCpuMilliseconds, validImage };
   });
 
+type HostileInput = Readonly<{
+  body: string | Uint8Array;
+  expectedReason: string;
+  expectedStatus: number;
+  label: string;
+}>;
+
+const proveRejected = (input: HostileInput): Effect.Effect<void, ProofError> =>
+  Effect.gen(function* () {
+    const response = yield* fromPromise((signal) => requestExtraction(input.body, signal));
+
+    const rejected = yield* Schema.decodeUnknownEffect(RejectedResult)(
+      yield* fromPromise(() => response.json())
+    );
+
+    if (response.status !== input.expectedStatus || rejected.reason !== input.expectedReason) {
+      return yield* new ExtractionEvidenceFailure({
+        message: `Document extraction did not fail closed for ${input.label}`,
+      });
+    }
+  });
+
 const proveHostileInputs = (
   infrastructureRoot: string,
   validImage: Uint8Array
 ): Effect.Effect<void, ProofError> =>
   Effect.gen(function* () {
-    const inputs: ReadonlyArray<{
-      readonly body: string | Uint8Array;
-      readonly expectedReason: string;
-      readonly expectedStatus: number;
-      readonly label: string;
-    }> = [
+    const inputs: ReadonlyArray<HostileInput> = [
       {
         body: "not a document",
         expectedReason: "unsupported-format",
@@ -300,17 +342,7 @@ const proveHostileInputs = (
       },
     ];
 
-    for (const input of inputs) {
-      const response = yield* fromPromise((signal) => requestExtraction(input.body, signal));
-
-      const rejected = yield* Schema.decodeUnknownEffect(RejectedResult)(
-        yield* fromPromise(() => response.json())
-      );
-
-      if (response.status !== input.expectedStatus || rejected.reason !== input.expectedReason) {
-        throw new Error(`Document extraction did not fail closed for ${input.label}`);
-      }
-    }
+    yield* Effect.forEach(inputs, proveRejected, { discard: true });
   });
 
 const stopWorker = (process: Bun.Subprocess): Effect.Effect<void> =>
@@ -362,7 +394,9 @@ const runtimeProof = (options: ProofOptions): Effect.Effect<RuntimeProof, ProofE
         !Number.isFinite(conversions.pdfCpuMilliseconds) ||
         !Number.isFinite(conversions.imageCpuMilliseconds)
       ) {
-        throw new Error("Document extraction has invalid Worker resource evidence");
+        return yield* new ExtractionEvidenceFailure({
+          message: "Document extraction has invalid Worker resource evidence",
+        });
       }
 
       return {
@@ -374,27 +408,27 @@ const runtimeProof = (options: ProofOptions): Effect.Effect<RuntimeProof, ProofE
     })
   );
 
-export const runExtractionProof = (options: ProofOptions): Promise<ExtractionProof> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const build = yield* buildProof(options);
+export const runExtractionProof = (
+  options: ProofOptions
+): Effect.Effect<ExtractionProof, ProofError> =>
+  Effect.gen(function* () {
+    const build = yield* buildProof(options);
 
-      if (!options.runAuthenticatedRuntime) {
-        return {
-          ...build,
-          connectionUpperBound,
-          runtimeStatus: "credentials-required" as const,
-        };
-      }
-
-      const runtime = yield* runtimeProof(options);
-
+    if (!options.runAuthenticatedRuntime) {
       return {
         ...build,
-        ...runtime,
         connectionUpperBound,
-        runtimeStatus: "authenticated" as const,
-        workerdProbes,
+        runtimeStatus: "credentials-required" as const,
       };
-    })
-  );
+    }
+
+    const runtime = yield* runtimeProof(options);
+
+    return {
+      ...build,
+      ...runtime,
+      connectionUpperBound,
+      runtimeStatus: "authenticated" as const,
+      workerdProbes,
+    };
+  });

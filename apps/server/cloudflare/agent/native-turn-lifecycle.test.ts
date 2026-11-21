@@ -195,9 +195,13 @@ const refusedAdmission = Effect.gen(function* () {
     )
   );
 
-  for (const text of ["Otra pregunta", "Nueva pregunta"]) {
-    expect((yield* post("", { text })).status).toBe(429);
-  }
+  yield* Effect.forEach(
+    ["Otra pregunta", "Nueva pregunta"],
+    Effect.fnUntraced(function* (text) {
+      expect((yield* post("", { text })).status).toBe(429);
+    }),
+    { discard: true }
+  );
 
   yield* native(() =>
     db.exec(

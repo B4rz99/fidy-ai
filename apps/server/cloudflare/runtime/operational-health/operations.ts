@@ -221,15 +221,18 @@ export const inspectNativeQueues = Effect.fn(function* (
     environment.PROACTIVITY_ENABLED === "enabled" ||
     environment.WEEKLY_SUMMARY_ENABLED === "enabled";
 
-  const queues = [
+  const baseQueues = [
     ["deadLetters", environment.ASYNC_DEAD_LETTERS],
     ["browserPairingQueue", environment.BROWSER_PAIRING_EMAIL_QUEUE],
     ["forwardedEmailQueue", environment.FORWARDED_EMAIL_QUEUE],
     ["billingQueue", environment.BILLING_COLLECTION_QUEUE],
     ["statementQueue", environment.STATEMENT_EXTRACTION_QUEUE],
     ["whatsappQueue", environment.HOSTED_WHATSAPP_QUEUE],
-    ...(proactivity ? [["proactivityQueue", environment.WEEKLY_DELIVERY_QUEUE] as const] : []),
   ] as const;
+
+  const queues = proactivity
+    ? [...baseQueues, ["proactivityQueue", environment.WEEKLY_DELIVERY_QUEUE] as const]
+    : baseQueues;
 
   yield* Effect.forEach(
     queues,

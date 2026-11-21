@@ -84,7 +84,7 @@ export const medianAdapterTimings = (
     return runSamples(run);
   });
 
-  const files = [...(samples[0]?.keys() ?? [])].sort();
+  const files = Array.from(samples[0]?.keys() ?? []).sort();
 
   if (
     samples.some(

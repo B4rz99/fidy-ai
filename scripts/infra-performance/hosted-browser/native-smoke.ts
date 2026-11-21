@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { BunServices } from "@effect/platform-bun";
+import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { Clock, Config, Data, Effect, Path, Schema } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
@@ -179,18 +179,19 @@ export const runNativeSmoke = Effect.fnUntraced(function* (config: Smoke) {
   const correct = Effect.fnUntraced(function* (method: string, path: string, body: unknown) {
     yield* Effect.sleep(mutationIntervalMs);
 
-    return yield* transport.forward(
-      new Request(origins.api + path, {
-        method,
-        headers: {
-          cookie: config.native.session.cookie,
-          origin: origins.browser,
-          "fidy-session-binding": config.native.session.binding,
-          "content-type": "application/json",
-        },
-        ...(body === undefined ? {} : { body: yield* encodeJson(body) }),
-      })
-    );
+    const init: RequestInit = {
+      method,
+      headers: {
+        cookie: config.native.session.cookie,
+        origin: origins.browser,
+        "fidy-session-binding": config.native.session.binding,
+        "content-type": "application/json",
+      },
+    };
+
+    if (body !== undefined) init.body = yield* encodeJson(body);
+
+    return yield* transport.forward(new Request(origins.api + path, init));
   });
 
   const mutation = yield* fromBrowser(() =>
@@ -215,10 +216,15 @@ if (import.meta.main) {
     yield* fromBrowser(() => Bun.write(path.join(directory, "smoke.json"), evidence));
   });
 
-  try {
-    await Effect.runPromise(run.pipe(Effect.provide(BunServices.layer)));
-  } catch {
-    process.stderr.write("Protected native Transactions correctness smoke failed\n");
-    process.exitCode = 1;
-  }
+  BunRuntime.runMain(
+    run.pipe(
+      Effect.catchCause(() =>
+        Effect.sync(() => {
+          process.stderr.write("Protected native Transactions correctness smoke failed\n");
+          process.exitCode = 1;
+        })
+      ),
+      Effect.provide(BunServices.layer)
+    )
+  );
 }

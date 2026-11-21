@@ -371,16 +371,20 @@ describe("production edge smoke", () => {
           respond(401, { "cache-control": "no-store" }),
         ];
 
-        for (const response of challenges) {
-          const result = yield* Effect.exit(
-            verifyEdgeSmoke({
-              probe: () => Effect.succeed(response),
-              candidate: Option.none(),
-            })
-          );
+        yield* Effect.forEach(
+          challenges,
+          Effect.fnUntraced(function* (response) {
+            const result = yield* Effect.exit(
+              verifyEdgeSmoke({
+                probe: () => Effect.succeed(response),
+                candidate: Option.none(),
+              })
+            );
 
-          expect(result._tag).toBe("Failure");
-        }
+            expect(result._tag).toBe("Failure");
+          }),
+          { discard: true }
+        );
       })
   );
 });

@@ -1,4 +1,5 @@
 import { captureTraceHeaders } from "../../runtime/telemetry/operations";
+import { OutboundHttpRequest } from "../../../src/shell/outbound-http/contract";
 import { type JWKSCacheInput, createRemoteJWKSet, customFetch, jwksCache, jwtVerify } from "jose";
 import { Effect, Option, Schema } from "effect";
 import { StartRefundInput } from "../../../src/core/subscription/contract";
@@ -13,6 +14,11 @@ import {
   maximumRefundOperatorIdLength,
 } from "../contract";
 import { refundFailureResponse } from "./refund-http-response";
+
+const RefundReadTarget = Schema.Struct({
+  userId: RefundRead.fields.userId,
+  refundAttemptId: RefundRead.fields.refundAttemptId,
+});
 
 const maximumAssertionCharacters = 8192;
 
@@ -46,7 +52,7 @@ const signingKeys = (issuer: string, http: OutboundHttpService, signal: AbortSig
     [jwksCache]: retained.data,
     [customFetch]: (_url, options): Promise<Response> =>
       Effect.runPromise(
-        http.execute({ _tag: "CloudflareAccessSigningKeys" }).pipe(
+        http.execute(OutboundHttpRequest.CloudflareAccessSigningKeys()).pipe(
           Effect.timeout("5 seconds"),
           Effect.map(
             (response) =>
@@ -156,7 +162,6 @@ const submit = (
     const encodedInput = yield* Schema.encodeEffect(StartRefundInput)(body.value);
 
     const admission = RefundSupportAdmission.make({
-      _tag: "BillingRefundSupport",
       authority: input.authority,
       input: encodedInput,
     });
@@ -198,12 +203,9 @@ export const handleRefundSupport = (
     const userId = path.split("/").at(userPathPosition) ?? "";
     const refundAttemptId = path.split("/").at(-1) ?? "";
 
-    const read = Schema.decodeOption(RefundRead)({
-      _tag: "ReadBillingRefund",
-      authority: authority.value,
-      userId,
-      refundAttemptId,
-    });
+    const read = Schema.decodeOption(RefundReadTarget)({ userId, refundAttemptId }).pipe(
+      Option.flatMap((target) => RefundRead.makeOption({ authority: authority.value, ...target }))
+    );
 
     if (Option.isNone(read)) return refundFailureResponse("charge-unavailable");
     const body = yield* Schema.encodeEffect(Schema.fromJsonString(RefundRead))(read.value);

@@ -799,21 +799,24 @@ export const exerciseClosedUsers = Effect.fn(function* (input: Inputs) {
 
   yield* consume(ordinary, isolated);
   yield* renewWork(input);
-  const deniedStatuses = [];
 
-  for (const operation of [pricePublicationPath, refundSupportBasePath]) {
-    const reply = yield* call(operation, {
-      method: "POST",
-      headers: {
-        "cf-access-jwt-assertion": "unassigned-synthetic-identity",
-        "content-type": "application/json",
-      },
-      body: "{}",
-    });
+  const deniedStatuses = yield* Effect.forEach(
+    [pricePublicationPath, refundSupportBasePath],
+    Effect.fnUntraced(function* (operation) {
+      const reply = yield* call(operation, {
+        method: "POST",
+        headers: {
+          "cf-access-jwt-assertion": "unassigned-synthetic-identity",
+          "content-type": "application/json",
+        },
+        body: "{}",
+      });
 
-    yield* consume(reply, unauthorized);
-    deniedStatuses.push(reply.status);
-  }
+      yield* consume(reply, unauthorized);
+
+      return reply.status;
+    })
+  );
 
   const [first, second] = yield* establishSmokeUsers(input);
   const callback = yield* charge(input, first, second);

@@ -44,9 +44,13 @@ const scenario = Effect.gen(function* () {
     requestId: "10000000-0000-4000-8000-000000000100",
   };
 
-  for (const role of ["reviewer", "support", "erasure"]) {
-    expect((yield* send(yield* token(role), command)).status).toBe(401);
-  }
+  yield* Effect.forEach(
+    ["reviewer", "support", "erasure"],
+    Effect.fnUntraced(function* (role) {
+      expect((yield* send(yield* token(role), command)).status).toBe(401);
+    }),
+    { discard: true }
+  );
 
   const wrongMember = yield* native(() =>
     signer
@@ -194,9 +198,13 @@ const mailboxOwnership = Effect.gen(function* () {
   const newOwner = yield* call(email);
   expect(yield* native(() => newOwner.json())).toEqual({ userId: bob.user, revision: 1 });
 
-  for (const store of [first, other]) {
-    expect(yield* store.exec("SELECT count(*) n FROM pro_grant_events")).toEqual([{ n: 0 }]);
-  }
+  yield* Effect.forEach(
+    [first, other],
+    Effect.fnUntraced(function* (store) {
+      expect(yield* store.exec("SELECT count(*) n FROM pro_grant_events")).toEqual([{ n: 0 }]);
+    }),
+    { discard: true }
+  );
 });
 
 const underPressure = Effect.gen(function* () {

@@ -177,8 +177,9 @@ it.effect("permits resource retirement only while the promoted pair still owns e
 );
 
 it.effect("refuses retirement for superseded, unreadable, or replaced deployment receipts", () =>
-  Effect.gen(function* () {
-    for (const scenario of ["superseded", publicName, coreName, "new-receipt"]) {
+  Effect.forEach(
+    ["superseded", publicName, coreName, "new-receipt"],
+    Effect.fnUntraced(function* (scenario) {
       const fixture = harness();
       const snapshot = yield* captured(fixture.port);
       const release = yield* releaseController.stageRelease(fixture.port, snapshot, candidates);
@@ -213,8 +214,9 @@ it.effect("refuses retirement for superseded, unreadable, or replaced deployment
         )
       ).toBe(true);
       expect(fixture.changes).toEqual(beforeVerification);
-    }
-  })
+    }),
+    { discard: true }
+  )
 );
 
 const isolationOrdering =

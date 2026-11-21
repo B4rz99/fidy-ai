@@ -49,17 +49,21 @@ const exerciseDownloads = Effect.fn(function* () {
 
   yield* Effect.addFinalizer(() => Effect.tryPromise(() => instance.dispose()).pipe(Effect.orDie));
 
-  for (const name of ["install.sh", "install.ps1"]) {
-    const response = yield* Effect.tryPromise(() =>
-      instance.dispatchFetch(`https://app.fidyapp.com/${name}`)
-    );
+  yield* Effect.forEach(
+    ["install.sh", "install.ps1"],
+    Effect.fnUntraced(function* (name) {
+      const response = yield* Effect.tryPromise(() =>
+        instance.dispatchFetch(`https://app.fidyapp.com/${name}`)
+      );
 
-    expect(response.status).toBe(200);
-    expect(response.headers.get("content-type")).toContain("text/plain");
-    expect(yield* Effect.tryPromise(() => response.text())).toBe(
-      yield* Effect.tryPromise(() => Bun.file(`../../scripts/cli-release/${name}`).text())
-    );
-  }
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toContain("text/plain");
+      expect(yield* Effect.tryPromise(() => response.text())).toBe(
+        yield* Effect.tryPromise(() => Bun.file(`../../scripts/cli-release/${name}`).text())
+      );
+    }),
+    { discard: true }
+  );
 }, Effect.scoped);
 
 layer(BunFileSystem.layer)((it) => {

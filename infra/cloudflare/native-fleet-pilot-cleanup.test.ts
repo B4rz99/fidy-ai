@@ -67,16 +67,20 @@ it.effect(
   "requires the original logical User, physical object and full baseline before erasure",
   () =>
     Effect.gen(function* () {
-      for (const changes of [
-        { userSha256: hash("other") },
-        { target: "prior" },
-        { baselineSha256: hash("prior:true") },
-      ]) {
-        const { input, stages } = fixture();
-        const verdict = yield* continueFleetCleanup({ ...input, ...changes }).pipe(Effect.result);
-        expect(verdict._tag).toBe("Failure");
-        expect(stages).not.toContain("posted");
-      }
+      yield* Effect.forEach(
+        [
+          { userSha256: hash("other") },
+          { target: "prior" },
+          { baselineSha256: hash("prior:true") },
+        ],
+        Effect.fnUntraced(function* (changes) {
+          const { input, stages } = fixture();
+          const verdict = yield* continueFleetCleanup({ ...input, ...changes }).pipe(Effect.result);
+          expect(verdict._tag).toBe("Failure");
+          expect(stages).not.toContain("posted");
+        }),
+        { discard: true }
+      );
 
       const { input, rows, stages } = fixture();
       rows.set("old", true);

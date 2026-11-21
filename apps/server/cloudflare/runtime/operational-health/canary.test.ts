@@ -18,20 +18,24 @@ it.effect("validates private canaries before Workflow handoff and completion", (
         Promise.resolve({ status: () => Promise.resolve({ status: "complete" }) }),
     };
 
-    for (const payload of [
-      { version: 1, sentAtMs: "malformed" },
-      { version: 1, sentAtMs: now + 1 },
-      { version: 1, sentAtMs: now - 600_001 },
-    ]) {
-      yield* Effect.tryPromise(() =>
-        expect(receiveCanary({ workflow, now, payload })).rejects.toThrow(
-          "Invalid operational canary"
-        )
-      );
-      yield* Effect.tryPromise(() =>
-        expect(completeCanary({ now, payload })).rejects.toThrow("Invalid operational canary")
-      );
-    }
+    yield* Effect.forEach(
+      [
+        { version: 1, sentAtMs: "malformed" },
+        { version: 1, sentAtMs: now + 1 },
+        { version: 1, sentAtMs: now - 600_001 },
+      ],
+      Effect.fnUntraced(function* (payload) {
+        yield* Effect.tryPromise(() =>
+          expect(receiveCanary({ workflow, now, payload })).rejects.toThrow(
+            "Invalid operational canary"
+          )
+        );
+        yield* Effect.tryPromise(() =>
+          expect(completeCanary({ now, payload })).rejects.toThrow("Invalid operational canary")
+        );
+      }),
+      { discard: true }
+    );
 
     expect(created).toEqual([]);
     yield* Effect.tryPromise(() =>
@@ -58,11 +62,15 @@ it.effect("publishes once across the five minute ticks of a canary period", () =
       },
     };
 
-    for (const now of [3_005_000, 3_065_000, 3_125_000, 3_185_000, 3_245_000, 3_305_000]) {
-      yield* Effect.tryPromise(() =>
-        sendCanary({ queue, now, signal: new AbortController().signal })
-      );
-    }
+    yield* Effect.forEach(
+      [3_005_000, 3_065_000, 3_125_000, 3_185_000, 3_245_000, 3_305_000],
+      Effect.fnUntraced(function* (now) {
+        yield* Effect.tryPromise(() =>
+          sendCanary({ queue, now, signal: new AbortController().signal })
+        );
+      }),
+      { discard: true }
+    );
 
     expect(sent).toEqual([
       { version: 1, sentAtMs: 3_000_000 },

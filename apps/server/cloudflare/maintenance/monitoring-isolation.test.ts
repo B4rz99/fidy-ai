@@ -50,54 +50,62 @@ const testCase = Effect.fn(function* (scenario: Scenario) {
     other = yield* seed(runtime, bob),
     now = yield* Clock.currentTimeMillis;
 
-  for (const [store, who] of [
-    [owner, alice],
-    [other, bob],
-  ] as const) {
-    yield* store.exec(
-      "INSERT INTO proactive_grants VALUES(?,'budget-threshold',?,'{}',NULL)",
-      who.user,
-      who.user
-    );
-    yield* store.exec(
-      "INSERT INTO insight_events VALUES(?,?,?,1,?,?,NULL)",
-      who.user,
-      delivery,
-      who.session,
-      now - 600000,
-      yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-        id: delivery,
-        scheduleId: who.session,
-        scheduleVersion: 1,
-        kind: "budget-threshold",
-      })
-    );
-    yield* store.exec(
-      "INSERT INTO reminder_deliveries(id,user_id,grant_id,correlation,portfolio,bsuid,endpoint,deadline_ms,offer_ms,body,digest,created_ms) VALUES(?,?,?,?,'portfolio','private-contact','phone',?,?,'private-report','opaque',?)",
-      delivery,
-      who.user,
-      who.user,
-      delivery,
-      now + 3600000,
-      now + 600000,
-      now - 600000
-    );
-    yield* store.exec(
-      "INSERT INTO reminder_disclosures(id,user_id,portfolio,bsuid,endpoint,request_message,created_ms,expires_ms,attempt_ms,correlation,disclosure,body,digest,kind) VALUES(?,?,'portfolio','private-contact','phone','source',?,?,?,?,'{}','private-question','opaque','weekly-summary')",
-      question,
-      who.user,
-      now - 300000,
-      now + 3600000,
-      now + 600000,
-      question
-    );
-  }
+  yield* Effect.forEach(
+    [
+      [owner, alice],
+      [other, bob],
+    ] as const,
+    Effect.fnUntraced(function* ([store, who]) {
+      yield* store.exec(
+        "INSERT INTO proactive_grants VALUES(?,'budget-threshold',?,'{}',NULL)",
+        who.user,
+        who.user
+      );
+      yield* store.exec(
+        "INSERT INTO insight_events VALUES(?,?,?,1,?,?,NULL)",
+        who.user,
+        delivery,
+        who.session,
+        now - 600000,
+        yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+          id: delivery,
+          scheduleId: who.session,
+          scheduleVersion: 1,
+          kind: "budget-threshold",
+        })
+      );
+      yield* store.exec(
+        "INSERT INTO reminder_deliveries(id,user_id,grant_id,correlation,portfolio,bsuid,endpoint,deadline_ms,offer_ms,body,digest,created_ms) VALUES(?,?,?,?,'portfolio','private-contact','phone',?,?,'private-report','opaque',?)",
+        delivery,
+        who.user,
+        who.user,
+        delivery,
+        now + 3600000,
+        now + 600000,
+        now - 600000
+      );
+      yield* store.exec(
+        "INSERT INTO reminder_disclosures(id,user_id,portfolio,bsuid,endpoint,request_message,created_ms,expires_ms,attempt_ms,correlation,disclosure,body,digest,kind) VALUES(?,?,'portfolio','private-contact','phone','source',?,?,?,?,'{}','private-question','opaque','weekly-summary')",
+        question,
+        who.user,
+        now - 300000,
+        now + 3600000,
+        now + 600000,
+        question
+      );
+    }),
+    { discard: true }
+  );
 
-  for (const who of [alice, bob]) {
-    const registered = yield* history(runtime, who);
-    expect(registered.status).toBe(200);
-    yield* native(() => registered.arrayBuffer());
-  }
+  yield* Effect.forEach(
+    [alice, bob],
+    Effect.fnUntraced(function* (who) {
+      const registered = yield* history(runtime, who);
+      expect(registered.status).toBe(200);
+      yield* native(() => registered.arrayBuffer());
+    }),
+    { discard: true }
+  );
 
   const core = yield* native(() => runtime.getWorker("core"));
   const scheduled = Math.floor(now / 3600000) * 3600000 + 5000;

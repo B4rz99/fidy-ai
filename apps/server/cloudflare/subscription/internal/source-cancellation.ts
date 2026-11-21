@@ -1,4 +1,5 @@
 import { Effect, Option, Schema } from "effect";
+import { OutboundHttpRequest } from "../../../src/shell/outbound-http/contract";
 import { UnknownJsonString } from "../../../src/shell/schema-codecs/contract";
 import { BillingCollectionFailure } from "../contract";
 import { WompiSourceId } from "./wompi-model";
@@ -29,7 +30,7 @@ export const verifyVoidedSource = Effect.fnUntraced(function* (
   sourceId: WompiSourceId
 ) {
   const response = yield* http
-    .execute({ _tag: "WompiVerifyPaymentSource", sourceId })
+    .execute(OutboundHttpRequest.WompiVerifyPaymentSource({ sourceId }))
     .pipe(Effect.mapError((cause) => new BillingCollectionFailure({ cause: Option.some(cause) })));
 
   if (response.status < httpSuccessMinimum || response.status >= httpSuccessMaximum) {

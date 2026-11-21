@@ -24,11 +24,20 @@ class HostedProofCommandFailed extends Data.TaggedError("HostedProofCommandFaile
   readonly codes: ReadonlyArray<string>;
 }> {}
 
+class ProofWorkerFailure extends Data.TaggedError("ProofWorkerFailure")<{
+  readonly message: string;
+}> {}
+
+const isHostedProofCommandFailed = Schema.is(Schema.instanceOf(HostedProofCommandFailed));
+
 export type HostedWorkerProof = Readonly<{ origin: string; token: string }>;
 
 export const deleteProofWorker = Effect.fn(
   function* (name: string) {
-    if (!/^xlsx-proof-[a-f0-9]{8}$/u.test(name)) throw new Error("Invalid proof Worker name");
+    if (!/^xlsx-proof-[a-f0-9]{8}$/u.test(name)) {
+      return yield* new ProofWorkerFailure({ message: "Invalid proof Worker name" });
+    }
+
     const account = yield* Config.NonEmptyString("CLOUDFLARE_ACCOUNT_ID");
     const token = yield* Config.Redacted("CLOUDFLARE_API_TOKEN");
     const client = yield* HttpClient.HttpClient;
@@ -76,7 +85,7 @@ export const deleteProofWorker = Effect.fn(
   Effect.scoped,
   Effect.timeout("10 seconds"),
   Effect.mapError((error) =>
-    error instanceof HostedProofCommandFailed
+    isHostedProofCommandFailed(error)
       ? error
       : new HostedProofCommandFailed({ operation: "delete", exitCode: 1, codes: [] })
   ),
@@ -145,7 +154,11 @@ export const hostedWorkerProof = Effect.fn(function* (
 
   const origin = /https:\/\/[a-z0-9.-]+\.workers\.dev/iu.exec(output)?.[0];
 
-  if (origin === undefined) throw new Error("Isolated parser Worker did not expose its HTTPS URL");
+  if (origin === undefined) {
+    return yield* new ProofWorkerFailure({
+      message: "Isolated parser Worker did not expose its HTTPS URL",
+    });
+  }
 
   const unauthorized = yield* Effect.tryPromise(() =>
     requestHostedProof({
@@ -160,7 +173,9 @@ export const hostedWorkerProof = Effect.fn(function* (
   );
 
   if (unauthorized.status !== hiddenProofStatus) {
-    throw new Error("Isolated parser Worker did not require its access key");
+    return yield* new ProofWorkerFailure({
+      message: "Isolated parser Worker did not require its access key",
+    });
   }
 
   return { origin, token };

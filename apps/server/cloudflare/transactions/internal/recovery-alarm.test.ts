@@ -1,6 +1,10 @@
 import { Effect, Option } from "effect";
 import { expect, it } from "vitest";
-import { makeUserRecoveryAlarm } from "./recovery-alarm";
+import {
+  RecoveryAlarmClear,
+  RecoveryAlarmUnavailable,
+  makeUserRecoveryAlarm,
+} from "./recovery-alarm";
 
 const fromTestPromise = <A>(run: () => PromiseLike<A>): Effect.Effect<A> =>
   Effect.tryPromise(() => Promise.resolve(run())).pipe(Effect.orDie);
@@ -61,7 +65,7 @@ it("joins an in-flight write and fences queued or late callbacks before clearing
       const clearing = owner.retireAndClear();
       release.resolve();
       yield* fromTestPromise(() => Promise.all([scheduling, queued]));
-      expect(yield* fromTestPromise(() => clearing)).toEqual({ _tag: "AlarmAbsent" });
+      expect(yield* fromTestPromise(() => clearing)).toEqual(RecoveryAlarmClear.AlarmAbsent());
       yield* fromTestPromise(() => owner.schedule(1));
       expect(Option.isNone(alarm)).toBe(true);
     })
@@ -95,11 +99,13 @@ it("does not poison future alarm work after a rejected native write", () =>
       });
 
       yield* fromTestPromise(() =>
-        expect(owner.schedule(10)).rejects.toMatchObject({ _tag: "RecoveryAlarmUnavailable" })
+        expect(owner.schedule(10)).rejects.toBeInstanceOf(RecoveryAlarmUnavailable)
       );
       yield* fromTestPromise(() => owner.schedule(20));
       expect(Option.getOrNull(alarm)).toBe(20);
-      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({ _tag: "AlarmAbsent" });
+      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual(
+        RecoveryAlarmClear.AlarmAbsent()
+      );
     })
   ));
 
@@ -162,7 +168,7 @@ it("retires synchronously during a suspended read before any write can enter", (
       const late = owner.schedule(1);
       release.resolve(null);
       yield* fromTestPromise(() => Promise.all([scheduling, late]));
-      expect(yield* fromTestPromise(() => clearing)).toEqual({ _tag: "AlarmAbsent" });
+      expect(yield* fromTestPromise(() => clearing)).toEqual(RecoveryAlarmClear.AlarmAbsent());
       expect(calls).toEqual(["read", "delete", "read"]);
     })
   ));
@@ -191,13 +197,13 @@ it("reports uncertainty when deletion leaves an alarm and retries without reopen
         },
       });
 
-      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({
-        _tag: "ClearUnconfirmed",
-      });
+      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual(
+        RecoveryAlarmClear.ClearUnconfirmed()
+      );
       yield* fromTestPromise(() => owner.schedule(1));
-      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({
-        _tag: "AlarmAbsent",
-      });
+      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual(
+        RecoveryAlarmClear.AlarmAbsent()
+      );
       expect(deletions).toBe(2);
       expect(writes).toEqual([]);
     })
@@ -242,14 +248,12 @@ it.each(["delete", "verification"] as const)(
         });
 
         yield* fromTestPromise(() =>
-          expect(owner.retireAndClear()).rejects.toMatchObject({
-            _tag: "RecoveryAlarmUnavailable",
-          })
+          expect(owner.retireAndClear()).rejects.toBeInstanceOf(RecoveryAlarmUnavailable)
         );
         yield* fromTestPromise(() => owner.schedule(1));
-        expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({
-          _tag: "AlarmAbsent",
-        });
+        expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual(
+          RecoveryAlarmClear.AlarmAbsent()
+        );
         expect(calls).toEqual(
           failure === "delete" ? ["delete", "delete", "read"] : ["delete", "read", "delete", "read"]
         );
@@ -290,8 +294,8 @@ it("serializes repeated retirement attempts while native deletion is pending", (
       expect(calls).toEqual(["delete"]);
       release.resolve();
       expect(yield* fromTestPromise(() => Promise.all([first, second]))).toEqual([
-        { _tag: "AlarmAbsent" },
-        { _tag: "AlarmAbsent" },
+        RecoveryAlarmClear.AlarmAbsent(),
+        RecoveryAlarmClear.AlarmAbsent(),
       ]);
       yield* fromTestPromise(() => scheduling);
       expect(calls).toEqual(["delete", "read", "delete", "read"]);
@@ -342,9 +346,11 @@ it("retires a schedule waiting for its native read before it can write an alarm"
       expect(effects).toEqual([]);
       release.resolve(null);
       yield* fromTestPromise(() => scheduling);
-      expect(yield* fromTestPromise(() => clearing)).toEqual({ _tag: "AlarmAbsent" });
+      expect(yield* fromTestPromise(() => clearing)).toEqual(RecoveryAlarmClear.AlarmAbsent());
       yield* fromTestPromise(() => late);
-      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({ _tag: "AlarmAbsent" });
+      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual(
+        RecoveryAlarmClear.AlarmAbsent()
+      );
       yield* fromTestPromise(() => owner.schedule(1));
       expect(effects).toEqual(["delete", "verify", "delete", "verify"]);
       expect(reads).toBe(3);
@@ -374,14 +380,16 @@ it("distinguishes a remaining alarm from native clearance failure and stays reti
         },
       });
 
-      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({
-        _tag: "ClearUnconfirmed",
-      });
+      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual(
+        RecoveryAlarmClear.ClearUnconfirmed()
+      );
       yield* fromTestPromise(() =>
-        expect(owner.retireAndClear()).rejects.toMatchObject({ _tag: "RecoveryAlarmUnavailable" })
+        expect(owner.retireAndClear()).rejects.toBeInstanceOf(RecoveryAlarmUnavailable)
       );
       yield* fromTestPromise(() => owner.schedule(1));
-      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({ _tag: "AlarmAbsent" });
+      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual(
+        RecoveryAlarmClear.AlarmAbsent()
+      );
       yield* fromTestPromise(() => owner.schedule(1));
       expect(deletes).toBe(3);
       expect(writes).toBe(0);
@@ -416,10 +424,12 @@ it("rejects unavailable absence verification and permits cleanup retry without r
       });
 
       yield* fromTestPromise(() =>
-        expect(owner.retireAndClear()).rejects.toMatchObject({ _tag: "RecoveryAlarmUnavailable" })
+        expect(owner.retireAndClear()).rejects.toBeInstanceOf(RecoveryAlarmUnavailable)
       );
       yield* fromTestPromise(() => owner.schedule(1));
-      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({ _tag: "AlarmAbsent" });
+      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual(
+        RecoveryAlarmClear.AlarmAbsent()
+      );
       expect(reads).toBe(2);
       expect(deletes).toBe(2);
       expect(writes).toBe(0);

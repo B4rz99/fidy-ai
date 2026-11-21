@@ -1,5 +1,5 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Predicate, Schema } from "effect";
 import {
   CompactedConversationOutput,
   TranscriptEntry,
@@ -18,7 +18,7 @@ import { AgentUnavailable } from "../contract";
 const maximumRetainedEntries = 200;
 
 const modelEntry = (entry: TranscriptEntry): TranscriptEntry =>
-  entry._tag === "UserTranscriptEntry" && entry.text.startsWith("CONFIRMAR ")
+  Predicate.isTagged(entry, "UserTranscriptEntry") && entry.text.startsWith("CONFIRMAR ")
     ? { ...entry, text: TranscriptText.make("Confirmé la operación revisada.") }
     : entry;
 

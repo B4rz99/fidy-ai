@@ -186,17 +186,21 @@ it.effect.each([
             false
           );
 
-          for (const application of applications) {
-            const { allowedIdps } = yield* Schema.decodeUnknownEffect(
-              Schema.Struct({ allowedIdps: Schema.Unknown })
-            )(application.Props);
+          yield* Effect.forEach(
+            applications,
+            Effect.fnUntraced(function* (application) {
+              const { allowedIdps } = yield* Schema.decodeUnknownEffect(
+                Schema.Struct({ allowedIdps: Schema.Unknown })
+              )(application.Props);
 
-            expect(
-              yield* evaluate(allowedIdps, {}).pipe(
-                Effect.provideService(FetchHttpClient.Fetch, pinFetch)
-              )
-            ).toEqual([pinId]);
-          }
+              expect(
+                yield* evaluate(allowedIdps, {}).pipe(
+                  Effect.provideService(FetchHttpClient.Fetch, pinFetch)
+                )
+              ).toEqual([pinId]);
+            }),
+            { discard: true }
+          );
 
           const bindings = Schema.Struct({ bindings: Schema.optional(NativeBindings) });
 

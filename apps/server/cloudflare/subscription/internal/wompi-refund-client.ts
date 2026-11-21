@@ -1,4 +1,5 @@
 import { Effect, Option, Schema } from "effect";
+import { OutboundHttpRequest } from "../../../src/shell/outbound-http/contract";
 import { type OutboundHttpService } from "../../../src/shell/outbound-http/operations";
 import { type RefundAttemptId } from "../../../src/core/subscription/contract";
 import { WompiTransactionId } from "./wompi-model";
@@ -121,8 +122,8 @@ export const submitCorrection = ({
 
     const response = yield* http.execute(
       input.kind === "refund"
-        ? { _tag: "WompiSandboxRefund", body }
-        : { _tag: "WompiSandboxCardVoid", transactionId: input.transactionId }
+        ? OutboundHttpRequest.WompiSandboxRefund({ body })
+        : OutboundHttpRequest.WompiSandboxCardVoid({ transactionId: input.transactionId })
     );
 
     if (response.status < successMinimum || response.status >= successMaximumExclusive) {
@@ -140,12 +141,14 @@ export const verifyCardVoid = ({
 }: Readonly<{ http: OutboundHttpService; input: RefundSubmission }>): Effect.Effect<
   Option.Option<RefundEvidence>
 > =>
-  http.execute({ _tag: "WompiFindTransaction", transactionId: input.transactionId }).pipe(
-    Effect.flatMap((response) =>
-      response.status >= successMinimum && response.status < successMaximumExclusive
-        ? parseVoid(response.body, input)
-        : Effect.succeedNone
-    ),
-    Effect.timeout("14 seconds"),
-    Effect.orElseSucceed(Option.none)
-  );
+  http
+    .execute(OutboundHttpRequest.WompiFindTransaction({ transactionId: input.transactionId }))
+    .pipe(
+      Effect.flatMap((response) =>
+        response.status >= successMinimum && response.status < successMaximumExclusive
+          ? parseVoid(response.body, input)
+          : Effect.succeedNone
+      ),
+      Effect.timeout("14 seconds"),
+      Effect.orElseSucceed(Option.none)
+    );

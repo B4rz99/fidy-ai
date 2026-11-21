@@ -1,6 +1,6 @@
 import { PrivateObjectKey } from "../../private-objects/contract";
 import type { NotificationEmailOutcome } from "../../../src/shell/ingestion/contract";
-import { DateTime, Effect, Schema } from "effect";
+import { type Data, DateTime, Effect, Option, Schema } from "effect";
 import type PostalMime from "postal-mime";
 import { ReceivedEmailId } from "../../../src/core/ingestion/contract";
 import { CapturedInterpretationContext } from "../../../src/core/interpretation-evidence/contract";
@@ -22,10 +22,7 @@ type Receipt = typeof Receipt.Type;
 
 type EmailOutcome =
   | NotificationEmailOutcome
-  | Readonly<{
-      _tag: "NeedsReview";
-      reason: "canonical-validation-failed";
-    }>;
+  | Data.TaggedEnum<{ NeedsReview: { readonly reason: "canonical-validation-failed" } }>;
 
 const maximumTagCount = 9999;
 
@@ -65,8 +62,14 @@ export const decideEmail = ({
       from: parsed.from?.address ?? "",
       to: (parsed.to ?? []).map((recipient) => recipient.address ?? ""),
       subject: parsed.subject ?? "",
-      ...(parsed.text === undefined ? {} : { text: parsed.text }),
-      ...(parsed.html === undefined ? {} : { html: parsed.html }),
+      ...Option.match(Option.fromUndefinedOr(parsed.text), {
+        onNone: () => ({}),
+        onSome: (text) => ({ text }),
+      }),
+      ...Option.match(Option.fromUndefinedOr(parsed.html), {
+        onNone: () => ({}),
+        onSome: (html) => ({ html }),
+      }),
       inlineImages: [],
       createdAt: DateTime.formatIso(DateTime.makeUnsafe(receipt.received_at_ms)),
     };

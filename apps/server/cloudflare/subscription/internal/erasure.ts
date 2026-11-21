@@ -1,11 +1,11 @@
-import type { ErasureProjection } from "../../erasure-store/contract";
+import { type ErasureProjection, ErasureQuiescence } from "../../erasure-store/contract";
 
 export const projections: ReadonlyArray<ErasureProjection> = [
   {
     id: "billing_event_candidates",
     dataClass: "billing",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM billing_callback_hints r WHERE EXISTS(SELECT 1 FROM billing_provider_transactions p JOIN billing_attempt_context a ON a.id=p.attempt_id WHERE p.status IS NOT NULL AND p.transaction_id=r.transaction_id AND a.user_id=?)",
@@ -27,7 +27,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "billing_checkout_responses",
     dataClass: "billing",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(rowid AS TEXT) AS rowRef FROM billing_attempt_context WHERE user_id=? AND checkout_transaction_id IS NOT NULL",
@@ -48,7 +48,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "billing_provider_transactions",
     dataClass: "billing",
     dependencies: ["billing_checkout_responses", "billing_event_candidates", "refund_attempts"],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM billing_provider_transactions r WHERE EXISTS(SELECT 1 FROM billing_attempt_context p WHERE p.id=r.attempt_id AND p.user_id=?)",
@@ -74,13 +74,12 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "card_enrollments",
     dataClass: "billing",
     dependencies: ["billing_history", "card_payment_sources"],
-    quiescence: {
-      _tag: "Durable",
+    quiescence: ErasureQuiescence.Durable({
       select: ({ userId }) => ({
         sql: "SELECT 1 FROM payment_enrollment_context WHERE user_id=? AND status IN('preparing','creating','verifying')",
         params: [userId],
       }),
-    },
+    }),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM payment_enrollment_context r WHERE r.user_id=?",
@@ -101,7 +100,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "card_payment_sources",
     dataClass: "billing",
     dependencies: ["billing_history", "subscription_cancellations"],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM payment_source_context r WHERE r.user_id=?",
@@ -126,13 +125,12 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "refund_attempts",
     dataClass: "billing",
     dependencies: [],
-    quiescence: {
-      _tag: "Durable",
+    quiescence: ErasureQuiescence.Durable({
       select: ({ userId }) => ({
         sql: "SELECT 1 FROM refund_attempts WHERE user_id=? AND status='pending'",
         params: [userId],
       }),
-    },
+    }),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM refund_attempts r WHERE r.user_id=?",
@@ -154,7 +152,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "subscription_cancellations",
     dataClass: "billing",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM subscription_cancellation_context r WHERE r.user_id=?",
@@ -180,7 +178,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       "card_enrollments",
       "card_payment_sources",
     ],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM subscriptions r WHERE r.user_id=?",
@@ -202,7 +200,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "subscriptions",
     dataClass: "billing",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM subscription_standing r WHERE r.user_id=?",
@@ -230,13 +228,12 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       "subscription_cancellations",
       "subscriptions",
     ],
-    quiescence: {
-      _tag: "Durable",
+    quiescence: ErasureQuiescence.Durable({
       select: ({ userId }) => ({
         sql: "SELECT 1 FROM billing_attempt_context WHERE user_id=? AND status='pending'",
         params: [userId],
       }),
-    },
+    }),
 
     candidates: (userId) => ({
       sql: "SELECT a.id AS rowRef FROM billing_attempt_context a WHERE a.user_id=? AND NOT EXISTS(SELECT 1 FROM billing_attempt_context later WHERE later.previous_paid_attempt_id=a.id)",

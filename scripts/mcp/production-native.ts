@@ -3,10 +3,10 @@ import { join, resolve, sep } from "node:path";
 import { userInfo } from "node:os";
 import {
   Cause,
-  Clock,
   Config,
   Data,
   DateTime,
+  Duration,
   Effect,
   FileSystem,
   Option,
@@ -29,7 +29,7 @@ type LoginEffect = Effect.Effect<
     host: NativeHost;
     passed: boolean;
   },
-  PlatformError.PlatformError | NativeBoundaryFailure | Cause.TimeoutError,
+  PlatformError.PlatformError | ModelFixtureFailure | NativeBoundaryFailure | Cause.TimeoutError,
   FileSystem.FileSystem
 >;
 
@@ -52,6 +52,7 @@ type AnthropicEventsInput = Readonly<{
 export type NativeMode = "journey" | "cancel" | "accept" | "repeat" | "refresh" | "headless";
 
 export class NativeProofError extends Data.TaggedError("NativeProofError")<{
+  cause: Redacted.Redacted<Cause.Cause<unknown>>;
   reason: string;
   host: NativeHost;
   phase: string;
@@ -218,12 +219,7 @@ const privateWrite = (
     })
   );
 
-const environment = (
-  host: NativeHost,
-  root: string
-): {
-  [key: string]: string;
-} => {
+const environment = (host: NativeHost, root: string): NodeJS.ProcessEnv => {
   const env = Object.fromEntries(
     Object.entries(process.env).filter(
       ([name, value]) =>
@@ -232,28 +228,23 @@ const environment = (
     )
   );
 
-  return {
+  const hostEnvironment: NodeJS.ProcessEnv = {
     ...env,
     TERM: "xterm-256color",
     DISABLE_TELEMETRY: "1",
     DISABLE_NONESSENTIAL_TRAFFIC: "1",
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
     NO_PROXY: "127.0.0.1,localhost",
-    ...(host === "claude"
-      ? {
-          CLAUDE_CONFIG_DIR: profilePath(host, root),
-        }
-      : {
-          CODEX_HOME: profilePath(host, root),
-        }),
   };
+
+  hostEnvironment[host === "claude" ? "CLAUDE_CONFIG_DIR" : "CODEX_HOME"] = profilePath(host, root);
+
+  return hostEnvironment;
 };
 
 type CommandInput = Readonly<{
   args: string[];
-  env: {
-    [key: string]: string;
-  };
+  env: NodeJS.ProcessEnv;
   root: string;
   signal: AbortSignal;
 }>;
@@ -263,7 +254,13 @@ class ModelFixtureFailure extends Data.TaggedError("ModelFixtureFailure")<{
   diagnostics: Option.Option<NativeDiagnostics>;
 }> {}
 
-class NativeBoundaryFailure extends Data.TaggedError("NativeBoundaryFailure")<{}> {}
+class NativeBoundaryFailure extends Data.TaggedError("NativeBoundaryFailure")<{
+  cause: unknown;
+}> {}
+
+const isModelFixtureFailure = Schema.is(Schema.instanceOf(ModelFixtureFailure));
+
+const isNativeBoundaryFailure = Schema.is(Schema.instanceOf(NativeBoundaryFailure));
 
 const safeFailureReason = <E>(cause: Cause.Cause<E>): string => {
   const defect = Cause.findDefect(cause);
@@ -272,11 +269,11 @@ const safeFailureReason = <E>(cause: Cause.Cause<E>): string => {
     return "schema_decode_failure";
   }
 
-  if (Result.isSuccess(defect) && defect.success instanceof ModelFixtureFailure) {
+  if (Result.isSuccess(defect) && isModelFixtureFailure(defect.success)) {
     return defect.success.reason;
   }
 
-  if (Result.isSuccess(defect) && defect.success instanceof Error) {
+  if (Result.isSuccess(defect) && Predicate.isError(defect.success)) {
     const message = defect.success.message;
 
     const known = [
@@ -301,9 +298,9 @@ const safeFailureReason = <E>(cause: Cause.Cause<E>): string => {
   return Option.match(Cause.findErrorOption(cause), {
     onNone: () => "internal_failure",
     onSome: (error) => {
-      if (error instanceof ModelFixtureFailure) return error.reason;
+      if (isModelFixtureFailure(error)) return error.reason;
 
-      if (error instanceof NativeBoundaryFailure) return "native_io_failure";
+      if (isNativeBoundaryFailure(error)) return "native_io_failure";
 
       return "platform_failure";
     },
@@ -313,7 +310,7 @@ const safeFailureReason = <E>(cause: Cause.Cause<E>): string => {
 const foreign = <A>(run: () => Promise<A>): Effect.Effect<A, NativeBoundaryFailure> =>
   Effect.tryPromise({
     try: run,
-    catch: () => new NativeBoundaryFailure(),
+    catch: (cause) => new NativeBoundaryFailure({ cause }),
   });
 
 const command = ({
@@ -321,7 +318,11 @@ const command = ({
   env,
   root,
   signal,
-}: CommandInput): Effect.Effect<string, NativeBoundaryFailure | Cause.TimeoutError, never> =>
+}: CommandInput): Effect.Effect<
+  string,
+  ModelFixtureFailure | NativeBoundaryFailure | Cause.TimeoutError,
+  never
+> =>
   Effect.scoped(
     Effect.gen(function* () {
       if (signal.aborted) return yield* Effect.die("interrupted");
@@ -348,13 +349,13 @@ const command = ({
         const chunks = yield* Stream.runCollect(
           Stream.fromReadableStream({
             evaluate: () => child.stdout,
-            onError: () => new NativeBoundaryFailure(),
+            onError: (cause) => new NativeBoundaryFailure({ cause }),
           }).pipe(
             Stream.mapEffect((chunk) => {
               bytes += chunk.byteLength;
 
               return bytes > outputLimit
-                ? Effect.fail(new NativeBoundaryFailure())
+                ? Effect.fail(new NativeBoundaryFailure({ cause: "output bound" }))
                 : Effect.succeed(decoder.decode(chunk, { stream: true }));
             })
           )
@@ -363,7 +364,10 @@ const command = ({
         const output = chunks.join("") + decoder.decode();
 
         if ((yield* foreign(() => child.exited)) !== 0) {
-          throw new Error("command failed");
+          return yield* new ModelFixtureFailure({
+            reason: "command failed",
+            diagnostics: Option.none(),
+          });
         }
 
         return output;
@@ -378,7 +382,8 @@ const command = ({
     }).pipe(Effect.timeout(commandTimeout))
   );
 
-const wait = (_signal: AbortSignal): Effect.Effect<void, never, never> => Effect.sleep(100);
+const wait = (_signal: AbortSignal): Effect.Effect<void, never, never> =>
+  Effect.sleep(Duration.millis(100));
 
 const stopProcess = (child: Bun.Subprocess): Effect.Effect<void, NativeBoundaryFailure, never> =>
   Effect.scoped(
@@ -406,7 +411,7 @@ type NativeInput = Readonly<{
 const checkVersion = (
   { host, binary, root }: NativeInput,
   signal: AbortSignal
-): Effect.Effect<void, NativeBoundaryFailure | Cause.TimeoutError, never> =>
+): Effect.Effect<void, ModelFixtureFailure | NativeBoundaryFailure | Cause.TimeoutError, never> =>
   Effect.scoped(
     Effect.gen(function* () {
       const version = yield* command({
@@ -417,7 +422,10 @@ const checkVersion = (
       });
 
       if (!version.split(/\s/u).includes(pinnedVersions[host])) {
-        throw new Error("unsupported version");
+        return yield* new ModelFixtureFailure({
+          reason: "unsupported version",
+          diagnostics: Option.none(),
+        });
       }
     })
   );
@@ -515,7 +523,7 @@ const deliverCallback = (
   path: string
 ): Effect.Effect<
   void,
-  PlatformError.PlatformError | NativeBoundaryFailure,
+  PlatformError.PlatformError | ModelFixtureFailure | NativeBoundaryFailure,
   FileSystem.FileSystem
 > =>
   Effect.scoped(
@@ -524,7 +532,13 @@ const deliverCallback = (
       const fs = yield* FileSystem.FileSystem;
       const value = (yield* fs.readFileString(path)).trim();
 
-      if (value.length > callbackLimit) throw new Error("callback bound");
+      if (value.length > callbackLimit) {
+        return yield* new ModelFixtureFailure({
+          reason: "callback bound",
+          diagnostics: Option.none(),
+        });
+      }
+
       terminal.write(`${value}\r`);
       state.callbackSent = true;
     })
@@ -544,14 +558,20 @@ const pollLogin = (
   signal: AbortSignal
 ): Effect.Effect<
   void,
-  PlatformError.PlatformError | NativeBoundaryFailure,
+  PlatformError.PlatformError | ModelFixtureFailure | NativeBoundaryFailure,
   FileSystem.FileSystem
 > =>
   Effect.scoped(
     Effect.gen(function* () {
       if (input.child.exitCode !== null || now() >= input.deadline) return;
 
-      if (input.state.output.length > outputLimit) throw new Error("output bound");
+      if (input.state.output.length > outputLimit) {
+        return yield* new ModelFixtureFailure({
+          reason: "output bound",
+          diagnostics: Option.none(),
+        });
+      }
+
       yield* publishAuthorization(input.state, join(input.root, `${input.host}-authorize-url.txt`));
       yield* deliverCallback(
         input.state,
@@ -603,14 +623,9 @@ const runLogin = (input: NativeInput, signal: AbortSignal): LoginEffect =>
       const terminal = createTerminal(state);
 
       const child = Bun.spawn(
-        [
-          binary,
-          "mcp",
-          "login",
-          "fidy",
-          "--no-browser",
-          ...(host === "codex" ? ["--scopes", "read,write,dashboard"] : []),
-        ],
+        [binary, "mcp", "login", "fidy", "--no-browser"].concat(
+          host === "codex" ? ["--scopes", "read,write,dashboard"] : []
+        ),
         {
           cwd: root,
           env: environment(host, root),
@@ -632,7 +647,10 @@ const runLogin = (input: NativeInput, signal: AbortSignal): LoginEffect =>
         );
 
         if (child.exitCode !== 0 || !state.urlWritten) {
-          throw new Error("login incomplete");
+          return yield* new ModelFixtureFailure({
+            reason: "login incomplete",
+            diagnostics: Option.none(),
+          });
         }
 
         return {
@@ -673,9 +691,10 @@ export const nativeLogin = ({
         yield* Effect.abortSignal
       );
     }).pipe(
-      Effect.catchCause(() =>
+      Effect.catchCause((cause) =>
         Effect.fail(
           new NativeProofError({
+            cause: Redacted.make(cause),
             reason: "native_failure",
             host,
             phase: "login",
@@ -796,13 +815,13 @@ const parseEmbedded = (value: string): Option.Option<Schema.Json> =>
   );
 
 const findId = (value: Schema.Json): string => {
-  if (typeof value === "string") {
+  if (Predicate.isString(value)) {
     return Option.match(parseEmbedded(value), { onNone: () => "", onSome: findId });
   }
 
   const fields = object(value);
 
-  if (typeof fields.id === "string" && /^[\da-f-]{36}$/iu.test(fields.id)) return fields.id;
+  if (Predicate.isString(fields.id) && /^[\da-f-]{36}$/iu.test(fields.id)) return fields.id;
 
   for (const child of Schema.is(ModelJsonArray)(value) ? value : Object.values(fields)) {
     const id = findId(child);
@@ -814,7 +833,7 @@ const findId = (value: Schema.Json): string => {
 };
 
 const failedOutput = (value: Schema.Json): boolean => {
-  if (typeof value === "string") {
+  if (Predicate.isString(value)) {
     return Option.match(parseEmbedded(value), { onNone: () => false, onSome: failedOutput });
   }
 
@@ -1120,17 +1139,14 @@ const modelItem = (
 
   const tool = found.value;
 
-  return {
+  const call = {
     type: "function_call",
     call_id: `fixture_${step}`,
     name: text(tool.value.name ?? ""),
     arguments: stringify(args),
-    ...(tool.namespace.length > 0
-      ? {
-          namespace: tool.namespace,
-        }
-      : {}),
   };
+
+  return tool.namespace.length > 0 ? { ...call, namespace: tool.namespace } : call;
 };
 
 const catalogMissingPlannedTool = (
@@ -1227,12 +1243,18 @@ const serveModel = (
   request: Request
 ): Effect.Effect<
   Response,
-  PlatformError.PlatformError | NativeBoundaryFailure,
+  PlatformError.PlatformError | ModelFixtureFailure | NativeBoundaryFailure,
   FileSystem.FileSystem
 > =>
   Effect.scoped(
     Effect.gen(function* () {
-      if (++state.requests > 100) throw new Error("request bound");
+      if (++state.requests > 100) {
+        return yield* new ModelFixtureFailure({
+          reason: "request bound",
+          diagnostics: Option.none(),
+        });
+      }
+
       const probe = nonModelResponse(request);
 
       if (Option.isSome(probe)) {
@@ -1248,7 +1270,10 @@ const serveModel = (
       const parsed = parseJson(raw);
 
       if (!Schema.is(HostModelRequest)(parsed) || !Schema.is(ModelJsonObject)(parsed)) {
-        throw new Error("invalid host request");
+        return yield* new ModelFixtureFailure({
+          reason: "internal_failure",
+          diagnostics: Option.none(),
+        });
       }
 
       const body = parsed;
@@ -1270,7 +1295,13 @@ const serveModel = (
       state.outputs = mergeOutputs(input.host, state.outputs, modelOutputs(input.host, body));
       yield* retainBudget(input, state);
 
-      if (state.outputs.length > input.plan.length) throw new Error("unexpected tools");
+      if (state.outputs.length > input.plan.length) {
+        return yield* new ModelFixtureFailure({
+          reason: "unexpected tools",
+          diagnostics: Option.none(),
+        });
+      }
+
       state.stage = "canned_response";
 
       return cannedResponse(input, state, body);
@@ -1340,7 +1371,11 @@ type DaemonState = {
 const daemonVersion = (
   input: NativeInput,
   signal: AbortSignal
-): Effect.Effect<typeof DaemonMetadata.Type, NativeBoundaryFailure | Cause.TimeoutError, never> =>
+): Effect.Effect<
+  typeof DaemonMetadata.Type,
+  ModelFixtureFailure | NativeBoundaryFailure | Cause.TimeoutError,
+  never
+> =>
   Effect.scoped(
     Effect.gen(function* () {
       const raw = yield* command({
@@ -1351,7 +1386,7 @@ const daemonVersion = (
       });
 
       return yield* Schema.decodeEffect(Schema.fromJsonString(DaemonMetadata))(raw).pipe(
-        Effect.mapError(() => new NativeBoundaryFailure())
+        Effect.mapError((cause) => new NativeBoundaryFailure({ cause }))
       );
     })
   );
@@ -1360,7 +1395,7 @@ const pinDaemon = (
   input: ToolInput,
   daemon: DaemonState,
   signal: AbortSignal
-): Effect.Effect<void, NativeBoundaryFailure | Cause.TimeoutError, never> =>
+): Effect.Effect<void, ModelFixtureFailure | NativeBoundaryFailure | Cause.TimeoutError, never> =>
   Effect.scoped(
     Effect.gen(function* () {
       const { binary, root } = input;
@@ -1374,7 +1409,10 @@ const pinDaemon = (
       const initial = yield* daemonVersion(input, signal);
 
       if (!resolve(initial.managedCodexPath).startsWith(`${profilePath(input.host, root)}${sep}`)) {
-        throw new Error("daemon ownership");
+        return yield* new ModelFixtureFailure({
+          reason: "daemon ownership",
+          diagnostics: Option.none(),
+        });
       }
 
       daemon.owned = true;
@@ -1386,7 +1424,12 @@ const pinDaemon = (
       });
       const updated = yield* daemonVersion(input, signal);
 
-      if (updated.appServerVersion !== pinnedVersions.codex) throw new Error("daemon version");
+      if (updated.appServerVersion !== pinnedVersions.codex) {
+        return yield* new ModelFixtureFailure({
+          reason: "daemon version",
+          diagnostics: Option.none(),
+        });
+      }
     })
   );
 
@@ -1423,7 +1466,7 @@ const prepareTools = (
   }>
 ): Effect.Effect<
   void,
-  PlatformError.PlatformError | NativeBoundaryFailure | Cause.TimeoutError,
+  PlatformError.PlatformError | ModelFixtureFailure | NativeBoundaryFailure | Cause.TimeoutError,
   FileSystem.FileSystem
 > =>
   Effect.scoped(
@@ -1557,7 +1600,7 @@ const classifyStartup = (input: PtyInput, state: PtyState): void => {
     deadlineReached: now() >= input.deadline,
     exitCode: input.child.exitCode ?? -1,
     exitSignal:
-      typeof signal === "string" &&
+      Predicate.isString(signal) &&
       ["SIGTERM", "SIGKILL", "SIGABRT", "SIGSEGV", "SIGINT"].includes(signal)
         ? signal
         : "none",
@@ -1598,14 +1641,18 @@ const startupFailures = (compact: string): ReadonlyArray<string> => {
     },
   ];
 
-  return checks.filter((check) => check.pattern.test(compact)).map((check) => check.code);
+  return checks
+    .values()
+    .filter((check) => check.pattern.test(compact))
+    .map((check) => check.code)
+    .toArray();
 };
 
 const pollTools = (
   input: PtyInput,
   state: PtyState,
   signal: AbortSignal
-): Effect.Effect<void, NativeBoundaryFailure> =>
+): Effect.Effect<void, ModelFixtureFailure | NativeBoundaryFailure> =>
   Effect.scoped(
     Effect.gen(function* () {
       classifyStartup(input, state);
@@ -1625,7 +1672,10 @@ const pollTools = (
       }
 
       if (state.output.length > terminalLimit) {
-        throw new Error("native state.output bound");
+        return yield* new ModelFixtureFailure({
+          reason: "native state.output bound",
+          diagnostics: Option.none(),
+        });
       }
 
       const compact = compactOutput(state.output);
@@ -1657,8 +1707,7 @@ const nativeArgs = (input: ToolInput): string[] => {
       "",
       "--permission-mode",
       "default",
-      ...(mode === "headless" ? ["-p"] : []),
-    ];
+    ].concat(mode === "headless" ? ["-p"] : []);
   }
 
   if (mode === "headless") return [binary, "exec", "--skip-git-repo-check", prompt];
@@ -1673,7 +1722,7 @@ const runToolsPty = (
     modelUrl: string;
     signal: AbortSignal;
   }>
-): Effect.Effect<boolean, NativeBoundaryFailure, never> =>
+): Effect.Effect<boolean, ModelFixtureFailure | NativeBoundaryFailure, never> =>
   Effect.scoped(
     Effect.gen(function* () {
       const env = environment(input.host, input.root);
@@ -1731,7 +1780,7 @@ const runToolsPty = (
   );
 
 const refusalCode = (value: Schema.Json): boolean => {
-  if (typeof value === "string") {
+  if (Predicate.isString(value)) {
     return Option.match(parseEmbedded(value), { onNone: () => false, onSome: refusalCode });
   }
 
@@ -1743,7 +1792,7 @@ const refusalCode = (value: Schema.Json): boolean => {
 };
 
 const closedErrorCode = (value: Schema.Json): string => {
-  if (typeof value === "string") {
+  if (Predicate.isString(value)) {
     return Option.match(parseEmbedded(value), { onNone: () => "none", onSome: closedErrorCode });
   }
 
@@ -1826,11 +1875,12 @@ const nativeToolsFailure = <E>(
   const defect = Cause.findDefect(cause);
 
   return new NativeProofError({
+    cause: Redacted.make(cause),
     reason: safeFailureReason(cause),
     host,
     phase,
     diagnostics:
-      Result.isSuccess(defect) && defect.success instanceof ModelFixtureFailure
+      Result.isSuccess(defect) && isModelFixtureFailure(defect.success)
         ? defect.success.diagnostics
         : Option.none(),
   });
@@ -1894,7 +1944,7 @@ const summarizeTools = (
 
 type ToolsEffect = Effect.Effect<
   NativeSummary,
-  PlatformError.PlatformError | NativeBoundaryFailure | Cause.TimeoutError,
+  PlatformError.PlatformError | ModelFixtureFailure | NativeBoundaryFailure | Cause.TimeoutError,
   FileSystem.FileSystem
 >;
 
@@ -2011,7 +2061,10 @@ export const nativeTools = (
         : "";
 
       if (["cancel", "accept", "headless"].includes(mode) && budgetId.length === 0) {
-        throw new Error("missing budget");
+        return yield* new ModelFixtureFailure({
+          reason: "missing budget",
+          diagnostics: Option.none(),
+        });
       }
 
       return yield* runTools(
@@ -2038,7 +2091,7 @@ export const nativeTools = (
   );
 };
 
-const CredentialShape = Schema.Struct({
+const StoredCredential = Schema.Struct({
   accessToken: Schema.NonEmptyString,
   refreshToken: Schema.NonEmptyString,
   clientId: Schema.NonEmptyString,
@@ -2050,7 +2103,11 @@ const readCredential = (
   signal: AbortSignal
 ): Effect.Effect<
   Schema.Json,
-  PlatformError.PlatformError | NativeBoundaryFailure | Cause.TimeoutError | Config.ConfigError,
+  | PlatformError.PlatformError
+  | ModelFixtureFailure
+  | NativeBoundaryFailure
+  | Cause.TimeoutError
+  | Config.ConfigError,
   FileSystem.FileSystem
 > =>
   Effect.scoped(
@@ -2086,7 +2143,7 @@ const readCredential = (
   );
 
 const normalizeCredential = (entry: JsonObject): NativeCredential => {
-  const decoded = Schema.decodeUnknownSync(CredentialShape)({
+  const decoded = Schema.decodeUnknownSync(StoredCredential)({
     accessToken: entry.accessToken ?? entry.access_token,
     refreshToken: entry.refreshToken ?? entry.refresh_token,
     clientId: entry.clientId ?? entry.client_id,
@@ -2143,9 +2200,10 @@ export const nativeCredential = ({
       );
     }).pipe(
       Effect.map((raw) => selectCredential(host, raw)),
-      Effect.catchCause(() =>
+      Effect.catchCause((cause) =>
         Effect.fail(
           new NativeProofError({
+            cause: Redacted.make(cause),
             reason: "native_failure",
             host,
             phase: "credential",
@@ -2181,9 +2239,10 @@ export const nativeLogout = ({
         host,
         passed: true,
       }),
-      Effect.catchCause(() =>
+      Effect.catchCause((cause) =>
         Effect.fail(
           new NativeProofError({
+            cause: Redacted.make(cause),
             reason: "native_failure",
             host,
             phase: "logout",
@@ -2194,6 +2253,6 @@ export const nativeLogout = ({
     )
   );
 
-const now = (): number => Effect.runSync(Clock.currentTimeMillis);
+const now = (): number => DateTime.toEpochMillis(DateTime.nowUnsafe());
 
 const stringify = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));

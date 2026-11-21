@@ -6,7 +6,7 @@
 const staticName = (node) => {
   if (node.type === "Identifier") return node.name;
 
-  if (node.type === "Literal" && typeof node.value === "string") return node.value;
+  if (node.type === "Literal" && /^["']/u.test(node.raw ?? "")) return String(node.value);
 
   return undefined;
 };

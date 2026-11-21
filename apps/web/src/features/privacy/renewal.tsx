@@ -22,7 +22,7 @@ const makeRenewal = ({
   client,
   withdrawalReference,
   authorization,
-}: RenewalInput): Atom.AtomResultFn<void, boolean, never> =>
+}: RenewalInput): Atom.AtomResultFn<void, void, unknown> =>
   client.runtime.fn<void>()(() =>
     client.pipe(
       Effect.flatMap((api) =>
@@ -35,9 +35,7 @@ const makeRenewal = ({
           },
         })
       ),
-      Effect.tap(() => Reactivity.invalidate(["processing-consent"])),
-      Effect.as(true),
-      Effect.catchCause(() => Effect.succeed(false))
+      Effect.flatMap(() => Reactivity.invalidate(["processing-consent"]))
     )
   );
 
@@ -103,7 +101,7 @@ const RenewalChoice = ({
           {result.waiting ? "Registrando autorización…" : "Renovar autorización"}
         </Button>
       </div>
-      {Predicate.isTagged(result, "Success") && !result.value ? (
+      {Predicate.isTagged(result, "Failure") ? (
         <Alert variant="destructive" role="alert">
           <AlertTitle>No pudimos confirmar la renovación</AlertTitle>
           <AlertDescription>

@@ -1,4 +1,5 @@
 import { Option, Schema } from "effect";
+import { reportBrowserDefect } from "@/transport/browser-defects";
 
 const Theme = Schema.Literals(["light", "dark"]);
 
@@ -11,7 +12,9 @@ export const readThemePreference = (): "light" | "dark" => {
     const stored = Schema.decodeUnknownOption(Theme)(localStorage.getItem(preferenceKey));
 
     if (Option.isSome(stored)) return stored.value;
-  } catch {}
+  } catch {
+    reportBrowserDefect("storage_failed");
+  }
 
   return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 };
@@ -33,6 +36,8 @@ export const toggleThemePreference = (theme: "light" | "dark"): void => {
   try {
     localStorage.setItem(preferenceKey, theme === "dark" ? "light" : "dark");
   } catch {
+    reportBrowserDefect("storage_failed");
+
     return;
   }
 

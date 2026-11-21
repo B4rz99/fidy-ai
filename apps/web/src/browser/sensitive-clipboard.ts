@@ -1,5 +1,6 @@
 import { Duration, Effect, FiberHandle, Function, Option, type Scope } from "effect";
 import { type BrowserClipboard, ClipboardAccessFailed } from "./clipboard";
+import { reportBrowserDefect } from "@/transport/browser-defects";
 
 const sensitiveClipboardMinutes = 10;
 
@@ -100,7 +101,7 @@ const release = (state: ClipboardState, owner: CopyOwner): void => {
 
       return undefined;
     })
-    .catch(() => undefined);
+    .catch(() => reportBrowserDefect("clipboard_failed"));
 };
 
 const cleanPrior = (state: ClipboardState, owner: CopyOwner): Promise<void> => {
@@ -118,7 +119,7 @@ const cleanPrior = (state: ClipboardState, owner: CopyOwner): Promise<void> => {
 
       return undefined;
     })
-    .catch(() => undefined)
+    .catch(() => reportBrowserDefect("clipboard_failed"))
     .finally(() => {
       owner.prior = Option.none();
     });

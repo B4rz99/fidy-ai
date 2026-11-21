@@ -21,6 +21,7 @@ import {
 } from "@/transport/wompi-daviplata";
 import { type DaviplataChallenge, openDaviplataChallenge } from "./daviplata-challenge";
 import { paymentSubmissionIsTerminal } from "./payment-status";
+import { reportBrowserDefect } from "@/transport/browser-defects";
 
 export type Enrollment = PaymentEnrollmentType;
 
@@ -89,7 +90,9 @@ export const clearNequiPhone = (fields?: PaymentFields): void => {
 
   try {
     fields.clearPhone();
-  } catch {}
+  } catch {
+    reportBrowserDefect("client_defect");
+  }
 };
 
 type SubmissionOptions = Readonly<{
@@ -249,7 +252,9 @@ const submitNequiSource = ({
 
     try {
       fields.clearPhone();
-    } catch {}
+    } catch {
+      reportBrowserDefect("client_defect");
+    }
   };
 
   return client

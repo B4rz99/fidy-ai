@@ -8,7 +8,12 @@ export type BrowserDefect =
   | "runtime_error"
   | "unhandled_rejection"
   | "invalid_response"
-  | "client_defect";
+  | "client_defect"
+  | "preparation_failed"
+  | "navigation_failed"
+  | "storage_failed"
+  | "clipboard_failed"
+  | "command_failed";
 
 const maximumPageDefectRecords = 20;
 
@@ -32,6 +37,11 @@ export const makeBrowserDefectReporter = (): ((error: BrowserDefect) => void) =>
 };
 
 export const reportBrowserDefect = makeBrowserDefectReporter();
+
+export const reportBrowserFailure =
+  (error: BrowserDefect) =>
+  <E>(cause: Cause.Cause<E>): Effect.Effect<void> =>
+    Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.sync(() => reportBrowserDefect(error));
 
 export const observeBrowserDecode = <A, E, R>(
   response: Effect.Effect<A, E, R>

@@ -44,40 +44,34 @@ const runPolicyGate = (directory: string): Bun.SyncSubprocess<"pipe", "pipe"> =>
 layer(BunFileSystem.layer, { excludeTestServices: true })(
   "mandatory edge policy verification",
   (it) => {
-    it.effect(
-      "accepts the reviewed policy through the Production CLI",
-      () =>
-        Effect.gen(function* () {
-          const directory = yield* policyFixture;
-          const result = yield* Effect.sync(() => runPolicyGate(directory));
-          expect(result.exitCode).toBe(0);
-          expect(new TextDecoder().decode(result.stdout)).toBe("");
-          expect(new TextDecoder().decode(result.stderr)).toBe("");
-        }),
-      20_000
+    it.effect("accepts the reviewed policy through the Production CLI", () =>
+      Effect.gen(function* () {
+        const directory = yield* policyFixture;
+        const result = yield* Effect.sync(() => runPolicyGate(directory));
+        expect(result.exitCode).toBe(0);
+        expect(new TextDecoder().decode(result.stdout)).toBe("");
+        expect(new TextDecoder().decode(result.stderr)).toBe("");
+      })
     );
 
     it.effect.each([
       "worker-observability.ts",
       "../../scripts/pro/runtime.ts",
       "../../scripts/infra-performance/canonical-fixture/canonical_activity.py",
-    ])(
-      "refuses changes in %s without disclosing their contents",
-      (source) =>
-        Effect.gen(function* () {
-          const directory = yield* policyFixture;
-          const fs = yield* FileSystem.FileSystem;
-          const artifact = `${directory}/${source}`;
-          const original = yield* fs.readFileString(artifact);
-          yield* fs.writeFileString(artifact, `${original}\n// private-policy-change\n`);
-          const result = yield* Effect.sync(() => runPolicyGate(directory));
-          expect(result.exitCode).toBe(1);
-          expect(new TextDecoder().decode(result.stdout)).toBe("");
-          expect(new TextDecoder().decode(result.stderr)).toBe(
-            "Desired edge policy differs from the reviewed manifest.\n"
-          );
-        }),
-      20_000
+    ])("refuses changes in %s without disclosing their contents", (source) =>
+      Effect.gen(function* () {
+        const directory = yield* policyFixture;
+        const fs = yield* FileSystem.FileSystem;
+        const artifact = `${directory}/${source}`;
+        const original = yield* fs.readFileString(artifact);
+        yield* fs.writeFileString(artifact, `${original}\n// private-policy-change\n`);
+        const result = yield* Effect.sync(() => runPolicyGate(directory));
+        expect(result.exitCode).toBe(1);
+        expect(new TextDecoder().decode(result.stdout)).toBe("");
+        expect(new TextDecoder().decode(result.stderr)).toBe(
+          "Desired edge policy differs from the reviewed manifest.\n"
+        );
+      })
     );
   }
 );

@@ -6,6 +6,18 @@ import {
   verifiedVersionResources,
 } from "./rollback-compatibility";
 
+type VersionResponse = Readonly<{
+  success: true;
+  result: Readonly<{
+    id: string;
+    resources: Readonly<{
+      script: object;
+      script_runtime: object;
+      bindings: ReadonlyArray<object>;
+    }>;
+  }>;
+}>;
+
 const worker = (migrationTag: string, bindings: WorkerBindings): WorkerResources => ({
   runtime: {},
   migrationTag,
@@ -78,7 +90,7 @@ it("compares immutable namespace IDs from the Worker Versions response before a 
   const stable = "a".repeat(40);
   const candidate = "b".repeat(40);
 
-  const response = (revision: string, namespace: string, flip = false): unknown => {
+  const response = (revision: string, namespace: string, flip = false): VersionResponse => {
     const bindings = [
       {
         name: "USER_STORE",

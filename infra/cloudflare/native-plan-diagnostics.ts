@@ -1,5 +1,5 @@
 import * as Alchemist from "alchemy/Alchemist";
-import { Effect, Option } from "effect";
+import { Effect, Match, Option, Schema } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { nativeResourceInventory } from "./native-graph";
 import { type NativeStageFailure, nativeResourceStage } from "./resource-failure";
@@ -80,7 +80,7 @@ const observeHttp = ({
     (...args: Parameters<typeof fetch>) => {
       const [input, init] = args;
 
-      if (init?.method === undefined || !(input instanceof URL)) return fetch(...args);
+      if (init?.method === undefined || !Schema.is(Schema.URL)(input)) return fetch(...args);
       const kind = classify(input, init.method);
 
       if (Option.isNone(kind)) return fetch(...args);
@@ -174,23 +174,32 @@ export const diagnoseNativePlan =
         started = 0,
         completed = 0;
 
+      const tracked = (logicalId: string, resourceType: string): Option.Option<string> =>
+        inventory.get(logicalId) === resourceType
+          ? Option.some(logicalId.replace(/-[a-f0-9]{40}$/u, ""))
+          : Option.none();
+
       const observe: Alchemist.ProgressReporter = (event) =>
-        Effect.sync(() => {
-          if (event._tag === "plan.phase" && phases.has(event.phase)) phase = event.phase;
+        Effect.sync(() =>
+          Match.value(event).pipe(
+            Match.tag("plan.phase", ({ phase: next }) => {
+              if (phases.has(next)) phase = next;
+            }),
+            Match.tag("plan.resource.started", ({ logicalId, resourceType }) => {
+              started++;
+              const label = tracked(logicalId, resourceType);
 
-          if (event._tag !== "plan.resource.started" && event._tag !== "plan.resource.completed") {
-            return;
-          }
+              if (Option.isSome(label)) pending.add(label.value);
+            }),
+            Match.tag("plan.resource.completed", ({ logicalId, resourceType }) => {
+              completed++;
+              const label = tracked(logicalId, resourceType);
 
-          if (event._tag === "plan.resource.started") started++;
-          else completed++;
-
-          if (inventory.get(event.logicalId) !== event.resourceType) return;
-          const label = event.logicalId.replace(/-[a-f0-9]{40}$/u, "");
-
-          if (event._tag === "plan.resource.started") pending.add(label);
-          else pending.delete(label);
-        }).pipe(Effect.andThen(report(event)));
+              if (Option.isSome(label)) pending.delete(label.value);
+            }),
+            Match.orElse(() => undefined)
+          )
+        ).pipe(Effect.andThen(report(event)));
 
       const diagnostics = (): string =>
         " Planner phase " +

@@ -69,9 +69,17 @@ it.effect("sends the native proof only to its installation hostname", () =>
   })
 );
 
-for (const refusal of [
-  { label: "wrong public version", body: { ...readinessBody, public: coreIdentity }, status: 200 },
-  { label: "wrong Core version", body: { ...readinessBody, core: publicIdentity }, status: 200 },
+[
+  {
+    label: "wrong public version",
+    body: { ...readinessBody, public: coreIdentity },
+    status: 200,
+  },
+  {
+    label: "wrong Core version",
+    body: { ...readinessBody, core: publicIdentity },
+    status: 200,
+  },
   {
     label: "wrong Core revision",
     body: { ...readinessBody, core: { ...coreIdentity, gitRevision: "d".repeat(40) } },
@@ -84,7 +92,7 @@ for (const refusal of [
   },
   { label: "unavailable proof", body: {}, status: 404 },
   { label: "foreign refusal", body: { message: "private-provider-detail" }, status: 503 },
-]) {
+].forEach((refusal) => {
   it.effect(`refuses stable identity with ${refusal.label}`, () =>
     Effect.gen(function* () {
       const outcome = yield* verifyStableWorkerIdentity(expected).pipe(
@@ -98,4 +106,4 @@ for (const refusal of [
       expect(Cause.pretty(outcome.cause)).not.toContain(proof);
     })
   );
-}
+});

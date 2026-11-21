@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { ConfigProvider, Effect, Result } from "effect";
+import { ConfigProvider, Effect, Result, type Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { expect } from "vitest";
 import { nativeIngressHost, nativeWebHost } from "./storage-installation";
@@ -8,6 +8,14 @@ import {
   requireClosedIngressDomains,
   requireStagedHostDomains,
 } from "./native-deployed-edge";
+
+type DomainAttachment = Readonly<{
+  hostname: string;
+  service: string;
+  zone_id: string;
+  enabled: boolean;
+  previews_enabled: boolean;
+}>;
 
 const account = "a".repeat(32);
 
@@ -26,7 +34,7 @@ const triggers = scripts.map(
   ({ tag }) => "/client/v4/accounts/" + account + "/builds/workers/" + tag + "/triggers"
 );
 
-const resultFor = (path: string): unknown => {
+const resultFor = (path: string): Schema.Json => {
   if (path === "/client/v4/zones") return [zone];
 
   if (path.endsWith("/workers/scripts")) return scripts;
@@ -38,13 +46,12 @@ const resultFor = (path: string): unknown => {
   return [];
 };
 
-const inspect = (
-  secret: string,
-  buildResult: readonly unknown[] = []
-): {
+type EdgeInspection = {
   seen: string[];
   operation: ReturnType<typeof inspectDeployedEdge>;
-} => {
+};
+
+const inspect = (secret: string, buildResult: readonly unknown[] = []): EdgeInspection => {
   const seen: string[] = [];
 
   const client = HttpClient.make((request) => {
@@ -122,27 +129,31 @@ it.effect("refuses an extra Ingress domain before reconciling the closed version
 
     const approved = { ...attachment, hostname: nativeIngressHost };
 
-    for (const rows of [
-      [approved],
-      [approved, { ...attachment, hostname: "api.fidyapp.com" }],
-      [{ ...approved, previews_enabled: true }],
-    ]) {
-      const accepted = yield* requireClosedIngressDomains((path) => {
-        expect(path).toContain("service=fidy-native-storage-ingress");
+    yield* Effect.forEach(
+      [
+        [approved],
+        [approved, { ...attachment, hostname: "api.fidyapp.com" }],
+        [{ ...approved, previews_enabled: true }],
+      ],
+      Effect.fnUntraced(function* (rows) {
+        const accepted = yield* requireClosedIngressDomains((path) => {
+          expect(path).toContain("service=fidy-native-storage-ingress");
 
-        return Effect.succeed({ success: true, result: rows });
-      }).pipe(Effect.result);
+          return Effect.succeed({ success: true, result: rows });
+        }).pipe(Effect.result);
 
-      expect(Result.isSuccess(accepted)).toBe(
-        rows.length === 1 && rows[0]?.previews_enabled === false
-      );
-    }
+        expect(Result.isSuccess(accepted)).toBe(
+          rows.length === 1 && rows[0]?.previews_enabled === false
+        );
+      }),
+      { discard: true }
+    );
   })
 );
 
 it.effect("admits only the closed acceptance and canonical hosts during staged transfer", () =>
   Effect.gen(function* () {
-    const attachment = (hostname: string, service: string): Record<string, string | boolean> => ({
+    const attachment = (hostname: string, service: string): DomainAttachment => ({
       hostname,
       service,
       zone_id: zone.id,

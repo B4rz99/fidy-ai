@@ -7,7 +7,9 @@ const hash = (value: string): string => new Bun.CryptoHasher("sha256").update(va
 
 type Input = Parameters<typeof continueFleetCleanup>[0];
 
-const fixture = (): { rows: Map<string, boolean>; stages: string[]; input: Input } => {
+type PilotFixture = { rows: Map<string, boolean>; stages: string[]; input: Input };
+
+const fixture = (): PilotFixture => {
   const rows = new Map([
     ["prior", true],
     ["old", false],

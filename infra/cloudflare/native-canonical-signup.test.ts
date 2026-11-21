@@ -9,6 +9,8 @@ import {
   validProviderRedirect,
 } from "./native-canonical-signup";
 
+type PlainTextBinding = Readonly<{ type: string; text: string }>;
+
 it("verifies the provider cookie independently of other edge cookies and attribute casing", () => {
   const cookie = "__Host-fidy_google=proof; path=/; secure; HTTPOnly; SameSite=lax";
   const headers = ["edge-session=opaque; Path=/; Secure", cookie];
@@ -89,7 +91,7 @@ it("matches a single new physical signup Store without publishing prior identiti
 });
 
 it("retains unmodified launch controls when staging ordinary admission", () => {
-  const plain = (text: string): { type: string; text: string } => ({ type: "plain_text", text });
+  const plain = (text: string): PlainTextBinding => ({ type: "plain_text", text });
   const before = { PROACTIVITY_ENABLED: plain("disabled") };
 
   const after = {
@@ -110,7 +112,7 @@ it("retains unmodified launch controls when staging ordinary admission", () => {
 });
 
 it("requires the ordinary WhatsApp sandbox binding to be a valid ID or empty", () => {
-  const plain = (text: string): { type: string; text: string } => ({ type: "plain_text", text });
+  const plain = (text: string): PlainTextBinding => ({ type: "plain_text", text });
 
   const secrets = Object.fromEntries(
     [

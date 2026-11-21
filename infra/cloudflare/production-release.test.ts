@@ -1,7 +1,7 @@
 import uploadedPair from "./native-pairing-upload.json" with { type: "json" };
 import fixtureUpload from "./native-fixture-upload.json" with { type: "json" };
-import { Cause, Context, Effect, Exit, Layer, Option } from "effect";
-import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
+import { Cause, Context, Effect, Exit, Layer, Match, Option, type Schema } from "effect";
+import { FetchHttpClient, type HttpBody, HttpClient, HttpClientResponse } from "effect/http";
 import { it } from "@effect/vitest";
 import { assert, describe, expect, vi } from "vitest";
 import { archivedDormant } from "./native-fallback-recovery";
@@ -18,6 +18,28 @@ import {
 } from "./production-release";
 import { type ReleasePort, releaseController } from "./release-controller";
 
+const persistedObservability = {
+  observability: {
+    enabled: true,
+    head_sampling_rate: 1,
+    redact_query_string: true,
+    issues: { enabled: true },
+    logs: {
+      enabled: true,
+      head_sampling_rate: 1,
+      invocation_logs: false,
+      persist: true,
+    },
+    traces: { enabled: false },
+  },
+};
+
+const patchJson = (body: HttpBody.HttpBody): Schema.Json =>
+  Match.value(body).pipe(
+    Match.tag("Uint8Array", (bytes) => JSON.parse(new TextDecoder().decode(bytes.body))),
+    Match.orElse(({ _tag }) => _tag)
+  );
+
 const revision = "a".repeat(40);
 
 const publicVersion = "11111111-1111-4111-8111-111111111111";
@@ -25,8 +47,8 @@ const publicVersion = "11111111-1111-4111-8111-111111111111";
 const coreVersion = "22222222-2222-4222-8222-222222222222";
 
 it.effect("requires native default placement on the exact staged Core version", () =>
-  Effect.gen(function* () {
-    for (const observation of [
+  Effect.forEach(
+    [
       { id: coreVersion, placement: undefined, legacy: undefined, accepted: true },
       { id: publicVersion, placement: undefined, legacy: undefined, accepted: false },
       { id: coreVersion, placement: undefined, legacy: "smart", accepted: false },
@@ -41,7 +63,8 @@ it.effect("requires native default placement on the exact staged Core version", 
       { id: coreVersion, placement: { mode: "off" }, accepted: false },
       { id: coreVersion, placement: { region: "aws:us-east-1" }, accepted: false },
       { id: coreVersion, placement: { hostname: "example.com" }, accepted: false },
-    ]) {
+    ],
+    Effect.fnUntraced(function* (observation) {
       const requests: Array<string> = [];
 
       const client = HttpClient.make((request) => {
@@ -55,7 +78,10 @@ it.effect("requires native default placement on the exact staged Core version", 
               result: {
                 id: observation.id,
                 resources: {
-                  script: { placement: observation.placement, placement_mode: observation.legacy },
+                  script: {
+                    placement: observation.placement,
+                    placement_mode: observation.legacy,
+                  },
                 },
               },
             })
@@ -75,8 +101,9 @@ it.effect("requires native default placement on the exact staged Core version", 
       expect(requests).toEqual([
         `GET /client/v4/accounts/test-account/workers/scripts/core/versions/${coreVersion}`,
       ]);
-    }
-  })
+    }),
+    { discard: true }
+  )
 );
 
 it.effect(
@@ -85,30 +112,12 @@ it.effect(
     Effect.gen(function* () {
       const requests: string[] = [];
 
+      const patchBodies: Array<HttpBody.HttpBody> = [];
+
       const client = HttpClient.make((request) => {
         requests.push(`${request.method} ${new URL(request.url).pathname}`);
 
-        if (request.method === "PATCH") {
-          expect(request.body._tag).toBe("Uint8Array");
-
-          if (request.body._tag === "Uint8Array") {
-            expect(JSON.parse(new TextDecoder().decode(request.body.body))).toEqual({
-              observability: {
-                enabled: true,
-                head_sampling_rate: 1,
-                redact_query_string: true,
-                issues: { enabled: true },
-                logs: {
-                  enabled: true,
-                  head_sampling_rate: 1,
-                  invocation_logs: false,
-                  persist: true,
-                },
-                traces: { enabled: false },
-              },
-            });
-          }
-        }
+        if (request.method === "PATCH") patchBodies.push(request.body);
 
         return Effect.succeed(
           HttpClientResponse.fromWeb(
@@ -133,6 +142,7 @@ it.effect(
         ["ingress", "core"],
         client
       );
+      expect(patchBodies.map(patchJson)).toEqual(patchBodies.map(() => persistedObservability));
       expect(requests).toEqual([
         "PATCH /client/v4/accounts/test-account/workers/scripts/ingress/script-settings",
         "GET /client/v4/accounts/test-account/workers/scripts/ingress/settings",
@@ -302,34 +312,32 @@ const captureInput = {
   coreName: "prod-core",
 };
 
+type ReferenceHarness = Readonly<{ port: ReleasePort; requests: ReadonlyArray<string> }>;
+
 const referenceHarness = (
   reference: unknown = trunkReference,
   applicationRevision = revision
-): { port: ReleasePort; requests: ReadonlyArray<string> } => {
+): ReferenceHarness => {
   const requests: string[] = [];
 
   const client = HttpClient.make((request) => {
     requests.push(`${request.method} ${request.url}`);
-    let body: unknown;
+    const isPublic = request.url.endsWith("/prod-ingress/deployments");
+    const deployed = isPublic ? publicVersion : coreVersion;
 
-    if (request.url === "https://api.github.com/repos/test/fidy/git/ref/heads/trunk") {
-      body = reference;
-    } else if (request.url === "https://api.github.com/repos/test/fidy/commits/trunk") {
-      body = { sha: revision, files: [{ patch: "x".repeat(200_000) }] };
-    } else {
-      const isPublic = request.url.endsWith("/prod-ingress/deployments");
-      body = {
+    const body = Match.value(request.url).pipe(
+      Match.when("https://api.github.com/repos/test/fidy/git/ref/heads/trunk", () => reference),
+      Match.when("https://api.github.com/repos/test/fidy/commits/trunk", () => ({
+        sha: revision,
+        files: [{ patch: "x".repeat(200_000) }],
+      })),
+      Match.orElse(() => ({
         success: true,
         result: {
-          deployments: [
-            {
-              id: isPublic ? publicVersion : coreVersion,
-              versions: [{ version_id: isPublic ? publicVersion : coreVersion, percentage: 100 }],
-            },
-          ],
+          deployments: [{ id: deployed, versions: [{ version_id: deployed, percentage: 100 }] }],
         },
-      };
-    }
+      }))
+    );
 
     return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(body)));
   });
@@ -456,61 +464,63 @@ it.effect(
     Effect.gen(function* () {
       const services = yield* Layer.build(FetchHttpClient.layer);
 
-      for (const options of [
-        { status: 503, headers: new Headers() },
-        { status: 200, headers: new Headers({ "content-length": "100001" }) },
-      ]) {
-        let aborted = false;
-        let pulled = 0;
+      yield* Effect.forEach(
+        [
+          { status: 503, headers: new Headers() },
+          { status: 200, headers: new Headers({ "content-length": "100001" }) },
+        ],
+        Effect.fnUntraced(function* (options) {
+          const signals: Array<AbortSignal> = [];
+          let pulled = 0;
 
-        const fetch: typeof globalThis.fetch = Object.assign(
-          (
-            _input: Parameters<typeof globalThis.fetch>[0],
-            init?: Parameters<typeof globalThis.fetch>[1]
-          ): Promise<Response> => {
-            init?.signal?.addEventListener("abort", () => {
-              aborted = true;
-            });
+          const fetch: typeof globalThis.fetch = Object.assign(
+            (
+              _input: Parameters<typeof globalThis.fetch>[0],
+              init?: Parameters<typeof globalThis.fetch>[1]
+            ): Promise<Response> => {
+              signals.push(init?.signal ?? new AbortController().signal);
 
-            return Promise.resolve(
-              new Response(
-                new ReadableStream<Uint8Array>(
-                  {
-                    pull() {
-                      pulled += 1;
+              return Promise.resolve(
+                new Response(
+                  new ReadableStream<Uint8Array>(
+                    {
+                      pull() {
+                        pulled += 1;
+                      },
                     },
-                  },
-                  { highWaterMark: 0 }
-                ),
-                options
-              )
-            );
-          },
-          { preconnect: globalThis.fetch.preconnect }
-        );
+                    { highWaterMark: 0 }
+                  ),
+                  options
+                )
+              );
+            },
+            { preconnect: globalThis.fetch.preconnect }
+          );
 
-        const port = releasePort({
-          client: Context.get(services, HttpClient.HttpClient),
-          env: {
-            account: "0".repeat(32),
-            token: "test-only-cloudflare",
-            revision,
-            repository: "test/fidy",
-            githubToken: "test-only-github",
-            file: "/unused-snapshot",
-            smokeProof: "0".repeat(64),
-            smokeAttestationFile: "/unused-attestation",
-          },
-        });
+          const port = releasePort({
+            client: Context.get(services, HttpClient.HttpClient),
+            env: {
+              account: "0".repeat(32),
+              token: "test-only-cloudflare",
+              revision,
+              repository: "test/fidy",
+              githubToken: "test-only-github",
+              file: "/unused-snapshot",
+              smokeProof: "0".repeat(64),
+              smokeAttestationFile: "/unused-attestation",
+            },
+          });
 
-        const outcome = yield* port
-          .current("prod-ingress")
-          .pipe(Effect.provideService(FetchHttpClient.Fetch, fetch), Effect.exit);
+          const outcome = yield* port
+            .current("prod-ingress")
+            .pipe(Effect.provideService(FetchHttpClient.Fetch, fetch), Effect.exit);
 
-        expect(Exit.isFailure(outcome)).toBe(true);
-        expect(aborted).toBe(true);
-        expect(pulled).toBe(0);
-      }
+          expect(Exit.isFailure(outcome)).toBe(true);
+          expect(signals.some((signal) => signal.aborted)).toBe(true);
+          expect(pulled).toBe(0);
+        }),
+        { discard: true }
+      );
     }).pipe(Effect.scoped)
 );
 
@@ -689,10 +699,10 @@ it.effect.each([
           : Response.json(
               {
                 success: false,
-                errors: [
-                  { code: 10220, message: "private-provider-body-and-token" },
-                  ...(scenario === "multiple codes" ? [{ code: 10097 }] : []),
-                ],
+                errors:
+                  scenario === "multiple codes"
+                    ? [{ code: 10220, message: "private-provider-body-and-token" }, { code: 10097 }]
+                    : [{ code: 10220, message: "private-provider-body-and-token" }],
               },
               { status: scenario === "different status" ? 409 : 400 }
             );
@@ -768,13 +778,15 @@ it.effect.each([
   })
 );
 
+type WorkerState = Readonly<{
+  logicalId: string;
+  status: string;
+  attr: Readonly<{ workerName: string; versionId: string; hash: Readonly<{ main: string }> }>;
+}>;
+
 describe("Production release Worker receipts", () => {
   it("authenticates the two gradual uploads and the completed non-versioned technical Smoke Worker", () => {
-    const worker = (
-      logicalId: string,
-      workerName: string,
-      versionId: string
-    ): Record<string, unknown> => ({
+    const worker = (logicalId: string, workerName: string, versionId: string): WorkerState => ({
       logicalId,
       status: "updated",
       attr: { workerName, versionId, hash: { main: "state-hash" } },

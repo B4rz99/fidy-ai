@@ -1,7 +1,7 @@
 import { ReleaseHttpLive } from "./release-http";
 /// <reference types="bun-types" />
 
-import { type Cause, Context, Data, Effect, Layer, Option } from "effect";
+import { type Cause, Context, Data, Effect, Exit, Layer, Option } from "effect";
 import type * as HttpClientError from "effect/http/HttpClientError";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpBody from "effect/http/HttpBody";
@@ -55,7 +55,24 @@ type Candidate = Readonly<{ proof: string; override: string; publicVersionId: st
 
 class EdgeSmokeFailure extends Data.TaggedError("EdgeSmokeFailure")<{
   readonly path: string;
+  readonly cause: unknown;
 }> {}
+
+const probeHeaders = (
+  entry: (typeof probes)[number],
+  candidate: Option.Option<Candidate>
+): EdgeRequest["headers"] => {
+  if (Option.isNone(candidate)) return entry.headers;
+
+  const versioned = {
+    ...entry.headers,
+    "cloudflare-workers-version-overrides": candidate.value.override,
+  };
+
+  return entry.path === "/health"
+    ? versioned
+    : { ...versioned, "x-fidy-smoke-proof": candidate.value.proof };
+};
 
 export const verifyEdgeSmoke = <E, R>({
   probe,
@@ -71,16 +88,8 @@ export const verifyEdgeSmoke = <E, R>({
         const response = yield* probe({
           method: entry.method,
           path: entry.path,
-          headers: Option.isNone(candidate)
-            ? entry.headers
-            : {
-                ...entry.headers,
-                ...(entry.path === "/health"
-                  ? {}
-                  : { "x-fidy-smoke-proof": candidate.value.proof }),
-                "cloudflare-workers-version-overrides": candidate.value.override,
-              },
-        }).pipe(Effect.mapError(() => new EdgeSmokeFailure({ path: entry.path })));
+          headers: probeHeaders(entry, candidate),
+        }).pipe(Effect.mapError((cause) => new EdgeSmokeFailure({ path: entry.path, cause })));
 
         const status = entry.expectedStatus;
 
@@ -89,7 +98,7 @@ export const verifyEdgeSmoke = <E, R>({
           !hasExpectedChallenge(response, entry.path, entry.expectedStatus) ||
           !candidateResponseMatches(response, entry.path, candidate)
         ) {
-          return yield* new EdgeSmokeFailure({ path: entry.path });
+          return yield* new EdgeSmokeFailure({ path: entry.path, cause: response.status });
         }
       }),
       { concurrency: 4, discard: true }
@@ -125,13 +134,13 @@ const verifyCandidateHealth = <E, R>(
         "x-fidy-smoke-proof": candidate.proof,
         "cloudflare-workers-version-overrides": candidate.override,
       },
-    }).pipe(Effect.mapError(() => new EdgeSmokeFailure({ path: "/health" })));
+    }).pipe(Effect.mapError((cause) => new EdgeSmokeFailure({ path: "/health", cause })));
 
     if (
       !isExpectedResponse(health, healthyStatus) ||
       health.headers.get("x-fidy-smoke-worker-version") !== candidate.publicVersionId
     ) {
-      return yield* new EdgeSmokeFailure({ path: "/health" });
+      return yield* new EdgeSmokeFailure({ path: "/health", cause: health.status });
     }
   });
 
@@ -198,7 +207,7 @@ if (import.meta.main) {
     )
   );
 
-  if (result._tag === "Failure") {
+  if (Exit.isFailure(result)) {
     await Bun.write(
       Bun.stderr,
       "Safe production edge probes failed; inspect edge configuration.\n"

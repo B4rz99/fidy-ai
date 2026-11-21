@@ -3,12 +3,14 @@ import { Effect } from "effect";
 import { expect } from "vitest";
 import { type TenFleetPort, type TenState, fleetOrdinals, runTenFleet } from "./native-ten-fleet";
 
-const fixture = (): {
+type TenFleetFixture = {
   port: TenFleetPort;
   state: TenState;
   calls: string[];
   rows: Map<string, boolean>;
-} => {
+};
+
+const fixture = (): TenFleetFixture => {
   const calls: string[] = [];
 
   const rows = new Map([

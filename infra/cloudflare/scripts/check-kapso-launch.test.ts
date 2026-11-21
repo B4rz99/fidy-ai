@@ -34,7 +34,9 @@ const ready = {
   onboardingRevision: "onboarding-2026-10-08-providers",
 };
 
-const check = (evidence: unknown): { readonly code: number; readonly output: string } => {
+type LaunchCheck = { readonly code: number; readonly output: string };
+
+const check = (evidence: unknown): LaunchCheck => {
   const directory = mkdtempSync(join(tmpdir(), "kapso-gate-"));
 
   try {

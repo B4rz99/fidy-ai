@@ -1,6 +1,7 @@
-import { ConfigProvider, Effect, Logger, Result } from "effect";
+import { ConfigProvider, Effect, Logger, Result, type Schema } from "effect";
 import { expect, it } from "vitest";
 import {
+  NativeInventoryRefused,
   inspectNativeResources,
   requireDeployedRole,
   verifyDeployedVersion,
@@ -8,6 +9,7 @@ import {
   verifySuccessorVersionAt,
 } from "./native-deployed-graph";
 import { inspectNativeAccess } from "./native-deployed-access";
+import { RecoveryPinUnavailable } from "./native-recovery-identity";
 import { nativeBindingInventory } from "./native-graph";
 
 const revision = "1".repeat(40),
@@ -48,7 +50,7 @@ const workflows = [
   ["smoke-" + revision, "ReleaseSmokeWorkflowV2"],
 ] as const;
 
-const consumers = (url: URL): unknown => {
+const consumers = (url: URL): Schema.Json => {
   const [, , id] = url.pathname.split("/");
 
   if (id === "async-dead-letters") return basic;
@@ -73,7 +75,7 @@ const consumers = (url: URL): unknown => {
   };
 };
 
-const installed = (path: string): unknown => {
+const installed = (path: string): Schema.Json => {
   const url = new URL(path, "https://provider.invalid");
 
   if (url.pathname === "/r2/buckets") {
@@ -166,21 +168,27 @@ it("attributes an inventory read failure without disclosing provider messages", 
           : Effect.try(() => installed(path));
 
       const failure = yield* Effect.flip(inspectNativeResources(read, revision, true));
-      expect(failure).toMatchObject({ _tag: "NativeInventoryRefused", phase: "Workflow list" });
+      expect(failure).toBeInstanceOf(NativeInventoryRefused);
+      expect(failure).toMatchObject({ phase: "Workflow list" });
       expect(failure.message).not.toContain("private-provider-message");
     })
   ));
+
+const deployedBinding = (name: string, type: string): Schema.JsonObject =>
+  type === "service"
+    ? {
+        name,
+        type,
+        service: name === "CORE" ? core : smoke,
+        text: name === "RECOVERY_ISOLATION" ? "isolated" : "closed",
+      }
+    : { name, type, text: name === "RECOVERY_ISOLATION" ? "isolated" : "closed" };
 
 it("refuses a correct binding label connected to an incumbent or a foreign Worker", () => {
   const bindings = Object.fromEntries(
     [...nativeBindingInventory({ fingerprint: "", role: "Ingress" })].map(([name, type]) => [
       name,
-      {
-        name,
-        type,
-        ...(type === "service" ? { service: name === "CORE" ? core : smoke } : {}),
-        text: name === "RECOVERY_ISOLATION" ? "isolated" : "closed",
-      },
+      deployedBinding(name, type),
     ])
   );
 
@@ -388,7 +396,7 @@ const bindings = {
   BETA_PRO_OPERATOR_EMAIL: { type: "plain_text", text: human },
 };
 
-const accessReply = (path: string): unknown => {
+const accessReply = (path: string): Schema.Json => {
   if (path.startsWith("account/access/apps?") || path.startsWith("zone/access/apps?")) {
     return { ...basic, result: applications };
   }
@@ -413,7 +421,7 @@ const accessReply = (path: string): unknown => {
     };
   }
 
-  const selector = path.includes("/CLOUDFLARE_ACCESS_AUDIENCE/")
+  const selector: Schema.JsonObject = path.includes("/CLOUDFLARE_ACCESS_AUDIENCE/")
     ? { group: { id: "recovery-group" } }
     : { email: { email: human } };
 
@@ -424,18 +432,16 @@ const accessReply = (path: string): unknown => {
 };
 
 const verify = (
-  source: (path: string) => unknown,
+  source: (path: string) => Schema.Json,
   installed = true,
   options = { canonicalDiagnostics: false }
 ): ReturnType<typeof inspectNativeAccess> =>
   inspectNativeAccess({
     account: "account/",
     zone: "zone/",
-    hosts: [
-      apiHost,
-      "storage-web-acceptance.fidyapp.com",
-      ...(options.canonicalDiagnostics ? ["api.fidyapp.com"] : []),
-    ],
+    hosts: [apiHost, "storage-web-acceptance.fidyapp.com"].concat(
+      options.canonicalDiagnostics ? ["api.fidyapp.com"] : []
+    ),
     apiHosts: [apiHost],
     staging: false,
     ...options,
@@ -455,7 +461,7 @@ const verify = (
   );
 
 const fresh =
-  (result: readonly unknown[]): ((path: string) => unknown) =>
+  (result: Schema.JsonArray): ((path: string) => Schema.Json) =>
   (path) =>
     path.startsWith("account/access/identity_providers") ? { ...basic, result } : basic;
 
@@ -486,7 +492,8 @@ it("requires exactly one account OTP before first install regardless of its disp
         ] as const,
         Effect.fnUntraced(function* ([methods, reason]) {
           const refusal = yield* Effect.flip(verify(fresh(methods), false));
-          expect(refusal).toMatchObject({ _tag: "RecoveryPinUnavailable", reason });
+          expect(refusal).toBeInstanceOf(RecoveryPinUnavailable);
+          expect(refusal).toMatchObject({ reason });
         }),
         { discard: true }
       );
@@ -591,7 +598,7 @@ it("reports a fixed canonical Access reason and allowlisted path projection", ()
 
       const unrelatedId = "bccee459-9687-423e-958d-c25b38ca8013";
 
-      const source = (path: string): unknown =>
+      const source = (path: string): Schema.Json =>
         path.startsWith("zone/access/apps?")
           ? {
               ...basic,

@@ -142,17 +142,8 @@ export const verifyNativeEdge = Effect.fn(function* (
     return yield* Effect.try(() => nativeEdgeChanges(ruleset));
   });
 
-  for (let mutations = 0; mutations <= previousExpressions.length; mutations++) {
-    const changes = yield* inspect();
-    const change = changes[0];
-
-    if (change === undefined || mode === "plan") return;
-
-    if (mode !== "install" || mutations === previousExpressions.length) {
-      return yield* Effect.fail(Error("Acceptance hostname policy is incomplete"));
-    }
-
-    yield* releaseEvidence
+  const patch = Effect.fnUntraced(function* (change: Change) {
+    return yield* releaseEvidence
       .providerJson(
         HttpClientRequest.patch(zoneUrl + change.path, {
           headers,
@@ -160,5 +151,28 @@ export const verifyNativeEdge = Effect.fn(function* (
         })
       )
       .pipe(Effect.provideService(HttpClient.HttpClient, client));
-  }
+  });
+
+  const converge = (
+    mutations: number
+  ): Effect.Effect<
+    void,
+    Effect.Error<ReturnType<typeof inspect>> | Effect.Error<ReturnType<typeof patch>> | Error
+  > =>
+    Effect.gen(function* () {
+      const changes = yield* inspect();
+      const change = changes[0];
+
+      if (change === undefined || mode === "plan") return;
+
+      if (mode !== "install" || mutations === previousExpressions.length) {
+        return yield* Effect.fail(Error("Acceptance hostname policy is incomplete"));
+      }
+
+      yield* patch(change);
+
+      return yield* converge(mutations + 1);
+    });
+
+  yield* converge(0);
 });

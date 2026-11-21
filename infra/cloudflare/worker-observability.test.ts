@@ -1,7 +1,7 @@
 import { Credentials, apiTokenCredentials } from "@distilled.cloud/cloudflare/Credentials";
 import { putScript } from "@distilled.cloud/cloudflare/workers";
 import { it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Predicate, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { expect } from "vitest";
 import { freeTierWorkerObservability } from "./worker-observability";
@@ -29,7 +29,9 @@ it.effect("uploads query-redacted custom logs without automatic request invocati
       Effect.gen(function* () {
         expect(request.method).toBe("PUT");
 
-        if (request.body._tag !== "FormData") return yield* Effect.die("Expected Worker upload");
+        if (!Predicate.isTagged(request.body, "FormData")) {
+          return yield* Effect.die("Expected Worker upload");
+        }
 
         const metadata = yield* Schema.decodeUnknownEffect(UploadMetadata)(
           request.body.formData.get("metadata")

@@ -137,10 +137,10 @@ it.effect("checks exact immutable namespace IDs, access and Worker pair descript
     expect(compatibleStoragePairs({ serving: actual, candidate: replaced }).forward).toBe(false);
     expect(() => verifiedStoragePair({ ingress, core: { ...core, DB: { type: "d1" } } })).toThrow();
     expect(() =>
-      verifiedStoragePair({ ingress: { ...ingress, PRICING: bindings.PRICING }, core })
+      verifiedStoragePair({ ingress: { ...ingress, PRICING: bindings.PRICING ?? null }, core })
     ).toThrow();
     expect(() =>
-      verifiedStoragePair({ ingress, core: { ...core, ERASURE: bindings.MAINTENANCE } })
+      verifiedStoragePair({ ingress, core: { ...core, ERASURE: bindings.MAINTENANCE ?? null } })
     ).toThrow();
     expect(() => verifiedStoragePair({ ingress: {}, core })).toThrow();
   })

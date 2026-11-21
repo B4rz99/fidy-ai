@@ -26,32 +26,39 @@ export const readProviderList = Effect.fn(function* <Value>(
   path: string,
   item: Schema.Codec<Value>
 ) {
-  const rows: Value[] = [];
-
   const inventoryPage = Schema.Struct({
     success: Schema.Literal(true),
     result: Schema.Array(item),
     result_info: Schema.optional(Page),
   });
 
-  for (let page = 1; page <= limit; page++) {
-    const url = pageUrl(path, page);
-    const body = yield* Schema.decodeUnknownEffect(inventoryPage)(yield* read(url));
+  const readFrom = (
+    page: number,
+    previous: ReadonlyArray<Value>
+  ): Effect.Effect<ReadonlyArray<Value>, Error | Schema.SchemaError> =>
+    page > limit
+      ? Effect.fail(Error("Provider inventory exceeds closed-release budget"))
+      : Effect.gen(function* () {
+          const body = yield* Schema.decodeUnknownEffect(inventoryPage)(
+            yield* read(pageUrl(path, page))
+          );
 
-    if (!consistent(page, body.result_info?.page)) {
-      return yield* Effect.fail(Error("Provider returned an unexpected inventory page"));
-    }
+          if (!consistent(page, body.result_info?.page)) {
+            return yield* Effect.fail(Error("Provider returned an unexpected inventory page"));
+          }
 
-    rows.push(...body.result);
+          const rows = [...previous, ...body.result];
 
-    if (finished(body.result_info ?? {}, page, body.result.length)) {
-      if (!consistent(rows.length, body.result_info?.total_count)) {
-        return yield* Effect.fail(Error("Provider returned an incomplete inventory"));
-      }
+          if (!finished(body.result_info ?? {}, page, body.result.length)) {
+            return yield* readFrom(page + 1, rows);
+          }
 
-      return rows;
-    }
-  }
+          if (!consistent(rows.length, body.result_info?.total_count)) {
+            return yield* Effect.fail(Error("Provider returned an incomplete inventory"));
+          }
 
-  return yield* Effect.fail(Error("Provider inventory exceeds closed-release budget"));
+          return rows;
+        });
+
+  return yield* readFrom(1, []);
 });

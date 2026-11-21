@@ -161,11 +161,16 @@ it.effect("observes pending and expired redemption for the verified erased subje
   Effect.gen(function* () {
     const origins = installedOrigins.acceptance;
 
+    type ContinuationVerification = {
+      driver: ReturnType<typeof admittedErasureLogins>;
+      paths: Array<string>;
+    };
+
     const verify = (
       status: number,
       body: string,
       scenario = "verified"
-    ): { driver: ReturnType<typeof admittedErasureLogins>; paths: Array<string> } => {
+    ): ContinuationVerification => {
       const paths: Array<string> = [];
       const providerStatus = scenario === "pending" ? "pending" : "verified";
       const expiresAt = "1970-01-01T00:10:00.000Z";
@@ -234,34 +239,38 @@ it.effect("observes pending and expired redemption for the verified erased subje
     const accepted = verify(400, "invalid");
     const pending = verify(503, "unavailable");
 
-    for (const [scenario, outcome] of [
-      [accepted, "invalid"],
-      [pending, "unavailable"],
-    ] as const) {
-      yield* TestClock.setTime(0);
-      const ready = yield* Deferred.make<void>();
-      const states: Array<string> = [];
+    yield* Effect.forEach(
+      [
+        [accepted, "invalid"],
+        [pending, "unavailable"],
+      ] as const,
+      Effect.fnUntraced(function* ([scenario, outcome]) {
+        yield* TestClock.setTime(0);
+        const ready = yield* Deferred.make<void>();
+        const states: Array<string> = [];
 
-      const run = yield* scenario.driver
-        .refused((stage) => {
-          states.push(stage);
+        const run = yield* scenario.driver
+          .refused((stage) => {
+            states.push(stage);
 
-          return stage === "pairing-pending"
-            ? Deferred.succeed(ready, undefined).pipe(Effect.asVoid)
-            : Effect.void;
-        })
-        .pipe(Effect.forkChild);
+            return stage === "pairing-pending"
+              ? Deferred.succeed(ready, undefined).pipe(Effect.asVoid)
+              : Effect.void;
+          })
+          .pipe(Effect.forkChild);
 
-      yield* Deferred.await(ready);
-      yield* TestClock.adjust("11 minutes");
-      expect(yield* Fiber.join(run)).toBe(outcome);
-      expect(states).toEqual([
-        "erased-provider-verified",
-        "completion-" + outcome,
-        "pairing-pending",
-        "pairing-expired",
-      ]);
-    }
+        yield* Deferred.await(ready);
+        yield* TestClock.adjust("11 minutes");
+        expect(yield* Fiber.join(run)).toBe(outcome);
+        expect(states).toEqual([
+          "erased-provider-verified",
+          "completion-" + outcome,
+          "pairing-pending",
+          "pairing-expired",
+        ]);
+      }),
+      { discard: true }
+    );
 
     expect(accepted.paths.slice(-2)).toEqual(["/web/pairings/redeem", "/web/pairings/redeem"]);
 

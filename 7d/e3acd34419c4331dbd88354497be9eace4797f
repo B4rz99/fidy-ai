@@ -1,0 +1,22 @@
+apps/server/cloudflare/oauth-agents/native-lease-source.test.ts
+  h_c6d49c804e0ad2 3,14-15,22,33-34,36
+apps/server/cloudflare/categories/internal/sqlite-keyword.ts
+  h_c6d49c804e0ad2 17
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+apps/server/cloudflare/canonical-admission/contract.ts
+  h_c6d49c804e0ad2 2-10
+apps/server/cloudflare/canonical-admission/internal/local-mutation.ts
+  h_c6d49c804e0ad2 42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7de3acd34419c4331dbd88354497be9eace4797f",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

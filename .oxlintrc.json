@@ -914,7 +914,34 @@
         "apps/server/cloudflare/cli-distribution.test.ts",
         "apps/server/cloudflare/cli-distribution/**",
         "apps/server/cloudflare/connection-worker.test-fixture.ts",
-        "apps/server/cloudflare/connections/**",
+        "apps/server/cloudflare/connections/**"
+      ],
+      "rules": {
+        "anti-slop-effect/no-manual-tag-comparison": "off",
+        "anti-slop-effect/no-manual-tagged-construction": "off",
+        "anti-slop-effect/no-manual-tagged-type": "off",
+        "anti-slop-effect/no-service-constructor-imports": "off",
+        "anti-slop-effect/no-service-parameters": "off",
+        "anti-slop-effect/require-cause-when-narrowing": "off",
+        "anti-slop/no-conditional-spread": "off",
+        "anti-slop/no-instanceof": "off",
+        "anti-slop/no-known-value-widening": "off",
+        "anti-slop/no-object-parameters": "off",
+        "anti-slop/no-reflect-get": "off",
+        "anti-slop/no-reprovide-ambient-service": "off",
+        "anti-slop/no-runtime-typeof": "off",
+        "anti-slop/no-shape-in-symbol-names": "off",
+        "anti-slop/no-unknown-returns": "off",
+        "anti-slop/no-unsafe-dictionary-type": "off",
+        "enfect/avoid-expect-in-if": "off",
+        "enfect/effect-run-in-body": "off",
+        "enfect/yield-in-for-loop": "off",
+        "landmines/no-flake-masking": "off",
+        "oxc/no-accumulating-spread": "off"
+      }
+    },
+    {
+      "files": [
         "apps/server/cloudflare/consent/**",
         "apps/server/cloudflare/core-http/**",
         "apps/server/cloudflare/core-worker.ts",
@@ -928,7 +955,34 @@
         "apps/server/cloudflare/fixture-fallback-core.ts",
         "apps/server/cloudflare/fixture-fallback-ingress.ts",
         "apps/server/cloudflare/http/**",
-        "apps/server/cloudflare/mcp/**",
+        "apps/server/cloudflare/mcp/**"
+      ],
+      "rules": {
+        "anti-slop-effect/no-manual-tag-comparison": "off",
+        "anti-slop-effect/no-manual-tagged-construction": "off",
+        "anti-slop-effect/no-manual-tagged-type": "off",
+        "anti-slop-effect/no-service-constructor-imports": "off",
+        "anti-slop-effect/no-service-parameters": "off",
+        "anti-slop-effect/require-cause-when-narrowing": "off",
+        "anti-slop/no-conditional-spread": "off",
+        "anti-slop/no-instanceof": "off",
+        "anti-slop/no-known-value-widening": "off",
+        "anti-slop/no-object-parameters": "off",
+        "anti-slop/no-reflect-get": "off",
+        "anti-slop/no-reprovide-ambient-service": "off",
+        "anti-slop/no-runtime-typeof": "off",
+        "anti-slop/no-shape-in-symbol-names": "off",
+        "anti-slop/no-unknown-returns": "off",
+        "anti-slop/no-unsafe-dictionary-type": "off",
+        "enfect/avoid-expect-in-if": "off",
+        "enfect/effect-run-in-body": "off",
+        "enfect/yield-in-for-loop": "off",
+        "landmines/no-flake-masking": "off",
+        "oxc/no-accumulating-spread": "off"
+      }
+    },
+    {
+      "files": [
         "apps/server/cloudflare/memory/**",
         "apps/server/cloudflare/oauth-confirmation/**",
         "apps/server/cloudflare/openai.test-fixture.ts",

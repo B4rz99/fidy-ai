@@ -271,8 +271,12 @@ def require_ordinary_source(application, verifier):
          '  if (environment.MAINTENANCE !== undefined && readable) {'),
     ])
 
-def approved_transfer(reference, source, verifier, get=actions_get):
-    run, body = protected_archive(verifier, reference["artifactId"], reference["sha256"],
+def approved_transfer(reference, source, verifier, get=actions_get, git=git_read):
+    producer = json.loads(get("artifacts/" + reference["artifactId"]))["workflow_run"]["head_sha"]
+    if (re.fullmatch(r"[a-f0-9]{40}", producer) is None or source["verifierRevision"] != verifier
+            or git("merge-base", producer, verifier) != producer):
+        raise ValueError("Canonical host transfer is outside the protected verifier lineage")
+    run, body = protected_archive(producer, reference["artifactId"], reference["sha256"],
                                   prefix="native-canonical-host-transfer-", conclusions={"success"}, get=get)
     job = protected_release_job(run, get)
     required = {
@@ -290,9 +294,10 @@ def approved_transfer(reference, source, verifier, get=actions_get):
         if entry.filename != "native-verification.json.canonical-hosts" or not 0 < entry.file_size <= 16384:
             raise ValueError("Unexpected canonical host transfer evidence")
         transfer = json.loads(archive.read(entry))
-    if transfer.get("source") != source or transfer.get("admission") != "closed":
+    transferred_source = {**source, "verifierRevision": producer}
+    if transfer.get("source") != transferred_source or transfer.get("admission") != "closed":
         raise ValueError("Closed canonical transfer differs from the approved native smoke")
-    return transfer
+    return {**transfer, "source": source}
 
 
 def main():

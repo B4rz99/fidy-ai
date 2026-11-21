@@ -366,6 +366,7 @@ export const inspectDeployedEdge = Effect.fn(function* (
     zone: "zones/" + zone.id + "/",
     installed,
     staging: stage.staging === true,
+    canonicalDiagnostics: stage.hosts === "staged",
     hosts: hosts.map(([host]) => host),
     apiHosts: hosts
       .filter(([, worker]) => worker === installationNames.Ingress)

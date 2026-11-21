@@ -83,7 +83,7 @@ const matchesSelector = (row: typeof selectors.Type, wanted: unknown): boolean =
   isDeepStrictEqual(row.include, [wanted]) &&
   (row.exclude ?? []).length === 0 &&
   (row.require ?? []).length === 0;
-const validatePolicy = Effect.fn(function* (read: Read, path: string, selector: unknown) {
+const validatePolicy = Effect.fn(function* (input: Input, path: string, selector: unknown) {
   const policy = Schema.Struct({
     ...selectors.fields,
     decision: Schema.Literal("allow"),
@@ -92,32 +92,37 @@ const validatePolicy = Effect.fn(function* (read: Read, path: string, selector: 
   });
   const body = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ success: Schema.Literal(true), result: Schema.Tuple([policy]) })
-  )(yield* read(path + "?per_page=100"));
+  )(yield* input.read(path + "?per_page=100").pipe(accessStep(input, "policy read"))).pipe(
+    accessStep(input, "policy count, decision and precedence")
+  );
   const row = body.result[0];
   if (!matchesSelector(row, selector) || !fifteenMinutes(row.session_duration)) {
-    return yield* Effect.fail(Error("Unapproved Access policy membership or duration"));
+    return yield* accessRefusal(input, "policy selector or session duration");
   }
 });
 const restricted = (app: typeof App.Type): boolean =>
   app.app_launcher_visible === false &&
   app.options_preflight_bypass !== true &&
   app.allow_authenticate_via_warp !== true;
-const appShape = (
+const applicationChecks = (
   app: typeof App.Type,
   coordinates: ReadonlyArray<string>,
-  idp: string
-): boolean => {
-  const present = findUris(app);
-  const destinations = app.destinations ?? [];
-  return (
-    app.type === "self_hosted" &&
-    isDeepStrictEqual(present.toSorted(), coordinates.toSorted()) &&
-    destinations.every((item) => item.type === "public") &&
-    isDeepStrictEqual(app.allowed_idps, [idp]) &&
-    fifteenMinutes(app.session_duration) &&
-    restricted(app)
-  );
-};
+  { idp, audience }: { idp: string; audience: string }
+): ReadonlyArray<readonly [string, boolean]> =>
+  [
+    ["role audience", app.aud === audience],
+    [
+      "application type or destinations",
+      app.type === "self_hosted" &&
+        (app.destinations ?? []).every((item) => item.type === "public"),
+    ],
+    ["application paths", isDeepStrictEqual(findUris(app).toSorted(), coordinates.toSorted())],
+    ["application identity provider", isDeepStrictEqual(app.allowed_idps, [idp])],
+    [
+      "application session duration or controls",
+      fifteenMinutes(app.session_duration) && restricted(app),
+    ],
+  ] as const;
 type Input = {
   read: Read;
   account: string;
@@ -126,8 +131,81 @@ type Input = {
   hosts: readonly string[];
   apiHosts: readonly string[];
   staging: boolean;
+  canonicalDiagnostics: boolean;
   workers: readonly string[];
   bindings: Readonly<Record<string, unknown>>;
+};
+const accessStep =
+  (input: Input, reason: string) =>
+  <A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    work.pipe(
+      Effect.tapCause(() =>
+        input.canonicalDiagnostics
+          ? Effect.logError("Canonical Access verification failed at " + reason)
+          : Effect.void
+      )
+    );
+const accessRefusal = (input: Input, reason: string): Effect.Effect<never, Error> =>
+  Effect.fail(Error("Protected Access verification failed at " + reason)).pipe(
+    accessStep(input, reason)
+  );
+
+type RelevantScope = Readonly<{
+  scope: "account" | "zone";
+  rows: readonly (typeof App.Type)[];
+}>;
+const maxDiagnosticApplications = 24;
+const accessIdPattern = /^(?:[a-f0-9]{32}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/iu;
+const encodeDiagnostic = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
+const routeCategories = ["login", "providers", "web", "internal"] as const;
+const classifyRoute = (uri: string): string => {
+  const path = uri.replace(/^https?:\/\//u, "").replace(/^[^/]+/u, "");
+  if (path === "" || path === "/") return "root";
+  if (path === "/*" || path === "/**") return "catch-all";
+  return (
+    routeCategories.find(
+      (segment) => path === "/" + segment || path.startsWith("/" + segment + "/")
+    ) ?? "other"
+  );
+};
+const summarizeRoutes = (configured: readonly string[], hosts: readonly string[]): string[] =>
+  [
+    ...new Set(
+      configured.flatMap((uri) =>
+        hosts
+          .filter((host) => addressesHost(uri, [host]))
+          .map((host) => host + " " + classifyRoute(uri))
+      )
+    ),
+  ].toSorted();
+const applicationDiagnostic = (input: Input, scopes: readonly RelevantScope[]): string => {
+  const approvedPaths = new Set(
+    input.hosts.flatMap((host) =>
+      ["", "/", ...subjects.map((role) => role.path)].map((path) => host + path)
+    )
+  );
+  const relevant = scopes.flatMap(({ scope, rows }) => rows.map((app) => ({ scope, app })));
+  const applications = relevant.slice(0, maxDiagnosticApplications).map(({ scope, app }) => {
+    const configured = findUris(app);
+    const paths = configured
+      .map((path) => path.replace(/^https?:\/\//u, ""))
+      .filter((path) => approvedPaths.has(path));
+    return {
+      scope,
+      id: accessIdPattern.test(app.id) ? app.id : "invalid",
+      expectedNativeRole: subjects.some((role) => role.name === app.name),
+      paths,
+      routeScopes: summarizeRoutes(configured, input.hosts),
+      unlistedPathCount: configured.length - paths.length,
+    };
+  });
+  return (
+    "Canonical Access applications " +
+    encodeDiagnostic({
+      applications,
+      omitted: relevant.length - applications.length,
+    })
+  );
 };
 const configuredRole = Effect.fn(function* (
   input: Input,
@@ -138,13 +216,18 @@ const configuredRole = Effect.fn(function* (
   const approved = input.apiHosts.map((host) => host + role.path);
   const audience = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ type: Schema.Literal("plain_text"), text: name })
-  )(input.bindings[role.binding]);
+  )(input.bindings[role.binding]).pipe(accessStep(input, "role audience binding"));
+  const acceptance = approved.slice(0, 1);
   const paths =
-    input.staging === true && appShape(app, approved.slice(0, 1), identities.idp)
-      ? approved.slice(0, 1)
+    input.staging === true && isDeepStrictEqual(findUris(app).toSorted(), acceptance)
+      ? acceptance
       : approved;
-  if (app.aud !== audience.text || !appShape(app, paths, identities.idp)) {
-    return yield* Effect.fail(Error("Unexpected Access application for " + role.name));
+  const failure = applicationChecks(app, paths, {
+    idp: identities.idp,
+    audience: audience.text,
+  }).find(([, valid]) => !valid);
+  if (failure !== undefined) {
+    return yield* accessRefusal(input, failure[0]);
   }
   const email = {
     SAMPLE_REVIEW_AUDIENCE: identities.reviewer,
@@ -153,11 +236,7 @@ const configuredRole = Effect.fn(function* (
     CLOUDFLARE_ACCESS_AUDIENCE: null,
   }[role.binding];
   const selector = email === null ? { group: { id: identities.group } } : { email: { email } };
-  yield* validatePolicy(
-    input.read,
-    input.account + "access/apps/" + app.id + "/policies",
-    selector
-  );
+  yield* validatePolicy(input, input.account + "access/apps/" + app.id + "/policies", selector);
   return {
     name: role.name,
     appId: app.id,
@@ -167,15 +246,27 @@ const configuredRole = Effect.fn(function* (
 });
 const relevantApplications = Effect.fn(function* (input: Input) {
   const { read, account, zone } = input;
-  const appScopes = yield* Effect.forEach([account, zone], (scope) =>
-    readNamed(read, scope + "access/apps", App)
+  const appScopes = yield* Effect.forEach(
+    [
+      { scope: "account", path: account },
+      { scope: "zone", path: zone },
+    ] as const,
+    Effect.fn(function* ({ scope, path }) {
+      const rows = yield* readNamed(read, path + "access/apps", App).pipe(
+        accessStep(input, scope + " application inventory")
+      );
+      return { scope, rows: rows.filter((app) => related(app, input)) };
+    })
   );
+  if (input.canonicalDiagnostics) {
+    yield* Effect.logInfo(applicationDiagnostic(input, appScopes));
+  }
   const active = new Map<string, typeof App.Type>();
-  for (const rows of appScopes) {
-    for (const app of rows.filter((item) => related(item, input))) {
+  for (const { rows } of appScopes) {
+    for (const app of rows) {
       const previous = active.get(app.id);
       if (previous !== undefined && !isDeepStrictEqual(previous, app)) {
-        return yield* Effect.fail(Error("Account and zone disagree on protected Access"));
+        return yield* accessRefusal(input, "account and zone application disagreement");
       }
       active.set(app.id, app);
     }
@@ -186,12 +277,16 @@ const relevantApplications = Effect.fn(function* (input: Input) {
 export const inspectNativeAccess = Effect.fn(function* (input: Input) {
   const { read, account, installed } = input;
   const active = yield* relevantApplications(input);
-  const idp = yield* readRecoveryPin(read, account);
+  const idp = yield* readRecoveryPin(read, account).pipe(
+    accessStep(input, "recovery identity provider")
+  );
   const groups = (yield* readNamed(
     read,
     account + "access/groups",
     Schema.Struct({ ...selectors.fields, id: name, name })
-  )).filter((row) => row.name === "Fidy native recovery operators");
+  ).pipe(accessStep(input, "recovery group inventory"))).filter(
+    (row) => row.name === "Fidy native recovery operators"
+  );
   if (!installed) {
     if (active.size + groups.length !== 0) {
       return yield* Effect.fail(Error("Protected Access target already exists"));
@@ -200,26 +295,29 @@ export const inspectNativeAccess = Effect.fn(function* (input: Input) {
   }
   const [group] = yield* Schema.decodeUnknownEffect(
     Schema.Tuple([Schema.Struct({ ...selectors.fields, id: name })])
-  )(groups);
+  )(groups).pipe(accessStep(input, "recovery group count"));
   const email = yield* Config.String("RECOVERY_OPERATOR_EMAIL"),
     reviewer = yield* Config.Literal("obarboza@fidyapp.com", "SAMPLE_REVIEWER_EMAIL");
   const betaOperator = yield* Config.Literal("obarboza@fidyapp.com", "BETA_PRO_OPERATOR_EMAIL");
   yield* Schema.decodeUnknownEffect(
     Schema.Struct({ type: Schema.Literal("plain_text"), text: Schema.Literal(betaOperator) })
-  )(input.bindings.BETA_PRO_OPERATOR_EMAIL);
-  if (active.size !== subjects.length || !matchesSelector(group, { email: { email } })) {
-    return yield* Effect.fail(Error("Unexpected native Access authority inventory"));
+  )(input.bindings.BETA_PRO_OPERATOR_EMAIL).pipe(accessStep(input, "operator binding"));
+  if (active.size !== subjects.length) {
+    return yield* accessRefusal(input, "selected application count");
+  }
+  if (!matchesSelector(group, { email: { email } })) {
+    return yield* accessRefusal(input, "recovery group selector");
   }
   const rows = [...active.values()];
   if (new Set(rows.map((row) => row.aud)).size !== subjects.length) {
-    return yield* Effect.fail(Error("Access audiences must be distinct"));
+    return yield* accessRefusal(input, "duplicate role audience");
   }
   return yield* Effect.forEach(
     subjects,
     Effect.fn(function* (role) {
       const app = rows.find((row) => row.name === role.name);
       if (app === undefined) {
-        return yield* Effect.fail(Error("Missing protected application " + role.name));
+        return yield* accessRefusal(input, "missing native role");
       }
       return yield* configuredRole(
         input,

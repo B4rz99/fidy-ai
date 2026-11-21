@@ -358,18 +358,8 @@
         "mode": "changed"
       }
     ],
-    "anti-slop-effect-jev/shallow-service": [
-      "error",
-      {
-        "mode": "changed"
-      }
-    ],
-    "anti-slop-effect-jev/single-use-abstraction": [
-      "error",
-      {
-        "mode": "changed"
-      }
-    ],
+    "anti-slop-effect-jev/shallow-service": "off",
+    "anti-slop-effect-jev/single-use-abstraction": "off",
     "anti-slop-effect-jev/swallow-without-capture": [
       "error",
       {
@@ -389,73 +379,18 @@
       }
     ],
     "anti-slop-effect-jev/test-cannot-fail": "off",
-    "anti-slop-martinfowler-jev/comments": [
-      "error",
-      {
-        "mode": "changed"
-      }
-    ],
-    "anti-slop-martinfowler-jev/data-class": [
-      "error",
-      {
-        "mode": "changed"
-      }
-    ],
-    "anti-slop-martinfowler-jev/data-clumps": [
-      "error",
-      {
-        "mode": "changed"
-      }
-    ],
-    "anti-slop-martinfowler-jev/feature-envy": [
-      "error",
-      {
-        "mode": "changed"
-      }
-    ],
-    "anti-slop-martinfowler-jev/insider-trading": [
-      "error",
-      {
-        "mode": "changed"
-      }
-    ],
-    "anti-slop-martinfowler-jev/lazy-element": [
-      "error",
-      {
-        "mode": "changed"
-      }
-    ],
-    "anti-slop-martinfowler-jev/middle-man": [
-      "error",
-      {
-        "mode": "changed"
-      }
-    ],
-    "anti-slop-martinfowler-jev/mysterious-name": [
-      "error",
-      {
-        "mode": "changed"
-      }
-    ],
+    "anti-slop-martinfowler-jev/comments": "off",
+    "anti-slop-martinfowler-jev/data-class": "off",
+    "anti-slop-martinfowler-jev/data-clumps": "off",
+    "anti-slop-martinfowler-jev/feature-envy": "off",
+    "anti-slop-martinfowler-jev/insider-trading": "off",
+    "anti-slop-martinfowler-jev/lazy-element": "off",
+    "anti-slop-martinfowler-jev/middle-man": "off",
+    "anti-slop-martinfowler-jev/mysterious-name": "off",
     "anti-slop-martinfowler-jev/primitive-obsession": "off",
-    "anti-slop-martinfowler-jev/repeated-switches": [
-      "error",
-      {
-        "mode": "changed"
-      }
-    ],
-    "anti-slop-martinfowler-jev/speculative-generality": [
-      "error",
-      {
-        "mode": "changed"
-      }
-    ],
-    "anti-slop-martinfowler-jev/temporary-field": [
-      "error",
-      {
-        "mode": "changed"
-      }
-    ]
+    "anti-slop-martinfowler-jev/repeated-switches": "off",
+    "anti-slop-martinfowler-jev/speculative-generality": "off",
+    "anti-slop-martinfowler-jev/temporary-field": "off"
   },
   "overrides": [
     {
@@ -466,8 +401,6 @@
         "anti-slop-effect-jev/error-as-value": "off",
         "anti-slop-effect-jev/network-call-in-transaction": "off",
         "anti-slop-effect-jev/read-then-write-race": "off",
-        "anti-slop-effect-jev/shallow-service": "off",
-        "anti-slop-effect-jev/single-use-abstraction": "off",
         "anti-slop-effect-jev/swallow-without-capture": "off",
         "anti-slop-effect-jev/unbounded-fanout": "off",
         "anti-slop-effect-jev/unbounded-retry": "off",

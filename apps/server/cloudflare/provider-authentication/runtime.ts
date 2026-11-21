@@ -4,7 +4,7 @@ import {
   whatsappBootstrapUrl,
 } from "../directory/contract";
 import { UserId } from "../../src/core/identity/contract";
-import { DateTime, Effect, Option, Redacted, Schema } from "effect";
+import { DateTime, Effect, Option, Predicate, Redacted, Result, Schema } from "effect";
 import { makeProviderHandoffSender } from "../../src/shell/provider-authentication/runtime";
 import type {
   WhatsAppAuthenticatedInbound,
@@ -34,7 +34,7 @@ const sendInvitation = Effect.fn(function* (
     })
   );
 
-  if (sent._tag === "Failure") {
+  if (Result.isFailure(sent)) {
     if (sent.failure.deliveryCertainty !== "rejected") return new Response(null, { status: 503 });
 
     const receipt = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
@@ -56,7 +56,7 @@ export const routeNativeInvitation = Effect.fn(
   function* (environment: WhatsAppIngressEnvironment, inbound: WhatsAppAuthenticatedInbound) {
     const { event } = inbound;
 
-    if (event.content._tag !== "Text" || environment.DIRECTORY === undefined) {
+    if (!Predicate.isTagged(event.content, "Text") || environment.DIRECTORY === undefined) {
       return new Response(null, { status: 503 });
     }
 

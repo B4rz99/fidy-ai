@@ -273,33 +273,37 @@ const signedReminderJourney = Effect.fnUntraced(function* (
 
     const merchants = ["Banco", "Café", "Excluido"];
 
-    for (const [index, merchant] of merchants.entries()) {
-      const id = "22570000-0000-4000-8000-00000000010" + index,
-        series = "22570000-0000-4000-8000-00000000020" + index;
+    yield* Effect.forEach(
+      merchants.entries(),
+      Effect.fnUntraced(function* ([index, merchant]) {
+        const id = "22570000-0000-4000-8000-00000000010" + index,
+          series = "22570000-0000-4000-8000-00000000020" + index;
 
-      const snapshot = {
-        id,
-        seriesId: series,
-        money: { amount: "25.15", currency: "COP" },
-        counterparty: merchant,
-        confirmedAt: DateTime.formatIso(yesterday),
-        cadence: { kind: "monthly" },
-        announcement:
-          index === 2 ? { kind: "suppressed", reason: "backfill" } : { kind: "eligible" },
-      };
+        const snapshot = {
+          id,
+          seriesId: series,
+          money: { amount: "25.15", currency: "COP" },
+          counterparty: merchant,
+          confirmedAt: DateTime.formatIso(yesterday),
+          cadence: { kind: "monthly" },
+          announcement:
+            index === 2 ? { kind: "suppressed", reason: "backfill" } : { kind: "eligible" },
+        };
 
-      yield* owner.exec(
-        schema,
-        alice.user,
-        series,
-        merchant,
-        id,
-        yesterday.epochMilliseconds,
-        context,
-        yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(snapshot),
-        index + 1
-      );
-    }
+        yield* owner.exec(
+          schema,
+          alice.user,
+          series,
+          merchant,
+          id,
+          yesterday.epochMilliseconds,
+          context,
+          yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(snapshot),
+          index + 1
+        );
+      }),
+      { discard: true }
+    );
 
     const [projection] = yield* owner.exec(
       "SELECT fact_revision,first_captured_at_ms,time_zone FROM transaction_projection_state WHERE user_id=?",

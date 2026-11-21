@@ -100,7 +100,13 @@ export const startedResponse = ({
 }>): Response =>
   providerJson({
     body: {
-      authorizationUrl: authorizationUrl({ environment, provider, state, nonce, challenge }),
+      authorizationUrl: authorizationUrl({
+        environment,
+        provider,
+        state,
+        nonce,
+        challenge,
+      }),
     },
     status: successStatus,
     headers: {

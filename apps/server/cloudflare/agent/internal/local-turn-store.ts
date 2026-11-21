@@ -2,7 +2,7 @@ import { HostedPauseNotice } from "../../insights/contract";
 import type { LocalTurn } from "./local-turn";
 import { visibleChallenge } from "./local-challenge";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import {
   AgentIteration,
@@ -14,7 +14,11 @@ import {
 } from "../../../src/core/agent/contract";
 import { hostedSessionIdleMilliseconds } from "../../../src/core/agent/operations";
 import { UserContext, UserId } from "../../../src/core/identity/contract";
-import { DisclosureSnapshot, OnboardingConsentBasis } from "../../../src/shell/consent/contract";
+import {
+  type ConsentSubject,
+  DisclosureSnapshot,
+  OnboardingConsentBasis,
+} from "../../../src/shell/consent/contract";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
 import {
@@ -39,10 +43,16 @@ export const channelStatus = {
 
 const receiptBytes = 32;
 
+const Entry = Data.taggedEnum<TranscriptEntry>();
+
+const Subject = Data.taggedEnum<ConsentSubject>();
+
 export const channelReply =
   (status: number) =>
   (body: unknown): Response =>
     Response.json(body, { status, headers: { "cache-control": "no-store" } });
+
+export const isResponse = Schema.is(Schema.instanceOf(Response));
 
 export const unavailable = (): Response =>
   channelReply(channelStatus.unavailable)({ status: "unavailable" });
@@ -101,8 +111,8 @@ export const finishTurn = Effect.fn(function* (
   yield* appendEntry(
     session,
     reason === "interrupted"
-      ? { ...identity, _tag: "InterruptedTurnTranscriptEntry" }
-      : { ...identity, _tag: "FailedTurnTranscriptEntry", reason: "HostedInferenceFailed" }
+      ? Entry.InterruptedTurnTranscriptEntry(identity)
+      : Entry.FailedTurnTranscriptEntry({ ...identity, reason: "HostedInferenceFailed" })
   );
   yield* sql`UPDATE hosted_agent_sessions SET active_ms=${now} WHERE id=${session}`;
 });
@@ -113,7 +123,7 @@ const basisFor = Effect.fn(function* (user: UserId) {
       sql: "SELECT id,disclosure_json FROM consent_history WHERE user_id=? AND record_type='processing_grant'",
       params: [user],
     },
-    subject: { _tag: "User", userId: user },
+    subject: Subject.User({ userId: user }),
     requirement: "active",
   });
 
@@ -200,7 +210,7 @@ export const beginTurn = Effect.fn(function* (
   const id = TranscriptTurnId.make(newId());
   yield* sql`INSERT INTO hosted_turns(id,user_id,session_id,browser_id,start_ms,deadline_ms,request_text,state) VALUES(${id},${user},${session},${Option.getOrNull(actor.id)},${current},${current + pendingExecutionRecoveryMs},${text},'queued')`;
   yield* (yield* HostedPauseNotice).bind({ id, user, session }, previous === undefined);
-  yield* appendEntry(session, { ...entryIdentity(id)(current), _tag: "UserTranscriptEntry", text });
+  yield* appendEntry(session, Entry.UserTranscriptEntry({ ...entryIdentity(id)(current), text }));
   yield* preserveStoreAlarm(storage, current);
 
   return {
@@ -296,12 +306,14 @@ export const observeTurn = Effect.fn(function* (
     }
 
     const session = yield* Schema.decodeUnknownEffect(HostedAgentSessionId)(held.session_id);
-    yield* appendEntry(session, {
-      ...entryIdentity(input.turnId)(now),
-      _tag: "AssistantTranscriptEntry",
-      text: answer,
-      iteration: yield* Schema.decodeUnknownEffect(AgentIteration)(row.proposal_iteration),
-    });
+    yield* appendEntry(
+      session,
+      Entry.AssistantTranscriptEntry({
+        ...entryIdentity(input.turnId)(now),
+        text: answer,
+        iteration: yield* Schema.decodeUnknownEffect(AgentIteration)(row.proposal_iteration),
+      })
+    );
     yield* sql`UPDATE hosted_agent_sessions SET active_ms=${now} WHERE id=${session}`;
     yield* (yield* HostedPauseNotice).acknowledge(input.turnId);
 

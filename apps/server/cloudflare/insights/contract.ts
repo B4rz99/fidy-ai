@@ -1,6 +1,6 @@
 import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import type { UserStoreBindings } from "../directory/contract";
-import { Context, Data, Effect, Schema } from "effect";
+import { Context, Data, Effect, Option, Schema } from "effect";
 import {
   InsightEventId,
   ProactivityThresholds,
@@ -120,7 +120,9 @@ type ProactivitySettings = Partial<
 
 export const WeeklyThresholdConfiguration = Schema.toCodecStringTree(ProactivityThresholds);
 
-export class InsightUnavailable extends Data.TaggedError("InsightUnavailable") {}
+export class InsightUnavailable extends Data.TaggedError("InsightUnavailable")<{
+  readonly cause: Option.Option<unknown>;
+}> {}
 
 export type NativeReminderEnvironment = UserStoreBindings &
   ProactivitySettings &
@@ -148,11 +150,12 @@ export const HostedPauseNotice = Context.Reference<PauseNoticeService>(
   "@fidy/server/cloudflare/insights/contract/HostedPauseNotice",
   {
     defaultValue: (): PauseNoticeService => ({
-      bind: (): Effect.Effect<never, InsightUnavailable> => Effect.fail(new InsightUnavailable()),
+      bind: (): Effect.Effect<never, InsightUnavailable> =>
+        Effect.fail(new InsightUnavailable({ cause: Option.none() })),
       include: (): Effect.Effect<never, InsightUnavailable> =>
-        Effect.fail(new InsightUnavailable()),
+        Effect.fail(new InsightUnavailable({ cause: Option.none() })),
       acknowledge: (): Effect.Effect<never, InsightUnavailable> =>
-        Effect.fail(new InsightUnavailable()),
+        Effect.fail(new InsightUnavailable({ cause: Option.none() })),
     }),
   }
 );

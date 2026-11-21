@@ -25,7 +25,21 @@ import {
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { proactivityWorkflowId } from "./internal/proactivity-workflow";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { Clock, Context, Effect, Layer, Option, Redacted, Schema, type Scope } from "effect";
+import {
+  Clock,
+  Context,
+  Data,
+  Effect,
+  Exit,
+  Layer,
+  ManagedRuntime,
+  Option,
+  Predicate,
+  Redacted,
+  Result,
+  Schema,
+  type Scope,
+} from "effect";
 import { HttpClient } from "effect/http";
 import {
   InsightTemplateConfiguration,
@@ -57,12 +71,14 @@ import {
   ProactivityDeliveryWork,
 } from "./contract";
 
+const ActivityResult = Data.taggedEnum<ProactivityActivityResult>();
+
 const nativeOutbound = (
   environment: Partial<Readonly<{ KAPSO_API_KEY: string }>>
 ): Effect.Effect<OutboundHttpService, InsightUnavailable, Scope.Scope> =>
   Effect.gen(function* () {
     if (environment.KAPSO_API_KEY === undefined || environment.KAPSO_API_KEY.length === 0) {
-      return yield* new InsightUnavailable();
+      return yield* new InsightUnavailable({ cause: Option.none() });
     }
 
     const services = yield* Layer.build(OutboundHttpLive);
@@ -93,14 +109,14 @@ const runActivity = (
       })
     );
 
-    if (!response.ok) return yield* new InsightUnavailable();
+    if (!response.ok) return yield* new InsightUnavailable({ cause: Option.none() });
 
     return yield* Schema.decodeUnknownEffect(ProactivityActivityResult)(
       yield* Effect.tryPromise(() => response.json())
     );
   }).pipe(
     Effect.timeout("30 seconds"),
-    Effect.mapError(() => new InsightUnavailable())
+    Effect.mapError((cause) => new InsightUnavailable({ cause: Option.some(cause) }))
   );
 
 export const startProactivityWorkflow = (
@@ -111,14 +127,17 @@ export const startProactivityWorkflow = (
   }>
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.gen(function* () {
-    if (Option.isNone(input.workflow)) return yield* new InsightUnavailable();
+    if (Option.isNone(input.workflow)) {
+      return yield* new InsightUnavailable({ cause: Option.none() });
+    }
+
     const workflow = input.workflow.value;
     const work = yield* Schema.decodeUnknownEffect(ProactivityDeliveryWork)(input.body);
     const id = yield* proactivityWorkflowId(work);
     const params = yield* sanitizeWorkTrace(work);
     const created = yield* Effect.exit(Effect.tryPromise(() => workflow.create({ id, params })));
 
-    if (created._tag === "Failure") {
+    if (Exit.isFailure(created)) {
       const instance = yield* Effect.tryPromise(() => workflow.get(id));
       const status = yield* Effect.tryPromise(() => instance.status());
 
@@ -132,12 +151,12 @@ export const startProactivityWorkflow = (
           work: { kind: "proactivity-recover", version: 1, userId: work.userId, work },
         });
 
-        if (recovery._tag === "RecoveryAdmitted") {
+        if (Predicate.isTagged(recovery, "RecoveryAdmitted")) {
           yield* Effect.tryPromise(() => instance.restart());
         }
       }
     }
-  }).pipe(Effect.mapError(() => new InsightUnavailable()));
+  }).pipe(Effect.mapError((cause) => new InsightUnavailable({ cause: Option.some(cause) })));
 
 export const receiveProactivityWork = (
   input: Readonly<{
@@ -146,13 +165,14 @@ export const receiveProactivityWork = (
     users: Option.Option<Coordinator>;
   }>
 ): Effect.Effect<void> =>
-  Effect.gen(function* () {
-    for (const message of input.messages) {
+  Effect.forEach(
+    input.messages,
+    Effect.fnUntraced(function* (message) {
       const coordinator = input.users;
 
       const outcome = yield* Effect.exit(
         Option.isNone(coordinator)
-          ? Effect.fail(new InsightUnavailable())
+          ? Effect.fail(new InsightUnavailable({ cause: Option.none() }))
           : startProactivityWorkflow({
               body: message.body,
               workflow: input.workflow,
@@ -160,10 +180,33 @@ export const receiveProactivityWork = (
             })
       );
 
-      if (outcome._tag === "Success") message.ack();
+      if (Exit.isSuccess(outcome)) message.ack();
       else message.retry({ delaySeconds: 60 });
-    }
-  });
+    }),
+    { discard: true }
+  );
+
+const deliveryWake = Effect.fnUntraced(function* (
+  step: WorkflowStep,
+  wake: number,
+  deliver: () => Promise<ProactivityActivityResult>
+) {
+  const result = yield* Effect.tryPromise(() =>
+    step.do(
+      `weekly-delivery-${wake}`,
+      {
+        retries: { limit: 3, delay: "1 minute", backoff: "exponential" },
+        timeout: "40 seconds",
+      },
+      deliver
+    )
+  );
+
+  if (!Predicate.isTagged(result, "Deferred")) return true;
+  yield* Effect.tryPromise(() => step.sleepUntil(`weekly-window-${wake}`, result.nextEligibleAtMs));
+
+  return false;
+});
 
 const runProactivityWorkflow = ({
   coordinator,
@@ -176,31 +219,24 @@ const runProactivityWorkflow = ({
   payload: ProactivityDeliveryWork;
   step: WorkflowStep;
 }>): Promise<void> =>
-  Effect.runPromise(
+  workflowRuntime.runPromise(
     Effect.gen(function* () {
       const work = yield* Schema.decodeEffect(ProactivityDeliveryWork)(payload);
       const context = yield* Effect.context<never>();
       const run = Effect.runPromiseWith(context);
 
-      for (let wake = 0; wake < 4; wake += 1) {
-        const result = yield* Effect.tryPromise(() =>
-          step.do(
-            `weekly-delivery-${wake}`,
-            {
-              retries: { limit: 3, delay: "1 minute", backoff: "exponential" },
-              timeout: "40 seconds",
-            },
-            () => run(runActivity({ coordinator, work }))
-          )
-        );
+      const settled = yield* Effect.reduce(
+        [0, 1, 2, 3],
+        () => false,
+        (done, wake) =>
+          done
+            ? Effect.succeed(true)
+            : deliveryWake(step, wake, () => run(runActivity({ coordinator, work })))
+      );
 
-        if (result._tag !== "Deferred") return;
-        yield* Effect.tryPromise(() =>
-          step.sleepUntil(`weekly-window-${wake}`, result.nextEligibleAtMs)
-        );
-      }
+      if (settled) return;
 
-      return yield* new InsightUnavailable();
+      return yield* new InsightUnavailable({ cause: Option.none() });
     }).pipe(
       observeWorkerExecution({
         environment: workerRelease(environment),
@@ -210,6 +246,8 @@ const runProactivityWorkflow = ({
       })
     )
   );
+
+const workflowRuntime = ManagedRuntime.make(Layer.empty);
 
 export class ProactivityDeliveryWorkflow extends WorkflowEntrypoint<
   Pick<UserStoreBindings, "USER_STORE">,
@@ -378,7 +416,7 @@ export const recoverLocalReminders = Effect.fn(function* (
 
               const recovered = yield* processReminder({ environment, storage, owns, sender });
 
-              return { ...recovered, failed: recovered.failed + Number(offer._tag === "Failure") };
+              return { ...recovered, failed: recovered.failed + Number(Result.isFailure(offer)) };
             })
           )
         );
@@ -403,7 +441,7 @@ const recoverDelivery = Effect.fn(function* (
       ? environment.PROACTIVITY_ENABLED
       : environment.WEEKLY_SUMMARY_ENABLED) !== "enabled"
   ) {
-    return Response.json({ _tag: "Done" });
+    return Response.json(ActivityResult.Done());
   }
 
   const sql = yield* SqliteClient,
@@ -414,7 +452,9 @@ const recoverDelivery = Effect.fn(function* (
       ? yield* sql`UPDATE reminder_disclosures SET restarts=restarts+1 WHERE user_id=${work.userId} AND id=${job.id} AND kind='weekly-summary' AND state='ready' AND expires_ms>${now} AND restarts<3 RETURNING id`
       : yield* sql`UPDATE reminder_deliveries SET restarts=restarts+1 WHERE user_id=${work.userId} AND id=${job.kind === "weekly-summary" ? job.insightEventId : job.id} AND state='ready' AND deadline_ms>${now} AND restarts<3 AND EXISTS(SELECT 1 FROM proactive_grants g WHERE g.id=grant_id AND (g.kind='weekly-summary')=${Number(job.kind === "weekly-summary")} AND g.revoked_at_ms IS NULL) RETURNING id`;
 
-  return Response.json({ _tag: rows.length === 1 ? "RecoveryAdmitted" : "Done" });
+  return Response.json(
+    rows.length === 1 ? ActivityResult.RecoveryAdmitted() : ActivityResult.Done()
+  );
 });
 
 const weeklyActivity = Effect.fn(function* (
@@ -429,7 +469,7 @@ const weeklyActivity = Effect.fn(function* (
       )
     );
 
-    return Response.json({ _tag: "Done" });
+    return Response.json(ActivityResult.Done());
   }
 
   return Response.json(
@@ -454,18 +494,18 @@ export const nativeReminderActivity = Effect.fn(function* (
     yield* Effect.tryPromise(() => request.json())
   );
 
-  if (!owns(work.userId)) return Response.json({ _tag: "Done" });
+  if (!owns(work.userId)) return Response.json(ActivityResult.Done());
 
   if (work.kind === "weekly-question" || work.kind === "weekly-summary") {
     return environment.WEEKLY_SUMMARY_ENABLED === "enabled"
       ? yield* weeklyActivity(work, environment, storage)
-      : Response.json({ _tag: "Done" });
+      : Response.json(ActivityResult.Done());
   }
 
   if (work.kind === "proactivity-recover") return yield* recoverDelivery(work, environment);
 
   if (work.kind !== "proactivity-delivery" || environment.PROACTIVITY_ENABLED !== "enabled") {
-    return Response.json({ _tag: "Done" });
+    return Response.json(ActivityResult.Done());
   }
 
   return Response.json(

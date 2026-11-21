@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { OAuthRedirect, oauthResource } from "../../../src/shell/oauth-agents/contract";
 import { OAuthClientId } from "../../../src/core/oauth-agents/contract";
 import { RequestBodyPolicy } from "../../http/contract";
@@ -44,10 +44,10 @@ export const decodeExchange = (
     const fields = new URLSearchParams(text);
 
     if (new Set(fields.keys()).size !== Array.from(fields.keys()).length) {
-      return yield* new BootstrapInvalid();
+      return yield* new BootstrapInvalid({ cause: Option.none() });
     }
 
     return yield* Schema.decodeUnknownEffect(TokenExchange, { onExcessProperty: "error" })(
       Object.fromEntries(fields)
     );
-  }).pipe(Effect.mapError(() => new BootstrapInvalid()));
+  }).pipe(Effect.mapError((cause) => new BootstrapInvalid({ cause: Option.some(cause) })));

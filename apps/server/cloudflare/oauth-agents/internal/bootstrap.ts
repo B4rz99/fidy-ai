@@ -23,11 +23,15 @@ const invalidStatus = 400;
 export const invalidRequest = (): Response =>
   jsonResponse({ body: { error: "invalid_request" }, status: invalidStatus });
 
-export class BootstrapInvalid extends Data.TaggedError("BootstrapInvalid") {}
+export const isResponse = Schema.is(Schema.instanceOf(Response));
 
-export const decodePayload = <Shape extends Schema.ConstraintDecoder<unknown>>(
-  input: Readonly<{ request: Request; schema: Shape; onExcessProperty: "ignore" | "error" }>
-): Effect.Effect<Shape["Type"], BootstrapInvalid> =>
+export class BootstrapInvalid extends Data.TaggedError("BootstrapInvalid")<{
+  readonly cause: Option.Option<unknown>;
+}> {}
+
+export const decodePayload = <Payload extends Schema.ConstraintDecoder<unknown>>(
+  input: Readonly<{ request: Request; schema: Payload; onExcessProperty: "ignore" | "error" }>
+): Effect.Effect<Payload["Type"], BootstrapInvalid> =>
   Effect.gen(function* () {
     if (
       input.request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !==
@@ -46,7 +50,9 @@ export const decodePayload = <Shape extends Schema.ConstraintDecoder<unknown>>(
     return yield* Schema.decodeEffect(Schema.fromJsonString(input.schema), {
       onExcessProperty: input.onExcessProperty,
     })(text);
-  }).pipe(Effect.catchCause(() => Effect.fail(new BootstrapInvalid())));
+  }).pipe(
+    Effect.catchCause((cause) => Effect.fail(new BootstrapInvalid({ cause: Option.some(cause) })))
+  );
 
 export const registerWithStore = Effect.fn(
   function* <R>(input: {

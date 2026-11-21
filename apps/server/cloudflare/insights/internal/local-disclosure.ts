@@ -108,10 +108,10 @@ export const dispatchDisclosure = Effect.fn(function* (
 });
 
 const unattendedDisclosureAllowed = (
-  offer: Readonly<Record<string, unknown>>,
+  automatic: unknown,
+  activeGrant: unknown,
   now: number
-): boolean =>
-  offer.automatic !== 1 || (disclosureWindowAt(now) === now && offer.active_grant !== 1);
+): boolean => automatic !== 1 || (disclosureWindowAt(now) === now && activeGrant !== 1);
 
 export const claimDisclosure = Effect.fn(function* (
   work: typeof DeliverySend.Type,
@@ -125,7 +125,7 @@ export const claimDisclosure = Effect.fn(function* (
 
   if (offer === undefined) return true;
 
-  if (!unattendedDisclosureAllowed(offer, now)) return false;
+  if (!unattendedDisclosureAllowed(offer.automatic, offer.active_grant, now)) return false;
 
   if (!(offer.kind === "weekly-summary" ? enabled.weekly : enabled.category)) return false;
 

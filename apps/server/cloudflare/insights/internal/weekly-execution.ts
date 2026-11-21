@@ -1,4 +1,4 @@
-import { Cause, Exit, Option } from "effect";
+import { Cause, Exit, Option, Predicate } from "effect";
 import {
   type InsightTemplateUnavailable,
   type WhatsAppProviderMessageId,
@@ -24,7 +24,9 @@ export const sendEvidence = (
   const certainty = Option.match(Cause.findErrorOption(sent.cause), {
     onNone: () => "ambiguous" as const,
     onSome: (failure) =>
-      failure._tag === "WhatsAppSendFailed" ? failure.deliveryCertainty : ("rejected" as const),
+      Predicate.isTagged(failure, "WhatsAppSendFailed")
+        ? failure.deliveryCertainty
+        : ("rejected" as const),
   });
 
   return { certainty, providerMessageId: Option.none() };

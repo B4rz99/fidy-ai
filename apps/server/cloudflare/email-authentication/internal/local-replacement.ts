@@ -42,13 +42,15 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
   deadlineMilliseconds: 2000,
 });
 
+const isResponse = Schema.is(Schema.instanceOf(Response));
+
 const invalidStatus = 400,
   unauthorizedStatus = 401,
   missingStatus = 404,
   conflictStatus = 409,
   unavailableStatus = 503;
 
-const json = (body: object, status = 200): Response =>
+const json = (body: unknown, status = 200): Response =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
 
 const invalid = (): Response => json(emailReplacementInvalidBody, invalidStatus);
@@ -273,7 +275,7 @@ export const replacementRequest = Effect.fn(
       withStoreCapacity("required")
     );
 
-    if (row instanceof Response) return row;
+    if (isResponse(row)) return row;
 
     const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
       ...row,

@@ -2,13 +2,13 @@ import { readLocalSubscriptionOffers } from "../../subscription/operations";
 import { reserveBatchForwarding } from "../../ingestion/operations";
 import { getAtomicBatchInputSchema } from "../../../src/shell/operations/contract";
 import { captureWithoutCommit } from "./capture-reply";
-import { type HostedToolAction, committedAnswer, failedQueryReply } from "./tool-reply";
+import { HostedToolAction, committedAnswer, failedQueryReply } from "./tool-reply";
 import { documentReply } from "./local-document-reply";
 import { takeChallenge, visibleChallenge } from "./local-challenge";
 import { guardModelConfirmationReply, isHostedConfirmationAttempt } from "./hosted-confirmation";
 import { compact, continuity } from "./local-compaction";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, DateTime, Effect, Option, Result, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Option, Predicate, Result, Schema } from "effect";
 import {
   ProactiveInsightTranscriptEntry,
   TranscriptText,
@@ -18,6 +18,7 @@ import {
 import { MemoryText } from "../../../src/core/memory/contract";
 import {
   HostedInferenceError,
+  type HostedInferenceFailureReason,
   type HostedInferenceService,
   type HostedTextResult,
   type HostedTextToolCall,
@@ -35,8 +36,17 @@ import { preserveStoreAlarm, withStoreCapacity } from "../../runtime/sqlite/oper
 import { AgentUnavailable } from "../contract";
 import { assembleWorkingContext } from "./working-context";
 import { type LocalTurn, channelAuthority } from "./local-turn";
-import { channelReply, channelStatus, liveTurn, propose, unavailable } from "./local-turn-store";
+import {
+  channelReply,
+  channelStatus,
+  isResponse,
+  liveTurn,
+  propose,
+  unavailable,
+} from "./local-turn-store";
 import { applyTool } from "./local-tool";
+
+const FailureReason = Data.taggedEnum<HostedInferenceFailureReason>();
 
 type Environment = OpenAiEnvironment & {
   DIRECTORY: Pick<DurableObjectNamespace, "getByName">;
@@ -91,7 +101,7 @@ export const validateAdmission = Effect.fn(function* (
   environment: OpenAiEnvironment,
   turn: LocalTurn | Response
 ) {
-  if (turn instanceof Response) return turn;
+  if (isResponse(turn)) return turn;
 
   if (!isHostedConfirmationAttempt(turn.request_text)) {
     const inference = yield* makeLocalHostedInference({
@@ -132,10 +142,11 @@ const modelFor = Effect.fn(function* (env: Environment, turn: LocalTurn) {
         return yield* chargeLocalProvider(work, "user", current);
       }).pipe(withStoreCapacity("required"));
     },
+    Effect.tapError(Effect.logDebug),
     Effect.mapError(
       () =>
         new HostedInferenceError({
-          reason: { _tag: "AdmissionUnavailable" },
+          reason: FailureReason.AdmissionUnavailable(),
           retryable: false,
           retryAfter: Option.none(),
         })
@@ -174,7 +185,7 @@ const confirm = Effect.fn(function* (turn: LocalTurn, storage: DurableObjectStor
       { turn, iteration: 1, storage, confirmed: action }
     );
 
-    if (result.outcome._tag === "Succeeded") {
+    if (Predicate.isTagged(result.outcome, "Succeeded")) {
       text = TranscriptText.make("Se confirmó y completó la operación.");
     }
   }
@@ -184,7 +195,7 @@ const confirm = Effect.fn(function* (turn: LocalTurn, storage: DurableObjectStor
 
 type ToolRound = { turn: LocalTurn; iteration: number; storage: DurableObjectStorage };
 
-type ToolResult = Extract<HostedToolAction, { _tag: "Result" }>;
+type ToolResult = Data.TaggedEnum.Value<HostedToolAction, "Result">;
 
 const finishActions = Effect.fn(function* (
   actions: ReadonlyArray<ToolResult>,
@@ -254,58 +265,87 @@ const reserveToolRoutes = Effect.fn(function* (
   }
 });
 
-const runTools = Effect.fn(function* (
-  calls: ReadonlyArray<HostedTextToolCall>,
+const applyToolCall = Effect.fn(function* (
+  tool: HostedTextToolCall,
   round: ToolRound,
   env: Environment
 ) {
   const { turn, iteration, storage } = round;
   const catalog = localHostedCatalog(channelAuthority(turn));
+  yield* reserveToolRoutes(tool, turn, env.DIRECTORY);
 
-  if (invalidToolGroup(calls, catalog)) return yield* new AgentUnavailable();
-  const actions: ToolResult[] = [];
+  const offers =
+    tool.operation === "subscription.listSubscriptionOffers"
+      ? yield* readLocalSubscriptionOffers(env.PRICING).pipe(Effect.option)
+      : Option.none();
 
-  for (const tool of calls) {
-    yield* reserveToolRoutes(tool, turn, env.DIRECTORY);
+  const applied = yield* Effect.gen(function* () {
+    const event = yield* applyTool(tool, {
+      turn,
+      iteration,
+      storage,
+      commercial: { origin: env.BROWSER_ORIGIN, offers },
+    });
 
-    const offers =
-      tool.operation === "subscription.listSubscriptionOffers"
-        ? yield* readLocalSubscriptionOffers(env.PRICING).pipe(Effect.option)
-        : Option.none();
+    const challenge = yield* visibleChallenge(turn.id, yield* Clock.currentTimeMillis);
 
-    const applied = yield* Effect.gen(function* () {
-      const event = yield* applyTool(tool, {
-        turn,
-        iteration,
-        storage,
-        commercial: { origin: env.BROWSER_ORIGIN, offers },
-      });
+    if (Option.isSome(challenge)) {
+      yield* present(turn, { text: challenge.value.effect, iteration }, storage);
+    }
 
-      const challenge = yield* visibleChallenge(turn.id, yield* Clock.currentTimeMillis);
+    return { event, presented: Option.isSome(challenge) };
+  }).pipe(withStoreCapacity("growth"));
 
-      if (Option.isSome(challenge)) {
-        yield* present(turn, { text: challenge.value.effect, iteration }, storage);
-      }
+  if (applied.presented) return Option.none<ToolResult>();
 
-      return { event, presented: Option.isSome(challenge) };
-    }).pipe(withStoreCapacity("growth"));
-
-    if (applied.presented) return Option.none();
-    actions.push({
-      _tag: "Result",
+  return Option.some(
+    HostedToolAction.Result({
       event: applied.event,
       mutationSucceeded:
-        applied.event.outcome._tag === "Succeeded" &&
+        Predicate.isTagged(applied.event.outcome, "Succeeded") &&
         catalog.find((op) => op.id === tool.operation)?.policy.kind === "mutation",
-    });
-  }
+    })
+  );
+});
 
-  if (yield* finishActions(actions, round)) return Option.none();
+const runTools = Effect.fn(function* (
+  calls: ReadonlyArray<HostedTextToolCall>,
+  round: ToolRound,
+  env: Environment
+) {
+  const catalog = localHostedCatalog(channelAuthority(round.turn));
 
-  return Option.some(actions.map(({ event }) => event));
+  if (invalidToolGroup(calls, catalog)) return yield* new AgentUnavailable();
+
+  const applied = yield* Effect.reduce(
+    calls,
+    () => Option.some<ReadonlyArray<ToolResult>>([]),
+    (actions, tool) =>
+      Option.match(actions, {
+        onNone: () => Effect.succeedNone,
+        onSome: (prior) =>
+          applyToolCall(tool, round, env).pipe(
+            Effect.map(Option.map((action) => [...prior, action]))
+          ),
+      })
+  );
+
+  if (Option.isNone(applied)) return Option.none();
+
+  if (yield* finishActions(applied.value, round)) return Option.none();
+
+  return Option.some(applied.value.map(({ event }) => event));
 });
 
 type RoundProgress = { repairUsed: boolean; mutationAttempted: boolean };
+
+type RoundStep = Data.TaggedEnum<{
+  Result: { readonly output: HostedTextResult };
+  Retry: { readonly prepared: PreparedHostedText };
+  Proposed: {};
+}>;
+
+const RoundStep = Data.taggedEnum<RoundStep>();
 
 const canRepair = (reason: string, round: ToolRound, previous: RoundProgress): boolean =>
   !previous.repairUsed &&
@@ -320,7 +360,7 @@ const providerRound = Effect.fn(function* (
   const { turn, iteration, storage } = round;
   const result = yield* Effect.result(prepared.execute);
 
-  if (Result.isSuccess(result)) return { _tag: "Result" as const, output: result.success };
+  if (Result.isSuccess(result)) return RoundStep.Result({ output: result.success });
   const reason = result.failure.reason._tag;
 
   if (previous.mutationAttempted) return yield* result.failure;
@@ -329,7 +369,7 @@ const providerRound = Effect.fn(function* (
     previous.repairUsed = true;
     const repair = yield* Effect.result(prepared.repairInvalidOutput);
 
-    if (Result.isSuccess(repair)) return { _tag: "Retry" as const, prepared: repair.success };
+    if (Result.isSuccess(repair)) return RoundStep.Retry({ prepared: repair.success });
   }
 
   if (
@@ -347,7 +387,7 @@ const providerRound = Effect.fn(function* (
       storage
     ).pipe(withStoreCapacity("required"));
 
-    return { _tag: "Proposed" as const };
+    return RoundStep.Proposed();
   }
 
   return yield* result.failure;
@@ -381,6 +421,73 @@ const includesMutation = (
 ): boolean =>
   calls.some((tool) => catalog.find((op) => op.id === tool.operation)?.policy.kind === "mutation");
 
+type RoundState = {
+  prepared: PreparedHostedText;
+  iteration: number;
+  total: number;
+  settled: boolean;
+  previous: RoundProgress;
+};
+
+type RoundScope = {
+  turn: LocalTurn;
+  storage: DurableObjectStorage;
+  env: Environment;
+  catalog: ReturnType<typeof localHostedCatalog>;
+};
+
+const completeRound = Effect.fn(function* (
+  result: HostedTextResult,
+  rounds: RoundState,
+  { turn, storage, env, catalog }: RoundScope
+) {
+  const { iteration } = rounds;
+
+  if (result.toolCalls.length === 0) {
+    yield* finishReply(result, { turn, storage, iteration });
+    rounds.settled = true;
+
+    return;
+  }
+
+  rounds.total += result.toolCalls.length;
+
+  if (!validToolRound(result, rounds.total)) {
+    return yield* new AgentUnavailable();
+  }
+
+  rounds.previous.mutationAttempted ||= includesMutation(result.toolCalls, catalog);
+  const events = yield* runTools(result.toolCalls, { turn, iteration, storage }, env);
+
+  if (Option.isNone(events)) {
+    rounds.settled = true;
+
+    return;
+  }
+
+  rounds.prepared = yield* result.continuation.prepare(events.value);
+});
+
+const advanceRound = Effect.fn(function* (rounds: RoundState, scope: RoundScope) {
+  const step = yield* providerRound(
+    rounds.prepared,
+    { turn: scope.turn, storage: scope.storage, iteration: rounds.iteration },
+    rounds.previous
+  );
+
+  return yield* RoundStep.$match(step, {
+    Proposed: () =>
+      Effect.sync(() => {
+        rounds.settled = true;
+      }),
+    Retry: ({ prepared }) =>
+      Effect.sync(() => {
+        rounds.prepared = prepared;
+      }),
+    Result: ({ output }) => completeRound(output, rounds, scope),
+  });
+});
+
 const runRounds = Effect.fn(function* (
   inference: HostedInferenceService,
   turn: LocalTurn,
@@ -389,46 +496,30 @@ const runRounds = Effect.fn(function* (
   const context = yield* contextFor(turn).pipe(withStoreCapacity("required"));
   const catalog = localHostedCatalog(channelAuthority(turn));
 
-  let prepared = yield* inference.prepareText({
+  const prepared = yield* inference.prepareText({
     context,
     toolChoice: "auto",
     maximumToolCalls: HostedToolCallMaximum.make(maximumToolCallsPerTurn),
     availableOperations: catalog.map((op) => op.id),
   });
 
-  let total = 0;
-  const previous = { repairUsed: false, mutationAttempted: false };
+  const rounds: RoundState = {
+    prepared,
+    iteration: 1,
+    total: 0,
+    settled: false,
+    previous: { repairUsed: false, mutationAttempted: false },
+  };
 
-  for (let iteration = 1; iteration <= maximumHostedTurnIterations; iteration++) {
-    const step = yield* providerRound(prepared, { turn, storage, iteration }, previous);
+  yield* Effect.whileLoop({
+    while: () => !rounds.settled && rounds.iteration <= maximumHostedTurnIterations,
+    body: () => advanceRound(rounds, { turn, storage, env, catalog }),
+    step: () => {
+      rounds.iteration++;
+    },
+  });
 
-    if (step._tag === "Proposed") return;
-
-    if (step._tag === "Retry") {
-      prepared = step.prepared;
-      continue;
-    }
-
-    const result = step.output;
-
-    if (result.toolCalls.length === 0) {
-      return yield* finishReply(result, { turn, storage, iteration });
-    }
-
-    total += result.toolCalls.length;
-
-    if (!validToolRound(result, total)) {
-      return yield* new AgentUnavailable();
-    }
-
-    previous.mutationAttempted ||= includesMutation(result.toolCalls, catalog);
-    const events = yield* runTools(result.toolCalls, { turn, iteration, storage }, env);
-
-    if (Option.isNone(events)) return;
-    prepared = yield* result.continuation.prepare(events.value);
-  }
-
-  return yield* new AgentUnavailable();
+  if (!rounds.settled) return yield* new AgentUnavailable();
 });
 
 export const executeTurn = Effect.fn(function* (

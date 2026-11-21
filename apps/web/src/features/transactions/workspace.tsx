@@ -84,6 +84,7 @@ type WorkspaceProps = Readonly<{
     | Readonly<{
         readOnly: false;
         editable: boolean;
+        capture: boolean;
       }>
   );
 
@@ -948,6 +949,22 @@ const capturePanelStatus = (
   return TransactionPanel.Capture({ status: capture.value.uncertain ? "uncertain" : "idle" });
 };
 
+const initialWorkspacePanel = (
+  props: WorkspaceProps,
+  defaultPanel: TransactionPanel,
+  located: Option.Option<string>
+): TransactionPanel => {
+  if (!Predicate.isTagged(defaultPanel, "Summary")) return defaultPanel;
+
+  if (Option.isSome(located)) {
+    return TransactionPanel.Detail({ id: located.value, mode: DetailMode.Viewing() });
+  }
+
+  return !props.readOnly && props.capture && props.editable
+    ? TransactionPanel.Capture({ status: "idle" })
+    : defaultPanel;
+};
+
 type WorkspacePanelState = Readonly<{
   panel: TransactionPanel;
   onPanel: (panel: TransactionPanel) => void;
@@ -977,10 +994,7 @@ const useWorkspacePanel = (props: WorkspaceProps): WorkspacePanelState => {
       props.transactions.some((transaction) => transaction.id === id)
   );
 
-  const initialPanel: TransactionPanel =
-    Predicate.isTagged(defaultPanel, "Summary") && Option.isSome(located)
-      ? TransactionPanel.Detail({ id: located.value, mode: DetailMode.Viewing() })
-      : defaultPanel;
+  const initialPanel = initialWorkspacePanel(props, defaultPanel, located);
 
   const panel: TransactionPanel =
     interaction.generation === generation

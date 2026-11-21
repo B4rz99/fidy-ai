@@ -131,15 +131,13 @@ export const decodeBody = <Decoded, Encoded>({
     const value = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text);
 
     return Schema.decodeUnknownOption(schema)(value);
-  }).pipe(Effect.orElseSucceed(() => Option.none<Decoded>()));
+  }).pipe(
+    Effect.tapError(Effect.logDebug),
+    Effect.orElseSucceed(() => Option.none<Decoded>())
+  );
 
-export const scopesFrom = (text: string): Option.Option<PATScopes> => {
-  try {
-    return Schema.decodeUnknownOption(PATScopes)(JSON.parse(text));
-  } catch {
-    return Option.none();
-  }
-};
+export const scopesFrom = (text: string): Option.Option<PATScopes> =>
+  Schema.decodeOption(Schema.fromJsonString(PATScopes))(text);
 
 const PATFields = Schema.toType(PAT.mapFields(Struct.omit(["_tag"])));
 

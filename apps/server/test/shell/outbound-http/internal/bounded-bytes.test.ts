@@ -1,6 +1,9 @@
 import { expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Fiber, Option, Stream } from "effect";
-import { collectBoundedBytes } from "~/shell/outbound-http/internal/bounded-bytes";
+import { Cause, Effect, Exit, Fiber, Stream } from "effect";
+import {
+  BoundedBytesExceeded,
+  collectBoundedBytes,
+} from "~/shell/outbound-http/internal/bounded-bytes";
 
 it.effect("collects a byte stream exactly at its limit", () =>
   Effect.gen(function* () {
@@ -9,7 +12,7 @@ it.effect("collects a byte stream exactly at its limit", () =>
       4
     );
 
-    expect(bytes).toEqual(Option.some(new Uint8Array([1, 2, 3, 4])));
+    expect(bytes).toEqual(new Uint8Array([1, 2, 3, 4]));
   })
 );
 
@@ -23,9 +26,9 @@ it.effect("stops a byte stream at the first overflowing chunk", () =>
       new Uint8Array([6]),
     ]).pipe(Stream.tap(() => Effect.sync(() => (pulls += 1))));
 
-    const bytes = yield* collectBoundedBytes(stream, 4);
+    const failure = yield* Effect.flip(collectBoundedBytes(stream, 4));
 
-    expect(bytes).toEqual(Option.none());
+    expect(failure).toEqual(new BoundedBytesExceeded({ maximumBytes: 4 }));
     expect(pulls).toBe(2);
   })
 );
@@ -59,8 +62,8 @@ it.effect("collects fragmented bytes without retaining empty chunks", () =>
     );
 
     const bytes = yield* collectBoundedBytes(Stream.fromIterable(chunks), 2048);
-    expect(Option.isSome(bytes) && bytes.value.byteLength).toBe(2048);
-    expect(Option.isSome(bytes) && bytes.value[0]).toBe(1);
-    expect(Option.isSome(bytes) && bytes.value[2047]).toBe(255);
+    expect(bytes.byteLength).toBe(2048);
+    expect(bytes[0]).toBe(1);
+    expect(bytes[2047]).toBe(255);
   })
 );

@@ -316,6 +316,13 @@ const smokeResponse = (
           ),
     catch: () => undefined,
   }).pipe(
+    Effect.tapError(() =>
+      Effect.logWarning({
+        component: "core-http",
+        operation: "smokeResponse",
+        outcome: "unavailable",
+      })
+    ),
     Effect.orElseSucceed(() =>
       Response.json(
         { status: "unavailable" },
@@ -434,7 +441,16 @@ const supportCoreResponse = (
       Effect.tryPromise({
         try: () => handleRefundSupport({ request, environment }),
         catch: () => undefined,
-      }).pipe(Effect.orElseSucceed(unavailable))
+      }).pipe(
+        Effect.tapError(() =>
+          Effect.logWarning({
+            component: "core-http",
+            operation: "refundSupport",
+            outcome: "unavailable",
+          })
+        ),
+        Effect.orElseSucceed(unavailable)
+      )
     );
   }
 

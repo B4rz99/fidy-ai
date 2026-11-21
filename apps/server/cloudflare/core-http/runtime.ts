@@ -78,6 +78,13 @@ const sharedReadiness = Effect.fn(function* (request: Request, environment: Core
           : { core, manifest: smokeManifest, status: "pending" }
       )
     ),
+    Effect.tapCause(() =>
+      Effect.logWarning({
+        component: "core-http",
+        operation: "initializeSharedStores",
+        outcome: "unavailable",
+      })
+    ),
     Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
   );
 });

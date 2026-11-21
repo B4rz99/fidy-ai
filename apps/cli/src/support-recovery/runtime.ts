@@ -14,14 +14,18 @@ const maximumResponseBytes = 1024;
 
 const maximumRequestBytes = 256;
 
-const OutcomeBody = Schema.fromJsonString(
-  Schema.Struct({
-    status: Schema.Literals(["approved", "not_approved", "unauthorized", "limited", "unavailable"]),
-  })
-);
+const OutcomeStatus = Schema.Literals([
+  "approved",
+  "not_approved",
+  "unauthorized",
+  "limited",
+  "unavailable",
+]);
+
+const OutcomeBody = Schema.fromJsonString(Schema.Struct({ status: OutcomeStatus }));
 
 const outcomes: Readonly<
-  Record<typeof OutcomeBody.Type.status, Readonly<{ status: number; outcome: RecoveryOutcome }>>
+  Record<typeof OutcomeStatus.Type, Readonly<{ status: number; outcome: RecoveryOutcome }>>
 > = {
   approved: { status: 200, outcome: "approved" },
   not_approved: { status: 400, outcome: "not_approved" },
@@ -29,6 +33,10 @@ const outcomes: Readonly<
   limited: { status: 429, outcome: "unavailable" },
   unavailable: { status: 503, outcome: "unavailable" },
 };
+
+const replyStatuses = new Map(
+  OutcomeStatus.literals.map((status) => [outcomes[status].status, status])
+);
 
 export const recoverySubmitter = (
   httpClient: HttpClient.HttpClient
@@ -54,11 +62,17 @@ export const recoverySubmitter = (
         )
       );
 
-      const outcome = yield* Schema.decodeEffect(OutcomeBody)(yield* response.text);
-      const reply = outcomes[outcome.status];
+      const expected = replyStatuses.get(response.status);
 
-      return response.status === reply.status ? reply.outcome : "uncertain";
+      if (expected === undefined) return "uncertain";
+
+      const outcome = yield* Schema.decodeEffect(OutcomeBody)(yield* response.text);
+
+      return outcome.status === expected ? outcomes[expected].outcome : "uncertain";
     },
+    Effect.tapError((error) =>
+      Effect.logDebug("Recovery submission outcome is uncertain", { reason: error._tag })
+    ),
     Effect.orElseSucceed((): RecoveryOutcome => "uncertain")
   );
 };

@@ -1,8 +1,8 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { cruise } from "dependency-cruiser";
-import { Predicate } from "effect";
+import { Predicate, Schema } from "effect";
 import extractDepcruiseConfig from "dependency-cruiser/config-utl/extract-depcruise-config";
 import extractTSConfig from "dependency-cruiser/config-utl/extract-ts-config";
 
@@ -20,17 +20,20 @@ const sourceFiles = (packageRoot, directory) =>
     return /\.[cm]?[jt]sx?$/u.test(entry.name) ? [path] : [];
   });
 
+const ServerRuntimeGraph = Schema.Struct({
+  application: Schema.Literal("apps/server"),
+  roots: Schema.Array(Schema.String).check(
+    Schema.makeFilter((roots) => roots.includes("src") && roots.includes("cloudflare"))
+  ),
+});
+
 /** @param {string} packageRoot - Application root. @param {string[]} roots - Requested source inputs. */
 const graphSources = (packageRoot, roots) => {
   if (roots.length === 0) return ["src"];
 
-  if (
-    !packageRoot.endsWith("/apps/server") ||
-    !roots.includes("src") ||
-    !roots.includes("cloudflare")
-  ) {
-    return roots;
-  }
+  const application = `${basename(dirname(packageRoot))}/${basename(packageRoot)}`;
+
+  if (!Schema.is(ServerRuntimeGraph)({ application, roots })) return roots;
 
   const repositorySources = execFileSync(
     "git",
@@ -45,6 +48,7 @@ const graphSources = (packageRoot, roots) => {
       ":(top,exclude).repos/**",
       ":(top,exclude).agents/skills/install-anti-slop/**",
       ":(top,exclude)tools/oxlint/anti-slop/**",
+      ":(top,exclude)tools/oxlint/oxlint-plugin-jev/**",
     ],
     { cwd: packageRoot, encoding: "utf8" }
   )
@@ -78,6 +82,15 @@ const assertCompleteGraph = (graph, packageRoot, sourceRoots) => {
   }
 };
 
+const providedImports = [
+  { module: "cloudflare:workers", from: /^/u },
+  { module: "astro:content", from: /^\.\.\/docs\/src\//u },
+  {
+    module: "./browser-acceptance-core-bundle.mjs",
+    from: /^cloudflare\/browser-acceptance-core-module\.ts$/u,
+  },
+];
+
 /** @param {import("dependency-cruiser").ICruiseResult} graph - Resolved imports. */
 const unresolvedDependencies = (graph) =>
   graph.modules.flatMap((module) =>
@@ -85,11 +98,8 @@ const unresolvedDependencies = (graph) =>
       .filter(
         (dependency) =>
           dependency.couldNotResolve &&
-          dependency.module !== "cloudflare:workers" &&
-          !(dependency.module === "astro:content" && module.source.startsWith("../docs/src/")) &&
-          !(
-            module.source === "cloudflare/browser-acceptance-core-module.ts" &&
-            dependency.module === "./browser-acceptance-core-bundle.mjs"
+          !providedImports.some(
+            (provided) => provided.module === dependency.module && provided.from.test(module.source)
           )
       )
       .map((dependency) => ({ from: module.source, to: dependency.module }))

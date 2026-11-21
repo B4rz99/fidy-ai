@@ -1,6 +1,6 @@
 import { textReport } from "./local-billing-admission";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, DateTime, Effect, Option, Result, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Option, Result, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import {
   PaymentEnrollmentId,
@@ -68,6 +68,26 @@ export const enrollmentAllowance = Effect.fn(function* (env: NativeEnrollmentEnv
       headers: { "content-type": "application/json" },
       body,
     })
+  );
+});
+
+export class OffersUnavailable extends Data.TaggedError("OffersUnavailable")<{
+  readonly status: number;
+}> {}
+
+const publishedOffers = Effect.fn(function* (env: NativeEnrollmentEnv) {
+  const published = yield* Effect.tryPromise(() =>
+    env.PRICING.getByName(pricingName).fetch("https://pricing.internal/offers")
+  );
+
+  if (!published.ok) {
+    yield* Effect.tryPromise(() => published.body?.cancel() ?? Promise.resolve());
+
+    return yield* new OffersUnavailable({ status: published.status });
+  }
+
+  return yield* Schema.decodeUnknownEffect(SubscriptionOffers)(
+    yield* Effect.tryPromise(() => published.json())
   );
 });
 
@@ -249,15 +269,7 @@ export const prepareLocalForm = Effect.fn(function* (input: BrowserEnrollment) {
     return unavailableEnrollment();
   }
 
-  const offers = yield* Effect.tryPromise(() =>
-    env.PRICING.getByName(pricingName)
-      .fetch("https://pricing.internal/offers")
-      .then((res) => res.json())
-  );
-
-  const selected = (yield* Schema.decodeUnknownEffect(SubscriptionOffers)(offers)).find(
-    (price) => price.id === priceId
-  );
+  const selected = (yield* publishedOffers(env)).find((price) => price.id === priceId);
 
   if (selected === undefined) return invalidEnrollment();
   const enrollmentId = PaymentEnrollmentId.make(newId());

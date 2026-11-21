@@ -206,6 +206,9 @@ export const dispatchLocalReview = Effect.fn(
         }),
     });
   },
+  Effect.tapCause(() =>
+    Effect.logWarning({ component: "ingestion", operation: "localReview", outcome: "unavailable" })
+  ),
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
 

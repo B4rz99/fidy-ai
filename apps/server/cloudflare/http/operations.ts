@@ -66,7 +66,11 @@ const releaseLock = (reader: ReadableStreamDefaultReader<unknown>): Effect.Effec
   Effect.try({
     try: () => reader.releaseLock(),
     catch: () => undefined,
-  }).pipe(Effect.ignore);
+  }).pipe(
+    Effect.catch(() =>
+      Effect.logDebug({ component: "http", operation: "releaseLock", outcome: "failed" })
+    )
+  );
 
 const releaseReader = (reader: ReadableStreamDefaultReader<unknown>): Effect.Effect<void> =>
   Effect.sync(() => {
@@ -180,6 +184,14 @@ export const boundedJsonBodyWithSize = <A extends Schema.ConstraintDecoder<unkno
           const value = yield* Schema.decodeUnknownEffect(schema)(json);
 
           return { value, byteLength: bytes.byteLength };
+        })
+      ),
+      Effect.tapError((error) =>
+        Effect.logDebug({
+          component: "http",
+          operation: "boundedJsonBody",
+          outcome: "rejected",
+          reason: error._tag,
         })
       ),
       Effect.option

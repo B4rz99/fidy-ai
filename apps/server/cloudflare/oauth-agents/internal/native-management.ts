@@ -192,7 +192,9 @@ export const nativeManagement = Effect.fn(
       Effect.tap((response) => (!listing && response.ok ? input.retire(id) : Effect.void))
     );
   },
+  Effect.tapError(Effect.logDebug),
   Effect.catchTag("BootstrapInvalid", () => Effect.succeed(invalidRequest())),
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() =>
     Effect.succeed(oauthResponse({ body: { error: "temporarily_unavailable" }, status: 503 }))
   )

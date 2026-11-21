@@ -1,5 +1,5 @@
 import { Clock, DateTime, Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
-import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
+import { type JWKSCacheInput, createRemoteJWKSet, customFetch, jwksCache, jwtVerify } from "jose";
 import { OutboundHttpRequest } from "../../src/shell/outbound-http/contract";
 import type { OutboundHttpService } from "../../src/shell/outbound-http/operations";
 
@@ -37,14 +37,27 @@ const configured = (config: OperatorAccessConfiguration): boolean =>
 
 const signingKeysRuntime = ManagedRuntime.make(Layer.empty);
 
+type KeyLookup = ReturnType<typeof createRemoteJWKSet>;
+
+let cachedKeyData: Option.Option<Readonly<{ issuer: string; data: JWKSCacheInput }>> =
+  Option.none();
+
 const signingKeys = (
   input: Readonly<{
     request: Request;
     configuration: OperatorAccessConfiguration;
     http: OutboundHttpService;
   }>
-): ReturnType<typeof createRemoteJWKSet> =>
-  createRemoteJWKSet(new URL(`${input.configuration.issuer}/cdn-cgi/access/certs`), {
+): KeyLookup => {
+  const retained =
+    Option.isSome(cachedKeyData) && cachedKeyData.value.issuer === input.configuration.issuer
+      ? cachedKeyData.value
+      : { issuer: input.configuration.issuer, data: {} satisfies JWKSCacheInput };
+
+  cachedKeyData = Option.some(retained);
+
+  return createRemoteJWKSet(new URL(`${input.configuration.issuer}/cdn-cgi/access/certs`), {
+    [jwksCache]: retained.data,
     [customFetch]: (_url, options): Promise<Response> =>
       signingKeysRuntime.runPromise(
         input.http.execute(OutboundHttpRequest.CloudflareAccessSigningKeys()).pipe(
@@ -60,6 +73,7 @@ const signingKeys = (
         { signal: AbortSignal.any([input.request.signal, options.signal]) }
       ),
   });
+};
 
 export const authenticateOperator = (
   input: Readonly<{
@@ -108,7 +122,10 @@ export const authenticateOperator = (
       operatorRef: claims.sub,
       expiresAtMs: claims.exp * millisecondsPerSecond,
     });
-  }).pipe(Effect.orElseSucceed(() => Option.none()));
+  }).pipe(
+    Effect.tapError(Effect.logDebug),
+    Effect.orElseSucceed(() => Option.none())
+  );
 
 const currentClaims = (claims: typeof Claims.Type, current: number): boolean =>
   claims.iat <= current &&

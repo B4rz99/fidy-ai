@@ -34,6 +34,7 @@ const limits = {
   registrationSource: 10,
   registrationGlobal: 100,
   concurrent: 32,
+  concurrentSource: 8,
 } as const;
 
 const begin = Effect.fn(function* (source: string, registration: boolean) {
@@ -45,6 +46,13 @@ const begin = Effect.fn(function* (source: string, registration: boolean) {
     const leases = yield* sql`SELECT 1 FROM oauth_leases LIMIT 1 OFFSET ${limits.concurrent - 1}`;
 
     if (leases.length !== 0) return Option.none<string>();
+
+    const sourceLeases =
+      yield* sql`SELECT 1 FROM oauth_leases WHERE source=${source} LIMIT 1 OFFSET ${
+        limits.concurrentSource - 1
+      }`;
+
+    if (sourceLeases.length !== 0) return Option.none<string>();
 
     const sourceWindows = [
       { key: "oauth/source/" + source, limit: limits.source },
@@ -75,7 +83,7 @@ const begin = Effect.fn(function* (source: string, registration: boolean) {
     );
 
     const id = newId();
-    yield* sql`INSERT INTO oauth_leases VALUES(${id},${now + leaseMs})`;
+    yield* sql`INSERT INTO oauth_leases(id,expires_at_ms,source) VALUES(${id},${now + leaseMs},${source})`;
 
     return Option.some(id);
   }).pipe(withStoreCapacity("required"));
@@ -216,9 +224,10 @@ export const nativePublicOAuth = Effect.fn(
         Effect.forEach(
           Option.toArray(lease),
           (id) => sql`DELETE FROM oauth_leases WHERE id=${id}`
-        ).pipe(Effect.ignore)
+        ).pipe(Effect.tapError(Effect.logDebug), Effect.ignore)
     );
   },
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() =>
     Effect.succeed(oauthResponse({ body: { error: "temporarily_unavailable" }, status: 503 }))
   )

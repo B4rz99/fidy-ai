@@ -40,6 +40,7 @@ const DraftExample = (): JSX.Element => {
 const FloatingExample = (): JSX.Element => {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
+  const [discarded, setDiscarded] = useState(false);
   const { mounted } = useTheme();
 
   return (
@@ -50,10 +51,23 @@ const FloatingExample = (): JSX.Element => {
             <Message from="assistant">
               <MessageContent>
                 Esta ventana es una demostración local. La confirmación no representa una operación
-                pendiente y no puede ejecutarse.
+                pendiente; Confirmar está deshabilitado y Descartar solo muestra el estado
+                descartado aquí.
               </MessageContent>
-              <ChatConfirmation disabled onConfirm={() => undefined} />
+              {!discarded && (
+                <ChatConfirmation
+                  disabled
+                  discardDisabled={false}
+                  onConfirm={() => undefined}
+                  onDiscard={() => setDiscarded(true)}
+                />
+              )}
             </Message>
+            {discarded && (
+              <Message from="assistant">
+                <MessageContent>Cambio descartado. No se aplicó ningún cambio.</MessageContent>
+              </Message>
+            )}
           </ChatContent>
         </Conversation>
         <ChatComposer
@@ -110,7 +124,12 @@ export const ChatReference = (): JSX.Element => (
           <p className="text-sm text-muted-foreground">
             Muestra de confirmación deshabilitada. No representa una operación pendiente.
           </p>
-          <ChatConfirmation disabled onConfirm={() => undefined} />
+          <ChatConfirmation
+            disabled
+            discardDisabled
+            onConfirm={() => undefined}
+            onDiscard={() => undefined}
+          />
         </CardContent>
       </Card>
     </div>

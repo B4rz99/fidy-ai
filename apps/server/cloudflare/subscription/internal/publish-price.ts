@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from "effect";
+import { Data, Effect, Option, Schema } from "effect";
 import type { OutboundHttpService } from "../../../src/shell/outbound-http/operations";
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
@@ -14,6 +14,8 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 4096,
   deadlineMilliseconds: 5000,
 });
+
+class PricingOwnerUnbound extends Data.TaggedError("PricingOwnerUnbound") {}
 
 const validRequest = (request: Request): boolean =>
   request.method === "POST" && !request.headers.has("origin") && new URL(request.url).search === "";
@@ -52,7 +54,7 @@ export const publishPrice = (
     if (Option.isNone(body)) return new Response(null, { status: 400 });
     const owner = environment.PRICING;
 
-    if (owner === undefined) return new Response(null, { status: 503 });
+    if (owner === undefined) return yield* new PricingOwnerUnbound();
 
     const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(AdmittedPricePublication))({
       ...body.value,
@@ -71,4 +73,7 @@ export const publishPrice = (
         signal: request.signal,
       })
     );
-  }).pipe(Effect.orElseSucceed(() => new Response(null, { status: 503 })));
+  }).pipe(
+    Effect.tapError(Effect.logDebug),
+    Effect.orElseSucceed(() => new Response(null, { status: 503 }))
+  );

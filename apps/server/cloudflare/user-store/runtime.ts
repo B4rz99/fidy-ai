@@ -302,6 +302,14 @@ const completedAlarm = (summary: { failedFamilies: number }): Effect.Effect<void
 
 const isResponse = Schema.is(Schema.instanceOf(Response));
 
+const unavailableOnFailure = <A, E, R>(
+  work: Effect.Effect<A, E, R>
+): Effect.Effect<A | Response, never, R> =>
+  work.pipe(
+    Effect.tapCause(Effect.logDebug),
+    Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+  );
+
 export class UserStore extends DurableObject<UserStoreEnvironment> {
   private browserEnvironment(request: Request): UserStoreEnvironment {
     return closedHostEnvironment({ request, environment: this.env, boundary: "core" });
@@ -358,11 +366,17 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
               );
 
               return yield* Effect.tryPromise(() => this.runtime.runPromise(localized));
-            }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))),
+            }).pipe(
+              Effect.tapCause(Effect.logDebug),
+              Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+            ),
         });
 
         return yield* this.mcp.handle({ admission, signal: request.signal });
-      }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
+      }).pipe(
+        Effect.tapCause(Effect.logDebug),
+        Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+      )
     );
   }
   constructor(state: DurableObjectState, env: UserStoreEnvironment) {
@@ -523,13 +537,11 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   private patOperation(
     unit: Parameters<typeof dispatchLocalPATManagement>[0]
   ): Option.Option<ReturnType<typeof dispatchLocalBudget>> {
-    const onFailure = Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()));
-
     if (isLocalPATManagement(unit.operation.id)) {
       return Option.some(
         dispatchLocalPATManagement(unit).pipe(
           Effect.flatMap((plan) => runLocalMutation(plan)),
-          onFailure
+          unavailableOnFailure
         )
       );
     }
@@ -538,7 +550,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       return Option.some(
         dispatchLocalPATGrant({ ...unit, directory: this.env.DIRECTORY }).pipe(
           Effect.flatMap((plan) => runLocalMutation(plan)),
-          onFailure
+          unavailableOnFailure
         )
       );
     }
@@ -555,7 +567,6 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     const environment = this.browserEnvironment(request),
       directory = environment.DIRECTORY;
 
-    const onFailure = Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()));
     const pat = this.patOperation(unit);
 
     if (Option.isSome(pat)) return pat;
@@ -581,7 +592,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
               if (response.ok) this.ctx.waitUntil(this.alarm());
             })
           ),
-          onFailure
+          unavailableOnFailure
         )
       );
     }
@@ -655,6 +666,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
               }
             })
           ),
+          Effect.tapCause(Effect.logDebug),
           Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
         )
       );
@@ -662,6 +674,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
 
     return this.runtime.runPromise(
       drainLocalUser(request, unit).pipe(
+        Effect.tapCause(Effect.logDebug),
         Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
       )
     );
@@ -702,6 +715,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     ) {
       return this.runtime.runPromise(
         completeLocalBootstrap(request, this.env, this.owns).pipe(
+          Effect.tapCause(Effect.logDebug),
           Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
         )
       );
@@ -742,6 +756,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
               now
             );
           }).pipe(
+            Effect.tapCause(Effect.logDebug),
             Effect.catchCause(() =>
               logOperationalSignal({
                 component: "async-health",
@@ -839,13 +854,17 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
                   )
                 )
               )
-            ).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
+            ).pipe(
+              Effect.tapCause(Effect.logDebug),
+              Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+            )
           )
         );
       case localMediaUrl:
         return Option.some(
           this.runtime.runPromise(
             admitLocalMedia(unit).pipe(
+              Effect.tapCause(Effect.logDebug),
               Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
             )
           )
@@ -854,9 +873,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       case localEmailUrl:
         return Option.some(
           this.runtime.runPromise(
-            Effect.catchCause(
-              request.url === localEmailUrl ? admitLocalEmail(unit) : localSampleReview(unit),
-              () => Effect.succeed(canonicalAdmissionUnavailable())
+            (request.url === localEmailUrl ? admitLocalEmail(unit) : localSampleReview(unit)).pipe(
+              Effect.tapCause(Effect.logDebug),
+              Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
             )
           )
         );
@@ -875,6 +894,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         return Option.some(
           this.runtime.runPromise(
             processLocalEmail(request, this.env, owns).pipe(
+              Effect.tapCause(Effect.logDebug),
               Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
             )
           )
@@ -883,6 +903,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         return Option.some(
           this.runtime.runPromise(
             localStatementActivity(request, this.env.STATEMENT_STAGING_BUCKET, owns).pipe(
+              Effect.tapCause(Effect.logDebug),
               Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
             )
           )
@@ -891,6 +912,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         return Option.some(
           this.runtime.runPromise(
             localPendingStatement(request, owns).pipe(
+              Effect.tapCause(Effect.logDebug),
               Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
             )
           )
@@ -907,7 +929,10 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
                   )
                 )
               )
-            ).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
+            ).pipe(
+              Effect.tapCause(Effect.logDebug),
+              Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+            )
           )
         );
       default:
@@ -1007,7 +1032,10 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           }).pipe(
             Effect.tap((response) =>
               response.ok
-                ? offerErasureHandoff(this.ctx.storage, this.env.ERASURE, owns).pipe(Effect.ignore)
+                ? offerErasureHandoff(this.ctx.storage, this.env.ERASURE, owns).pipe(
+                    Effect.tapError(Effect.logDebug),
+                    Effect.ignore
+                  )
                 : Effect.void
             )
           )
@@ -1046,6 +1074,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       return Option.some(
         this.runtime.runPromise(
           localChannelRequest(request, this.env.DIRECTORY, owns).pipe(
+            Effect.tapCause(Effect.logDebug),
             Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
           )
         )
@@ -1060,6 +1089,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       return Option.some(
         this.runtime.runPromise(
           redeemLocalPairing(request, this.env.DIRECTORY, owns).pipe(
+            Effect.tapCause(Effect.logDebug),
             Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
           )
         )
@@ -1090,7 +1120,10 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           environment: this.env,
           storage: this.ctx.storage,
           owns,
-        }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
+        }).pipe(
+          Effect.tapCause(Effect.logDebug),
+          Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+        )
       );
     }
 
@@ -1103,6 +1136,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     if ([localIdentityCommitUrl, localIdentityCancelUrl].includes(request.url)) {
       return respond(
         applyIdentityChange(request, owns).pipe(
+          Effect.tapCause(Effect.logDebug),
           Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
         )
       );
@@ -1111,6 +1145,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     if ([localSupportUrl, localRecoveryCheckUrl].includes(request.url)) {
       return respond(
         localSupportApproval(request, owns, this.ctx.storage).pipe(
+          Effect.tapCause(Effect.logDebug),
           Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
         )
       );
@@ -1136,6 +1171,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       if (request.url === confirmHandoffUrl) {
         return this.runtime.runPromise(
           confirmErasureHandoff(request, owns).pipe(
+            Effect.tapCause(Effect.logDebug),
             Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
           )
         );
@@ -1166,6 +1202,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
                 )
               : Effect.void
           ),
+          Effect.tapCause(Effect.logDebug),
           Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
         )
       );
@@ -1181,7 +1218,10 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           env: this.env,
           owns,
           storage: this.ctx.storage,
-        }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
+        }).pipe(
+          Effect.tapCause(Effect.logDebug),
+          Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+        )
       );
     }
 
@@ -1218,6 +1258,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       return Option.some(
         this.runtime.runPromise(
           nativeReminderActivity(request, this.env, { owns, storage: this.ctx.storage }).pipe(
+            Effect.tapCause(Effect.logDebug),
             Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
           )
         )
@@ -1265,6 +1306,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       return Option.some(
         this.runtime.runPromise(
           handleNativeRefundWork(request, { owns, storage: this.ctx.storage, env: this.env }).pipe(
+            Effect.tapCause(Effect.logDebug),
             Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
           )
         )
@@ -1289,6 +1331,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       return Option.some(
         this.runtime.runPromise(
           answerRegistration(request, owns).pipe(
+            Effect.tapCause(Effect.logDebug),
             Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
           )
         )
@@ -1301,7 +1344,10 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           request,
           { env: this.browserEnvironment(request), storage: this.ctx.storage },
           owns
-        ).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
+        ).pipe(
+          Effect.tapCause(Effect.logDebug),
+          Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+        )
       );
 
       if (command.endsWith("/submit")) {
@@ -1353,7 +1399,10 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           request,
           environment: this.env,
           owns,
-        }).pipe(Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 }))))
+        }).pipe(
+          Effect.tapCause(Effect.logDebug),
+          Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+        )
       );
     }
 

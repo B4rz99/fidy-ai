@@ -24,7 +24,11 @@ import { Clock, DateTime, Effect, Match, Option, Predicate, Schema } from "effec
 import { allowancePeriod } from "../../../src/core/quotas/operations";
 import { UserId } from "../../../src/core/identity/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
-import { grantsRequiredTier } from "../../../src/shell/canonical-operations/operations";
+import {
+  type SuggestedOperationCaller,
+  freePatCaller,
+  grantsRequiredTier,
+} from "../../../src/shell/canonical-operations/operations";
 import { listLaunchCategories } from "../../../src/core/categories/operations";
 import { decideOperationAccess } from "../../../src/shell/canonical-policy/operations";
 import { patRouteHeader } from "../../directory/contract";
@@ -39,6 +43,7 @@ import {
 import { newId } from "../../secret-material/operations";
 import {
   CanonicalAdmissionUnavailable,
+  CurrentSuggestionCaller,
   type LocalMutationResult,
   canonicalRequestProtection,
 } from "../contract";
@@ -195,6 +200,19 @@ type Subject = Exclude<
   | { oauth: LocalOAuthInvocation; userId: UserId; scopes: PATScopes },
   string
 >;
+
+const suggestionCallerFor = (subject: Subject): SuggestedOperationCaller => {
+  if ("patId" in subject) return freePatCaller(subject.scopes);
+
+  if ("oauth" in subject) {
+    return {
+      accessCaller: OperationAccessCaller.OAuthAgent({ capabilities: subject.scopes }),
+      tier: "free",
+    };
+  }
+
+  return { accessCaller: OperationAccessCaller.WebSession({ fresh: false }), tier: "free" };
+};
 
 export type Call = Readonly<{
   storage: DurableObjectStorage;
@@ -733,7 +751,7 @@ export const runLocalMutation = Effect.fn(function* <A, E>(
         invocation: prepared.invocation,
         admission: requiresGrowthAdmission(operation.id) ? admitGrowth : Effect.void,
         work: work.bind(null, prepared.value, subject.userId, current),
-      });
+      }).pipe(Effect.provideService(CurrentSuggestionCaller, suggestionCallerFor(subject)));
     })
   );
 });

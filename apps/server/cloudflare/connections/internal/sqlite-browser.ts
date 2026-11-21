@@ -140,6 +140,12 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
 
 const maximumWait = 30000;
 
+const handoffUnprepared = Effect.logWarning({
+  component: "connections",
+  operation: "prepareHandoff",
+  outcome: "unprepared",
+});
+
 type AuthorizationProof = Effect.Success<ReturnType<typeof prepareProof>>;
 
 type ClaimedAttempt<Claim> = Claim extends Result.Result<infer Claimed, unknown> ? Claimed : never;
@@ -291,6 +297,7 @@ const prepareHandoff = Effect.fn(function* (
           })
         )
       ),
+      Effect.tapError(() => handoffUnprepared),
       Effect.option
     );
 
@@ -377,6 +384,13 @@ export const browser = Effect.fn(
   },
   Effect.catchTag("BrowserSessionRefused", (err) =>
     Effect.succeed(continuationFailure(err.status))
+  ),
+  Effect.tapCause(() =>
+    Effect.logWarning({
+      component: "connections",
+      operation: "browserContinuation",
+      outcome: "unavailable",
+    })
   ),
   Effect.catchCause(() => Effect.succeed(continuationFailure(unavailableStatus)))
 );

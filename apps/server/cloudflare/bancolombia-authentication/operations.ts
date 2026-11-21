@@ -398,15 +398,19 @@ export const activateBancolombiaSandbox = (
     ...input,
     assertion: prepareAssertion(input),
     retainGrant: (grant) =>
-      input
-        .retainGrant(grant)
-        .pipe(
-          Effect.onError(() =>
-            revokeBancolombiaSandboxGrant({ ...input, grant, proof: Option.none() }).pipe(
-              Effect.orElseSucceed(() => undefined)
+      input.retainGrant(grant).pipe(
+        Effect.onError(() =>
+          revokeBancolombiaSandboxGrant({ ...input, grant, proof: Option.none() }).pipe(
+            Effect.catch(() =>
+              Effect.logWarning({
+                component: "bancolombia-sandbox",
+                operation: "revokeUnretainedGrant",
+                outcome: "failed",
+              })
             )
           )
-        ),
+        )
+      ),
     consentBearer: applicationToken(input, Discovery).pipe(Effect.map((grant) => grant.bearer)),
   });
 

@@ -95,13 +95,13 @@ const applyDecision = Effect.fn(function* ({
   const sql = yield* SqliteClient;
 
   if (Predicate.isTagged(decision, "WrongProof")) {
-    yield* sql`UPDATE pat_pairings SET wrong_attempts=${decision.wrongProofAttempts} WHERE id=${id}`;
+    yield* sql`UPDATE pat_pairings SET wrong_attempts=${decision.wrongProofAttempts} WHERE id=${id} AND wrong_attempts=${pairing.wrong_attempts}`;
 
     return invalid();
   }
 
   if (Predicate.isTagged(decision, "SlowDown")) {
-    yield* sql`UPDATE pat_pairings SET minimum_poll_seconds=${Math.min(maximumPollSeconds, decision.minimumPollIntervalSeconds)} WHERE id=${id}`;
+    yield* sql`UPDATE pat_pairings SET minimum_poll_seconds=${Math.min(maximumPollSeconds, decision.minimumPollIntervalSeconds)} WHERE id=${id} AND minimum_poll_seconds=${pairing.minimum_poll_seconds}`;
 
     return response({
       status: 429,
@@ -110,7 +110,7 @@ const applyDecision = Effect.fn(function* ({
   }
 
   if (Predicate.isTagged(decision, "Pending")) {
-    yield* sql`UPDATE pat_pairings SET last_poll_at_ms=${current} WHERE id=${id}`;
+    yield* sql`UPDATE pat_pairings SET last_poll_at_ms=${current} WHERE id=${id} AND last_poll_at_ms IS ${pairing.last_poll_at_ms}`;
 
     return response({
       status: 202,
@@ -280,5 +280,6 @@ export const localClaim = Effect.fn(
       return yield* claimResponse({ pairing, patId, shortId, bearer });
     }).pipe(withStoreCapacity("growth"));
   },
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() => Effect.succeed(unavailable()))
 );

@@ -245,6 +245,13 @@ export const dispatchLocalBatchRoute = Effect.fn(
         : Option.none()
     );
   },
+  Effect.tapCause(() =>
+    Effect.logWarning({
+      component: "canonical-operations",
+      operation: "localOwner",
+      outcome: "unavailable",
+    })
+  ),
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
 

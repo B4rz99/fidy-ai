@@ -1,6 +1,7 @@
 import { Effect, Schedule, Schema } from "effect";
 import { ownerCheckUrl } from "../maintenance/contract";
 import type { Miniflare } from "miniflare";
+import { expect } from "vitest";
 import { browser } from "../browser-bootstrap.test-fixture";
 import { native, nativeLoginPlatform } from "../user-store.test-fixture";
 import { NativeLoginEmailWork, loginDeliverUrl } from "./contract";
@@ -39,10 +40,12 @@ const providerMailbox = Effect.fn(function* (runtime: Miniflare, address: string
 
   const inbox = (recipient = address): Effect.Effect<ReadonlyArray<string>, Schema.SchemaError> =>
     native(() =>
-      FIXTURE_PROVIDER.fetch(
-        "https://mailbox.fixture.invalid/?to=" + encodeURIComponent(recipient)
-      ).then((reply) => reply.json())
-    ).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(Schema.String))));
+      FIXTURE_PROVIDER.fetch("https://mailbox.fixture.invalid/?to=" + encodeURIComponent(recipient))
+    ).pipe(
+      Effect.tap((reply) => Effect.sync(() => expect(reply.ok).toBe(true))),
+      Effect.flatMap((reply) => native(() => reply.json())),
+      Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(Schema.String)))
+    );
 
   const awaitMail = (recipient = address): ReturnType<typeof inbox> =>
     inbox(recipient).pipe(

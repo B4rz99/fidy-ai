@@ -110,5 +110,6 @@ export const requestLocalErasure = Effect.fn(
       })
     );
   },
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() => Effect.succeed(refused(unavailableStatus)))
 );

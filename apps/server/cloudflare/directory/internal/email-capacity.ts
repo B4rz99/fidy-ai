@@ -102,7 +102,11 @@ const claimSlot = Effect.fn(function* (
   }
 
   yield* admitGrowth;
-  yield* sql`INSERT INTO ${sql(pool.table)}(slot,generation,receipt,expires_at_ms,state) VALUES(${slot},${generation + 1},${receipt},${expires},'outstanding') ON CONFLICT(slot) DO UPDATE SET generation=excluded.generation,receipt=excluded.receipt,expires_at_ms=excluded.expires_at_ms,state=excluded.state`;
+
+  const claimed =
+    yield* sql`INSERT INTO ${sql(pool.table)}(slot,generation,receipt,expires_at_ms,state) VALUES(${slot},${generation + 1},${receipt},${expires},'outstanding') ON CONFLICT(slot) DO UPDATE SET generation=excluded.generation,receipt=excluded.receipt,expires_at_ms=excluded.expires_at_ms,state=excluded.state WHERE generation=${generation} AND (receipt IS NULL OR expires_at_ms<=${now}) RETURNING slot`;
+
+  if (claimed.length !== 1) return status(stale);
   yield* preserveStoreAlarm(storage, expires);
 
   return status(applied);
@@ -110,21 +114,25 @@ const claimSlot = Effect.fn(function* (
 
 const isTargetCommand = Schema.is(EmailCapacityTargetCommand);
 
-const settleSlot = Effect.fn(function* (slot: number, exact: boolean, pool: Pool) {
+const settleSlot = Effect.fn(function* (target: Target, exact: boolean, pool: Pool) {
   const sql = yield* SqliteClient;
 
   if (exact) {
-    yield* sql`UPDATE ${sql(pool.table)} SET state='retained' WHERE slot=${slot}`;
+    yield* sql`UPDATE ${sql(pool.table)} SET state='retained' WHERE slot=${target.slot} AND generation=${target.generation + 1} AND receipt=${target.receipt} AND expires_at_ms=${target.expires}`;
   }
 
   return status(applied);
 });
 
-const releaseSlot = Effect.fn(function* (target: Target, releasable: boolean, pool: Pool) {
+const releaseSlot = Effect.fn(function* (
+  target: Target,
+  { releasable, now }: { releasable: boolean; now: number },
+  pool: Pool
+) {
   const sql = yield* SqliteClient;
 
   if (releasable) {
-    yield* sql`INSERT INTO ${sql(pool.table)}(slot,generation) VALUES(${target.slot},${target.generation + 1}) ON CONFLICT(slot) DO UPDATE SET generation=excluded.generation,receipt=NULL,expires_at_ms=NULL,state=NULL`;
+    yield* sql`INSERT INTO ${sql(pool.table)}(slot,generation) VALUES(${target.slot},${target.generation + 1}) ON CONFLICT(slot) DO UPDATE SET generation=excluded.generation,receipt=NULL,expires_at_ms=NULL,state=NULL WHERE (generation=${target.generation + 1} AND receipt=${target.receipt} AND expires_at_ms=${target.expires}) OR (generation=${target.generation} AND (receipt IS NULL OR expires_at_ms<=${now}))`;
   }
 
   return status(applied);
@@ -145,8 +153,9 @@ const targetSlot = Effect.fn(function* (
       return yield* Match.value(command).pipe(
         Match.tagsExhaustive({
           Claim: (claim) => claimSlot(claim, state, { now, pool, storage, admitGrowth }),
-          Settle: (settle) => settleSlot(settle.slot, state.exact, pool),
-          Release: (release) => releaseSlot(release, state.exact || state.available, pool),
+          Settle: (settle) => settleSlot(settle, state.exact, pool),
+          Release: (release) =>
+            releaseSlot(release, { releasable: state.exact || state.available, now }, pool),
         })
       );
     })

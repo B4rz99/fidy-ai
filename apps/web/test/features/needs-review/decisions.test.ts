@@ -269,6 +269,7 @@ it.live(
       yield* advance(0);
       expect(test.sent[2]?._tag).toBe("Restore");
       expect(test.sent[2]).toMatchObject({ items: [{ id: firstId, revision: 2 }] });
+      expect(test.view().feedback).toBe("1 elemento restaurado en Pendientes.");
       expect(test.entries.get(firstId)?.draft).toMatchObject({ amount: "98765" });
     })
 );

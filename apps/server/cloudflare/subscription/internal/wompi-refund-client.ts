@@ -85,6 +85,7 @@ const parseRefund = (
 
       return Option.some({ providerId: data.v2_refund_id ?? String(data.id), status: data.status });
     }),
+    Effect.tapError(Effect.logDebug),
     Effect.orElseSucceed(Option.none)
   );
 
@@ -103,6 +104,7 @@ const parseVoid = (
         ? Option.some({ providerId: data.id, status: "VOIDED" as const })
         : Option.none()
     ),
+    Effect.tapError(Effect.logDebug),
     Effect.orElseSucceed(Option.none)
   );
 
@@ -133,7 +135,11 @@ export const submitCorrection = ({
     return yield* input.kind === "refund"
       ? parseRefund(response.body, input)
       : parseVoid(response.body, input);
-  }).pipe(Effect.timeout("14 seconds"), Effect.orElseSucceed(Option.none));
+  }).pipe(
+    Effect.timeout("14 seconds"),
+    Effect.tapError(Effect.logDebug),
+    Effect.orElseSucceed(Option.none)
+  );
 
 export const verifyCardVoid = ({
   http,
@@ -150,5 +156,6 @@ export const verifyCardVoid = ({
           : Effect.succeedNone
       ),
       Effect.timeout("14 seconds"),
+      Effect.tapError(Effect.logDebug),
       Effect.orElseSucceed(Option.none)
     );

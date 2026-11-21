@@ -25,6 +25,7 @@
     ".pi/skills/shadcn",
     ".agents/skills/shadcn",
     ".agents/skills/install-anti-slop",
-    "tools/oxlint/anti-slop"
+    "tools/oxlint/anti-slop",
+    "tools/oxlint/oxlint-plugin-jev"
   ]
 }

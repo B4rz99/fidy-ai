@@ -9,6 +9,7 @@ import {
   type TransactionFilters,
   transactionSearch,
 } from "./transaction-filters";
+import { reportBrowserDefect } from "@/transport/browser-defects";
 
 type WorkspaceScope = Readonly<{
   month: string;
@@ -86,7 +87,7 @@ const saveSelection = ({
         },
       }),
     })
-    .catch(() => undefined);
+    .catch(() => reportBrowserDefect("navigation_failed"));
 };
 
 export type RecurringNavigation = Readonly<{

@@ -116,7 +116,7 @@ const authorize = (
       expiresAtMs: claims.exp * millisecondsPerSecond,
       permission: "billing.refund" as const,
     });
-  }).pipe(Effect.orElseSucceed(Option.none));
+  }).pipe(Effect.tapError(Effect.logDebug), Effect.orElseSucceed(Option.none));
 
 const routeOwner = Effect.fnUntraced(function* (
   environment: RefundSupportEnvironment,
@@ -173,7 +173,10 @@ const submit = (
     );
 
     return yield* routeOwner(input.environment, body.value.userId, encoded);
-  }).pipe(Effect.orElseSucceed(() => refundFailureResponse("unavailable")));
+  }).pipe(
+    Effect.tapError(Effect.logDebug),
+    Effect.orElseSucceed(() => refundFailureResponse("unavailable"))
+  );
 
 export const handleRefundSupport = (
   input: Readonly<{
@@ -213,4 +216,7 @@ export const handleRefundSupport = (
     const body = yield* Schema.encodeEffect(Schema.fromJsonString(RefundRead))(read.value);
 
     return yield* routeOwner(input.environment, userId, body);
-  }).pipe(Effect.orElseSucceed(() => refundFailureResponse("unavailable")));
+  }).pipe(
+    Effect.tapError(Effect.logDebug),
+    Effect.orElseSucceed(() => refundFailureResponse("unavailable"))
+  );

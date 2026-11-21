@@ -9,15 +9,6 @@ const { forbiddenRules, packageRoot, report } = await loadGraph(
   process.argv.slice(3).filter((argument) => argument !== "--publication")
 );
 
-/** @param {string} name - Rule identifier; every rule must explain its boundary. */
-const ruleReason = (name) => {
-  const reason = forbiddenRules.find((rule) => rule.name === name)?.comment;
-
-  if (!reason) throw new Error(`Dependency rule ${name} has no explanatory comment`);
-
-  return reason;
-};
-
 /** @param {string} path - Package-relative module path. */
 const displayPath = (path) => path.replace(/^(?:\.\.\/)+node_modules\//u, "node_modules/");
 
@@ -32,7 +23,13 @@ const reportViolations = (report) => {
       : `${displayPath(violation.from)} → ${displayPath(violation.to)}`;
 
     console.error(`${violation.rule.severity} ${violation.rule.name}: ${path}`);
-    console.error(`  ${ruleReason(violation.rule.name)}\n`);
+    const reason = forbiddenRules.find((rule) => rule.name === violation.rule.name)?.comment;
+
+    if (!reason) {
+      throw new Error(`Dependency rule ${violation.rule.name} has no explanatory comment`);
+    }
+
+    console.error(`  ${reason}\n`);
   }
 
   if (report.summary.error > 0) {

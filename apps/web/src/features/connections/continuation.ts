@@ -1,8 +1,8 @@
 import { browserRuntime } from "@/transport/browser-runtime";
 import { useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Clock, type DateTime, Effect, Option, Predicate } from "effect";
-import { Atom } from "effect/reactivity";
+import { Clock, Data, type DateTime, Effect, Option, Predicate } from "effect";
+import { AsyncResult, Atom } from "effect/reactivity";
 import { type RefCallback, useCallback, useState } from "react";
 import type {
   ConnectionAttemptReference,
@@ -60,6 +60,10 @@ const canRefresh = (result: CanonicalQueryState<Review, unknown>): boolean =>
 
 type Submission = Readonly<{ generation: number; deadline: number }>;
 
+class ContinuationUncertain extends Data.TaggedError("ContinuationUncertain")<{
+  readonly cause: unknown;
+}> {}
+
 const prepareContinuation = (
   {
     client,
@@ -73,7 +77,7 @@ const prepareContinuation = (
     refresh: () => void;
   }>,
   submission: Submission
-): Effect.Effect<boolean> => {
+): Effect.Effect<void, ContinuationUncertain> => {
   const current = (): boolean =>
     lifetime.active() &&
     lifetime.generation() === submission.generation &&
@@ -88,10 +92,10 @@ const prepareContinuation = (
               if (current()) refresh();
             })
           ),
-          Effect.as(false),
-          Effect.catchCause(() => Effect.succeed(true))
+          Effect.asVoid,
+          Effect.mapError((error) => new ContinuationUncertain({ cause: error }))
         )
-      : Effect.succeed(false)
+      : Effect.void
   );
 };
 
@@ -126,7 +130,7 @@ export const useContinuation = (attempt: Attempt): Continuation => {
     )
   );
 
-  const execution = useAtomValue(command).pipe(presentCanonicalQuery);
+  const execution = useAtomValue(command);
 
   const mounted = useCallback(
     (_node: HTMLDivElement): (() => void) =>
@@ -137,7 +141,7 @@ export const useContinuation = (attempt: Attempt): Continuation => {
   return {
     result: useAtomValue(query).pipe(presentCanonicalQuery),
     busy: execution.waiting,
-    uncertain: Predicate.isTagged(execution, "Ready") && execution.value,
+    uncertain: AsyncResult.isFailure(execution),
     submitted: useAtomValue(submitted),
     mounted,
     begin: () => {

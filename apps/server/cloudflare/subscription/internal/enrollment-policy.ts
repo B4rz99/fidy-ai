@@ -174,7 +174,11 @@ export const readEnrollmentBody = <A, E>({
 
     const result = yield* Effect.exit(readBoundedRequestBody(request, jsonPolicy));
 
-    if (Exit.isFailure(result)) return Option.none();
+    if (Exit.isFailure(result)) {
+      yield* Effect.logDebug(result.cause);
+
+      return Option.none();
+    }
 
     return yield* Effect.try({
       try: () =>
@@ -182,5 +186,8 @@ export const readEnrollmentBody = <A, E>({
           new TextDecoder("utf-8", { fatal: true }).decode(result.value)
         ),
       catch: () => new EnrollmentBodyMalformed(),
-    }).pipe(Effect.catchTag("EnrollmentBodyMalformed", () => Effect.succeedNone));
+    }).pipe(
+      Effect.tapError(Effect.logDebug),
+      Effect.catchTag("EnrollmentBodyMalformed", () => Effect.succeedNone)
+    );
   });

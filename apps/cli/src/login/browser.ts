@@ -23,5 +23,12 @@ export const openApprovalBrowser = (
     });
 
     yield* child.exitCode;
-  }).pipe(Effect.scoped, Effect.timeoutOption("5 seconds"), Effect.ignore);
+  }).pipe(
+    Effect.scoped,
+    Effect.timeoutOption("5 seconds"),
+    Effect.tapError((error) =>
+      Effect.logDebug("Approval browser did not open", { reason: error._tag })
+    ),
+    Effect.ignore
+  );
 };

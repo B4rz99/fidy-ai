@@ -6,7 +6,7 @@ import { HostedToolAction, committedAnswer, failedQueryReply } from "./tool-repl
 import { documentReply } from "./local-document-reply";
 import { takeChallenge, visibleChallenge } from "./local-challenge";
 import { guardModelConfirmationReply, isHostedConfirmationAttempt } from "./hosted-confirmation";
-import { compact, continuity } from "./local-compaction";
+import { type LocalInferenceServices, compact, continuity } from "./local-compaction";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, Data, DateTime, Effect, Option, Predicate, Result, Schema } from "effect";
 import {
@@ -26,7 +26,7 @@ import {
   type PreparedHostedText,
 } from "../../../src/shell/hosted-inference/contract";
 import type { OpenAiEnvironment } from "../../ai/contract";
-import { makeLocalHostedInference } from "../../ai/runtime";
+import { LocalHostedInference } from "../../ai/runtime";
 import {
   chargeLocalProvider,
   reserveSharedProviderSpend,
@@ -104,7 +104,7 @@ export const validateAdmission = Effect.fn(function* (
   if (isResponse(turn)) return turn;
 
   if (!isHostedConfirmationAttempt(turn.request_text)) {
-    const inference = yield* makeLocalHostedInference({
+    const inference = yield* LocalHostedInference.make({
       environment,
       admit: () => Effect.succeed(false),
     });
@@ -153,12 +153,7 @@ const modelFor = Effect.fn(function* (env: Environment, turn: LocalTurn) {
     )
   );
 
-  const scoped = yield* Effect.context<Effect.Services<ReturnType<typeof claim>>>();
-
-  return yield* makeLocalHostedInference({
-    environment: env,
-    admit: (units) => claim(units).pipe(Effect.provide(scoped)),
-  });
+  return yield* LocalHostedInference.make({ environment: env, admit: claim });
 });
 
 const present = Effect.fn(function* (
@@ -340,8 +335,8 @@ const runTools = Effect.fn(function* (
 type RoundProgress = { repairUsed: boolean; mutationAttempted: boolean };
 
 type RoundStep = Data.TaggedEnum<{
-  Result: { readonly output: HostedTextResult };
-  Retry: { readonly prepared: PreparedHostedText };
+  Result: { readonly output: HostedTextResult<LocalInferenceServices> };
+  Retry: { readonly prepared: PreparedHostedText<LocalInferenceServices> };
   Proposed: {};
 }>;
 
@@ -353,7 +348,7 @@ const canRepair = (reason: string, round: ToolRound, previous: RoundProgress): b
   (Option.isNone(round.turn.browser_id) || round.iteration === 1);
 
 const providerRound = Effect.fn(function* (
-  prepared: PreparedHostedText,
+  prepared: PreparedHostedText<LocalInferenceServices>,
   round: ToolRound,
   previous: RoundProgress
 ) {
@@ -394,7 +389,7 @@ const providerRound = Effect.fn(function* (
 });
 
 const finishReply = Effect.fn(function* (
-  result: HostedTextResult,
+  result: HostedTextResult<LocalInferenceServices>,
   { turn, storage, iteration }: ToolRound
 ) {
   if (result.finishReason !== "stop") return yield* new AgentUnavailable();
@@ -412,7 +407,7 @@ const finishReply = Effect.fn(function* (
   ).pipe(withStoreCapacity("required"));
 });
 
-const validToolRound = (result: HostedTextResult, total: number): boolean =>
+const validToolRound = (result: HostedTextResult<LocalInferenceServices>, total: number): boolean =>
   result.finishReason === "tool-calls" && total <= maximumToolCallsPerTurn;
 
 const includesMutation = (
@@ -422,7 +417,7 @@ const includesMutation = (
   calls.some((tool) => catalog.find((op) => op.id === tool.operation)?.policy.kind === "mutation");
 
 type RoundState = {
-  prepared: PreparedHostedText;
+  prepared: PreparedHostedText<LocalInferenceServices>;
   iteration: number;
   total: number;
   settled: boolean;
@@ -437,7 +432,7 @@ type RoundScope = {
 };
 
 const completeRound = Effect.fn(function* (
-  result: HostedTextResult,
+  result: HostedTextResult<LocalInferenceServices>,
   rounds: RoundState,
   { turn, storage, env, catalog }: RoundScope
 ) {
@@ -489,7 +484,7 @@ const advanceRound = Effect.fn(function* (rounds: RoundState, scope: RoundScope)
 });
 
 const runRounds = Effect.fn(function* (
-  inference: HostedInferenceService,
+  inference: HostedInferenceService<LocalInferenceServices>,
   turn: LocalTurn,
   { storage, env }: { storage: DurableObjectStorage; env: Environment }
 ) {

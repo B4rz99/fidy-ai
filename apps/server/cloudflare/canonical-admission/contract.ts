@@ -1,5 +1,16 @@
 import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Data, type Effect, type Option, type Schema } from "effect";
+import { Context, Data, type Effect, type Option, type Schema } from "effect";
+import { OperationAccessCaller } from "../../src/shell/canonical-policy/contract";
+import type { AccessTier } from "../../src/core/access-tier/contract";
+
+export const CurrentSuggestionCaller = Context.Reference<
+  Readonly<{ accessCaller: OperationAccessCaller; tier: AccessTier }>
+>("@fidy/cloudflare/CurrentSuggestionCaller", {
+  defaultValue: () => ({
+    accessCaller: OperationAccessCaller.PAT({ capabilities: [] }),
+    tier: "free",
+  }),
+});
 
 export class CanonicalAdmissionUnavailable extends Data.TaggedError(
   "CanonicalAdmissionUnavailable"

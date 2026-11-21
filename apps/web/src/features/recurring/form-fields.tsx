@@ -1,10 +1,11 @@
 import { Option } from "effect";
-import { type JSX, type ReactNode, useState } from "react";
+import { type JSX, type ReactNode, use, useState } from "react";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
 import { ChoiceField, CurrencyField, DefaultChoiceField, RecurringDateField } from "./fields";
 import type { Category, PlanInput } from "./model";
-import { frequencies, kinds } from "./model";
+import { firstDateNote, frequencies, kinds, noDateNote } from "./model";
+import { PlanningMonthContext } from "./planning-month";
 import { planProblemId, usePlanFieldAria, usePlanFieldProblem } from "./plan-validation";
 
 export const Field = ({
@@ -35,6 +36,7 @@ export const ScheduleFields = ({
   categories: ReadonlyArray<Category>;
 }>): JSX.Element => {
   const [frequency, setFrequency] = useState<string>(initial.frequency ?? "monthly");
+  const planning = use(PlanningMonthContext);
 
   return (
     <>
@@ -55,6 +57,9 @@ export const ScheduleFields = ({
             initial={initial.firstDate ?? ""}
             timeZone={initial.timeZone}
             required
+            note={(firstDate) =>
+              Option.flatMap(planning, (month) => firstDateNote({ firstDate, month }))
+            }
           />
         </Field>
         <Field label="Fecha final (opcional)" name="endDate">
@@ -64,6 +69,7 @@ export const ScheduleFields = ({
             initial={initial.endDate ?? ""}
             timeZone={initial.timeZone}
             required={false}
+            note={noDateNote}
           />
         </Field>
       </div>

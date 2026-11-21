@@ -1,6 +1,7 @@
 node_modules/
 
 dist/
+!tools/oxlint/oxlint-plugin-jev/dist/
 build/
 out/
 apps/web/preview.tar
@@ -45,6 +46,8 @@ npm-debug.log*
 .stryker-tmp/
 reports/
 stryker.log
+
+docs/security/runs/
 
 .hosted-evaluation.*/
 

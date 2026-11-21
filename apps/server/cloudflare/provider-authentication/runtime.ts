@@ -90,5 +90,6 @@ export const routeNativeInvitation = Effect.fn(
 
     return yield* sendInvitation(environment, event, { owner, invitation: result.invitation });
   },
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
 );

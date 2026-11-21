@@ -78,7 +78,16 @@ const admittedCommand = (
     if (operator.value.expiresAtMs <= current) return reply(unauthorizedStatus);
 
     return yield* apply({ command: action.value, operator: operator.value, current });
-  }).pipe(Effect.orElseSucceed(() => reply(unavailableStatus)));
+  }).pipe(
+    Effect.tapError(() =>
+      Effect.logWarning({
+        component: "erasure",
+        operation: "operatorRequest",
+        outcome: "unavailable",
+      })
+    ),
+    Effect.orElseSucceed(() => reply(unavailableStatus))
+  );
 
 export const nativeOperatorRequest = (input: OperatorCall): Effect.Effect<Response> =>
   admittedCommand(input, (admission) => {

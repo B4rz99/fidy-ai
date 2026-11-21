@@ -27,7 +27,12 @@ const LINTED_EXTENSIONS = [
   ".astro",
 ];
 
-const NOT_FIRST_PARTY = [".repos/", ".agents/skills/install-anti-slop/", "tools/oxlint/anti-slop/"];
+const NOT_FIRST_PARTY = [
+  ".repos/",
+  ".agents/skills/install-anti-slop/",
+  "tools/oxlint/anti-slop/",
+  "tools/oxlint/oxlint-plugin-jev/",
+];
 
 const repoRoot = Bun.fileURLToPath(new URL("..", import.meta.url));
 

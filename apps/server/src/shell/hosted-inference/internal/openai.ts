@@ -408,11 +408,11 @@ const readBoundedBody = (
   );
 };
 
-type InvokeInput = Readonly<{
+type InvokeInput<Requirements> = Readonly<{
   model: ApprovedOpenAiModel;
   overflow: () => HostedInferenceError;
   request: OpenAiRequest;
-  run: OpenAiRun;
+  run: OpenAiRun<Requirements>;
   timeout: Duration.Input;
   timeoutFailure: () => HostedInferenceError;
 }>;
@@ -478,19 +478,25 @@ const providerRefusal = (response: Response): Effect.Effect<never, HostedInferen
           })
         : fallback
     ),
-    Effect.orElseSucceed(() => fallback),
-    Effect.flatMap(Effect.fail)
+    Effect.matchEffect({
+      onFailure: () => Effect.fail(fallback),
+      onSuccess: Effect.fail,
+    })
   );
 };
 
-const invoke = ({
+const invoke = <Requirements>({
   model,
   overflow,
   request,
   run,
   timeout,
   timeoutFailure,
-}: InvokeInput): Effect.Effect<ProviderResponse, HostedInferenceError> =>
+}: InvokeInput<Requirements>): Effect.Effect<
+  ProviderResponse,
+  HostedInferenceError,
+  Requirements
+> =>
   run(model, request).pipe(
     Effect.catchTag("UnknownError", () => Effect.fail(providerUnavailable(true))),
     Effect.flatMap((response) =>
@@ -580,10 +586,10 @@ const decodeResult = (
     };
   });
 
-const makeStructuredAdapter = (
-  run: OpenAiRun,
+const makeStructuredAdapter = <Requirements>(
+  run: OpenAiRun<Requirements>,
   model: ApprovedOpenAiModel
-): HostedStructuredAdapter => ({
+): HostedStructuredAdapter<Requirements> => ({
   prepare: (input) =>
     Effect.gen(function* () {
       const messages = yield* projectMessages(
@@ -650,16 +656,16 @@ const continuationItems = (response: ProviderResponse): ReadonlyArray<OpenAiInpu
   ];
 };
 
-type ConfiguredOpenAi = Readonly<{
-  run: OpenAiRun;
+type ConfiguredOpenAi<Requirements> = Readonly<{
+  run: OpenAiRun<Requirements>;
   model: ApprovedOpenAiModel;
 }>;
 
-export const makeOpenAiInferenceServiceInternal = ({
+export const makeOpenAiInferenceServiceInternal = <Requirements>({
   run,
   model,
-}: ConfiguredOpenAi): HostedInferenceService => {
-  const adapter: HostedInferenceAdapter<PreparedOpenAiRequest, OpenAiContinuation> = {
+}: ConfiguredOpenAi<Requirements>): HostedInferenceService<Requirements> => {
+  const adapter: HostedInferenceAdapter<PreparedOpenAiRequest, OpenAiContinuation, Requirements> = {
     countText: (text) => Effect.succeed(tokenUpperBound(text)),
     countTranscript: (entries: ReadonlyArray<TranscriptEntry>) =>
       projectMessages(

@@ -1,13 +1,14 @@
 ---
-import { Option } from "effect";
+import { Option, Schema } from "effect";
 import { operationFor, schemaTarget } from "../lib/reference";
+import { ReferencePageId } from "../lib/reference-contract";
 import SchemaTable from "./schema-table.astro";
 import ReferenceJson from "./reference-json.astro";
 import "../styles/reference.css";
 
 type Props = { id: string };
 
-const operation = operationFor(Astro.props.id);
+const operation = operationFor(Schema.decodeUnknownSync(ReferencePageId)(Astro.props.id));
 
 const { declaration, method, path, raw } = operation;
 

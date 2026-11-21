@@ -8,6 +8,7 @@ import {
   readBoundedWompiResponse,
   wompiTokenizationOrigin,
 } from "./wompi-tokenization";
+import { reportBrowserDefect } from "./browser-defects";
 
 export class DaviplataAuthorizationFailed extends Data.TaggedError("DaviplataAuthorizationFailed")<{
   readonly status: "refused" | "uncertain";
@@ -204,9 +205,15 @@ const postDaviplataOtp = <Decoder extends Schema.ConstraintDecoder<unknown>>(
       catch: failure,
     });
 
-    const text = yield* readBoundedWompiResponse(response).pipe(Effect.mapError(failure));
+    if (!response.ok || response.redirected) {
+      yield* Effect.sync(() => {
+        response.body?.cancel().catch(() => reportBrowserDefect("client_defect"));
+      });
 
-    if (!response.ok || response.redirected) return yield* failure();
+      return yield* failure();
+    }
+
+    const text = yield* readBoundedWompiResponse(response).pipe(Effect.mapError(failure));
     const json = yield* Schema.decodeEffect(UnknownJsonString)(text).pipe(Effect.mapError(failure));
 
     return yield* Schema.decodeUnknownEffect(input.responseSchema)(json).pipe(
@@ -501,6 +508,7 @@ const perform = (authority: Authority, action: Action): Effect.Effect<DaviplataP
   }).pipe(
     Effect.catch(() =>
       Effect.sync(() => {
+        reportBrowserDefect("client_defect");
         authority.dispose();
 
         return { status: "uncertain" } as const;

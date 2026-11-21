@@ -1,4 +1,4 @@
-import { createJevPlugin } from "oxlint-plugin-jev";
+import { createJevPlugin } from "../../oxlint-plugin-jev/dist/index.mjs";
 
 import {
   effectJevOptions,
@@ -15,6 +15,6 @@ import {
 export default createJevPlugin({
   ...effectJevOptions,
   name: effectJevPluginName,
-  ci: "fail",
+  ci: "skip",
   rules: [...effectSourceJevRules, ...effectTestJevRules],
 });

@@ -220,11 +220,10 @@ const execute = Effect.fnUntraced(function* (
   }
 
   const reply = yield* service.request(item, headers);
-  const raw = yield* io(() => reply.text());
 
   const data = reply.ok
-    ? yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Json))(raw)
-    : null;
+    ? yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Json))(yield* io(() => reply.text()))
+    : yield* io(() => reply.body?.cancel() ?? Promise.resolve()).pipe(Effect.as(null));
 
   offer({ status: reply.status, data });
 });
@@ -244,6 +243,9 @@ const nativeMeters = Effect.fnUntraced(function* (runtime: Miniflare) {
   const read = Effect.fnUntraced(function* (name: string, path: string) {
     const worker = yield* io(() => runtime.getWorker(name));
     const response = yield* io(() => worker.fetch("https://offline.invalid/" + path));
+
+    if (!response.ok) return yield* new FixtureTransportError();
+
     const counters: unknown = yield* io(() => response.json());
 
     return counters;

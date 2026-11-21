@@ -61,7 +61,16 @@ export class CategoryProbe extends DurableObject<ConstructorParameters<typeof Us
         );
 
         return Response.json(result);
-      }).pipe(Effect.catchCause(() => Effect.succeed(new Response(null, { status: 409 }))))
+      }).pipe(
+        Effect.tapCause(() =>
+          Effect.logWarning({
+            component: "categories",
+            operation: "fixtureCapture",
+            outcome: "conflict",
+          })
+        ),
+        Effect.catchCause(() => Effect.succeed(new Response(null, { status: 409 })))
+      )
     );
   }
 }

@@ -1,7 +1,35 @@
 import { useState } from "react";
 
+type CorrectionStageName = "original" | "corrected";
+
+type CorrectionStage = Readonly<{
+  row: string;
+  amount: string;
+  action: string;
+  status: string;
+  next: CorrectionStageName;
+}>;
+
+const correctionStages: Readonly<Record<CorrectionStageName, CorrectionStage>> = {
+  original: {
+    row: "− $28.000",
+    amount: "$28.000 COP",
+    action: "Probar una corrección",
+    status: "Ejemplo: el monto correcto era $26.000.",
+    next: "corrected",
+  },
+  corrected: {
+    row: "− $26.000",
+    amount: "$26.000 COP",
+    action: "Reiniciar ejemplo",
+    status: "Monto corregido en este ejemplo. Es la misma transacción.",
+    next: "original",
+  },
+};
+
 export const CorrectionDemo = (): React.JSX.Element => {
-  const [corrected, setCorrected] = useState(false);
+  const [stage, setStage] = useState<CorrectionStageName>("original");
+  const correction = correctionStages[stage];
 
   return (
     <>
@@ -24,7 +52,7 @@ export const CorrectionDemo = (): React.JSX.Element => {
                 <small>{"Restaurantes"}</small>
               </span>
               <span>{"04 oct"}</span>
-              <strong>{corrected ? "− $26.000" : "− $28.000"}</strong>
+              <strong>{correction.row}</strong>
             </div>
             <div className="detail-table-row ">
               <span>
@@ -51,7 +79,10 @@ export const CorrectionDemo = (): React.JSX.Element => {
               <strong>{"− $8.500"}</strong>
             </div>
           </div>
-          <CorrectionInspector corrected={corrected} onCorrect={() => setCorrected(!corrected)} />
+          <CorrectionInspector
+            correction={correction}
+            onCorrect={() => setStage(correction.next)}
+          />
         </div>
       </div>{" "}
     </>
@@ -59,10 +90,10 @@ export const CorrectionDemo = (): React.JSX.Element => {
 };
 
 const CorrectionInspector = ({
-  corrected,
+  correction,
   onCorrect,
 }: {
-  corrected: boolean;
+  correction: CorrectionStage;
   onCorrect: () => void;
 }): React.JSX.Element => (
   <aside className="detail-inspector">
@@ -70,19 +101,15 @@ const CorrectionInspector = ({
     <h3>{"Crepes"}</h3>
     <dl>
       <dt>{"Monto"}</dt>
-      <dd data-correction-amount="">{corrected ? "$26.000 COP" : "$28.000 COP"}</dd>
+      <dd data-correction-amount="">{correction.amount}</dd>
       <dt>{"Categoría"}</dt>
       <dd>{"Restaurantes"}</dd>
       <dt>{"Fecha"}</dt>
       <dd>{"4 de octubre"}</dd>
     </dl>
     <button className="btn" data-correct="" onClick={onCorrect}>
-      {corrected ? "Reiniciar ejemplo" : "Probar una corrección"}
+      {correction.action}
     </button>
-    <output data-correction-status="">
-      {corrected
-        ? "Monto corregido en este ejemplo. Es la misma transacción."
-        : "Ejemplo: el monto correcto era $26.000."}
-    </output>
+    <output data-correction-status="">{correction.status}</output>
   </aside>
 );

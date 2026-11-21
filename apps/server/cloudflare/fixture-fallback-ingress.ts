@@ -24,6 +24,15 @@ export default {
         headers.set("x-fidy-fixture-fallback-ingress", environment.CF_VERSION_METADATA?.id ?? "");
 
         return new Response(response.body, { status: response.status, headers });
-      }).pipe(Effect.orElseSucceed(() => new Response(null, { status: 503 })))
+      }).pipe(
+        Effect.tapError(() =>
+          Effect.logWarning({
+            component: "release-isolation",
+            operation: "fixtureFallbackIngress",
+            outcome: "unavailable",
+          })
+        ),
+        Effect.orElseSucceed(() => new Response(null, { status: 503 }))
+      )
     ),
 } satisfies typeof ingress;

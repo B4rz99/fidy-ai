@@ -270,7 +270,7 @@ const MoneyAmount = Schema.String.check(
   )
 );
 
-const MoneyShape = Schema.Struct({
+const UncheckedMoney = Schema.Struct({
   amount: MoneyAmount.pipe(
     Schema.annotateEncoded({
       description:
@@ -283,7 +283,7 @@ const MoneyShape = Schema.Struct({
     "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied.",
 });
 
-export const Money = MoneyShape.check(
+export const Money = UncheckedMoney.check(
   Schema.makeFilter<ReadonlyMoney>((money) => {
     const usedDigits = Math.max(0, BigDecimal.normalize(money.amount).scale);
     const allowedDigits = currencyMetadata(money.currency).fractionalDigits;

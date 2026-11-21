@@ -1,7 +1,7 @@
 import { destinationAfterLogin } from "@/session/login-destination";
 import { useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Clock, type Context, DateTime, Effect, Option, Redacted, Schema } from "effect";
+import { Data, DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { Atom } from "effect/reactivity";
 import { type RefCallback, type RefObject, useCallback, useRef, useState } from "react";
 import { useSession } from "@/session/session-context";
@@ -16,20 +16,22 @@ import {
 
 export const invalidPairingMessage = "Esta vinculación ya no es válida. Inicia de nuevo." as const;
 
-export type BrowserLoginPairingViewState =
-  | Readonly<{ _tag: "Idle" }>
-  | Readonly<{ _tag: "Starting" }>
-  | Readonly<{
-      _tag: "AwaitingApproval";
-      publicCode: string;
-      expiresAt: number;
-      emailRetryAt: number;
-      emailStep: "ready" | "sending" | "code" | "submitting" | "rejected";
-    }>
-  | Readonly<{ _tag: "Authenticated" }>
-  | Readonly<{ _tag: "Invalid" }>
-  | Readonly<{ _tag: "Uncertain" }>
-  | Readonly<{ _tag: "Expired"; publicCode: string }>;
+export type BrowserLoginPairingViewState = Data.TaggedEnum<{
+  Idle: {};
+  Starting: {};
+  AwaitingApproval: Readonly<{
+    publicCode: string;
+    expiresAt: number;
+    emailRetryAt: number;
+    emailStep: "ready" | "sending" | "code" | "submitting" | "rejected";
+  }>;
+  Authenticated: {};
+  Invalid: {};
+  Uncertain: {};
+  Expired: Readonly<{ publicCode: string }>;
+}>;
+
+export const BrowserLoginPairingViewState = Data.taggedEnum<BrowserLoginPairingViewState>();
 
 type StartPairingCommand = Readonly<{
   onReady: () => void;
@@ -45,22 +47,28 @@ type EmailCommand = Readonly<{
   onStateChange: (state: BrowserLoginPairingViewState) => void;
 }>;
 
-type PollFailure =
-  | Readonly<{ _tag: "Invalid" }>
-  | Readonly<{ _tag: "SlowDown"; retryAfterSeconds: number }>
-  | Readonly<{ _tag: "Transport" }>;
+type StartedPairing = WebAuthSuccess<"browserLogin", "startPairing">;
 
-const classifyPollFailure = (error: unknown): PollFailure => {
+type RedeemResult = WebAuthSuccess<"browserLogin", "redeemPairing">;
+
+type PollAttempt = Data.TaggedEnum<{
+  Invalid: {};
+  SlowDown: Readonly<{ retryAfterSeconds: number }>;
+  Transport: {};
+  Success: Readonly<{ value: RedeemResult }>;
+}>;
+
+const PollAttempt = Data.taggedEnum<PollAttempt>();
+
+const classifyPollFailure = (error: unknown): PollAttempt => {
   if (Option.isSome(Schema.decodeUnknownOption(BrowserLoginPairingInvalidApi)(error))) {
-    return { _tag: "Invalid" };
+    return PollAttempt.Invalid();
   }
 
   return Option.match(Schema.decodeUnknownOption(BrowserLoginPollingRateLimitedApi)(error), {
-    onNone: () => ({ _tag: "Transport" }),
-    onSome: ({ error: detail }) => ({
-      _tag: "SlowDown",
-      retryAfterSeconds: detail.retryAfterSeconds,
-    }),
+    onNone: () => PollAttempt.Transport(),
+    onSome: ({ error: detail }) =>
+      PollAttempt.SlowDown({ retryAfterSeconds: detail.retryAfterSeconds }),
   });
 };
 
@@ -68,15 +76,9 @@ const millisecondsPerSecond = 1_000;
 
 const pollTimeoutMilliseconds = 15_000;
 
-const invalidState = { _tag: "Invalid" } as const satisfies BrowserLoginPairingViewState;
+const invalidState = BrowserLoginPairingViewState.Invalid();
 
-type DirectWebAuthClient = Context.Service.Shape<WebAuthClient>;
-
-type StartedPairing = WebAuthSuccess<"browserLogin", "startPairing">;
-
-type RedeemResult = WebAuthSuccess<"browserLogin", "redeemPairing">;
-
-type PollAttempt = PollFailure | Readonly<{ _tag: "Success"; value: RedeemResult }>;
+type DirectWebAuthClient = WebAuthClient["Service"];
 
 const requestPairingPoll = (
   client: DirectWebAuthClient,
@@ -93,11 +95,11 @@ const requestPairingPoll = (
     .pipe(
       Effect.match({
         onFailure: classifyPollFailure,
-        onSuccess: (value): PollAttempt => ({ _tag: "Success", value }),
+        onSuccess: (value) => PollAttempt.Success({ value }),
       }),
-      Effect.catchDefect(() => Effect.succeed({ _tag: "Transport" } as const)),
+      Effect.catchDefect(() => Effect.succeed(PollAttempt.Transport())),
       Effect.timeoutOption(Math.max(1, Math.min(remainingMilliseconds, pollTimeoutMilliseconds))),
-      Effect.map(Option.getOrElse((): PollAttempt => ({ _tag: "Transport" })))
+      Effect.map(Option.getOrElse((): PollAttempt => PollAttempt.Transport()))
     );
 
 type PollLoopInput = Readonly<{
@@ -108,67 +110,46 @@ type PollLoopInput = Readonly<{
   onStateChange: (state: BrowserLoginPairingViewState) => void;
 }>;
 
-type TerminalPollFailure = Extract<PollFailure, { _tag: "Invalid" | "Transport" }>;
+const pollUntilSettled = Effect.fnUntraced(function* (
+  input: PollLoopInput,
+  intervalSeconds: number
+): Effect.fn.Return<void> {
+  const { client, expiresAtEpochMillis, onAuthenticated, onStateChange, pairing } = input;
 
-const isTerminalPollFailure = (result: PollAttempt): result is TerminalPollFailure =>
-  result._tag === "Invalid" || result._tag === "Transport";
+  const expire = Effect.sync(() =>
+    onStateChange(BrowserLoginPairingViewState.Expired({ publicCode: pairing.publicCode }))
+  );
 
-const terminalPollState = (failure: TerminalPollFailure): BrowserLoginPairingViewState =>
-  failure._tag === "Transport" ? { _tag: "Uncertain" } : invalidState;
+  const remainingBeforeWait = expiresAtEpochMillis - DateTime.toEpochMillis(yield* DateTime.now);
+
+  if (remainingBeforeWait <= 0) return yield* expire;
+
+  yield* Effect.sleep(Math.min(remainingBeforeWait, intervalSeconds * millisecondsPerSecond));
+  const remainingBeforePoll = expiresAtEpochMillis - DateTime.toEpochMillis(yield* DateTime.now);
+
+  if (remainingBeforePoll <= 0) return yield* expire;
+
+  const result = yield* requestPairingPoll(client, pairing, remainingBeforePoll);
+  const remainingAfterPoll = expiresAtEpochMillis - DateTime.toEpochMillis(yield* DateTime.now);
+
+  if (remainingAfterPoll <= 0) return yield* expire;
+
+  return yield* PollAttempt.$match(result, {
+    Invalid: () => Effect.sync(() => onStateChange(invalidState)),
+    Transport: () => Effect.sync(() => onStateChange(BrowserLoginPairingViewState.Uncertain())),
+    SlowDown: ({ retryAfterSeconds }) =>
+      pollUntilSettled(input, Math.max(intervalSeconds, retryAfterSeconds)),
+    Success: ({ value }) =>
+      value.status === "pending_approval"
+        ? pollUntilSettled(input, Math.max(intervalSeconds, value.pollingIntervalSeconds))
+        : Effect.sync(onAuthenticated),
+  });
+});
 
 const pollBrowserLoginPairing = Effect.fn("BrowserLoginPairing.poll")(function* (
   input: PollLoopInput
 ): Effect.fn.Return<void> {
-  const { client, expiresAtEpochMillis, onAuthenticated, onStateChange, pairing } = input;
-  let intervalSeconds: number = pairing.pollingIntervalSeconds;
-
-  for (;;) {
-    const remainingBeforeWait = expiresAtEpochMillis - DateTime.toEpochMillis(yield* DateTime.now);
-
-    if (remainingBeforeWait <= 0) {
-      yield* Effect.sync(() => onStateChange({ _tag: "Expired", publicCode: pairing.publicCode }));
-
-      return;
-    }
-
-    yield* Effect.sleep(Math.min(remainingBeforeWait, intervalSeconds * millisecondsPerSecond));
-    const remainingBeforePoll = expiresAtEpochMillis - DateTime.toEpochMillis(yield* DateTime.now);
-
-    if (remainingBeforePoll <= 0) {
-      yield* Effect.sync(() => onStateChange({ _tag: "Expired", publicCode: pairing.publicCode }));
-
-      return;
-    }
-
-    const result = yield* requestPairingPoll(client, pairing, remainingBeforePoll);
-    const remainingAfterPoll = expiresAtEpochMillis - DateTime.toEpochMillis(yield* DateTime.now);
-
-    if (remainingAfterPoll <= 0) {
-      yield* Effect.sync(() => onStateChange({ _tag: "Expired", publicCode: pairing.publicCode }));
-
-      return;
-    }
-
-    if (isTerminalPollFailure(result)) {
-      yield* Effect.sync(() => onStateChange(terminalPollState(result)));
-
-      return;
-    }
-
-    if (result._tag === "SlowDown") {
-      intervalSeconds = Math.max(intervalSeconds, result.retryAfterSeconds);
-      continue;
-    }
-
-    if (result.value.status === "pending_approval") {
-      intervalSeconds = Math.max(intervalSeconds, result.value.pollingIntervalSeconds);
-      continue;
-    }
-
-    yield* Effect.sync(onAuthenticated);
-
-    return;
-  }
+  yield* pollUntilSettled(input, input.pairing.pollingIntervalSeconds);
 });
 
 type VerifiedEmailAddress = EmailAddress;
@@ -252,7 +233,7 @@ const makeStartPairingCommand = (
       Effect.gen(function* () {
         secrets.clear();
         const generation = secrets.generation();
-        input.onStateChange({ _tag: "Starting" });
+        input.onStateChange(BrowserLoginPairingViewState.Starting());
         const client = yield* webAuthClient;
         const started = yield* client.browserLogin.startPairing().pipe(Effect.option);
 
@@ -270,13 +251,14 @@ const makeStartPairingCommand = (
           if (secrets.generation() === generation) input.onStateChange(state);
         };
 
-        onCurrentStateChange({
-          _tag: "AwaitingApproval",
-          publicCode: pairing.publicCode,
-          expiresAt: DateTime.toEpochMillis(pairing.expiresAt),
-          emailRetryAt: secrets.emailRetryAt(),
-          emailStep: "ready",
-        });
+        onCurrentStateChange(
+          BrowserLoginPairingViewState.AwaitingApproval({
+            publicCode: pairing.publicCode,
+            expiresAt: DateTime.toEpochMillis(pairing.expiresAt),
+            emailRetryAt: secrets.emailRetryAt(),
+            emailStep: "ready",
+          })
+        );
         input.onReady();
         yield* pollBrowserLoginPairing({
           client,
@@ -305,13 +287,14 @@ const makeRequestEmailCommand = (
         const generation = secrets.generation();
 
         if (Option.isNone(pairing) || Option.isNone(email)) return;
-        command.onStateChange({
-          _tag: "AwaitingApproval",
-          publicCode: pairing.value.publicCode,
-          expiresAt: DateTime.toEpochMillis(pairing.value.expiresAt),
-          emailRetryAt: secrets.emailRetryAt(),
-          emailStep: "sending",
-        });
+        command.onStateChange(
+          BrowserLoginPairingViewState.AwaitingApproval({
+            publicCode: pairing.value.publicCode,
+            expiresAt: DateTime.toEpochMillis(pairing.value.expiresAt),
+            emailRetryAt: secrets.emailRetryAt(),
+            emailStep: "sending",
+          })
+        );
         const client = yield* webAuthClient;
 
         const requested = yield* client.browserPairingEmailAuthentication
@@ -332,13 +315,14 @@ const makeRequestEmailCommand = (
             );
           }
 
-          command.onStateChange({
-            _tag: "AwaitingApproval",
-            publicCode: pairing.value.publicCode,
-            expiresAt: DateTime.toEpochMillis(pairing.value.expiresAt),
-            emailStep: "code",
-            emailRetryAt: secrets.emailRetryAt(),
-          });
+          command.onStateChange(
+            BrowserLoginPairingViewState.AwaitingApproval({
+              publicCode: pairing.value.publicCode,
+              expiresAt: DateTime.toEpochMillis(pairing.value.expiresAt),
+              emailStep: "code",
+              emailRetryAt: secrets.emailRetryAt(),
+            })
+          );
         }
       }),
     { concurrent: false }
@@ -356,13 +340,14 @@ const makeCompleteEmailCommand = (
         const generation = secrets.generation();
 
         if (Option.isNone(pairing) || Option.isNone(combinedCode)) return;
-        command.onStateChange({
-          _tag: "AwaitingApproval",
-          publicCode: pairing.value.publicCode,
-          expiresAt: DateTime.toEpochMillis(pairing.value.expiresAt),
-          emailRetryAt: secrets.emailRetryAt(),
-          emailStep: "submitting",
-        });
+        command.onStateChange(
+          BrowserLoginPairingViewState.AwaitingApproval({
+            publicCode: pairing.value.publicCode,
+            expiresAt: DateTime.toEpochMillis(pairing.value.expiresAt),
+            emailRetryAt: secrets.emailRetryAt(),
+            emailStep: "submitting",
+          })
+        );
         const client = yield* webAuthClient;
 
         const approved = yield* client.browserPairingEmailAuthentication
@@ -376,13 +361,14 @@ const makeCompleteEmailCommand = (
           .pipe(Effect.option);
 
         if (Option.isSome(approved) || secrets.generation() !== generation) return;
-        command.onStateChange({
-          _tag: "AwaitingApproval",
-          publicCode: pairing.value.publicCode,
-          expiresAt: DateTime.toEpochMillis(pairing.value.expiresAt),
-          emailRetryAt: secrets.emailRetryAt(),
-          emailStep: "rejected",
-        });
+        command.onStateChange(
+          BrowserLoginPairingViewState.AwaitingApproval({
+            publicCode: pairing.value.publicCode,
+            expiresAt: DateTime.toEpochMillis(pairing.value.expiresAt),
+            emailRetryAt: secrets.emailRetryAt(),
+            emailStep: "rejected",
+          })
+        );
       }),
     { concurrent: false }
   );
@@ -478,17 +464,17 @@ type PairingEmailActions = Pick<
   "requestEmail" | "resendEmail" | "completeEmail"
 >;
 
-type WaitingPairing = Extract<BrowserLoginPairingViewState, { _tag: "AwaitingApproval" }>;
+type WaitingPairing = Data.TaggedEnum.Value<BrowserLoginPairingViewState, "AwaitingApproval">;
 
 const canRequestEmail = (state: BrowserLoginPairingViewState): state is WaitingPairing =>
-  state._tag === "AwaitingApproval" &&
+  BrowserLoginPairingViewState.$is("AwaitingApproval")(state) &&
   state.emailStep === "ready" &&
-  state.expiresAt > Effect.runSync(Clock.currentTimeMillis);
+  state.expiresAt > DateTime.toEpochMillis(DateTime.nowUnsafe());
 
 const canSubmitEmailCode = (state: BrowserLoginPairingViewState): state is WaitingPairing =>
-  state._tag === "AwaitingApproval" &&
+  BrowserLoginPairingViewState.$is("AwaitingApproval")(state) &&
   (state.emailStep === "code" || state.emailStep === "rejected") &&
-  state.expiresAt > Effect.runSync(Clock.currentTimeMillis);
+  state.expiresAt > DateTime.toEpochMillis(DateTime.nowUnsafe());
 
 const makePairingEmailActions = ({
   controller,
@@ -517,7 +503,7 @@ const makePairingEmailActions = ({
       runRequestEmail({ onStateChange: changeState });
     };
 
-    if (latestState.current._tag === "Idle") begin(send);
+    if (BrowserLoginPairingViewState.$is("Idle")(latestState.current)) begin(send);
     else send();
   };
 
@@ -525,7 +511,7 @@ const makePairingEmailActions = ({
     if (
       emailBusy.current ||
       !canSubmitEmailCode(latestState.current) ||
-      latestState.current.emailRetryAt > Effect.runSync(Clock.currentTimeMillis)
+      latestState.current.emailRetryAt > DateTime.toEpochMillis(DateTime.nowUnsafe())
     ) {
       return;
     }
@@ -555,21 +541,26 @@ type PairingPresentation = Readonly<{
 }>;
 
 const isRetiredPairing = (state: BrowserLoginPairingViewState): boolean =>
-  state._tag === "Invalid" || state._tag === "Expired" || state._tag === "Uncertain";
+  BrowserLoginPairingViewState.$is("Invalid")(state) ||
+  BrowserLoginPairingViewState.$is("Expired")(state) ||
+  BrowserLoginPairingViewState.$is("Uncertain")(state);
+
+const idlePairingState = BrowserLoginPairingViewState.Idle();
 
 const usePairingPresentation = (retire: () => void): PairingPresentation => {
-  const latestState = useRef<BrowserLoginPairingViewState>({ _tag: "Idle" });
+  const latestState = useRef<BrowserLoginPairingViewState>(idlePairingState);
   const startBusy = useRef(false);
   const emailBusy = useRef(false);
-  const [pairingState, setPairingState] = useState<BrowserLoginPairingViewState>({ _tag: "Idle" });
+
+  const [pairingState, setPairingState] = useState<BrowserLoginPairingViewState>(idlePairingState);
 
   const changeState = (next: BrowserLoginPairingViewState): void => {
     if (isRetiredPairing(next)) retire();
 
-    if (next._tag !== "Starting") startBusy.current = false;
+    if (!BrowserLoginPairingViewState.$is("Starting")(next)) startBusy.current = false;
 
     if (
-      next._tag !== "AwaitingApproval" ||
+      !BrowserLoginPairingViewState.$is("AwaitingApproval")(next) ||
       (next.emailStep !== "sending" && next.emailStep !== "submitting")
     ) {
       emailBusy.current = false;
@@ -580,7 +571,10 @@ const usePairingPresentation = (retire: () => void): PairingPresentation => {
   };
 
   const admitStart = (): boolean => {
-    if (startBusy.current || latestState.current._tag !== "Idle") return false;
+    if (startBusy.current || !BrowserLoginPairingViewState.$is("Idle")(latestState.current)) {
+      return false;
+    }
+
     startBusy.current = true;
 
     return true;
@@ -606,7 +600,7 @@ export const useBrowserLoginPairing = (): BrowserLoginPairing => {
     usePairingPresentation(clear);
 
   const state: BrowserLoginPairingViewState =
-    authentication === "signed-in" ? { _tag: "Authenticated" } : pairingState;
+    authentication === "signed-in" ? BrowserLoginPairingViewState.Authenticated() : pairingState;
 
   const begin = (onReady: () => void): void => {
     if (!admitStart()) return;
@@ -629,7 +623,7 @@ export const useBrowserLoginPairing = (): BrowserLoginPairing => {
   const restart = (): void => {
     if (!isRetiredPairing(latestState.current)) return;
     clear();
-    changeState({ _tag: "Idle" });
+    changeState(BrowserLoginPairingViewState.Idle());
     replaceAuthenticationLifetime();
   };
 
@@ -650,7 +644,7 @@ export const useBrowserLoginPairing = (): BrowserLoginPairing => {
     restart,
     cancel: () => {
       clear();
-      changeState({ _tag: "Idle" });
+      changeState(BrowserLoginPairingViewState.Idle());
     },
     ...emailActions,
     logout,

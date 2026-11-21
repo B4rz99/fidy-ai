@@ -1,20 +1,31 @@
+import { Option } from "effect";
 import { type JSX, type ReactNode, useState } from "react";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
 import { ChoiceField, CurrencyField, DefaultChoiceField, RecurringDateField } from "./fields";
 import type { Category, PlanInput } from "./model";
 import { frequencies, kinds } from "./model";
+import { planProblemId, usePlanFieldAria, usePlanFieldProblem } from "./plan-validation";
 
 export const Field = ({
   label,
   name,
   children,
-}: Readonly<{ label: string; name: string; children: ReactNode }>): JSX.Element => (
-  <div data-recurring-slot="field" data-recurring-field={name} className="grid gap-2">
-    <Label htmlFor={`recurring-${name}`}>{label}</Label>
-    {children}
-  </div>
-);
+}: Readonly<{ label: string; name: string; children: ReactNode }>): JSX.Element => {
+  const problem = usePlanFieldProblem(name);
+
+  return (
+    <div data-recurring-slot="field" data-recurring-field={name} className="grid gap-2">
+      <Label htmlFor={`recurring-${name}`}>{label}</Label>
+      {children}
+      {Option.isSome(problem) ? (
+        <p id={planProblemId(name)} className="text-sm text-destructive">
+          {problem.value.message}
+        </p>
+      ) : null}
+    </div>
+  );
+};
 
 export const ScheduleFields = ({
   initial,
@@ -36,7 +47,7 @@ export const ScheduleFields = ({
           options={frequencies.map(([value, label]) => ({ value, label }))}
         />
       </Field>
-      <div data-recurring-slot="date-fields" className="grid min-w-0 gap-3">
+      <div data-recurring-slot="date-fields" className="grid min-w-0 gap-5">
         <Field label="Primera fecha" name="firstDate">
           <RecurringDateField
             name="firstDate"
@@ -127,31 +138,38 @@ const ReferenceFields = ({
   </>
 );
 
-const MonthDays = ({ initial }: Readonly<{ initial: Partial<PlanInput> }>): JSX.Element => (
-  <>
-    <p className="text-xs text-muted-foreground">
-      Para dos veces al mes, elige dos días. Los meses cortos usan su último día y conservan el día
-      original.
-    </p>
-    <div data-recurring-slot="date-fields" className="grid min-w-0 gap-3">
-      <Field label="Primer día del mes" name="day1">
-        <Input
-          id="recurring-day1"
-          name="day1"
-          placeholder="15"
-          defaultValue={initial.monthDays?.[0] ?? "15"}
-        />
-      </Field>
-      <Field label="Segundo día (o último)" name="day2">
-        <Input
-          id="recurring-day2"
-          name="day2"
-          placeholder="último"
-          defaultValue={
-            initial.monthDays?.[1] === "last" ? "último" : (initial.monthDays?.[1] ?? "último")
-          }
-        />
-      </Field>
-    </div>
-  </>
-);
+const MonthDays = ({ initial }: Readonly<{ initial: Partial<PlanInput> }>): JSX.Element => {
+  const firstAria = usePlanFieldAria("day1");
+  const secondAria = usePlanFieldAria("day2");
+
+  return (
+    <>
+      <p className="text-xs text-muted-foreground">
+        Para dos veces al mes, elige dos días. Los meses cortos usan su último día y conservan el
+        día original.
+      </p>
+      <div data-recurring-slot="date-fields" className="grid min-w-0 gap-5">
+        <Field label="Primer día del mes" name="day1">
+          <Input
+            id="recurring-day1"
+            name="day1"
+            {...firstAria}
+            placeholder="15"
+            defaultValue={initial.monthDays?.[0] ?? "15"}
+          />
+        </Field>
+        <Field label="Segundo día (o último)" name="day2">
+          <Input
+            id="recurring-day2"
+            name="day2"
+            {...secondAria}
+            placeholder="último"
+            defaultValue={
+              initial.monthDays?.[1] === "last" ? "último" : (initial.monthDays?.[1] ?? "último")
+            }
+          />
+        </Field>
+      </div>
+    </>
+  );
+};

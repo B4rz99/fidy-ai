@@ -1,4 +1,4 @@
-import { type DateTime, type Option, Schema, SchemaTransformation } from "effect";
+import { Data, type DateTime, type Option, Schema, SchemaTransformation } from "effect";
 import { UtcTimestamp } from "~/core/_shared/time";
 
 export const BrowserLoginPairingId = Schema.String.check(Schema.isUUID())
@@ -52,35 +52,31 @@ export type RedemptionInput = Readonly<{
   attemptedAt: DateTime.Utc;
 }>;
 
-export type BrowserLoginRedemptionDecision =
-  | Readonly<{
-      _tag: "Pending";
-      acceptedAt: DateTime.Utc;
-      minimumPollIntervalSeconds: number;
-    }>
-  | Readonly<{ _tag: "Consume" }>
-  | Readonly<{
-      _tag: "WrongVerifier";
-      wrongVerifierAttempts: number;
-      lifecycle: "pending_approval" | "ready" | "invalidated";
-    }>
-  | Readonly<{
-      _tag: "SlowDown";
-      minimumPollIntervalSeconds: number;
-      retryAfterSeconds: number;
-    }>
-  | Readonly<{ _tag: "Expired" }>
-  | Readonly<{ _tag: "Invalid" }>;
+export type BrowserLoginRedemptionDecision = Data.TaggedEnum<{
+  Pending: { readonly acceptedAt: DateTime.Utc; readonly minimumPollIntervalSeconds: number };
+  Consume: {};
+  WrongVerifier: {
+    readonly wrongVerifierAttempts: number;
+    readonly lifecycle: "pending_approval" | "ready" | "invalidated";
+  };
+  SlowDown: { readonly minimumPollIntervalSeconds: number; readonly retryAfterSeconds: number };
+  Expired: {};
+  Invalid: {};
+}>;
 
-export type PendingBrowserLoginProofDecision =
-  | Readonly<{ _tag: "Accept" }>
-  | Readonly<{ _tag: "Invalid" }>
-  | Readonly<{ _tag: "Expired" }>
-  | Readonly<{
-      _tag: "WrongVerifier";
-      wrongVerifierAttempts: number;
-      lifecycle: "pending_approval" | "invalidated";
-    }>;
+export const BrowserLoginRedemptionDecision = Data.taggedEnum<BrowserLoginRedemptionDecision>();
+
+export type PendingBrowserLoginProofDecision = Data.TaggedEnum<{
+  Accept: {};
+  Invalid: {};
+  Expired: {};
+  WrongVerifier: {
+    readonly wrongVerifierAttempts: number;
+    readonly lifecycle: "pending_approval" | "invalidated";
+  };
+}>;
+
+export const PendingBrowserLoginProofDecision = Data.taggedEnum<PendingBrowserLoginProofDecision>();
 
 export type PendingBrowserLoginProofInput = Readonly<{
   lifecycle: BrowserLoginPairingLifecycle;

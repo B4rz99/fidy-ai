@@ -2,7 +2,7 @@ import { DateTime, Duration, Effect, Option } from "effect";
 import {
   type ManualPATGrantInput,
   type PATLifetimeDays,
-  type PATPairingClaimDecision,
+  PATPairingClaimDecision,
   type PATPairingClaimInput,
   type PATPairingLifecycle,
   type PATScopes,
@@ -119,20 +119,21 @@ const isActivePairing = (lifecycle: PATPairingLifecycle): boolean =>
   lifecycle === "pending_approval" || lifecycle === "approved_awaiting_claim";
 
 const expiryDecision = (lifecycle: PATPairingLifecycle): PATPairingClaimDecision =>
-  lifecycle === "pending_approval" ? { _tag: "ExpireUnapproved" } : { _tag: "RevokeUnclaimed" };
+  lifecycle === "pending_approval"
+    ? PATPairingClaimDecision.ExpireUnapproved()
+    : PATPairingClaimDecision.RevokeUnclaimed();
 
 const decidePATPairingClaimValue = (input: PATPairingClaimInput): PATPairingClaimDecision => {
-  if (!isActivePairing(input.lifecycle)) return { _tag: "Invalid" };
+  if (!isActivePairing(input.lifecycle)) return PATPairingClaimDecision.Invalid();
 
   if (DateTime.isGreaterThanOrEqualTo(input.attemptedAt, input.expiresAt)) {
     return expiryDecision(input.lifecycle);
   }
 
   if (!input.proofMatches) {
-    return {
-      _tag: "WrongProof",
+    return PATPairingClaimDecision.WrongProof({
       wrongProofAttempts: Math.min(maximumWrongProofAttempts, input.wrongProofAttempts + 1),
-    };
+    });
   }
 
   if (Option.isSome(input.lastAcceptedPollAt)) {
@@ -145,21 +146,19 @@ const decidePATPairingClaimValue = (input: PATPairingClaimInput): PATPairingClai
       const minimumPollIntervalSeconds =
         input.minimumPollIntervalSeconds + pollingSlowdownIncrementSeconds;
 
-      return {
-        _tag: "SlowDown",
+      return PATPairingClaimDecision.SlowDown({
         minimumPollIntervalSeconds,
         retryAfterSeconds: Math.max(1, Math.ceil(minimumPollIntervalSeconds - elapsedSeconds)),
-      };
+      });
     }
   }
 
   return input.lifecycle === "approved_awaiting_claim"
-    ? { _tag: "Claim" }
-    : {
-        _tag: "Pending",
+    ? PATPairingClaimDecision.Claim()
+    : PATPairingClaimDecision.Pending({
         acceptedAt: input.attemptedAt,
         minimumPollIntervalSeconds: input.minimumPollIntervalSeconds,
-      };
+      });
 };
 
 export const decidePATPairingClaim = (

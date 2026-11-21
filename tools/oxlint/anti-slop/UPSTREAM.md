@@ -7,6 +7,7 @@
 
 ## Deviations
 
+- `xstate/` is not copied.
 - The Jev rules (`jev/`) and diff rules (`diff-rules/`) are copied but not registered.
 - `anti-slop/no-unknown-parameters` is not enabled.
 - `max-lines-per-function` sets `skipBlankLines`, so the blank lines `anti-slop/require-readable-spacing` adds do not count.

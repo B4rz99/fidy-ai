@@ -1,4 +1,4 @@
-import { Clock, Data, DateTime, Effect, Option, Redacted, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Option, Predicate, Redacted, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import {
   BillingEmail,
@@ -19,7 +19,7 @@ import {
   type DaviplataFields,
   startDaviplataWithWompi,
 } from "@/transport/wompi-daviplata";
-import { type DaviplataChallenge, makeDaviplataChallenge } from "./daviplata-challenge";
+import { type DaviplataChallenge, openDaviplataChallenge } from "./daviplata-challenge";
 import { paymentSubmissionIsTerminal } from "./payment-status";
 
 export type Enrollment = PaymentEnrollmentType;
@@ -290,13 +290,13 @@ const submitNewSource = (input: NewSourceInput): Promise<PaymentSubmission> => {
   if (enrollment.method === "nequi") {
     return "method" in fields
       ? submitNequiSource({ ...input, fields })
-      : Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+      : Promise.reject(new EnrollmentSubmissionFailed());
   }
 
   if (enrollment.method !== "card" || "method" in fields) {
     clearNequiPhone(fields);
 
-    return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+    return Promise.reject(new EnrollmentSubmissionFailed());
   }
 
   const publicKey = enrollment.wompiPublicKey;
@@ -375,7 +375,7 @@ const makeSubmit = (
       if (!reserveCard(authorizedCards, enrollment, fields)) {
         clearNequiPhone(Option.getOrUndefined(fields));
 
-        return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+        return Promise.reject(new EnrollmentSubmissionFailed());
       }
 
       globalThis.sessionStorage.setItem(billingEmailStorageKey(enrollment), billingEmail);
@@ -398,7 +398,7 @@ const makeSubmit = (
       }
 
       if (Option.isNone(fields)) {
-        return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+        return Promise.reject(new EnrollmentSubmissionFailed());
       }
 
       return completed(
@@ -454,7 +454,7 @@ const daviplataSetupFailure = (
   error: EnrollmentSubmissionFailed | DaviplataAuthorizationFailed
 ): DaviplataSetupFailed =>
   new DaviplataSetupFailed({
-    status: error instanceof EnrollmentSubmissionFailed ? "refused" : error.status,
+    status: Predicate.isTagged(error, "EnrollmentSubmissionFailed") ? "refused" : error.status,
   });
 
 const submitDaviplata =
@@ -462,7 +462,7 @@ const submitDaviplata =
     client: SubscriptionEnrollmentClient,
     paymentRequests: PaymentRequestStore,
     context: Readonly<{ enrollment: PreparedEnrollment; facts: SubmissionFacts }>
-  ): Parameters<typeof makeDaviplataChallenge>[0]["submitApproved"] =>
+  ): Parameters<typeof openDaviplataChallenge>[0]["submitApproved"] =>
   (daviplataToken, signal) =>
     completed(
       paymentRequests,
@@ -526,7 +526,7 @@ const makeStartDaviplata = (
 
             globalThis.sessionStorage.setItem(billingEmailStorageKey(enrollment), billingEmail);
 
-            return makeDaviplataChallenge({
+            return openDaviplataChallenge({
               provider,
               client,
               submitApproved: submitDaviplata(client, paymentRequests, { enrollment, facts }),
@@ -535,7 +535,9 @@ const makeStartDaviplata = (
         { signal: fields.signal }
       )
       .then((result) => {
-        if (result instanceof DaviplataSetupFailed) throw result;
+        if (Predicate.isTagged(result, "DaviplataSetupFailed")) {
+          throw result;
+        }
 
         return result;
       })
@@ -555,13 +557,16 @@ const makePrepare =
           payload: {
             priceId,
             method,
-            ...(options?.replaceFailedSource === true ? { replaceFailedSource: true } : {}),
+            ...Option.match(
+              Option.liftPredicate(true, () => options?.replaceFailedSource === true),
+              { onNone: () => ({}), onSome: (replaceFailedSource) => ({ replaceFailedSource }) }
+            ),
           },
         }),
       executionOptions(options?.signal)
     );
 
-export const makeEnrollmentGateway = (
+export const createEnrollmentGateway = (
   clientService: SubscriptionEnrollmentClient
 ): EnrollmentGateway => {
   const paymentRequests: PaymentRequestStore = new Map();

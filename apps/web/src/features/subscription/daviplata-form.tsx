@@ -6,7 +6,7 @@ import { Redacted } from "effect";
 import { type FormEvent, type JSX, type RefCallback, useState } from "react";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
-import { type DaviplataStage, makeMountedDaviplata } from "./daviplata-task";
+import { type DaviplataStage, mountDaviplata } from "./daviplata-task";
 import {
   type EnrollmentGateway,
   type PaymentSubmission,
@@ -196,7 +196,7 @@ const useMountedDaviplata = (props: FormProps): Draft & Commands => {
   const lock = useAtomSet(DaviplataAuthorizationLock.use());
 
   const [task] = useState(() =>
-    makeMountedDaviplata({
+    mountDaviplata({
       ...props,
       lock,
       publish: (next) => {

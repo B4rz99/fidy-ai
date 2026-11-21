@@ -1,20 +1,19 @@
-// @vitest-environment jsdom
 import { authenticationEndedEvent } from "@/session/authentication-channel";
 import { Effect, Layer, Option } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { RegistryContext } from "@effect/atom-react";
 import { StrictMode, act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { SubscriptionCancellationManagement } from "./cancellation";
+import { SubscriptionCancellationManagement } from "@/features/subscription/cancellation";
 import { type Atom, AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
 import { afterEach, expect, vi } from "vitest";
 import { makeFidyClient } from "@/transport/client";
 import {
   type CancellationManagement,
-  makeCancellationManagement,
+  cancellationManagementAtom,
   subscriptionStatusQuery,
-} from "./cancellation-command";
+} from "@/features/subscription/cancellation-command";
 
 const paid = {
   priceId: "15520000-0000-4000-8000-000000000011",
@@ -120,7 +119,7 @@ const fixture = (): Fixture => {
   });
 
   const registry = AtomRegistry.make();
-  const resource = makeCancellationManagement(client);
+  const resource = cancellationManagementAtom(client);
   cleanup.push(() => registry.dispose(), registry.mount(resource));
   const dispose = registry.get(resource).mount();
   cleanup.push(dispose);

@@ -17,16 +17,9 @@
 "apps/web/src/features/budgets/navigation.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
 "apps/web/src/features/dashboard/spending-chart.tsx"	KyPa859Fmjrme77DeJDTkrdrrTzBNb4j_-KNe9db7X8
 "apps/web/src/features/email-replacement/commands.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
-"apps/web/src/features/oauth-connections/review-task.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
 "apps/web/src/features/pats/creation.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
 "apps/web/src/features/pats/reauthentication-draft.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
 "apps/web/src/features/recovery/feature.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
-"apps/web/src/features/recurring/controller.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
-"apps/web/src/features/recurring/feature.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
-"apps/web/src/features/recurring/navigation.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
-"apps/web/src/features/subscription/cancellation-command.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
-"apps/web/src/features/subscription/enrollment-gateway.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
-"apps/web/src/features/subscription/interaction.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
 "apps/web/src/features/transactions/scroll-continuation.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
 "apps/web/src/session/session.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
 "apps/web/src/transport/browser-defects.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s

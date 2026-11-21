@@ -90,7 +90,7 @@ export const DashboardReference = (): JSX.Element => (
   >
     <h2>Componentes del tablero</h2>
     <SpendingReference />
-    <DashboardCard title={<h2>Salidas del mes</h2>} editing={false} kind="custom-metric">
+    <DashboardCard title={<h2>Ingresos y gastos del mes</h2>} editing={false} kind="custom-metric">
       <DashboardFigures currency="COP" inflow="$ 3.800.000,00" outflow="$ 1.845.000,00" />
     </DashboardCard>
     <DashboardCard title={<h2>Presupuesto de restaurantes</h2>} editing={false} kind="budget-bar">

@@ -6,5 +6,12 @@ export const TransactionCorrectionContext = createContext<Option.Option<Transact
   Option.none()
 );
 
-export const useTransactionCorrections = (): TransactionCorrections =>
-  Option.getOrThrow(use(TransactionCorrectionContext));
+export const useTransactionCorrections = (): TransactionCorrections => {
+  const corrections = use(TransactionCorrectionContext);
+
+  if (Option.isNone(corrections)) {
+    throw new Error("useTransactionCorrections must be used within TransactionCorrectionContext");
+  }
+
+  return corrections.value;
+};

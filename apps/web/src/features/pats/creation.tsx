@@ -2,7 +2,7 @@ import { PendingRead } from "@/ui/components/pending-read";
 
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Option, Predicate } from "effect";
-import { type JSX, type RefCallback, useCallback, useRef, useState } from "react";
+import { type JSX, type RefCallback, useRef, useState } from "react";
 import type { SensitiveClipboard } from "@/browser/sensitive-clipboard";
 import type { FidyClient } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
@@ -43,15 +43,12 @@ const ResumedPATCreation = (props: CreationProps): JSX.Element => {
     ? Option.some(user.value.data.id)
     : Option.none();
 
-  const mounted = useCallback<RefCallback<HTMLElement>>(
-    (node) => {
-      if (node !== null && Option.isSome(userId) && !consumed.current) {
-        consumed.current = true;
-        setDraft(Option.some(resumePATDraft(userId.value)));
-      }
-    },
-    [userId, setDraft]
-  );
+  const mounted: RefCallback<HTMLElement> = (node) => {
+    if (node !== null && Option.isSome(userId) && !consumed.current) {
+      consumed.current = true;
+      setDraft(Option.some(resumePATDraft(userId.value)));
+    }
+  };
 
   if (Predicate.isTagged(user, "Failure")) {
     return (

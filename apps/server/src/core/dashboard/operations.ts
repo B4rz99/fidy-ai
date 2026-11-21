@@ -84,13 +84,13 @@ const recentTransactions = DashboardCatalogEntry.make({
   },
 });
 
-const monthlyOutflows = DashboardCatalogEntry.make({
+const monthlyIncomeAndExpenses = DashboardCatalogEntry.make({
   id: "monthly-outflows",
-  name: "Salidas del mes",
-  description: "Resume las salidas del mes sin mezclar monedas ni calcular un neto.",
+  name: "Ingresos y gastos del mes",
+  description: "Muestra ingresos y gastos del mes por moneda.",
   widget: {
     type: "custom-metric",
-    label: "Salidas del mes",
+    label: "Ingresos y gastos del mes",
     aggregation: "sum",
     period: DashboardPeriod.make("this-month"),
   },
@@ -102,7 +102,7 @@ export const makeDashboardCatalog = (
   monthlySpending,
   restaurantBudgetCop(input.restaurantCategoryId),
   recentTransactions,
-  monthlyOutflows,
+  monthlyIncomeAndExpenses,
 ];
 
 export const makeCatalogWidget = (

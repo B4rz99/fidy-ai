@@ -112,26 +112,17 @@ const importedNames = (context, expression) =>
 
 /** @param {Provenance} context - Module-local provenance. @param {import("typescript").Expression} expression - Candidate Effect dual constructor. */
 const isEffectDual = (context, expression) => {
-  if (
-    ts.isPropertyAccessExpression(expression)
-      ? expression.name.text !== "dual"
-      : !ts.isIdentifier(expression)
-  ) {
-    return false;
+  if (ts.isIdentifier(expression)) {
+    return importedNames(context, expression).some(
+      ({ source, name }) => source === "effect/Function" && name === "dual"
+    );
   }
 
-  const { binding, origins } = ts.isPropertyAccessExpression(expression)
-    ? {
-        binding: expression.expression,
-        origins: [
-          { source: "effect", name: "Function" },
-          { source: "effect/Function", name: "*" },
-        ],
-      }
-    : { binding: expression, origins: [{ source: "effect/Function", name: "dual" }] };
+  if (!ts.isPropertyAccessExpression(expression) || expression.name.text !== "dual") return false;
 
-  return importedNames(context, binding).some((imported) =>
-    origins.some(({ source, name }) => imported.source === source && imported.name === name)
+  return importedNames(context, expression.expression).some(
+    ({ source, name }) =>
+      (source === "effect" && name === "Function") || (source === "effect/Function" && name === "*")
   );
 };
 

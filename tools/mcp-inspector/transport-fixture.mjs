@@ -97,48 +97,46 @@ const receiveMessage = (response, message) => {
   assert.ok("method" in message);
   response.setHeader("mcp-session-id", "disposable-loopback-session");
 
-  const replies = new Map([
-    [
-      "initialize",
-      () => {
-        assert.ok("id" in message);
-        jsonReply(response, message.id, {
-          protocolVersion: "2025-11-25",
-          capabilities: { tools: {} },
-          serverInfo: { name: "disposable-loopback", version: "1" },
-        });
-      },
-    ],
-    [
-      "notifications/initialized",
-      () => {
-        response.writeHead(status.accepted).end();
-      },
-    ],
-    [
-      "tools/call",
-      () => {
-        assert.ok("id" in message);
-
-        const tool = new Map([
-          ["review", () => review(response, message.id)],
-          [
-            "read",
-            () => {
-              readWhilePending = !cancellationReceived;
-              jsonReply(response, message.id, { content: [] });
-            },
-          ],
-        ]).get(String(message.params?.name));
-
-        assert.ok(tool !== undefined);
-        tool();
-      },
-    ],
-  ]);
-
   (
-    replies.get(message.method) ??
+    new Map([
+      [
+        "initialize",
+        () => {
+          assert.ok("id" in message);
+          jsonReply(response, message.id, {
+            protocolVersion: "2025-11-25",
+            capabilities: { tools: {} },
+            serverInfo: { name: "disposable-loopback", version: "1" },
+          });
+        },
+      ],
+      [
+        "notifications/initialized",
+        () => {
+          response.writeHead(status.accepted).end();
+        },
+      ],
+      [
+        "tools/call",
+        () => {
+          assert.ok("id" in message);
+
+          const tool = new Map([
+            ["review", () => review(response, message.id)],
+            [
+              "read",
+              () => {
+                readWhilePending = !cancellationReceived;
+                jsonReply(response, message.id, { content: [] });
+              },
+            ],
+          ]).get(String(message.params?.name));
+
+          assert.ok(tool !== undefined);
+          tool();
+        },
+      ],
+    ]).get(message.method) ??
     (() => {
       response.writeHead(status.invalid).end();
     })

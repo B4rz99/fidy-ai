@@ -7,8 +7,8 @@ import {
 } from "~/core/categories/contract";
 
 export const writingTaxonomy = (release: CategoryTaxonomyRelease): CategoryTaxonomyRevision =>
-  Option.getOrThrow(
-    Option.fromUndefinedOr(release.revisions.find((revision) => revision.id === release.write))
+  release.revisions.reduce((writing, revision) =>
+    revision.id === release.write ? revision : writing
   );
 
 export const interpretReference = ({

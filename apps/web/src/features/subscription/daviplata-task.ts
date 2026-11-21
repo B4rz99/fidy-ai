@@ -1,4 +1,4 @@
-import { Option, Redacted } from "effect";
+import { Option, Redacted, Schema } from "effect";
 import { type DaviplataChallenge, type DaviplataConfirmation } from "./daviplata-challenge";
 import {
   DaviplataSetupFailed,
@@ -167,7 +167,10 @@ const begin = (task: Task, fields: BeginInput): void => {
       (error: unknown) => {
         if (!active(task)) return;
 
-        if (error instanceof DaviplataSetupFailed && error.status === "refused") {
+        if (
+          Schema.is(Schema.instanceOf(DaviplataSetupFailed))(error) &&
+          error.status === "refused"
+        ) {
           retire(task);
           change(task, "refused");
         } else uncertain(task, false);
@@ -175,7 +178,7 @@ const begin = (task: Task, fields: BeginInput): void => {
     );
 };
 
-export const makeMountedDaviplata = (input: TaskInput): MountedDaviplata => {
+export const mountDaviplata = (input: TaskInput): MountedDaviplata => {
   const task: Task = {
     input,
     controller: new AbortController(),

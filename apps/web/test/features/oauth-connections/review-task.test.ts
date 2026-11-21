@@ -1,5 +1,3 @@
-// @vitest-environment jsdom
-
 import { Effect, Layer, Schema } from "effect";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import { AtomRegistry } from "effect/reactivity";
@@ -7,11 +5,12 @@ import { it } from "@effect/vitest";
 import { afterEach, expect, vi } from "vitest";
 import { OAuthReview, makeWebAuthClient } from "@/transport/client";
 import {
+  type ReviewTask,
   type ReviewTaskActions,
-  type ReviewTaskState,
+  ReviewTaskState,
   initialReviewSelection,
-  makeReviewTask,
-} from "./review-task";
+  openReviewTask,
+} from "@/features/oauth-connections/review-task";
 
 const resources: Array<() => void> = [];
 
@@ -45,18 +44,20 @@ const approved: Reply = {
   wait: Promise.resolve(),
 };
 
-const fixture = (
-  navigate: (destination: string) => void,
-  replies: ReadonlyArray<Reply> = [approved]
-): Readonly<{
-  task: ReturnType<typeof makeReviewTask>;
+type ReviewTaskFixture = Readonly<{
+  task: ReviewTask;
   registry: AtomRegistry.AtomRegistry;
   sent: Array<string>;
   state: () => ReviewTaskState;
   actions: () => ReviewTaskActions;
   dispose: () => void;
   mount: () => void;
-}> => {
+}>;
+
+const fixture = (
+  navigate: (destination: string) => void,
+  replies: ReadonlyArray<Reply> = [approved]
+): ReviewTaskFixture => {
   vi.useFakeTimers();
   const sent: Array<string> = [];
 
@@ -104,7 +105,7 @@ const fixture = (
   };
 
   state = options.initial;
-  const task = makeReviewTask(options);
+  const task = openReviewTask(options);
   const registry = AtomRegistry.make();
 
   const dispatch: Parameters<typeof task.actions>[1] = (decision) =>
@@ -145,7 +146,7 @@ it.effect(
       retained.connect();
       yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(0));
       expect(assigned).toEqual([callback]);
-      expect(current.state()).toEqual({ _tag: "Uncertain" });
+      expect(current.state()).toEqual(ReviewTaskState.Uncertain());
       retained.connect();
       current.actions().connect();
       current.actions().cancel();
@@ -184,8 +185,9 @@ it.effect(
     })
 );
 
-for (const event of ["pagehide", "fidy:authentication-ended"]) {
-  it.effect(`retirement on ${event} fences late approval navigation before React unmount`, () =>
+it.effect.each(["pagehide", "fidy:authentication-ended"])(
+  "retirement on %s fences late approval navigation before React unmount",
+  (event) =>
     Effect.gen(function* () {
       const { promise: wait, resolve: release } = Promise.withResolvers<void>();
       const assigned: Array<string> = [];
@@ -205,8 +207,7 @@ for (const event of ["pagehide", "fidy:authentication-ended"]) {
       expect(assigned).toEqual([]);
       expect(current.sent).toEqual(["/web/oauth/connect"]);
     })
-  );
-}
+);
 
 it.effect(
   "fresh eligibility requires a new explicit decision and never revives captured actions from the old review",
@@ -269,7 +270,7 @@ it.effect(
       yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(0));
       expect(assigned).toEqual([callback]);
       expect(current.sent).toEqual(["/web/oauth/connect"]);
-      expect(current.state()).toEqual({ _tag: "Redirecting" });
+      expect(current.state()).toEqual(ReviewTaskState.Redirecting());
       expect(encodeJson(current.state())).not.toContain("one-use-callback");
       expect(encodeJson(current.registry.get(current.task.atom))).not.toContain("one-use-callback");
     })
@@ -293,7 +294,7 @@ it.effect("a malformed approval result cannot navigate or permit another approva
     yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(0));
     expect(assigned).toEqual([]);
     expect(current.sent).toEqual(["/web/oauth/connect"]);
-    expect(current.state()).toEqual({ _tag: "Uncertain" });
+    expect(current.state()).toEqual(ReviewTaskState.Uncertain());
   })
 );
 
@@ -321,7 +322,7 @@ it.effect(
       yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(0));
       current.actions().connect();
       yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(0));
-      expect(current.state()).toEqual({ _tag: "Unavailable" });
+      expect(current.state()).toEqual(ReviewTaskState.Unavailable());
       expect(current.sent).toEqual(["/web/oauth/cancel", "/web/oauth/review"]);
     })
 );

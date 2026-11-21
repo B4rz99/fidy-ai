@@ -1,4 +1,4 @@
-import { Cron, DateTime, Effect } from "effect";
+import { Cron, Data, DateTime, Effect } from "effect";
 import type { IanaTimeZone } from "~/core/_shared/context";
 import type {
   ConfirmationDay,
@@ -31,12 +31,12 @@ export const captureConfirmationDay = (
   };
 };
 
-export const recurringDigestTiming = (
-  day: ConfirmationDay
-): Readonly<{
+type RecurringDigestTiming = Readonly<{
   scheduledAt: DateTime.Utc;
   expiresAt: DateTime.Utc;
-}> => {
+}>;
+
+export const recurringDigestTiming = (day: ConfirmationDay): RecurringDigestTiming => {
   const scheduledAt = DateTime.toUtc(
     DateTime.setParts(DateTime.setZoneNamedUnsafe(day.toExclusive, day.timeZone), {
       hour: 9,
@@ -203,6 +203,8 @@ export const budgetAlertDeadline = (
     Math.min(input.detectedAt.epochMilliseconds + elapsedDayMs, input.monthEnd.epochMilliseconds)
   );
 
+const Delivery = Data.taggedEnum<InsightDeliveryDecision>();
+
 export const decideInsightDelivery = (
   input: Readonly<{
     scheduledAt: DateTime.Utc;
@@ -211,7 +213,7 @@ export const decideInsightDelivery = (
     now: DateTime.Utc;
   }>
 ): InsightDeliveryDecision => {
-  if (input.now.epochMilliseconds >= input.expiresAt.epochMilliseconds) return { _tag: "Expired" };
+  if (input.now.epochMilliseconds >= input.expiresAt.epochMilliseconds) return Delivery.Expired();
 
   const earliest = DateTime.makeUnsafe(
     Math.max(input.now.epochMilliseconds, input.scheduledAt.epochMilliseconds)
@@ -237,11 +239,11 @@ export const decideInsightDelivery = (
     });
   }
 
-  if (eligible.epochMilliseconds >= input.expiresAt.epochMilliseconds) return { _tag: "Expired" };
+  if (eligible.epochMilliseconds >= input.expiresAt.epochMilliseconds) return Delivery.Expired();
 
   return eligible.epochMilliseconds > input.now.epochMilliseconds
-    ? { _tag: "Deferred", nextEligibleAt: DateTime.toUtc(eligible) }
-    : { _tag: "Ready" };
+    ? Delivery.Deferred({ nextEligibleAt: DateTime.toUtc(eligible) })
+    : Delivery.Ready();
 };
 
 const allowedTargets: Readonly<

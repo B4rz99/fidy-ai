@@ -138,13 +138,13 @@ const completeSubmission = (controller: AbortController, dispose: () => void): v
   dispose();
 };
 
-const makeLifetime = (
-  input: ChallengeInput
-): Readonly<{
+type ChallengeLifetime = Readonly<{
   controller: AbortController;
   signal: AbortSignal;
   pendingOtp: Set<Redacted.Redacted<string>>;
-}> => {
+}>;
+
+const makeLifetime = (input: ChallengeInput): ChallengeLifetime => {
   const controller = new AbortController();
   const signal = AbortSignal.any([controller.signal, input.provider.signal, input.client.signal]);
   const pendingOtp = new Set<Redacted.Redacted<string>>();
@@ -154,7 +154,7 @@ const makeLifetime = (
   return { controller, signal, pendingOtp };
 };
 
-export const makeDaviplataChallenge = (input: ChallengeInput): DaviplataChallenge => {
+export const openDaviplataChallenge = (input: ChallengeInput): DaviplataChallenge => {
   const { controller, signal, pendingOtp } = makeLifetime(input);
   let disposed = false;
   let busy = false;

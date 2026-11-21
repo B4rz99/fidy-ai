@@ -3,7 +3,7 @@ import { PendingRead } from "@/ui/components/pending-read";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Option, Schema } from "effect";
+import { Option, Predicate, Schema } from "effect";
 import { type JSX, type ReactNode, useState } from "react";
 import { type CanonicalSuccess, TransactionQueryValues } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
@@ -76,10 +76,6 @@ export const TransactionBrowser = (props: BrowserProps): JSX.Element => {
   const current = control.state;
   const change = control.change;
 
-  const query = Option.getOrThrow(
-    transactionSearch({ draft: current.applied, timeZone: props.timeZone })
-  );
-
   const filters = (
     <TransactionSearchForm
       draft={current.draft}
@@ -91,28 +87,31 @@ export const TransactionBrowser = (props: BrowserProps): JSX.Element => {
     />
   );
 
-  return (
-    <TransactionPage
-      key={JSON.stringify(query)}
-      {...props}
-      query={query}
-      cursor={Option.fromUndefinedOr(current.cursors.at(-1))}
-      filters={filters}
-      selectedId={Option.fromUndefinedOr(current.selectedId)}
-      choose={control.select}
-      clear={control.clear}
-      next={(cursor) =>
-        change({ ...current, cursors: [...current.cursors, cursor], selectedId: undefined })
-      }
-      previous={
-        current.cursors.length === 0
-          ? Option.none()
-          : Option.some(() =>
-              change({ ...current, cursors: current.cursors.slice(0, -1), selectedId: undefined })
-            )
-      }
-    />
-  );
+  return Option.match(transactionSearch({ draft: current.applied, timeZone: props.timeZone }), {
+    onNone: () => filters,
+    onSome: (query) => (
+      <TransactionPage
+        key={JSON.stringify(query)}
+        {...props}
+        query={query}
+        cursor={Option.fromUndefinedOr(current.cursors.at(-1))}
+        filters={filters}
+        selectedId={Option.fromUndefinedOr(current.selectedId)}
+        choose={control.select}
+        clear={control.clear}
+        next={(cursor) =>
+          change({ ...current, cursors: [...current.cursors, cursor], selectedId: undefined })
+        }
+        previous={
+          current.cursors.length === 0
+            ? Option.none()
+            : Option.some(() =>
+                change({ ...current, cursors: current.cursors.slice(0, -1), selectedId: undefined })
+              )
+        }
+      />
+    ),
+  });
 };
 
 type PageProps = BrowserProps &
@@ -139,7 +138,7 @@ const TransactionRequest = (props: PageProps): JSX.Element => {
 
     const query = {
       ...filters,
-      ...(Option.isNone(props.cursor) ? {} : { cursor: props.cursor.value }),
+      ...Option.match(props.cursor, { onNone: () => ({}), onSome: (cursor) => ({ cursor }) }),
     };
 
     return (
@@ -157,16 +156,15 @@ const TransactionRequest = (props: PageProps): JSX.Element => {
 
   const blocked =
     props.disabled ||
-    state._tag !== "Ready" ||
+    !Predicate.isTagged(state, "Ready") ||
     state.waiting ||
     Option.isSome(state.refreshFailure);
 
-  const selected =
-    state._tag === "Ready"
-      ? Option.flatMap(props.selectedId, (id) =>
-          Option.fromUndefinedOr(state.value.data.find((transaction) => transaction.id === id))
-        )
-      : Option.none();
+  const selected = Predicate.isTagged(state, "Ready")
+    ? Option.flatMap(props.selectedId, (id) =>
+        Option.fromUndefinedOr(state.value.data.find((transaction) => transaction.id === id))
+      )
+    : Option.none();
 
   const results = (
     <SearchResults
@@ -206,7 +204,7 @@ type ResultsProps = Omit<PageProps, "choose"> &
 const SearchResults = (props: ResultsProps): JSX.Element => {
   const { state, refresh } = props;
 
-  if (state._tag === "Failure") {
+  if (Predicate.isTagged(state, "Failure")) {
     return (
       <div className="grid gap-3 py-6">
         <p>No pudimos cargar las transacciones. Tus filtros se conservaron.</p>
@@ -217,7 +215,7 @@ const SearchResults = (props: ResultsProps): JSX.Element => {
     );
   }
 
-  if (state._tag !== "Ready") return <PendingRead label="Cargando transacciones" />;
+  if (!Predicate.isTagged(state, "Ready")) return <PendingRead label="Cargando transacciones" />;
 
   return (
     <section

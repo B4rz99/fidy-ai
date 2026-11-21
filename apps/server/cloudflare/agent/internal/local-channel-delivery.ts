@@ -50,7 +50,11 @@ const takeOffer = Effect.fn(function* (
 
   if (!owns(row.user_id)) return Option.none();
   const next = Math.min(now + retryMs, row.deadline_ms);
-  yield* sql`UPDATE hosted_whatsapp_inbound SET offer_ms=${next} WHERE turn_id=${row.id}`;
+
+  const claimed =
+    yield* sql`UPDATE hosted_whatsapp_inbound SET offer_ms=${next} WHERE turn_id=${row.id} AND offer_ms<=${now} RETURNING turn_id`;
+
+  if (claimed.length !== 1) return Option.none();
   yield* preserveStoreAlarm(storage, next);
 
   return Option.some(row);

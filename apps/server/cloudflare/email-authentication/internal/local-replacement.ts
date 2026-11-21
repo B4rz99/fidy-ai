@@ -123,7 +123,15 @@ const start = Effect.fn(function* ({
     yield* sql`INSERT INTO email_replacements(user_id,work_id,session_id,prior_key,revision,candidate,created_at_ms,expires_at_ms,state) VALUES(${user},${newId()},${proof.binding},${mailbox.value.normalized_address},${mailbox.value.revision},${candidate},${now},${now + life},'awaiting_delivery') RETURNING 1`;
 
   if (record.length !== 1) return yield* new MailboxWriteUnavailable();
-  yield* preserveStoreAlarm(storage, now).pipe(Effect.ignore);
+  yield* preserveStoreAlarm(storage, now).pipe(
+    Effect.catch(() =>
+      Effect.logWarning({
+        component: "email-authentication",
+        operation: "requestEmailReplacement",
+        outcome: "alarm-unscheduled",
+      })
+    )
+  );
 
   return pending();
 });
@@ -299,6 +307,13 @@ export const replacementRequest = Effect.fn(
       ? yield* rejectProof(proof.value, owns).pipe(withStoreCapacity("required"))
       : json(emailReplacementUnavailableBody, unavailableStatus);
   },
+  Effect.tapCause(() =>
+    Effect.logWarning({
+      component: "email-authentication",
+      operation: "completeEmailReplacement",
+      outcome: "unavailable",
+    })
+  ),
   Effect.catchCause(() => Effect.succeed(json(emailReplacementUnavailableBody, unavailableStatus)))
 );
 

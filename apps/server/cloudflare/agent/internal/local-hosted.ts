@@ -90,5 +90,8 @@ export const browserHosted = Effect.fn(
     );
   },
   Effect.catchTag("HostedInferenceError", (err) => Effect.succeed(preflightRefusal(err))),
+  Effect.tapCause(() =>
+    Effect.logWarning({ component: "agent", operation: "browserHosted", outcome: "unavailable" })
+  ),
   Effect.catchCause(() => Effect.succeed(unavailable()))
 );

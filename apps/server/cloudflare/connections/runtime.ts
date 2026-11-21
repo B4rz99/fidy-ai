@@ -137,6 +137,13 @@ export const nativeConnectionBrowser = ({
       SecureRandom.SecureRandom,
       SecureRandom.make((size) => crypto.getRandomValues(new Uint8Array(size)))
     ),
+    Effect.tapCause(() =>
+      Effect.logWarning({
+        component: "connections",
+        operation: "connectionCallback",
+        outcome: "unavailable",
+      })
+    ),
     Effect.catchCause(() => Effect.succeed(continuationFailure(unavailableStatus)))
   );
 
@@ -183,6 +190,13 @@ export const runConnectionWork = Effect.fn(
 
     return new Response(null, { status: 204 });
   },
+  Effect.tapCause(() =>
+    Effect.logWarning({
+      component: "connections",
+      operation: "runConnectionWork",
+      outcome: "unavailable",
+    })
+  ),
   Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
 );
 

@@ -43,6 +43,15 @@ export default {
           { ...evidence, fixtureFallbackCoreVersion: evidence.core.workerVersionId },
           { headers: { "cache-control": "no-store" } }
         );
-      }).pipe(Effect.orElseSucceed(() => new Response(null, { status: 503 })))
+      }).pipe(
+        Effect.tapError(() =>
+          Effect.logWarning({
+            component: "release-isolation",
+            operation: "fixtureFallbackCore",
+            outcome: "unavailable",
+          })
+        ),
+        Effect.orElseSucceed(() => new Response(null, { status: 503 }))
+      )
     ),
 } satisfies typeof core;

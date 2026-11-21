@@ -147,5 +147,8 @@ export const hostedText = Effect.fn(
     );
   },
   Effect.catchTag("HostedInferenceError", (err) => Effect.succeed(preflightRefusal(err))),
+  Effect.tapCause(() =>
+    Effect.logWarning({ component: "agent", operation: "hostedText", outcome: "unavailable" })
+  ),
   Effect.catchCause(() => Effect.succeed(unavailable()))
 );

@@ -287,5 +287,12 @@ export const localProcessingConsent = Effect.fn(
       Effect.catchTag("RetiredConsentProof", () => Effect.succeed(noAuthority()))
     );
   },
+  Effect.tapCause(() =>
+    Effect.logWarning({
+      component: "consent",
+      operation: "localProcessingConsent",
+      outcome: "unavailable",
+    })
+  ),
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );

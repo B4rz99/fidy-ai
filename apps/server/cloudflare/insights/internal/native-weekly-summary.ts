@@ -35,6 +35,7 @@ const scheduleCodec = Schema.fromJsonString(Schema.toCodecJson(WeeklySchedule));
 const row = Schema.Struct({
   user_id: UserId,
   grant_id: Schema.String,
+  next_ms: Schema.Int,
   snapshot_json: scheduleCodec,
   portfolio: Schema.String,
   bsuid: Schema.String,
@@ -165,7 +166,10 @@ export const materializeWeekly = Effect.fn(function* (now: number, sender: Insig
         nextScheduledAt: next,
       });
 
-      yield* sql`UPDATE weekly_schedules SET next_ms=${next.epochMilliseconds},snapshot_json=${encoded} WHERE id=${schedule.id}`;
+      const advanced =
+        yield* sql`UPDATE weekly_schedules SET next_ms=${next.epochMilliseconds},snapshot_json=${encoded} WHERE id=${schedule.id} AND next_ms=${held.next_ms} RETURNING id`;
+
+      if (advanced.length !== 1) return;
 
       if (expires.epochMilliseconds <= now) return;
       const payload = yield* frozenPayload(user, at, schedule);

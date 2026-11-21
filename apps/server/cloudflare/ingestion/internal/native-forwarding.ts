@@ -188,6 +188,13 @@ export const dispatchLocalForwarding = Effect.fn(
         }),
     });
   },
+  Effect.tapCause(() =>
+    Effect.logWarning({
+      component: "ingestion",
+      operation: "nativeForwarding",
+      outcome: "unavailable",
+    })
+  ),
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
 

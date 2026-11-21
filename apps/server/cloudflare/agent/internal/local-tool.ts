@@ -143,7 +143,16 @@ const describeBatchChild = Effect.fnUntraced(function* (
       const result = yield* commitLocalWrite(prepared.value);
 
       return result.outcome === "success" ? Option.some(result.body) : Option.none();
-    }).pipe(Effect.orElseSucceed(() => Option.none()));
+    }).pipe(
+      Effect.tapError(() =>
+        Effect.logWarning({
+          component: "agent",
+          operation: "describeBatchChild",
+          outcome: "undescribed",
+        })
+      ),
+      Effect.orElseSucceed(() => Option.none())
+    );
 
   return (
     operation: string,

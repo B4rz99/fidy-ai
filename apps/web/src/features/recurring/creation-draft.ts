@@ -16,6 +16,7 @@ const snapshot = (form: HTMLFormElement): string =>
   JSON.stringify(
     Array.from(new FormData(form), ([key, entry]) => [key, typeof entry === "string" ? entry : ""])
   );
+const noForm: Option.Option<HTMLFormElement> = Option.none();
 export const useCreationDraft = (
   timeZone: PlanInput["timeZone"]
 ): Readonly<{
@@ -24,7 +25,7 @@ export const useCreationDraft = (
   keep: () => void;
   clear: () => void;
 }> => {
-  const form = useRef<Option.Option<HTMLFormElement>>(Option.none());
+  const form = useRef(noForm);
   const baseline = useRef("");
   const [kept, setKept] = useState<Option.Option<Initial>>(() => Option.none());
   const track = useCallback<RefCallback<HTMLElement>>((node) => {

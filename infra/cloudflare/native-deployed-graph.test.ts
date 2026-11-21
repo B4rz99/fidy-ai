@@ -7,7 +7,7 @@ import {
   verifySuccessorVersion,
   verifySuccessorVersionAt,
 } from "./native-deployed-graph";
-import { inspectNativeAccess } from "./native-deployed-access";
+import { inspectNativeAccess, readIncumbentAccess } from "./native-deployed-access";
 import { nativeBindingInventory } from "./native-graph";
 
 const revision = "1".repeat(40),
@@ -373,15 +373,19 @@ const accessReply = (path: string): unknown => {
 const verify = (
   source: (path: string) => unknown,
   installed = true,
-  canonicalDiagnostics = false
+  options = { canonicalDiagnostics: false, allowIncumbentAccess: false }
 ): ReturnType<typeof inspectNativeAccess> =>
   inspectNativeAccess({
     account: "account/",
     zone: "zone/",
-    hosts: [apiHost, "storage-web-acceptance.fidyapp.com"],
-    apiHosts: [apiHost],
-    staging: false,
-    canonicalDiagnostics,
+    hosts: [
+      apiHost,
+      "storage-web-acceptance.fidyapp.com",
+      ...(options.canonicalDiagnostics ? ["api.fidyapp.com"] : []),
+    ],
+    apiHosts: options.allowIncumbentAccess ? [apiHost, "api.fidyapp.com"] : [apiHost],
+    staging: options.allowIncumbentAccess,
+    ...options,
     workers: [core],
     installed,
     bindings,
@@ -521,10 +525,10 @@ it("reports a fixed canonical Access reason and allowlisted path projection", ()
               ],
             }
           : accessReply(path);
-      const checked = yield* verify(source, true, true).pipe(
-        Effect.result,
-        Effect.provideService(Logger.CurrentLoggers, loggers)
-      );
+      const checked = yield* verify(source, true, {
+        canonicalDiagnostics: true,
+        allowIncumbentAccess: false,
+      }).pipe(Effect.result, Effect.provideService(Logger.CurrentLoggers, loggers));
       expect(Result.isFailure(checked)).toBe(true);
       const text = reports.join("\n");
       expect(text).toContain("selected application count");
@@ -544,5 +548,105 @@ it("reports a fixed canonical Access reason and allowlisted path projection", ()
       );
       expect(Result.isFailure(withoutDiagnostics)).toBe(true);
       expect(reports).toEqual([]);
+    })
+  ));
+
+const legacyAccess = [
+  {
+    id: "af54bc92-73be-472a-b5a7-5002954dca47",
+    path: "api.fidyapp.com/internal/titular-erasure",
+  },
+  {
+    id: "8b963f88-6e96-44d5-acd1-a1bad374048b",
+    path: "api.fidyapp.com/internal/support-recovery",
+  },
+];
+const publicSelfHosted = legacyAccess.map(({ id, path }) => ({
+  id,
+  type: "self_hosted",
+  name: "incumbent Access authority",
+  aud: "private-audience-fixture",
+  domain: path,
+  destinations: [{ type: "public", uri: path }],
+}));
+const legacyAccessScopes = (
+  account: readonly unknown[],
+  zone: readonly unknown[]
+): ReturnType<typeof readIncumbentAccess> =>
+  readIncumbentAccess({
+    account: "account/",
+    zone: "zone/",
+    read: (path) =>
+      Effect.succeed({ ...basic, result: path.startsWith("account/") ? account : zone }),
+  });
+it("returns a content-free corroborated subset of the two exact incumbent Access applications", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      expect(yield* legacyAccessScopes(publicSelfHosted, publicSelfHosted)).toEqual(legacyAccess);
+      expect(
+        yield* legacyAccessScopes(publicSelfHosted.slice(1), publicSelfHosted.slice(1))
+      ).toEqual(legacyAccess.slice(1));
+      expect(yield* legacyAccessScopes([], [])).toEqual([]);
+
+      const [first] = publicSelfHosted;
+      const changed = [
+        { ...first, type: "non_self_hosted" },
+        { ...first, name: appRoles[0][0] },
+        { ...first, domain: "api.fidyapp.com/internal/*" },
+        { ...first, self_hosted_domains: ["other.fidyapp.com/internal/titular-erasure"] },
+        { ...first, destinations: [{ ...first?.destinations[0], worker_id: core }] },
+        { ...first, destinations: [{ ...first?.destinations[0], type: "all_workers" }] },
+      ];
+      for (const app of changed) {
+        expect(yield* Effect.result(legacyAccessScopes([app], [app]))).toMatchObject({
+          _tag: "Failure",
+        });
+      }
+      for (const [account, zone] of [
+        [publicSelfHosted, publicSelfHosted.slice(1)],
+        [publicSelfHosted, [...publicSelfHosted, first]],
+        [publicSelfHosted, [{ ...first, aud: "different-audience" }, ...publicSelfHosted.slice(1)]],
+      ] as const) {
+        expect(yield* Effect.result(legacyAccessScopes(account, zone))).toMatchObject({
+          _tag: "Failure",
+        });
+      }
+    })
+  ));
+it("keeps the incumbent exception confined to the staged transfer preflight", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const withIncumbent = (path: string): unknown =>
+        path.includes("/access/apps?")
+          ? { ...basic, result: [...applications, ...publicSelfHosted] }
+          : accessReply(path);
+      expect(
+        yield* verify(withIncumbent, true, {
+          canonicalDiagnostics: true,
+          allowIncumbentAccess: true,
+        })
+      ).toHaveLength(4);
+      expect(
+        yield* Effect.result(
+          verify(withIncumbent, true, { canonicalDiagnostics: true, allowIncumbentAccess: false })
+        )
+      ).toMatchObject({ _tag: "Failure" });
+
+      const withForeign = (path: string): unknown =>
+        path.includes("/access/apps?")
+          ? {
+              ...basic,
+              result: [
+                ...applications,
+                ...publicSelfHosted,
+                { id: "foreign", type: "self_hosted", domain: legacyAccess[0]?.path },
+              ],
+            }
+          : accessReply(path);
+      expect(
+        yield* Effect.result(
+          verify(withForeign, true, { canonicalDiagnostics: true, allowIncumbentAccess: true })
+        )
+      ).toMatchObject({ _tag: "Failure" });
     })
   ));

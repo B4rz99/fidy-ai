@@ -29,7 +29,11 @@ import {
   diagnoseNativePlan,
   diagnoseSuccessorApply,
 } from "./native-plan-diagnostics";
-import { firstInstallEdge, planCanonicalHostPreview } from "./native-storage-release";
+import {
+  firstInstallEdge,
+  planCanonicalHostPreview,
+  retireCanonicalIncumbentAccess,
+} from "./native-storage-release";
 import { confirmInterruptedSmokeConsumer } from "./native-smoke-consumer-recovery";
 import { nativeResourceInventory, requireNativeResourcePlan } from "./native-graph";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
@@ -159,13 +163,6 @@ const preflight = Effect.fn(function* (phase: typeof Phase.Type, preview: boolea
       diagnoseFreshTarget
     );
   }
-  if (phase === "stage-hosts" && preview) {
-    return yield* planCanonicalHostPreview.pipe(
-      Effect.provide(ReleaseHttpLive),
-      Effect.timeout("60 seconds"),
-      nativeResourceStage("host capture")
-    );
-  }
   yield* releaseCommand({
     args: ["bun", "native-storage-release.ts", releaseChecks[phase]],
     lifetime: phase === "stage-hosts" && !preview ? "started-write" : "read-only",
@@ -229,10 +226,8 @@ const canonicalAccess = Effect.fn(function* (apply: boolean) {
   yield* Config.Literal("true", "GITHUB_REF_PROTECTED");
   yield* Config.Literal("1", "GITHUB_RUN_ATTEMPT");
   yield* Config.Literal("staged", "NATIVE_STORAGE_HOSTS");
-  yield* Config.Literal(
-    apply ? "transfer-canonical-hosts" : "plan-stage-hosts",
-    "FIXTURE_RELEASE_OPERATION"
-  );
+  const operation = apply ? "transfer-canonical-hosts" : "plan-stage-hosts";
+  yield* Config.Literal(operation, "FIXTURE_RELEASE_OPERATION");
   const revision = yield* Config.String("RELEASE_GIT_SHA");
   const profile = yield* Config.String("ALCHEMY_PROFILE");
   const directory = yield* Config.String("RUNNER_TEMP");
@@ -241,18 +236,26 @@ const canonicalAccess = Effect.fn(function* (apply: boolean) {
     ...nativePlanOptions({ profile, preview: true, fingerprint: "" }),
     include: stagedAccessApplications,
   }).pipe(diagnoseNativePlan(revision));
-  yield* verifyPreparedPlan({
+  yield* verifyResourcePlan({
     phase: "stage-hosts",
-    preview: true,
     plan: snapshot.native,
     revision,
     hosts: "staged",
     pin,
   });
+  const host = yield* planCanonicalHostPreview.pipe(
+    Effect.provide(ReleaseHttpLive),
+    Effect.timeout("60 seconds"),
+    nativeResourceStage("host capture")
+  );
+  yield* requireSafeScopedNativePlan(snapshot.native).pipe(
+    Effect.provide(snapshot.session.context)
+  );
   const observed = {
     verifierRevision: revision,
     applied: false,
     resources: projectFixtureInventory(describePlan(snapshot.native).resources),
+    ...host,
   };
   if (apply) {
     const approved = yield* releaseEvidence.readFile(
@@ -261,6 +264,11 @@ const canonicalAccess = Effect.fn(function* (apply: boolean) {
     if (!isDeepStrictEqual(approved, observed)) {
       return yield* Effect.fail(Error("Approved canonical Access plan differs from the live plan"));
     }
+    yield* retireCanonicalIncumbentAccess(host).pipe(
+      Effect.provide(ReleaseHttpLive),
+      Effect.uninterruptible,
+      nativeResourceStage("provider apply")
+    );
     yield* applyScopedNativePlan(snapshot.native).pipe(
       Effect.provide(snapshot.session.context),
       Effect.uninterruptible,
@@ -268,9 +276,6 @@ const canonicalAccess = Effect.fn(function* (apply: boolean) {
     );
     return;
   }
-  yield* requireSafeScopedNativePlan(snapshot.native).pipe(
-    Effect.provide(snapshot.session.context)
-  );
   yield* releaseEvidence.writeFile(
     directory + "/native-canonical-host-plan.json",
     releaseEvidence.encodeJson(observed)

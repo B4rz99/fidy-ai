@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { WhatsAppBusinessPhoneNumberId } from "@fidy/server/whatsapp-contract";
 import { Effect, Option, Schema } from "effect";
-import { HttpBody, type HttpClient, HttpClientRequest } from "effect/http";
+import { HttpBody, type HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/http";
 import { webSignupDisclosure } from "../../apps/server/src/shell/consent/operations";
 
 const sharedChanges = [
@@ -165,6 +165,21 @@ const hostOnlyProviderCookie = (header: string, provider: Provider): boolean => 
     !/;\s*domain=/iu.test(header)
   );
 };
+const signupRefusal = (message: string): Effect.Effect<never, Error> =>
+  Effect.logError(message).pipe(Effect.andThen(Effect.fail(Error(message))));
+const readSignupResponse = Effect.fn(function* <Value>(
+  response: HttpClientResponse.HttpClientResponse,
+  schema: Schema.Codec<Value>,
+  stage: string
+) {
+  const expected = 200;
+  if (response.status !== expected) {
+    return yield* signupRefusal(stage + " returned HTTP " + response.status);
+  }
+  return yield* Effect.flatMap(response.json, Schema.decodeUnknownEffect(schema)).pipe(
+    Effect.catch(() => signupRefusal(stage + " returned an unexpected HTTP 200 response"))
+  );
+});
 export const verifyCanonicalSignupRedirects = Effect.fn(function* (client: HttpClient.HttpClient) {
   const post = (path: string, body: unknown): ReturnType<HttpClient.HttpClient["execute"]> =>
     client.execute(
@@ -177,13 +192,17 @@ export const verifyCanonicalSignupRedirects = Effect.fn(function* (client: HttpC
     ["google", "microsoft"] as const,
     Effect.fn(function* (provider) {
       const session = yield* post("/web/pairings", {});
-      const proof = yield* Schema.decodeUnknownEffect(pairing)(yield* session.json);
+      const proof = yield* readSignupResponse(session, pairing, "Canonical browser pairing");
       const response = yield* post("/web/providers/" + provider + "/start", {
         ...proof,
         intent: "signup",
         consentRevision: webSignupDisclosure().revision,
       });
-      const location = yield* Schema.decodeUnknownEffect(redirect)(yield* response.json);
+      const location = yield* readSignupResponse(
+        response,
+        redirect,
+        "Canonical " + provider + " start"
+      );
       const header = response.headers["set-cookie"] ?? "";
       const valid = yield* Effect.try(() =>
         validProviderRedirect({ authorization: location.authorizationUrl, provider })
@@ -193,10 +212,8 @@ export const verifyCanonicalSignupRedirects = Effect.fn(function* (client: HttpC
         !hostOnlyProviderCookie(header, provider) ||
         response.headers["access-control-allow-origin"] !== production.browser
       ) {
-        return yield* Effect.fail(
-          Error(
-            "Canonical " + provider + " signup has an unexpected redirect, cookie or browser origin"
-          )
+        return yield* signupRefusal(
+          "Canonical " + provider + " signup has an unexpected redirect, cookie or browser origin"
         );
       }
       return { provider, canonicalCallback: true, hostOnlyCookie: true };

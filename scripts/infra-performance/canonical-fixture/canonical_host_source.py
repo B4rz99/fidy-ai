@@ -7,10 +7,12 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from uuid import UUID
 from zipfile import ZipFile
 
-from installation import validate_candidate, validate_qualification
+from installation import SCRIPTS, validate_candidate, validate_qualification
 from qualified_release import actions_get, git_read, protected_archive, serving_graph
+from staged_application import require_steps
 from successor_artifacts import active_successor
 from successor_source import cloudflare
 
@@ -18,6 +20,15 @@ WORKFLOW_REF = "B4rz99/fidy-ai/.github/workflows/native-storage-release.yml@refs
 PLAN = "native-canonical-host-plan.json"
 SOURCE = "native-canonical-host-source.json"
 APPROVAL = "native-canonical-host-approved.json"
+OPENING_ROLLBACK_STEPS = {
+    "Authenticate the exact closed active source for canonical host planning": "success",
+    "Capture exact closed canonical versions and the protected User Store census": "success",
+    "Upload only the compatible exact canonical signup versions": "success",
+    "Stage and verify both canonical signup Workers before opening": "success",
+    "Open the exact canonical signup pair and verify real provider redirects": "failure",
+    "Retain exact canonical signup deployment and redirect evidence": "skipped",
+    "Retain native release evidence": "success",
+}
 
 
 def require_protected_preview(env, git=git_read):
@@ -40,7 +51,54 @@ def require_protected_preview(env, git=git_read):
     return verifier
 
 
-def verified_source(reference, verifier, account, public_key, read, get=actions_get, *, application=None):
+def exact_assignment(row, deployment, versions):
+    return (str(UUID(row["id"])) == deployment
+            and len(row["versions"]) == len(versions)
+            and {version["version_id"]: version["percentage"] for version in row["versions"]} == versions)
+
+
+def verify_opening_rollback(reference, *, account, revision, versions, digest, verifier,
+                            read, get=actions_get, git=git_read):
+    producer = json.loads(get("artifacts/" + reference["artifactId"]))["workflow_run"]["head_sha"]
+    if not re.fullmatch(r"[a-f0-9]{40}", producer) or git("merge-base", producer, verifier) != producer:
+        raise ValueError("Failed opening is outside the protected verifier lineage")
+    run, encoded = protected_archive(producer, reference["artifactId"], reference["sha256"],
+                                     prefix="native-storage-release-", conclusions={"failure"}, get=get)
+    require_steps(get, run, "failure", OPENING_ROLLBACK_STEPS)
+    filename = "native-release.json.canonical-promoted"
+    with ZipFile(BytesIO(encoded)) as archive:
+        entries = [entry for entry in archive.infolist() if entry.filename == filename]
+        if len(entries) != 1 or not 0 < entries[0].file_size <= 8192:
+            raise ValueError("Failed opening lacks the exact promoted versions")
+        proof = json.loads(archive.read(entries[0]))
+    release = proof["release"]
+    snapshot = release["snapshot"]
+    if (snapshot["revision"] != producer or snapshot["stableRevision"] != revision
+            or snapshot["stableContractDigest"] != digest):
+        raise ValueError("Failed opening did not start from the qualified closed release")
+
+    restored = {}
+    for role, label in (("core", "core"), ("ingress", "public")):
+        baseline = snapshot[label]
+        stable, opened = versions[role], release[label + "VersionId"]
+        if (baseline["name"] != SCRIPTS[role] or baseline["stableVersionId"] != stable
+                or opened == stable or str(UUID(opened)) != opened):
+            raise ValueError("Failed opening differs from the exact qualified Worker versions")
+        history = read(f"accounts/{account}/workers/scripts/{SCRIPTS[role]}/deployments")["deployments"]
+        current, promoted, staged, before = history[:4]
+        identity = str(UUID(current["id"]))
+        if (len({row["id"] for row in history[:4]}) != 4
+                or not exact_assignment(current, identity, {stable: 100})
+                or not exact_assignment(promoted, proof["promoted"][label + "DeploymentId"], {opened: 100})
+                or not exact_assignment(staged, release[label + "DeploymentId"], {stable: 100, opened: 0})
+                or not exact_assignment(before, baseline["deploymentId"], {stable: 100})):
+            raise ValueError("Live provider history does not prove the exact closed rollback")
+        restored[role] = identity
+    return restored
+
+
+def verified_source(reference, verifier, account, public_key, read, get=actions_get, *, application=None,
+                    rollback=None):
     artifact_id = reference["artifactId"]
     if (re.fullmatch(r"[1-9][0-9]{0,19}", artifact_id) is None
             or re.fullmatch(r"[a-f0-9]{64}", reference["sha256"]) is None):
@@ -57,12 +115,24 @@ def verified_source(reference, verifier, account, public_key, read, get=actions_
     versions = {"core": installed["coreVersionId"], "ingress": installed["publicVersionId"]}
     candidate = validate_candidate(read, account=account, revision=revision,
                                    versions=versions, public_key=public_key)
-    validate_qualification(candidate, promotion, installed)
-    serving_graph(read, account, revision, installed)
+    restored = None
+    if rollback is not None:
+        restored = verify_opening_rollback(
+            rollback, account=account, revision=revision, versions=versions, verifier=verifier,
+            digest=installed["website"][0]["contractDigest"], read=read, get=get,
+        )
+        validate_qualification(candidate, promotion, installed, restored=restored)
+        serving_graph(read, account, revision, installed, restored=restored)
+    else:
+        validate_qualification(candidate, promotion, installed)
+        serving_graph(read, account, revision, installed)
     website, = installed["website"]
     web, = [worker for worker in installed["workers"] if worker["role"] == "Web"]
+    qualified_deployments = {role: promotion["promoted"][label + "DeploymentId"]
+                             for role, label in (("core", "core"), ("ingress", "public"))} if restored else candidate["deployments"]
     return {"revision": revision, "verifierRevision": verifier, "source": reference,
-            "versions": versions, "deployments": candidate["deployments"],
+            "versions": versions, "deployments": qualified_deployments,
+            **({"restoredDeployments": restored} if restored else {}),
             "namespaces": installed["namespaces"],
             "website": {"revision": website["revision"], "contractDigest": website["contractDigest"],
                         "version": web["versionId"], "deployment": web["deploymentId"]}}
@@ -304,9 +374,16 @@ def main():
     env = os.environ
     verifier = require_protected_preview(env)
     reference = {"artifactId": env["CANONICAL_SOURCE_ARTIFACT"], "sha256": env["CANONICAL_SOURCE_SHA256"]}
+    rollback = {"artifactId": env.get("CANONICAL_ROLLBACK_ARTIFACT", ""),
+                "sha256": env.get("CANONICAL_ROLLBACK_SHA256", "")}
+    if any(rollback.values()) and (env["FIXTURE_RELEASE_OPERATION"] != "open-canonical-signup"
+                                  or not all(rollback.values())):
+        raise ValueError("An exact failed opening archive is only accepted for reopening")
     source = verified_source(reference, verifier, env["CLOUDFLARE_ACCOUNT_ID"],
                              env["FIDY_NATIVE_FIXTURE_PUBLIC_KEY"], cloudflare,
-                             application=env.get("CANONICAL_SOURCE_REVISION"))
+                             application=env.get("CANONICAL_SOURCE_REVISION"),
+                             rollback=rollback if all(rollback.values()) else None)
+    restored = source.pop("restoredDeployments", None)
     smoke = {"artifactId": env["CANONICAL_SMOKE_ARTIFACT"], "sha256": env["CANONICAL_SMOKE_SHA256"]}
     source["smoke"] = verified_smoke(smoke, source, verifier)
     directory = Path(env["RUNNER_TEMP"])
@@ -319,6 +396,9 @@ def main():
         require_ordinary_source(source["revision"], verifier)
         receipt = {"artifactId": env["CANONICAL_TRANSFER_ARTIFACT"], "sha256": env["CANONICAL_TRANSFER_SHA256"]}
         transfer = approved_transfer(receipt, source, verifier)
+        if restored is not None:
+            source = {**source, "deployments": restored}
+            transfer = {**transfer, "source": source}
         with (directory / "native-canonical-host-transfer.json").open("x") as evidence:
             json.dump(transfer, evidence)
     with (directory / SOURCE).open("x") as evidence:

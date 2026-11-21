@@ -2695,8 +2695,12 @@ const verifyOpenCanonical = Effect.fn(function* (
   input: CanonicalPromotion
 ) {
   const { release, promoted } = input;
-  const { source, hosts, zoneId } = yield* readOpenedCanonical(env, client, input);
-  const redirects = yield* verifyCanonicalSignupRedirects(client);
+  const { source, hosts, zoneId } = yield* readOpenedCanonical(env, client, input).pipe(
+    checkCanonicalPrerequisite("opened Worker and hostname verification")
+  );
+  const redirects = yield* verifyCanonicalSignupRedirects(client).pipe(
+    checkCanonicalPrerequisite("ordinary provider redirect verification")
+  );
   const alternate = yield* client.execute(
     HttpClientRequest.get(installedOrigins.acceptance.api + "/transactions", {
       headers: { origin: installedOrigins.production.browser },

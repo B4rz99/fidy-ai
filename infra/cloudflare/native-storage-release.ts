@@ -176,13 +176,14 @@ const installedDomains = Effect.fn(function* (
   )).flat();
 });
 const accountReader =
-  (env: Config, client: HttpClient.HttpClient) =>
+  (env: Config, client: HttpClient.HttpClient, reportRejection = false) =>
   (path: string): Effect.Effect<unknown, Error> =>
     providerJson(
       HttpClientRequest.get(
         `https://api.cloudflare.com/client/v4/accounts/${env.account}/${path}`,
         { headers: { authorization: `Bearer ${env.token}` } }
-      )
+      ),
+      reportRejection
     ).pipe(Effect.provideService(HttpClient.HttpClient, client));
 const firstInstallInventory = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
   const get = accountReader(env, client);
@@ -1296,23 +1297,18 @@ const CanonicalHostSource = Schema.Struct({
     deployment: Schema.NonEmptyString,
   }),
 });
-const zoneReader = (env: Config, client: HttpClient.HttpClient, zoneId: string) => {
+const zoneReader = (
+  env: Config,
+  client: HttpClient.HttpClient,
+  { zoneId, reportRejection }: { zoneId: string; reportRejection: boolean }
+) => {
   const base = "https://api.cloudflare.com/client/v4/zones/" + zoneId + "/";
   return (path: string): Effect.Effect<unknown, Error> =>
     providerJson(
-      HttpClientRequest.get(base + path, { headers: { authorization: "Bearer " + env.token } })
+      HttpClientRequest.get(base + path, { headers: { authorization: "Bearer " + env.token } }),
+      reportRejection
     ).pipe(Effect.provideService(HttpClient.HttpClient, client));
 };
-const inspectIncumbentWriters = Effect.fn(function* (
-  env: Config,
-  client: HttpClient.HttpClient,
-  zoneId: string
-) {
-  const account = accountReader(env, client);
-  const writers = yield* verifyIncumbentFence(account);
-  yield* verifyIncumbentMail(account, zoneReader(env, client, zoneId));
-  return writers;
-});
 const readCanonicalSource = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -1358,6 +1354,49 @@ const checkCanonicalPrerequisite =
         )
       )
     );
+const reportFenceRead =
+  (read: (path: string) => Effect.Effect<unknown, Error>, scope: string) =>
+  (path: string): Effect.Effect<unknown, Error> =>
+    read(path).pipe(
+      Effect.tapError((error) =>
+        error instanceof ReleaseFailure
+          ? Effect.logError(
+              "Canonical fence provider refused a " + scope + " read. " + error.message
+            )
+          : Effect.void
+      )
+    );
+const incumbentFenceChecks = (
+  env: Config,
+  client: HttpClient.HttpClient,
+  zoneId: string
+): {
+  mail: ReturnType<typeof verifyIncumbentMail>;
+  writers: ReturnType<typeof verifyIncumbentFence>;
+} => {
+  const account = reportFenceRead(accountReader(env, client, true), "Workers account");
+  const zoneMail = reportFenceRead(
+    zoneReader(env, client, { zoneId, reportRejection: true }),
+    "Email Routing zone"
+  );
+  const accountMail = reportFenceRead(accountReader(env, client, true), "Email Routing account");
+  const mail = verifyIncumbentMail(accountMail, zoneMail).pipe(
+    checkCanonicalPrerequisite("Email Routing fence")
+  );
+  const writers = verifyIncumbentFence(account).pipe(
+    checkCanonicalPrerequisite("incumbent Worker, Queue and Workflow fence")
+  );
+  return { mail, writers };
+};
+const inspectIncumbentWriters = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  zoneId: string
+) {
+  const { mail, writers } = incumbentFenceChecks(env, client, zoneId);
+  yield* mail;
+  return yield* writers;
+});
 const checkCanonicalHosts = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -1384,7 +1423,7 @@ const checkCanonicalHosts = Effect.fn(function* (
   );
   const read = canonicalDomainReader({
     readAccount: accountReader(env, client),
-    readZone: zoneReader(env, client, edge.zoneId),
+    readZone: zoneReader(env, client, { zoneId: edge.zoneId, reportRejection: false }),
     zoneId: edge.zoneId,
   });
   if (transferring) {
@@ -1395,12 +1434,13 @@ const checkCanonicalHosts = Effect.fn(function* (
   yield* requireStagedHostDomains(accountReader(env, client), edge.zoneId, transferring).pipe(
     checkCanonicalPrerequisite("native Worker domain inventory")
   );
-  yield* inspectIncumbentWriters(env, client, edge.zoneId).pipe(
-    Effect.mapError(
-      () => new ReleaseFailure({ message: "Incumbent writer or email fence remains unverified" })
-    ),
-    Effect.when(Effect.succeed(mode !== "plan"))
-  );
+  if (mode === "plan") {
+    const { mail, writers } = incumbentFenceChecks(env, client, edge.zoneId);
+    yield* Effect.ignore(mail);
+    yield* Effect.ignore(writers);
+  } else {
+    yield* inspectIncumbentWriters(env, client, edge.zoneId);
+  }
   return { source, edge, read };
 });
 const planHostStage = Effect.fn(function* (
@@ -2599,7 +2639,7 @@ const readOpenedCanonical = Effect.fn(function* (
   const { zoneId, hosts, source } = yield* readCanonicalTransfer;
   const read = canonicalDomainReader({
     readAccount: accountReader(env, client),
-    readZone: zoneReader(env, client, zoneId),
+    readZone: zoneReader(env, client, { zoneId, reportRejection: false }),
     zoneId,
   });
   const positions = yield* Effect.forEach(canonicalDomains, read);
@@ -2782,7 +2822,7 @@ const verifyCanonicalActivityHosts = Effect.fn(function* (
   const zoneId = opening.zoneId;
   const read = canonicalDomainReader({
     readAccount: accountReader(env, client),
-    readZone: zoneReader(env, client, zoneId),
+    readZone: zoneReader(env, client, { zoneId, reportRejection: false }),
     zoneId,
   });
   yield* Effect.forEach(

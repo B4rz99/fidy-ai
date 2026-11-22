@@ -3,11 +3,11 @@ import { Data, Effect, Option, Schema } from "effect";
 import {
   type CanonicalAdmissionFailure,
   type CanonicalOutcome,
-  CanonicalRejection,
+  type CanonicalRejection,
   type CanonicalRejectionOutcome,
   type LocalMutationPlan,
   type LocalMutationResult,
-  canonicalRejectionStatus,
+  childRejection as rejectChild,
 } from "../contract";
 import { recurringDiscoveryIntervalMs } from "../../recurring/contract";
 import { preserveStoreAlarm } from "../../runtime/sqlite/operations";
@@ -45,23 +45,17 @@ export type Refusal = {
 export class ChildRefused extends Data.TaggedError("ChildRefused")<Refusal> {}
 
 export const childRejection = (failure: Refusal): CanonicalRejection =>
-  new CanonicalRejection({
-    status: canonicalRejectionStatus.badRequest,
-    audit: { kind: "rejected", outcome: failure.outcome },
-    code: failure.code,
-    wireMessage: Option.some(failure.message),
-    fields: Option.some([]),
-    detail: Option.none(),
-    next: [],
-    batchChild: Option.some({ index: failure.index, operation: failure.operation.id }),
-  });
+  rejectChild({ ...failure, operation: failure.operation.id });
 
 const childFailure = (child: Child, rejection: CanonicalRejection): ChildRefused =>
   new ChildRefused({
     index: child.index,
     operation: child.operation,
     code: rejection.code,
-    message: Option.getOrElse(rejection.wireMessage, () => ""),
+    message: Option.match(rejection.wireMessage, {
+      onNone: () => "The requested record is unavailable.",
+      onSome: (message) => (message.length > 0 ? message : "The requested record is unavailable."),
+    }),
     outcome: rejection.audit.kind === "accepted" ? "validation_failed" : rejection.audit.outcome,
   });
 

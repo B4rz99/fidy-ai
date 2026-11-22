@@ -2,8 +2,12 @@ import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Context, Data, type Effect, Option, Schema } from "effect";
 import { OperationAccessCaller } from "../../src/shell/canonical-policy/contract";
 import type { AccessTier } from "../../src/core/access-tier/contract";
-import { ErrorCode, FieldIssue } from "../../src/shell/public-http/contract";
-import type { SuggestedOperation } from "../../src/shell/public-http/contract";
+import {
+  ErrorCode,
+  FieldIssue,
+  type SuggestedOperation,
+  SuggestedOperation as SuggestedOperationSchema,
+} from "../../src/shell/public-http/contract";
 
 export const CurrentSuggestionCaller = Context.Reference<
   Readonly<{ accessCaller: OperationAccessCaller; tier: AccessTier }>
@@ -72,16 +76,7 @@ const rejectionDetailGuard = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("reauthentication"), userId: Schema.String }),
 ]);
 
-const suggestedOperationGuard = Schema.Union([
-  Schema.Struct({ tool: Schema.String, hint: Schema.String }),
-  Schema.Struct({
-    tool: Schema.String,
-    args: Schema.Option(Schema.Unknown),
-    hint: Schema.String,
-  }),
-]);
-
-const nextGuard = Schema.Array(suggestedOperationGuard).check(Schema.isMaxLength(3));
+const nextGuard = Schema.Array(SuggestedOperationSchema).check(Schema.isMaxLength(3));
 
 const rejectionGuard = Schema.TaggedStruct("CanonicalRejection", {
   status: Schema.Literals(canonicalRejectionStatuses),
@@ -164,6 +159,44 @@ const assertDetail = (
   detail: Option.Option<CanonicalRejectionDetail>
 ): Option.Option<CanonicalRejectionDetail> =>
   Option.map(detail, (value) => Schema.decodeSync(rejectionDetailGuard)(value));
+
+const childRejectionIsCoherent = (code: ErrorCode, outcome: CanonicalRejectionOutcome): boolean =>
+  (code === "not_found" && outcome === "not_found") ||
+  (code === "quota_exhausted" && outcome === "resource_limit") ||
+  (outcome === "validation_failed" && code !== "not_found" && code !== "quota_exhausted");
+
+const assertChildRejection = (code: ErrorCode, outcome: CanonicalRejectionOutcome): void => {
+  if (!childRejectionIsCoherent(code, outcome)) {
+    throw new Error("Incoherent canonical child rejection");
+  }
+};
+
+export const childRejection = (
+  failure: Readonly<{
+    index: number;
+    operation: string;
+    code: ErrorCode;
+    message: string;
+    outcome: CanonicalRejectionOutcome;
+  }>
+): CanonicalRejection => {
+  assertChildRejection(failure.code, failure.outcome);
+
+  return new CanonicalRejection({
+    status: canonicalRejectionStatus.badRequest,
+    audit: { kind: "rejected", outcome: failure.outcome },
+    code: failure.code,
+    wireMessage: Option.some(
+      failure.message === undefined || failure.message.length === 0
+        ? "The requested record is unavailable."
+        : failure.message
+    ),
+    fields: Option.some([]),
+    detail: Option.none(),
+    next: [],
+    batchChild: Option.some({ index: failure.index, operation: failure.operation }),
+  });
+};
 
 export const rejection = (
   detail: Readonly<{

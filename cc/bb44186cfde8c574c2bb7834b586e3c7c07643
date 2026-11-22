@@ -1,0 +1,19 @@
+apps/server/cloudflare/canonical-operations/operations.ts
+  s_370e136601c9b6::t_6403279d93c283 37,358,375
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ccbb44186cfde8c574c2bb7834b586e3c7c07643",
+  "prompts": {},
+  "sessions": {
+    "s_370e136601c9b6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "tabby-puppet",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

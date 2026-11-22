@@ -1,4 +1,5 @@
 import { admitPurge, caseDriver } from "../erasure-purge.test-fixture";
+import { ErasureCustodian } from "../../src/core/erasure/contract";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Clock, Effect, Schedule, Schema } from "effect";
@@ -86,12 +87,13 @@ const startBankAttempt = Effect.fn(function* (
 
   const callback = (
     subject: typeof alice,
-    code = "fixture"
+    code = "fixture",
+    error?: string
   ): Effect.Effect<Awaited<ReturnType<Miniflare["dispatchFetch"]>>> =>
     native(() =>
       journey.runtime.dispatchFetch(
         "https://api.fidyapp.com/connections/bancolombia/sandbox/callback?" +
-          new URLSearchParams({ code, state }),
+          new URLSearchParams(error === undefined ? { code, state } : { error, state }),
         {
           headers: { cookie: "__Host-fidy_session=" + subject.bearer },
           redirect: "manual",
@@ -551,7 +553,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       })
   );
   test.effect(
-    "erasure suppresses an active Connection and clears its encrypted tokens after checked revocation",
+    "clears a revoked Connection's credential projections and seals the erasure case",
     () =>
       Effect.gen(function* () {
         const { journey, provider } = yield* runningSynchronization();
@@ -575,15 +577,68 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         yield* native(() => journey.checkWork(alice.user));
         const reply = yield* native(() => provider.fetch("https://fixture.invalid/status"));
         expect(yield* native(() => reply.json())).toMatchObject({ revocations: 1 });
-        expect(yield* driver.step()).toBe("Draining");
+        expect(["Sealing", "Erasing", "ExternalPending"]).toContain(yield* driver.step());
         expect(
           yield* native(() => driver.storage.exec("SELECT connection_blocked FROM erasure_cases"))
-        ).toEqual([{ connection_blocked: 1 }]);
+        ).toEqual([{ connection_blocked: 0 }]);
         expect(
           yield* native(() =>
             driver.storage.exec("SELECT count(*) AS n FROM erasure_case_custodians")
           )
+        ).toEqual([{ n: ErasureCustodian.literals.length }]);
+        expect(
+          yield* native(() => journey.exec("SELECT count(*) AS n FROM connection_authorizations"))
         ).toEqual([{ n: 0 }]);
       })
+  );
+  test.effect("clears an envelope-less denied Connection grant and seals the erasure case", () =>
+    Effect.gen(function* () {
+      const journey = yield* makeNativeTransactionJourney(undefined, nativeConnectionPlatform);
+      const { callback } = yield* startBankAttempt(journey);
+
+      expect((yield* callback(alice, "fixture", "access_denied")).status).toBe(303);
+
+      expect(
+        yield* native(() =>
+          journey.exec(
+            "SELECT state,envelope IS NULL AS cleared,expires_at_ms IS NULL AS expired,cleaned_at_ms IS NOT NULL AS cleaned FROM connection_grants"
+          )
+        )
+      ).toEqual([{ state: "cleanup_required", cleared: 1, expired: 1, cleaned: 0 }]);
+      expect(
+        yield* native(() =>
+          journey.exec(
+            "SELECT phase,consent_id IS NOT NULL AS consented FROM connection_authorizations"
+          )
+        )
+      ).toEqual([{ phase: "failed", consented: 1 }]);
+
+      expect((yield* admitPurge(journey.runtime)).status).toBe(202);
+      const driver = yield* caseDriver(journey.runtime);
+      yield* driver.step();
+      yield* driver.step();
+
+      const [sealedCase] = yield* native(() =>
+        driver.storage.exec("SELECT state,connection_blocked FROM erasure_cases")
+      );
+
+      expect(sealedCase?.connection_blocked).toBe(0);
+      expect(["Sealing", "Erasing", "ExternalPending"]).toContain(sealedCase?.state);
+      expect(
+        yield* native(() =>
+          journey.exec(
+            "SELECT cleaned_at_ms IS NOT NULL AS cleaned,envelope IS NULL AS cleared FROM connection_grants"
+          )
+        )
+      ).toEqual([{ cleaned: 1, cleared: 1 }]);
+      expect(
+        yield* native(() => journey.exec("SELECT count(*) AS n FROM connection_authorizations"))
+      ).toEqual([{ n: 0 }]);
+      expect(
+        yield* native(() =>
+          driver.storage.exec("SELECT count(*) AS n FROM erasure_case_custodians")
+        )
+      ).toEqual([{ n: ErasureCustodian.literals.length }]);
+    })
   );
 });

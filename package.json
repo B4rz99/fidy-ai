@@ -19,6 +19,7 @@
     "check:publication": "bun tools/depcruise/check-publication.mjs apps/server src scripts tools cloudflare",
     "lint:dependencies": "bun scripts/check-dependency-updates.ts",
     "check:effect-family": "bun scripts/check-effect-family.ts",
+    "check:hooks": "lefthook validate",
     "check:pattern-sources": "bun scripts/check-pattern-sources.ts",
     "dev": "bun run --cwd infra/cloudflare dev",
     "dev:browser": "bun scripts/dev-browser.ts",

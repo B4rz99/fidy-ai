@@ -7,6 +7,7 @@ import { currentCategoryRelease, interpretCategory } from "../../../src/core/cat
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import { recordAuthorizedCall } from "../../../src/shell/audit/operations";
+import type { LocalMutationResult } from "../../canonical-admission/contract";
 import {
   admitLocalRequest,
   attachCanonicalStanding,
@@ -52,6 +53,13 @@ const presentRetainedHistory = (input: Parameters<typeof presentHistory>[0]): Re
 
 class HistoryUnavailable extends Data.TaggedError("HistoryUnavailable") {}
 
+const parsedHistoryQuery = Effect.fn(function* (request: Request, search: boolean) {
+  return yield* parseQuery({ request, search, id: Option.none<string>() }).pipe(
+    Effect.map((query) => ({ kind: "valid" as const, query })),
+    Effect.catchTag("InvalidTransactionQuery", () => Effect.succeed({ kind: "invalid" as const }))
+  );
+});
+
 export const readUserHistory = Effect.fn(function* (
   request: Request,
   owns: (userId: string) => boolean
@@ -60,10 +68,11 @@ export const readUserHistory = Effect.fn(function* (
   const prepared = yield* Effect.tryPromise(() => readBoundWebSessionProof(request));
 
   if (Option.isNone(prepared)) return noAuthority();
+
   const search = new URL(request.url).pathname === "/transactions/search";
   const operation = search ? "transactions.searchTransactions" : "transactions.listTransactions";
   const selection = { request, search, id: Option.none<string>() } as const;
-  const query = parseQuery(selection);
+  const parsed = yield* parsedHistoryQuery(request, search);
 
   return yield* Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
@@ -91,12 +100,17 @@ export const readUserHistory = Effect.fn(function* (
 
     let response = invalid();
 
-    if (Option.isSome(query)) {
-      const page = selectedHistoryPage({ authority, query: query.value, userSelection: users });
+    if (parsed.kind === "valid") {
+      const page = selectedHistoryPage({
+        authority,
+        query: parsed.query,
+        userSelection: users,
+      });
+
       const rows = yield* sql.unsafe(page.sql, page.bindings);
       response = presentRetainedHistory({
         rows: { results: rows },
-        query: query.value,
+        query: parsed.query,
         selection,
       });
 
@@ -127,24 +141,25 @@ export const readLocalTransactionPage = Effect.fn(function* (request: Request, u
     id: Option.none<string>(),
   };
 
-  const query = parseQuery(selection);
-
-  if (Option.isNone(query)) {
-    return localTransactionRefusal({
-      status: 400,
-      code: "validation_failed",
-      message: "Invalid Transaction history query.",
-    });
-  }
+  const query = yield* parseQuery(selection).pipe(
+    Effect.catchTag("InvalidTransactionQuery", () =>
+      Effect.fail(
+        localTransactionRefusal({
+          status: 400,
+          message: "Invalid Transaction history query.",
+        })
+      )
+    )
+  );
 
   const sql = yield* SqliteClient;
-  const page = localHistoryPage({ user, query: query.value });
+  const page = localHistoryPage({ user, query });
   const rows = yield* sql.unsafe(page.sql, page.bindings);
 
   if (!rows.every(understoodCategory)) return yield* new HistoryUnavailable();
 
   const records = yield* Effect.fromOption(
-    decodeLocalHistoryPage({ rows, selection, query: query.value }),
+    decodeLocalHistoryPage({ rows, selection, query }),
     () => new HistoryUnavailable()
   );
 
@@ -152,5 +167,5 @@ export const readLocalTransactionPage = Effect.fn(function* (request: Request, u
     status: 200,
     outcome: "success" as const,
     body: yield* Schema.encodeEffect(Schema.toCodecJson(TransactionListResponse))(records),
-  };
+  } satisfies LocalMutationResult;
 });

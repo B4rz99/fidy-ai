@@ -1,7 +1,7 @@
 import { BudgetThresholdEvaluation } from "../../budgets/contract";
 import { localCorrectionReview } from "./oauth-review";
 import { CategoryReference } from "../../../src/core/categories/contract";
-import { commitLocalWrite, prepareLocalWrite } from "../../canonical-admission/operations";
+import { commitLocalPlan, prepareLocalWrite } from "../../canonical-admission/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { encodeMoneyAmount } from "../../../src/core/_shared/money";
@@ -19,6 +19,7 @@ import {
 import { TransactionInspection } from "../../../src/shell/transactions/contract";
 import {
   CanonicalAdmissionUnavailable,
+  type CanonicalRejection,
   type LocalMutationResult,
 } from "../../canonical-admission/contract";
 import {
@@ -38,11 +39,11 @@ import { correctionEvidence, invalidCorrection, replaceFacts } from "./transacti
 import { staleCorrectionMessage } from "./transaction-outcome";
 import { localTransactionRefusal } from "./sqlite-capture";
 
-export const missingLocalTransaction = (): LocalMutationResult =>
-  localTransactionRefusal({ status: 404, code: "not_found", message: missingTransactionMessage });
+export const missingLocalTransaction = (): CanonicalRejection =>
+  localTransactionRefusal({ status: 404, message: missingTransactionMessage });
 
-const invalid = (message: string): LocalMutationResult =>
-  localTransactionRefusal({ status: 400, code: "validation_failed", message });
+const invalid = (message: string): CanonicalRejection =>
+  localTransactionRefusal({ status: 400, message });
 
 const success = (data: Schema.Json): LocalMutationResult => ({
   status: 200,
@@ -157,18 +158,20 @@ export const prepareLocalCorrection = Effect.fn(function* (
   current: number
 ) {
   if (invalidCorrection({ input, current })) {
-    return invalid("The correction must change at least one fact and cannot occur in the future.");
+    return yield* invalid(
+      "The correction must change at least one fact and cannot occur in the future."
+    );
   }
 
   const owned = yield* retained(user, id);
 
-  if (Option.isNone(owned)) return missingLocalTransaction();
+  if (Option.isNone(owned)) return yield* missingLocalTransaction();
   const previous = owned.value.record;
 
-  if (previous.revision !== input.expectedRevision) return invalid(staleCorrectionMessage);
+  if (previous.revision !== input.expectedRevision) return yield* invalid(staleCorrectionMessage);
   const result = replaceFacts({ previous, changes: input.changes });
 
-  if (Option.isNone(result)) return invalid("The supplied Transaction facts are invalid.");
+  if (Option.isNone(result)) return yield* invalid("The supplied Transaction facts are invalid.");
   const updated = result.value;
   const sql = yield* SqliteClient;
 
@@ -180,9 +183,8 @@ export const prepareLocalCorrection = Effect.fn(function* (
   });
 
   if (Option.isNone(categoryRevision)) {
-    return localTransactionRefusal({
+    return yield* localTransactionRefusal({
       status: 404,
-      code: "not_found",
       message: "The Category does not exist; correct categoryId and retry.",
     });
   }
@@ -228,7 +230,7 @@ export const correctLocalTransaction = Effect.fnUntraced(function* (
   user: UserId,
   current: number
 ) {
-  return yield* prepareLocalCorrection(input, user, current).pipe(Effect.flatMap(commitLocalWrite));
+  return yield* prepareLocalCorrection(input, user, current).pipe(Effect.flatMap(commitLocalPlan));
 });
 
 export const inspectLocalTransaction = Effect.fn(function* (id: string, user: UserId) {
@@ -236,7 +238,7 @@ export const inspectLocalTransaction = Effect.fn(function* (id: string, user: Us
   const query = presentationQuery({ userId: user, id, authority: Option.none() });
   const [row] = yield* sql.unsafe(query.sql, query.bindings);
 
-  if (row === undefined) return missingLocalTransaction();
+  if (row === undefined) return yield* missingLocalTransaction();
 
   const detail = yield* Effect.fromOption(decodeInspectionRow(row), () =>
     unavailable("transaction_inspection")
@@ -260,12 +262,12 @@ const linkPair = Effect.fn(function* ({ user, current, first, second, left, righ
   const sql = yield* SqliteClient;
 
   if (left.reconciliation_first_id !== null || right.reconciliation_first_id !== null) {
-    return invalid(alreadyLinkedMessage);
+    return yield* invalid(alreadyLinkedMessage);
   }
 
   const decision = yield* decideTransactionLink(left.record, right.record).pipe(Effect.option);
 
-  if (Option.isNone(decision)) return invalid(pairPolicyMessage);
+  if (Option.isNone(decision)) return yield* invalid(pairPolicyMessage);
   const visible = decision.value.visibleTransactionId;
 
   return prepareLocalWrite({
@@ -309,7 +311,7 @@ const unlinkPair = Effect.fn(function* ({ user, current, first, second, left, ri
     right.reconciliation_first_id !== first ||
     right.reconciliation_second_id !== second
   ) {
-    return invalid(unlinkedPairMessage);
+    return yield* invalid(unlinkedPairMessage);
   }
 
   return prepareLocalWrite({
@@ -345,14 +347,14 @@ export const prepareLocalPair = Effect.fn(function* (
   const ordered = yield* orderTransactionPair(input).pipe(Effect.option);
 
   if (Option.isNone(ordered)) {
-    return invalid("A Transaction pair needs two different Transaction ids.");
+    return yield* invalid("A Transaction pair needs two different Transaction ids.");
   }
 
   const { firstTransactionId: first, secondTransactionId: second } = ordered.value;
   const left = yield* retained(user, first);
   const right = yield* retained(user, second);
 
-  if (Option.isNone(left) || Option.isNone(right)) return missingLocalTransaction();
+  if (Option.isNone(left) || Option.isNone(right)) return yield* missingLocalTransaction();
   const work = { user, current, first, second, left: left.value, right: right.value };
 
   return yield* link ? linkPair(work) : unlinkPair(work);
@@ -363,7 +365,7 @@ export const reconcileLocalTransactions = Effect.fnUntraced(function* (
   user: UserId,
   current: number
 ) {
-  return yield* prepareLocalPair(input, user, current).pipe(Effect.flatMap(commitLocalWrite));
+  return yield* prepareLocalPair(input, user, current).pipe(Effect.flatMap(commitLocalPlan));
 });
 
 export const prepareLocalDeletion = Effect.fn(function* (
@@ -373,10 +375,12 @@ export const prepareLocalDeletion = Effect.fn(function* (
 ) {
   const owned = yield* retained(user, id);
 
-  if (Option.isNone(owned)) return missingLocalTransaction();
+  if (Option.isNone(owned)) return yield* missingLocalTransaction();
 
   if (owned.value.reconciliation_first_id !== null) {
-    return invalid("Unlink the Transaction pair before deleting either original Transaction.");
+    return yield* invalid(
+      "Unlink the Transaction pair before deleting either original Transaction."
+    );
   }
 
   const sql = yield* SqliteClient;
@@ -402,5 +406,5 @@ export const deleteLocalTransaction = Effect.fnUntraced(function* (
   user: UserId,
   current: number
 ) {
-  return yield* prepareLocalDeletion(id, user, current).pipe(Effect.flatMap(commitLocalWrite));
+  return yield* prepareLocalDeletion(id, user, current).pipe(Effect.flatMap(commitLocalPlan));
 });

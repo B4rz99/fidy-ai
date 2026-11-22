@@ -1,5 +1,5 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import type { LocalMutationResult } from "../../canonical-admission/contract";
+import { type LocalMutationResult, notFoundRejection } from "../../canonical-admission/contract";
 import { Effect, Option, Schema } from "effect";
 import {
   InsightEvent,
@@ -32,13 +32,7 @@ export const readLocalReport = Effect.fn(function* (
     yield* sql`SELECT e.event_json,r.report_json FROM insight_events e JOIN recurring_digest_reports r ON r.event_id=e.id WHERE e.user_id=${input.userId} AND e.id=${input.id}`;
 
   if (row === undefined) {
-    const missing: LocalMutationResult = {
-      status: 404,
-      outcome: "not_found",
-      body: { error: { code: "not_found", message: "Recurring report unavailable." }, next: [] },
-    };
-
-    return missing;
+    return yield* notFoundRejection("Recurring report unavailable.");
   }
 
   const { event, report } = yield* Schema.decodeUnknownEffect(

@@ -1,9 +1,19 @@
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
-import { Deferred, Effect, Option, Schema } from "effect";
+import { Data, Deferred, Effect, Option, Schema } from "effect";
 
 type Environment = { CONTROL: DurableObjectNamespace; INGRESS: Fetcher };
 
 const browserBearerLength = 43;
+
+const capacityTextLength = 2_000;
+
+class BrowserRequestAborted extends Data.TaggedError("BrowserRequestAborted")<{
+  readonly cause: unknown;
+}> {}
+
+class BrowserRequestFailed extends Data.TaggedError("BrowserRequestFailed")<{
+  readonly cause: unknown;
+}> {}
 
 const completion = (content: string): Response =>
   Response.json({
@@ -16,7 +26,27 @@ type FixtureTool = Readonly<{ name: string; arguments: string }>;
 const fixtureTool = (mode: string): FixtureTool => {
   const id = "22460000-0000-4000-8000-000000000020";
 
-  if (mode === "/batch") {
+  if (mode === "/batch-capacity") {
+    return {
+      name: "operations__executeAtomicBatch",
+      arguments: JSON.stringify({
+        payload: {
+          calls: [
+            {
+              callId: "22460000-0000-4000-8000-000000000011",
+              operation: "memory.revise",
+              input: {
+                params: { id: "22460000-0000-4000-8000-000000000020" },
+                payload: { text: "x".repeat(capacityTextLength) },
+              },
+            },
+          ],
+        },
+      }),
+    };
+  }
+
+  if (mode === "/batch" || mode === "/batch-absent") {
     return {
       name: "operations__executeAtomicBatch",
       arguments: JSON.stringify({
@@ -52,6 +82,8 @@ const fixtureTool = (mode: string): FixtureTool => {
 
 const textModes = [
   "/batch",
+  "/batch-absent",
+  "/batch-capacity",
   "/forget",
   "/malformed",
   "/repair-after-query",
@@ -184,22 +216,36 @@ export class HostedProviderControl extends DurableObject<Environment> {
       const path = request.url.endsWith("admission") ? "" : "/progress";
 
       return Option.some(
-        request
-          .text()
-          .then((body) =>
-            this.env.INGRESS.fetch("https://api.fidyapp.com/web/hosted-turns" + path, {
-              method: "POST",
-              headers: {
-                origin: "https://app.fidyapp.com",
-                cookie: "__Host-fidy_session=" + "1".repeat(browserBearerLength),
-                "Fidy-Session-Binding": "10000000-0000-4000-8000-000000000061",
-                "content-type": "application/json",
-              },
-              body,
-              signal: this.browserClient.signal,
-            })
+        Effect.runPromise(
+          Effect.tryPromise({
+            try: () =>
+              request.text().then((body) =>
+                this.env.INGRESS.fetch("https://api.fidyapp.com/web/hosted-turns" + path, {
+                  method: "POST",
+                  headers: {
+                    origin: "https://app.fidyapp.com",
+                    cookie: "__Host-fidy_session=" + "1".repeat(browserBearerLength),
+                    "Fidy-Session-Binding": "10000000-0000-4000-8000-000000000061",
+                    "content-type": "application/json",
+                  },
+                  body,
+                  signal: this.browserClient.signal,
+                })
+              ),
+            catch: (cause) =>
+              this.browserClient.signal.aborted
+                ? new BrowserRequestAborted({ cause })
+                : new BrowserRequestFailed({ cause }),
+          }).pipe(
+            Effect.catchTag("BrowserRequestAborted", (failure) =>
+              Effect.logWarning({
+                component: "hosted-provider-fixture",
+                outcome: "browser_aborted",
+                cause: failure.cause,
+              }).pipe(Effect.as(new Response(null, { status: 499 })))
+            )
           )
-          .catch(() => new Response(null, { status: 499 }))
+        )
       );
     }
 

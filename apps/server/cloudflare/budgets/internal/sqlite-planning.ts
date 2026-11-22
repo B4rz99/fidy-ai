@@ -1,5 +1,5 @@
 import { BudgetThresholdEvaluation } from "../contract";
-import { commitLocalWrite, prepareLocalWrite } from "../../canonical-admission/operations";
+import { commitLocalPlan, prepareLocalWrite } from "../../canonical-admission/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Array as Arr, Data, DateTime, Effect, Option, Schema } from "effect";
 import type { SqlError } from "effect/sql";
@@ -11,7 +11,10 @@ import { currentCategoryRelease, interpretCategory } from "../../../src/core/cat
 import type { UserId } from "../../../src/core/identity/contract";
 import {
   CanonicalAdmissionUnavailable,
+  type CanonicalRejection,
   type LocalMutationResult,
+  notFoundRejection,
+  validationRejection,
 } from "../../canonical-admission/contract";
 import { resolveLocalCategory, retainLocalCategory } from "../../categories/operations";
 import { newId } from "../../secret-material/operations";
@@ -36,20 +39,10 @@ export const budgetSuccess = (data: Schema.Json): LocalMutationResult => ({
   body: { data, next: [] },
 });
 
-export const missingBudget = (): LocalMutationResult => ({
-  status: 404,
-  outcome: "not_found",
-  body: { error: { code: "not_found", message: "Budget or Category unavailable." }, next: [] },
-});
+export const missingBudget = (): CanonicalRejection =>
+  notFoundRejection("Budget or Category unavailable.");
 
-const invalid = (): LocalMutationResult => ({
-  status: 400,
-  outcome: "validation_failed",
-  body: {
-    error: { code: "validation_failed", message: "Budget input unavailable.", fields: [] },
-    next: [],
-  },
-});
+const invalidBudget = (): CanonicalRejection => validationRejection("Budget input unavailable.");
 
 export const localMonth = ({
   now,
@@ -281,23 +274,21 @@ const validateBudget = Effect.fn(function* ({ id, input }: SaveInput, user: User
         (yield* plannedBudgets(user, Option.fromUndefinedOr(input.month), id)).budgets[0]
       );
 
-  if (Option.isSome(id) && Option.isNone(existing)) return Option.some(missingBudget());
+  if (Option.isSome(id) && Option.isNone(existing)) return yield* missingBudget();
 
-  if (!(yield* validGroup(user, input, existing))) return Option.some(invalid());
+  if (!(yield* validGroup(user, input, existing))) return yield* invalidBudget();
 
   const [conflict] =
     yield* sql`SELECT id FROM budgets WHERE user_id=${user} AND category_id=${input.categoryId} AND currency=${input.cap.currency} AND id<>${Option.getOrElse(id, () => "")}`;
 
-  if (conflict !== undefined) return Option.some(invalid());
+  if (conflict !== undefined) return yield* invalidBudget();
 
   if (Option.isNone(id)) {
     const full =
       yield* sql`SELECT 1 FROM budgets WHERE user_id=${user} LIMIT 1 OFFSET ${maximumBudgets - 1}`;
 
-    if (full.length > 0) return Option.some(invalid());
+    if (full.length > 0) return yield* invalidBudget();
   }
-
-  return Option.none<LocalMutationResult>();
 });
 
 const writeBudget = Effect.fn(function* (
@@ -424,12 +415,10 @@ export const prepareLocalBudget = Effect.fn(function* (
   current: number
 ) {
   const { id, input } = save;
-  const failure = yield* validateBudget(save, user);
-
-  if (Option.isSome(failure)) return failure.value;
+  yield* validateBudget(save, user);
   const reference = yield* budgetCategory(user, input);
 
-  if (Option.isNone(reference)) return missingBudget();
+  if (Option.isNone(reference)) return yield* missingBudget();
   const client = yield* SqliteClient;
 
   const plan = prepareLocalWrite({
@@ -475,10 +464,10 @@ export const prepareLocalBudget = Effect.fn(function* (
           return {
             ...budgetSuccess(yield* Schema.encodeEffect(Schema.toCodecJson(Budget))(saved)),
             status: Option.isNone(id) ? createdStatus : updatedStatus,
-          };
+          } satisfies LocalMutationResult;
         })
       )
-      .pipe(Effect.catchTag("BudgetWriteConflict", () => Effect.succeed(invalid()))),
+      .pipe(Effect.catchTag("BudgetWriteConflict", () => Effect.fail(invalidBudget()))),
   });
 
   return { ...plan, premises: ["budget-member:" + input.categoryId] };
@@ -489,14 +478,14 @@ export const saveLocalBudget = Effect.fn(function* (
   user: UserId,
   current: number
 ) {
-  return yield* prepareLocalBudget(save, user, current).pipe(Effect.flatMap(commitLocalWrite));
+  return yield* prepareLocalBudget(save, user, current).pipe(Effect.flatMap(commitLocalPlan));
 });
 
 export const prepareLocalBudgetDeletion = Effect.fn(function* (id: BudgetId, user: UserId) {
   const sql = yield* SqliteClient;
 
   if ((yield* plannedBudgets(user, Option.none(), Option.some(id))).budgets.length === 0) {
-    return missingBudget();
+    return yield* missingBudget();
   }
 
   const plan = prepareLocalWrite({
@@ -516,5 +505,5 @@ export const prepareLocalBudgetDeletion = Effect.fn(function* (id: BudgetId, use
 });
 
 export const deleteLocalBudget = Effect.fnUntraced(function* (id: BudgetId, user: UserId) {
-  return yield* prepareLocalBudgetDeletion(id, user).pipe(Effect.flatMap(commitLocalWrite));
+  return yield* prepareLocalBudgetDeletion(id, user).pipe(Effect.flatMap(commitLocalPlan));
 });

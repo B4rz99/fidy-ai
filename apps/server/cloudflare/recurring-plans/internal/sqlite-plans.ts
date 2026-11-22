@@ -1,6 +1,6 @@
 import {
   canonicalAdmissionUnavailable,
-  commitLocalWrite,
+  commitLocalPlan,
   prepareLocalWrite,
   runLocalMutation,
 } from "../../canonical-admission/operations";
@@ -20,7 +20,11 @@ import {
   RecurringWorkspace,
   RecurringWorkspaceQuery,
 } from "../../../src/shell/recurring-plans/contract";
-import type { LocalMutationResult } from "../../canonical-admission/contract";
+import {
+  type CanonicalRejection,
+  type LocalMutationResult,
+  validationRejection,
+} from "../../canonical-admission/contract";
 
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
@@ -55,18 +59,8 @@ const success = (data: Schema.Json): LocalMutationResult => ({
   body: { data, next: [] },
 });
 
-const invalid: LocalMutationResult = {
-  status: 400,
-  outcome: "validation_failed",
-  body: {
-    error: {
-      code: "validation_failed",
-      message: "Revisa los datos y actualiza los recurrentes antes de guardar.",
-      fields: [],
-    },
-    next: [],
-  },
-};
+const invalid = (): CanonicalRejection =>
+  validationRejection("Revisa los datos y actualiza los recurrentes antes de guardar.");
 
 const categories = listLaunchCategories().map((entry) => entry.id);
 
@@ -111,7 +105,7 @@ export const prepareLocalRecurringEdit = Effect.fn(function* (
     !base.fulfillments.some((mark) => mark.id === edit.fulfillmentId) &&
     (yield* readLocalPlanningReferences(user, [edit.fulfillmentId])).length === 0
   ) {
-    return invalid;
+    return yield* invalid();
   }
 
   const retained = yield* retainCompletions({
@@ -135,7 +129,9 @@ export const prepareLocalRecurringEdit = Effect.fn(function* (
 
   const next = yield* applyRecurringEdit({ document: retained, command }).pipe(Effect.option);
 
-  if (Option.isNone(next) || !(yield* validReferences(user, command, next.value))) return invalid;
+  if (Option.isNone(next) || !(yield* validReferences(user, command, next.value))) {
+    return yield* invalid();
+  }
 
   return prepareLocalWrite({
     targets: ["recurring-document"],
@@ -162,7 +158,7 @@ export const editLocalRecurringPlan = Effect.fnUntraced(function* (
   current: number
 ) {
   return yield* prepareLocalRecurringEdit(input, user, current).pipe(
-    Effect.flatMap(commitLocalWrite)
+    Effect.flatMap(commitLocalPlan)
   );
 });
 
@@ -171,7 +167,10 @@ export const workspace = Effect.fn(function* (
   user: UserId,
   current: number
 ) {
-  if (query.previousMonth !== undefined && query.previousMonth >= query.month) return invalid;
+  if (query.previousMonth !== undefined && query.previousMonth >= query.month) {
+    return yield* invalid();
+  }
+
   const sql = yield* SqliteClient;
   const now = DateTime.makeUnsafe(current);
   const projection = yield* localWorkspaceProjection(user, query, now);

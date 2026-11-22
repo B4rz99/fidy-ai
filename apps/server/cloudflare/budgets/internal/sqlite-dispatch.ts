@@ -43,7 +43,7 @@ const dispatch = Effect.fn(function* (unit: Unit) {
   const { request, operation } = unit;
   const url = new URL(request.url);
   const id = Schema.decodeOption(BudgetId)(url.pathname.split("/").at(-1) ?? "");
-  const invalidTarget = Option.isNone(id) ? Option.some(missingBudget()) : Option.none();
+  const invalidTarget = Option.isNone(id) ? Option.some(() => missingBudget()) : Option.none();
 
   switch (operation.id) {
     case "budgets.createBudget":

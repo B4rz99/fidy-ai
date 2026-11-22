@@ -66,6 +66,6 @@ export const queryLocalBudget = Effect.fn(function* (
   const [budget] = budgets;
 
   return budget === undefined
-    ? missingBudget()
+    ? yield* missingBudget()
     : budgetSuccess(yield* Schema.encodeEffect(Schema.toCodecJson(Budget))(budget));
 });

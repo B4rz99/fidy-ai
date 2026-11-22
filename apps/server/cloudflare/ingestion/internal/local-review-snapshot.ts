@@ -2,7 +2,11 @@ import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Effect, Option, Schema } from "effect";
 import type { UserId } from "../../../src/core/identity/contract";
-import type { LocalMutationResult } from "../../canonical-admission/contract";
+import {
+  type CanonicalRejection,
+  type LocalMutationResult,
+  notFoundRejection,
+} from "../../canonical-admission/contract";
 import { resolveLocalCategory } from "../../categories/operations";
 import { ReviewRow, projectReviewDetailFromSnapshot, reviewProjection } from "./review-store";
 
@@ -33,11 +37,7 @@ export const localDetail = Effect.fnUntraced(function* ({
   });
 });
 
-export const missing = (): LocalMutationResult => ({
-  status: 404,
-  outcome: "not_found",
-  body: { error: { code: "not_found", message: "Elemento no disponible." }, next: [] },
-});
+export const missing = (): CanonicalRejection => notFoundRejection("Elemento no disponible.");
 
 export const readDetail = Effect.fn(function* (
   user: UserId,

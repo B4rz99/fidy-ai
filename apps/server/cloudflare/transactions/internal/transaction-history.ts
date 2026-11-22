@@ -21,7 +21,7 @@ import {
   selectedEffectiveHistoryPage,
 } from "./effective-transaction";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { PrivacyTransactionPage } from "../../../src/shell/processing-consent/contract";
 import type { PrivacyTransactionRequest } from "../../../src/shell/processing-consent/contract";
 import {
@@ -163,9 +163,11 @@ const validDecodedQuery = (query: typeof Query.Type, search: boolean): boolean =
   (search ? Option.isSome(query.q) : Option.isNone(query.q)) &&
   (Option.isNone(query.cursor) || Option.isSome(decodeCursor(query.cursor.value)));
 
-export const parseQuery = (
+export class InvalidTransactionQuery extends Data.TaggedError("InvalidTransactionQuery") {}
+
+const queryValuesFor = (
   selection: Pick<Selection, "id" | "request" | "search">
-): Option.Option<typeof Query.Type> => {
+): Option.Option<Readonly<{ values: Record<string, string>; search: boolean }>> => {
   if (!validSelectedId(selection.id)) return Option.none();
   const search = selection.search === true;
 
@@ -176,13 +178,25 @@ export const parseQuery = (
   const params = url.searchParams;
 
   if (!validParameters(params, search, Option.isSome(selection.id))) return Option.none();
-  const values = queryValues(params, search);
 
-  if (Option.isNone(values)) return Option.none();
-  const decoded = Schema.decodeOption(Query)(values.value);
-
-  return Option.filter(decoded, (query) => validDecodedQuery(query, search));
+  return Option.map(queryValues(params, search), (values) => ({ values, search }));
 };
+
+export const parseQuery = Effect.fn(function* (
+  selection: Pick<Selection, "id" | "request" | "search">
+) {
+  const input = queryValuesFor(selection);
+
+  if (Option.isNone(input)) return yield* new InvalidTransactionQuery();
+
+  const decoded = Schema.decodeOption(Query)(input.value.values);
+
+  if (Option.isNone(decoded) || !validDecodedQuery(decoded.value, input.value.search)) {
+    return yield* new InvalidTransactionQuery();
+  }
+
+  return decoded.value;
+});
 
 type AuthorityCondition = Pick<QueryAuthority, "table" | "predicate" | "bindings">;
 

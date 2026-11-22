@@ -33,12 +33,12 @@ export const localSubmission = Effect.fn(function* (
   if (Option.isSome(hosted)) {
     const scope = yield* hostedStatements(hosted.value.turn, user, hosted.value.current);
 
-    if ((yield* sql`SELECT 1 WHERE ${id} IN (${scope})`).length === 0) return missing();
+    if ((yield* sql`SELECT 1 WHERE ${id} IN (${scope})`).length === 0) return yield* missing();
   }
 
   const [raw] = yield* sql.unsafe(ownedSubmissionSelection, [id, user]);
 
-  if (raw === undefined) return missing();
+  if (raw === undefined) return yield* missing();
   const found = Option.flatMap(yield* decodeOwnedSubmission(raw), submissionProjection);
 
   if (Option.isNone(found)) {
@@ -121,7 +121,7 @@ export const observeDocumentPublication = Effect.fn(function* (
   input: SubmitForExtractionInput,
   { user, turn, current }: { user: UserId; turn: Option.Option<string>; current: number }
 ) {
-  if (Option.isNone(turn)) return missing();
+  if (Option.isNone(turn)) return yield* missing();
   const sql = yield* SqliteClient;
   const { reference, idempotencyKey } = input;
   const scope = yield* hostedStatements(turn.value, user, current);
@@ -133,7 +133,7 @@ export const observeDocumentPublication = Effect.fn(function* (
     WHERE s.id IN (${scope}) AND s.user_id=${user} AND s.hosted_turn_id=${turn.value} AND s.idempotency_key=${idempotencyKey}
     AND m.id=${reference.stagingId} AND m.byte_length=${reference.byteLength} AND m.sha256=${reference.sha256} AND m.expires_at_ms>${current}`;
 
-  if (row === undefined) return missing();
+  if (row === undefined) return yield* missing();
   const id = yield* Schema.decodeUnknownEffect(Schema.String)(row.id);
 
   return yield* localSubmission(user, id);

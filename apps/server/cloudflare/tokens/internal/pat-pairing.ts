@@ -1,24 +1,12 @@
 import { selectPATPairingPublicCodeSymbols } from "../../../src/core/tokens/operations";
-import { httpRateLimited, response } from "./pat-shared";
+import { httpRateLimited, pairingRateLimitedBody, response } from "./pat-shared";
 
 const symbolCount = 8;
 
 const sampleBytes = 16;
 
-const reviewRetrySeconds = 60;
-
 export const rateLimited = (): Response =>
-  response({
-    body: {
-      error: {
-        code: "rate_limited",
-        message: "This PAT pairing is invalid or no longer available. Start a new request.",
-        retryAfterSeconds: reviewRetrySeconds,
-      },
-      next: [],
-    },
-    status: httpRateLimited,
-  });
+  response({ body: pairingRateLimitedBody, status: httpRateLimited });
 
 export const publicCode = (): string => {
   let symbols = "";

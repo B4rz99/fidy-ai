@@ -1,6 +1,6 @@
 import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import type { OAuthReviewBinding } from "../oauth-confirmation/contract";
-import type { CanonicalAdmissionUnavailable } from "../canonical-admission/contract";
+import type { CanonicalAdmissionFailure } from "../canonical-admission/contract";
 import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import type { OAuthCanonicalAdmission } from "../../src/shell/mcp/contract";
 import { Context, Data, type Effect, Option } from "effect";
@@ -16,11 +16,7 @@ export type LocalOAuthInvocation = {
   admission: OAuthCanonicalAdmission;
   review: (
     current: number
-  ) => Effect.Effect<
-    Option.Option<OAuthReviewBinding>,
-    CanonicalAdmissionUnavailable,
-    SqliteClient
-  >;
+  ) => Effect.Effect<Option.Option<OAuthReviewBinding>, CanonicalAdmissionFailure, SqliteClient>;
 };
 
 export const CurrentOAuthInvocation = Context.Reference<Option.Option<LocalOAuthInvocation>>(

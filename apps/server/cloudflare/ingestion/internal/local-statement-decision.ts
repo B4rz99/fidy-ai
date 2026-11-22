@@ -60,7 +60,7 @@ export const prepareLocalAbandon = Effect.fn(function* (id: string, owner: Decis
   const sql = yield* SqliteClient;
   const { user, current } = owner;
 
-  if (!(yield* eligible(id, owner))) return missing();
+  if (!(yield* eligible(id, owner))) return yield* missing();
 
   return prepareLocalWrite({
     targets: ["statement:" + id],
@@ -127,13 +127,11 @@ export const prepareLocalDecision = Effect.fn(function* (
   const { user, current } = owner;
   const raw = yield* selectReview(user, id, current);
 
-  if (raw === undefined) return missing();
+  if (raw === undefined) return yield* missing();
   const row = yield* Schema.decodeUnknownEffect(selected)(raw);
 
-  if (!(yield* eligible(row.id, owner))) return missing();
+  if (!(yield* eligible(row.id, owner))) return yield* missing();
   const capture = yield* reviewedLineCapture(row, owner, extraction);
-
-  if (Option.isSome(capture) && !("commit" in capture.value)) return capture.value;
 
   return prepareLocalWrite({
     targets: ["review:" + id],
@@ -147,10 +145,9 @@ export const prepareLocalDecision = Effect.fn(function* (
       extraction,
     }),
     commit: Effect.gen(function* () {
-      const response =
-        Option.isSome(capture) && "commit" in capture.value
-          ? Option.some(yield* capture.value.commit)
-          : Option.none();
+      const response = Option.isSome(capture)
+        ? Option.some(yield* capture.value.commit)
+        : Option.none();
 
       const tx = Option.isSome(response)
         ? (yield* Schema.decodeUnknownEffect(capturedId)(response.value.body)).data.id

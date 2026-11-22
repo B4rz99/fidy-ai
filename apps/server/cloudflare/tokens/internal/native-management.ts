@@ -29,7 +29,12 @@ import {
 import { type CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { type LocalMutationResult } from "../../canonical-admission/contract";
+import {
+  type CanonicalRejection,
+  type LocalMutationResult,
+  notFoundRejection,
+  unauthenticatedRejection,
+} from "../../canonical-admission/contract";
 import { readBoundWebSessionProof } from "../../web-session/operations";
 import { newId } from "../../secret-material/operations";
 import { PATUnavailable } from "../contract";
@@ -48,11 +53,7 @@ const record = Effect.fn(function* (statement: OwnedStatement) {
   }
 });
 
-const missing: LocalMutationResult = {
-  status: 404,
-  outcome: "not_found",
-  body: { error: { code: "not_found", message: "PAT not found." }, next: [] },
-};
+const missing = (): CanonicalRejection => notFoundRejection("PAT not found.");
 
 const ok = (data: Schema.Json): LocalMutationResult => ({
   status: 200,
@@ -77,12 +78,12 @@ const revokeSingle = Effect.fn(function* ({
   const userId = session.user_id,
     sql = yield* SqliteClient;
 
-  if (!Schema.is(TokenShortId)(shortId)) return missing;
+  if (!Schema.is(TokenShortId)(shortId)) return yield* missing();
 
   const [owned] =
     yield* sql`SELECT revoked_at_ms FROM pats WHERE user_id=${userId} AND short_id=${shortId}`;
 
-  if (owned === undefined) return missing;
+  if (owned === undefined) return yield* missing();
 
   if (owned.revoked_at_ms !== null) return ok({ shortId });
   const candidates = revocablePATGrants({ userId, shortId: Option.some(shortId), current });
@@ -138,14 +139,8 @@ const revokeAll = Effect.fn(function* (session: Session, current: number) {
   return ok({ revokedCount: revoked.length });
 });
 
-const absentCredential: LocalMutationResult = {
-  status: 401,
-  outcome: "validation_failed" as const,
-  body: {
-    error: { code: "unauthenticated", message: "Present a valid credential and retry." },
-    next: [],
-  },
-};
+const absentCredential = (): CanonicalRejection =>
+  unauthenticatedRejection("Present a valid credential and retry.");
 
 export const dispatchManagement = Effect.fn(function* (unit: {
   request: Request;
@@ -162,7 +157,7 @@ export const dispatchManagement = Effect.fn(function* (unit: {
     input: Effect.succeedSome(true),
     work: Effect.fn(function* (_unused: boolean, userId: UserId, current: number) {
       if (Option.isNone(proof)) {
-        return absentCredential;
+        return yield* absentCredential();
       }
 
       const { binding, digest } = proof.value;
@@ -185,7 +180,7 @@ export const dispatchManagement = Effect.fn(function* (unit: {
         yield* sql`SELECT 1 FROM web_sessions WHERE id=${binding} AND user_id=${userId} AND fresh_until_ms>${current}`;
 
       if (fresh.length !== 1) {
-        return absentCredential;
+        return yield* absentCredential();
       }
 
       if (id === "pats.revokePAT") {
@@ -221,7 +216,7 @@ export const readActivity = Effect.fn(function* ({
   const history = yield* activity.decode(yield* read(activity.statement));
   yield* record(recordPATActivityQuery({ ...activityInput, id: newId() }));
 
-  if (Option.isNone(pat)) return missing;
+  if (Option.isNone(pat)) return yield* missing();
 
   return ok(
     yield* Schema.encodeEffect(Schema.toCodecJson(PATActivity))({

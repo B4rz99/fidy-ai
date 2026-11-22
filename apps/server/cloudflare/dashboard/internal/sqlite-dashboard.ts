@@ -1,7 +1,7 @@
 import { describeDashboardEffect } from "./oauth-review";
 import {
   canonicalAdmissionUnavailable,
-  commitLocalWrite,
+  commitLocalPlan,
   prepareLocalWrite,
   runLocalMutation,
 } from "../../canonical-admission/operations";
@@ -23,7 +23,14 @@ import type { UserId } from "../../../src/core/identity/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
 import { DashboardUnavailable, DashboardView } from "../../../src/shell/dashboard/contract";
 import { renderDashboardView } from "../../../src/shell/dashboard/operations";
-import { type LocalMutationResult } from "../../canonical-admission/contract";
+import {
+  type CanonicalRejection,
+  type LocalMutationResult,
+  acceptedReadRejection,
+  canonicalRejectionStatus,
+  notFoundRejection,
+  validationRejection,
+} from "../../canonical-admission/contract";
 
 import { boundedJsonBody } from "../../http/operations";
 import { defaultDocument } from "./dashboard-mutation";
@@ -48,32 +55,19 @@ const success = (data: Schema.Json): LocalMutationResult => ({
   body: { data, next: [] },
 });
 
-const missing: LocalMutationResult = {
-  status: 404,
-  outcome: "success",
-  body: {
-    error: {
-      code: "dashboard_uninitialized",
-      message: "Initialize your Dashboard explicitly, then read it again.",
-    },
+const missing = (): CanonicalRejection =>
+  acceptedReadRejection({
+    status: canonicalRejectionStatus.notFound,
+    code: "dashboard_uninitialized",
+    wireMessage: Option.some("Initialize your Dashboard explicitly, then read it again."),
+    fields: Option.none(),
+    detail: Option.none(),
     next: [],
-  },
-};
+  });
 
-const invalidEdit: LocalMutationResult = {
-  status: 400,
-  outcome: "validation_failed",
-  body: {
-    error: { code: "validation_failed", message: "Invalid Dashboard edit.", fields: [] },
-    next: [],
-  },
-};
+const invalidEdit = (): CanonicalRejection => validationRejection("Invalid Dashboard edit.");
 
-const missingWidget: LocalMutationResult = {
-  status: 404,
-  outcome: "not_found",
-  body: { error: { code: "not_found", message: "Dashboard widget unavailable." }, next: [] },
-};
+const missingWidget = (): CanonicalRejection => notFoundRejection("Dashboard widget unavailable.");
 
 const StoredDocument = Schema.Struct({ document_json: documentJson, revision: Schema.Int });
 
@@ -92,12 +86,10 @@ const editDocument = Effect.fn(function* (base: DashboardDocument, edit: Dashboa
   const result = yield* Effect.result(applyDashboardEdit({ document: base, edit }));
 
   if (Result.isFailure(result)) {
-    return Result.fail(
-      Predicate.isTagged(result.failure, "WidgetNotFound") ||
-        Predicate.isTagged(result.failure, "RegionNotFound")
-        ? missingWidget
-        : invalidEdit
-    );
+    return yield* Predicate.isTagged(result.failure, "WidgetNotFound") ||
+    Predicate.isTagged(result.failure, "RegionNotFound")
+      ? missingWidget()
+      : invalidEdit();
   }
 
   const categories = listLaunchCategories();
@@ -106,7 +98,9 @@ const editDocument = Effect.fn(function* (base: DashboardDocument, edit: Dashboa
     categories.some((category) => category.id === ref.categoryId)
   );
 
-  return valid ? Result.succeed(result.success) : Result.fail(invalidEdit);
+  if (!valid) return yield* invalidEdit();
+
+  return result.success;
 });
 
 export const prepareDashboardDocument = Effect.fn(function* (
@@ -121,10 +115,8 @@ export const prepareDashboardDocument = Effect.fn(function* (
     onSome: (row) => row.document_json,
   });
 
-  const result = Option.isSome(edit) ? yield* editDocument(base, edit.value) : Result.succeed(base);
-
-  if (Result.isFailure(result)) return result.failure;
-  const document = result.success;
+  const result = Option.isSome(edit) ? yield* editDocument(base, edit.value) : base;
+  const document = result;
 
   return prepareLocalWrite({
     targets: ["dashboard-document"],
@@ -178,11 +170,11 @@ const runDashboard = Effect.fn(function* (
     operation === "dashboard.initializeDashboard"
   ) {
     return yield* prepareDashboardDocument(user, stored, edit).pipe(
-      Effect.flatMap(commitLocalWrite)
+      Effect.flatMap(commitLocalPlan)
     );
   }
 
-  if (Option.isNone(stored)) return missing;
+  if (Option.isNone(stored)) return yield* missing();
   const document = stored.value.document_json;
 
   if (operation === "dashboard.getDashboard") {

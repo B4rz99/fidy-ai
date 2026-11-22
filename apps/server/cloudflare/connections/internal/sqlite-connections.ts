@@ -3,12 +3,14 @@ import { DateTime, Effect, Schema } from "effect";
 import { Account, Connection, InstitutionId } from "../../../src/core/connections/contract";
 import type { UserId } from "../../../src/core/identity/contract";
 import {
-  CanonicalAdmissionUnavailable,
+  type CanonicalRejection,
   type LocalMutationResult,
+  notFoundRejection,
+  validationRejection,
 } from "../../canonical-admission/contract";
 import { preserveStoreAlarm } from "../../runtime/sqlite/operations";
 import { newId } from "../../secret-material/operations";
-import { prepareLocalWrite } from "../../canonical-admission/operations";
+import { admissionFailure, prepareLocalWrite } from "../../canonical-admission/operations";
 import { institutionsForUser } from "./institution-registration";
 
 const accountPosition = -2;
@@ -21,73 +23,54 @@ const success = (data: Schema.Json): LocalMutationResult => ({
   body: { data, next: [] },
 });
 
-const missing = (): LocalMutationResult => ({
-  status: 404,
-  outcome: "not_found",
-  body: { error: { code: "not_found", message: "Connection unavailable." }, next: [] },
-});
+const missing = (): CanonicalRejection => notFoundRejection("Connection unavailable.");
 
-export const queryConnections = Effect.fn(
-  function* (operation: string, request: Request, user: UserId) {
-    const sql = yield* SqliteClient;
+export const queryConnections = Effect.fn(function* (
+  operation: string,
+  request: Request,
+  user: UserId
+) {
+  const sql = yield* SqliteClient;
 
-    const all = yield* Schema.decodeUnknownEffect(Schema.Array(Connection))(
-      yield* sql`SELECT id,institution_id AS institutionId,state FROM connections WHERE user_id=${user} ORDER BY institution_id,id`
-    );
+  const all = yield* Schema.decodeUnknownEffect(Schema.Array(Connection))(
+    yield* sql`SELECT id,institution_id AS institutionId,state FROM connections WHERE user_id=${user} ORDER BY institution_id,id`
+  );
 
-    if (operation === "connections.listConnections") return success([...all]);
+  if (operation === "connections.listConnections") return success([...all]);
 
-    if (operation === "connections.listInstitutions") {
-      const first = all[0];
+  if (operation === "connections.listInstitutions") {
+    const first = all[0];
 
-      return success([
-        {
-          id: "bancolombia",
-          displayName: "Bancolombia",
-          availability: (yield* institutionsForUser(user)).includes(
-            InstitutionId.make("bancolombia")
-          )
-            ? "available"
-            : "unavailable",
-          connection: first !== undefined ? { id: first.id, state: first.state } : null,
-        },
-      ]);
-    }
+    return success([
+      {
+        id: "bancolombia",
+        displayName: "Bancolombia",
+        availability: (yield* institutionsForUser(user)).includes(InstitutionId.make("bancolombia"))
+          ? "available"
+          : "unavailable",
+        connection: first !== undefined ? { id: first.id, state: first.state } : null,
+      },
+    ]);
+  }
 
-    const accounts = operation === "connections.listAccounts";
-    const id = new URL(request.url).pathname.split("/").at(accounts ? accountPosition : -1);
-    const connection = all.find((item) => item.id === id);
+  const accounts = operation === "connections.listAccounts";
+  const id = new URL(request.url).pathname.split("/").at(accounts ? accountPosition : -1);
+  const connection = all.find((item) => item.id === id);
 
-    if (connection === undefined) return missing();
+  if (connection === undefined) return yield* missing();
 
-    if (!accounts) return success(connection);
+  if (!accounts) return success(connection);
 
-    const rows =
-      yield* sql`SELECT r.id,r.connection_id AS connectionId FROM connection_accounts r JOIN connection_grants g ON g.attempt_id=r.grant_attempt_id WHERE r.connection_id=${connection.id} AND ${connection.state}='Active' AND g.state='active' ORDER BY r.id LIMIT ${maxAccounts}`;
+  const rows =
+    yield* sql`SELECT r.id,r.connection_id AS connectionId FROM connection_accounts r JOIN connection_grants g ON g.attempt_id=r.grant_attempt_id WHERE r.connection_id=${connection.id} AND ${connection.state}='Active' AND g.state='active' ORDER BY r.id LIMIT ${maxAccounts}`;
 
-    return success([...(yield* Schema.decodeUnknownEffect(Schema.Array(Account))(rows))]);
-  },
-  Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
-);
+  return success([...(yield* Schema.decodeUnknownEffect(Schema.Array(Account))(rows))]);
+}, Effect.mapError(admissionFailure));
 
-const invalidStatus = 400;
-
-const missingStatus = 404;
-
-const unavailableInstitution = (found: boolean): LocalMutationResult => {
-  const code = found ? "validation_failed" : "not_found";
-
-  return {
-    status: found ? invalidStatus : missingStatus,
-    outcome: code,
-    body: {
-      error: found
-        ? { code, message: "Institution unavailable.", fields: [] }
-        : { code, message: "Institution unavailable." },
-      next: [],
-    },
-  };
-};
+const unavailableInstitution = (found: boolean): CanonicalRejection =>
+  found
+    ? validationRejection("Institution unavailable.")
+    : notFoundRejection("Institution unavailable.");
 
 const attemptLifetime = 600000;
 
@@ -97,9 +80,9 @@ export const prepareConnection = Effect.fn(function* (
   id: InstitutionId,
   { user, current, storage }: { user: UserId; current: number; storage: DurableObjectStorage }
 ) {
-  if (id !== "bancolombia") return unavailableInstitution(false);
+  if (id !== "bancolombia") return yield* unavailableInstitution(false);
 
-  if (!(yield* institutionsForUser(user)).includes(id)) return unavailableInstitution(true);
+  if (!(yield* institutionsForUser(user)).includes(id)) return yield* unavailableInstitution(true);
 
   return prepareLocalWrite({
     targets: ["connections:" + id],

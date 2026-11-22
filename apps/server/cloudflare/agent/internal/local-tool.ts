@@ -1,12 +1,16 @@
 import { type ConfirmationRead, describeConfirmation } from "./confirmation-description";
 import { meterHistory } from "./local-history";
 import { stageChallenge } from "./local-challenge";
-import type {
-  LocalMutationPreparation,
-  LocalMutationResult,
-  LocalReviewFacts,
+import {
+  type CanonicalRejection,
+  type CanonicalWireOutcome,
+  type LocalMutationPlan,
+  type LocalReviewFacts,
+  canonicalRejectionStatus,
+  isCanonicalRejection,
 } from "../../canonical-admission/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
+import { atomicBatchOperation } from "../../../src/shell/operations/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import {
@@ -28,7 +32,12 @@ import {
   prepareHostedBatchOwner,
   prepareHostedOwner,
 } from "../../canonical-operations/operations";
-import { admitLocalRequest, commitLocalWrite } from "../../canonical-admission/operations";
+import {
+  admitLocalRequest,
+  commitLocalPlan,
+  encodeLocalRejection,
+  settleLocalPlan,
+} from "../../canonical-admission/operations";
 import { type LocalTurn, channelAuthority } from "./local-turn";
 import { appendEntry, entryIdentity, liveTurn } from "./local-turn-store";
 import { AgentUnavailable } from "../contract";
@@ -49,7 +58,7 @@ const Subject = Data.taggedEnum<ConsentSubject>();
 const failure = (code: string): CanonicalToolOutcome =>
   Outcome.CanonicalOperationFailed({ failure: { error: { code } } });
 
-const firstFailureStatus = 400;
+const firstFailureStatus = canonicalRejectionStatus.badRequest;
 
 const currentConsent = Effect.fn(function* (turn: LocalTurn) {
   const sql = yield* SqliteClient;
@@ -74,7 +83,7 @@ const grantsTier = Effect.fn(function* (turn: LocalTurn, now: number, tier: stri
 });
 
 const decodedOutcome = Effect.fn(function* (
-  result: LocalMutationResult,
+  result: CanonicalWireOutcome,
   operation: CatalogOperation
 ) {
   if (result.status >= firstFailureStatus) {
@@ -87,13 +96,11 @@ const decodedOutcome = Effect.fn(function* (
 });
 
 const approve = Effect.fn(function* (
-  plan: LocalMutationPreparation,
+  plan: LocalMutationPlan,
   tool: HostedTextToolCall,
   { action, required }: { action: Action; required: boolean }
 ) {
   if (!required) return true;
-
-  if (!("commit" in plan)) return tool.operation === "operations.executeAtomicBatch";
 
   if (Option.isNone(plan.review)) return false;
   const fresh = yield* plan.review.value;
@@ -140,9 +147,17 @@ const describeBatchChild = Effect.fnUntraced(function* (
       });
 
       if (Option.isNone(prepared)) return Option.none<Schema.Json>();
-      const result = yield* commitLocalWrite(prepared.value);
 
-      return result.outcome === "success" ? Option.some(result.body) : Option.none();
+      return yield* commitLocalPlan(prepared.value).pipe(
+        Effect.map((result) => Option.some(result.body)),
+        Effect.catchIf(isCanonicalRejection, (rejection) =>
+          Effect.logDebug({
+            component: "agent",
+            operation: "describeBatchChild",
+            outcome: rejection.code,
+          }).pipe(Effect.as(Option.none<Schema.Json>()))
+        )
+      );
     }).pipe(
       Effect.tapError(() =>
         Effect.logWarning({
@@ -178,7 +193,7 @@ const ownerForTool = Effect.fnUntraced(function* (
   const context =
     action.commercial === undefined ? base : { ...base, commercial: action.commercial };
 
-  return operation.id === "operations.executeAtomicBatch"
+  return operation.id === atomicBatchOperation
     ? Option.some(
         yield* prepareHostedBatchOwner(input, {
           ...context,
@@ -191,42 +206,84 @@ const ownerForTool = Effect.fnUntraced(function* (
     : yield* prepareHostedOwner(operation, input, context);
 });
 
-const executeOwner = Effect.fn(function* (
+const refusedOutcome = Effect.fn(function* (
+  operation: CatalogOperation,
+  tool: HostedTextToolCall,
+  rejection: CanonicalRejection
+) {
+  if (
+    operation.policy.agentConfirmation === "required" &&
+    tool.operation !== atomicBatchOperation
+  ) {
+    return failure("user_action_required");
+  }
+
+  return yield* decodedOutcome(encodeLocalRejection(rejection), operation);
+});
+
+const admitTool = Effect.fn(function* (
   tool: HostedTextToolCall,
   input: CanonicalToolEvidence,
   action: Action
 ) {
-  const { turn } = action,
-    now = yield* Clock.currentTimeMillis;
+  const { turn } = action;
+  const now = yield* Clock.currentTimeMillis;
 
   yield* liveTurn(turn, now);
 
-  if (!(yield* currentConsent(turn))) return failure("consent_required");
+  if (!(yield* currentConsent(turn))) {
+    return { kind: "failed" as const, outcome: failure("consent_required") };
+  }
 
   const operation = localHostedCatalog(channelAuthority(turn)).find(
     ({ id }) => id === tool.operation
   );
 
-  if (operation === undefined) return failure("scope_missing");
+  if (operation === undefined) {
+    return { kind: "failed" as const, outcome: failure("scope_missing") };
+  }
 
   if (Option.isNone(Schema.decodeOption(operation.input, { onExcessProperty: "error" })(input))) {
-    return failure("validation_failed");
+    return { kind: "failed" as const, outcome: failure("validation_failed") };
   }
 
   if (!(yield* grantsTier(turn, now, operation.policy.requiredTier))) {
-    return failure("paywall_required");
+    return { kind: "failed" as const, outcome: failure("paywall_required") };
   }
 
   if ((yield* admitLocalRequest({ user: turn.user_id, current: now })).length !== 1) {
-    return failure("rate_limited");
+    return { kind: "failed" as const, outcome: failure("rate_limited") };
   }
 
-  const plan = yield* ownerForTool(operation, input, { tool, action, now });
+  return { kind: "operation" as const, operation, now };
+});
 
-  if (Option.isNone(plan)) return failure("unavailable");
+const executeOwner = Effect.fn(function* (
+  tool: HostedTextToolCall,
+  input: CanonicalToolEvidence,
+  action: Action
+) {
+  const admitted = yield* admitTool(tool, input, action);
+
+  if (admitted.kind === "failed") return admitted.outcome;
+
+  const { operation, now } = admitted;
+
+  const prepared = yield* ownerForTool(operation, input, { tool, action, now }).pipe(
+    Effect.map((plan) => ({ kind: "plan" as const, plan })),
+    Effect.catchTag("CanonicalRejection", (rejection) =>
+      Effect.succeed({ kind: "refused" as const, rejection })
+    )
+  );
+
+  if (prepared.kind === "refused") {
+    return yield* refusedOutcome(operation, tool, prepared.rejection);
+  }
+
+  if (Option.isNone(prepared.plan)) return failure("unavailable");
 
   if (
-    !(yield* approve(plan.value, tool, {
+    !(yield* approve(prepared.plan.value, tool, {
       action,
       required: operation.policy.agentConfirmation === "required",
     }))
@@ -234,7 +291,7 @@ const executeOwner = Effect.fn(function* (
     return failure("user_action_required");
   }
 
-  const result = yield* commitLocalWrite(plan.value);
+  const result = yield* settleLocalPlan(prepared.plan.value);
 
   return yield* decodedOutcome(result, operation);
 });

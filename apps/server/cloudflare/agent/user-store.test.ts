@@ -30,7 +30,20 @@ const checkBatchEffects = Effect.fnUntraced(function* (
     expect(
       yield* owner.exec("SELECT count(*) AS n FROM user_documents WHERE kind='dashboard'")
     ).toEqual([{ n: 0 }]);
-  }).pipe(Effect.when(Effect.succeed(mode === "batch-stale")));
+  }).pipe(
+    Effect.when(
+      Effect.succeed(mode === "batch-stale" || mode === "batch-absent" || mode === "batch-capacity")
+    )
+  );
+
+  yield* Effect.gen(function* () {
+    expect(
+      yield* owner.exec(
+        "SELECT count(*) AS n FROM hosted_batch_child_audit WHERE turn_id=? AND outcome<>'success'",
+        turnId
+      )
+    ).toEqual([{ n: 1 }]);
+  }).pipe(Effect.when(Effect.succeed(mode === "batch-absent" || mode === "batch-capacity")));
 
   yield* Effect.gen(function* () {
     expect(
@@ -279,6 +292,8 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
     | "connection"
     | "batch"
     | "batch-stale"
+    | "batch-absent"
+    | "batch-capacity"
 ) {
   const create = yield* nativeHostedPlatform;
 
@@ -335,6 +350,8 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
     connection: "connect",
     batch: "batch",
     "batch-stale": "batch",
+    "batch-absent": "batch",
+    "batch-capacity": "batch-capacity",
     confirm: "forget",
     stale: "forget",
     withdraw: "waiting",
@@ -345,7 +362,28 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
   yield* prepareQueries(mode, { runtime, owner, provider });
   const id = "22460000-0000-4000-8000-000000000020";
 
-  if (["confirm", "stale", "batch", "batch-stale"].includes(mode)) {
+  if (mode === "batch-capacity") {
+    yield* Effect.forEach(
+      Array.from({ length: 7 }, (_, index) => index),
+      (index) =>
+        owner.exec(
+          "INSERT INTO memories VALUES(?,?,?,?,?)",
+          `84000000-0000-4000-8000-${index.toString().padStart(12, "0")}`,
+          alice.user,
+          "x".repeat(2_000),
+          owner.now,
+          owner.now
+        ),
+      { discard: true }
+    );
+    yield* owner.exec(
+      "INSERT INTO memories VALUES(?,?,'short',?,?)",
+      id,
+      alice.user,
+      owner.now,
+      owner.now
+    );
+  } else if (["confirm", "stale", "batch", "batch-stale", "batch-absent"].includes(mode)) {
     yield* owner.exec(
       "INSERT INTO memories VALUES(?,?,'Preparo almuerzos',?,?)",
       id,
@@ -434,9 +472,14 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
   if (mode === "withdraw") return;
 
   const assertReviewed = Effect.fnUntraced(function* () {
-    expect(proposal.text).toContain("Preparo almuerzos");
+    yield* Effect.sync(() => expect(proposal.text).toContain("Preparo almuerzos")).pipe(
+      Effect.when(Effect.succeed(mode !== "batch-capacity"))
+    );
+
     expect(proposal.confirmation?.command).toMatch(/^CONFIRMAR [a-f0-9]{64}$/u);
-    expect(yield* owner.exec("SELECT count(*) AS n FROM memories")).toEqual([{ n: 1 }]);
+    expect(yield* owner.exec("SELECT count(*) AS n FROM memories")).toEqual([
+      { n: mode === "batch-capacity" ? 8 : 1 },
+    ]);
 
     if (["stale", "batch-stale"].includes(mode)) {
       yield* owner.exec("UPDATE memories SET text='Estado nuevo' WHERE id=?", id);
@@ -447,7 +490,11 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
       expect(
         yield* owner.exec("SELECT count(*) AS n FROM user_documents WHERE kind='dashboard'")
       ).toEqual([{ n: 0 }]);
-    }).pipe(Effect.when(Effect.succeed(mode.startsWith("batch"))));
+    }).pipe(Effect.when(Effect.succeed(mode.startsWith("batch") && mode !== "batch-capacity")));
+
+    yield* owner
+      .exec("DELETE FROM memories WHERE id=?", id)
+      .pipe(Effect.when(Effect.succeed(mode === "batch-absent")));
 
     const confirmed = yield* post(alice, "", { text: proposal.confirmation?.command });
 
@@ -465,20 +512,34 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
       }),
       { times: 50, schedule: Schedule.spaced("50 millis") }
     );
+
+    const expectedMemories =
+      new Map([
+        ["batch-capacity", 8],
+        ["stale", 1],
+        ["batch-stale", 1],
+      ]).get(mode) ?? 0;
+
     expect(yield* owner.exec("SELECT count(*) AS n FROM memories")).toEqual([
-      { n: ["stale", "batch-stale"].includes(mode) ? 1 : 0 },
+      { n: expectedMemories },
     ]);
     yield* checkBatchEffects(mode, owner, accepted.turnId);
     expect(
       yield* owner.exec("SELECT outcome FROM hosted_tool_calls WHERE turn_id=?", accepted.turnId)
     ).toEqual([
       {
-        outcome: ["stale", "batch-stale"].includes(mode) ? "CanonicalOperationFailed" : "Succeeded",
+        outcome: ["stale", "batch-stale", "batch-absent", "batch-capacity"].includes(mode)
+          ? "CanonicalOperationFailed"
+          : "Succeeded",
       },
     ]);
   });
 
-  if (["confirm", "stale", "batch", "batch-stale"].includes(mode)) return yield* assertReviewed();
+  if (
+    ["confirm", "stale", "batch", "batch-stale", "batch-absent", "batch-capacity"].includes(mode)
+  ) {
+    return yield* assertReviewed();
+  }
 
   yield* owner.exec("ALTER TABLE unavailable_reminder_schedules RENAME TO reminder_schedules");
   expect(
@@ -547,6 +608,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   );
   test.effect("refuses the complete hosted batch when a reviewed child changed", () =>
     nativeTurnJourney("batch-stale")
+  );
+  test.effect("audits a hosted batch child rejection without committing sibling writes", () =>
+    nativeTurnJourney("batch-absent")
+  );
+  test.effect("audits a commit-time hosted batch child rejection", () =>
+    nativeTurnJourney("batch-capacity")
   );
   test.effect("refuses confirmation after the reviewed Memory changes", () =>
     nativeTurnJourney("stale")

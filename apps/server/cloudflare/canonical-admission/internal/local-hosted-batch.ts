@@ -6,9 +6,11 @@ import { grantsRequiredTier } from "../../../src/shell/canonical-operations/oper
 import { AtomicBatchAdmission } from "../../../src/shell/operations/contract";
 import {
   CanonicalAdmissionUnavailable,
+  type CanonicalOutcome,
   type LocalMutationPlan,
-  type LocalMutationResult,
+  validationRejection,
 } from "../contract";
+import { admissionFailure } from "./rejection";
 import {
   type Audit,
   type Child,
@@ -33,7 +35,7 @@ type HostedContext = Context & {
 
 const hostedAudit = (context: HostedContext): Audit =>
   Effect.fnUntraced(
-    function* (child: Pick<Child, "index" | "operation">, outcome: LocalMutationResult["outcome"]) {
+    function* (child: Pick<Child, "index" | "operation">, outcome: CanonicalOutcome) {
       const sql = yield* SqliteClient;
 
       const saved =
@@ -45,12 +47,6 @@ const hostedAudit = (context: HostedContext): Audit =>
     },
     Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
   );
-
-const invalidBatch = (): LocalMutationResult => ({
-  status: 400,
-  outcome: "validation_failed",
-  body: { error: { code: "validation_failed", message: "Invalid atomic batch input." }, next: [] },
-});
 
 const reviewPlans = Effect.fn(function* (
   plans: Effect.Success<ReturnType<typeof prepareChildren>>,
@@ -91,64 +87,72 @@ const reviewPlans = Effect.fn(function* (
   };
 });
 
-export const prepareHostedBatch = Effect.fn(
-  function* (input: Schema.Json, context: HostedContext, owners: ReadonlyMap<string, Prepare>) {
-    const payload = Schema.decodeUnknownOption(AtomicBatchAdmission)(input);
+export const prepareHostedBatch = Effect.fn(function* (
+  input: Schema.Json,
+  context: HostedContext,
+  owners: ReadonlyMap<string, Prepare>
+) {
+  const payload = Schema.decodeUnknownOption(AtomicBatchAdmission)(input);
 
-    if (Option.isNone(payload)) return invalidBatch();
-    const wire = Schema.decodeUnknownOption(Schema.Array(Schema.Json))(payload.value.payload.calls);
+  if (Option.isNone(payload)) {
+    return yield* validationRejection("Invalid atomic batch input.");
+  }
 
-    if (Option.isNone(wire)) return invalidBatch();
+  const wire = Schema.decodeUnknownOption(Schema.Array(Schema.Json))(payload.value.payload.calls);
 
-    const selected = selectChildren({
-      calls: wire.value,
-      owners,
-      allowed: (op) => isHostedVisible(op.policy.access, context.authorityRoot),
-    });
+  if (Option.isNone(wire)) {
+    return yield* validationRejection("Invalid atomic batch input.");
+  }
 
-    if ("invalid" in selected) return invalidBatch();
-    const audit = hostedAudit(context);
+  const selected = selectChildren({
+    calls: wire.value,
+    owners,
+    allowed: (op) => isHostedVisible(op.policy.access, context.authorityRoot),
+  });
 
-    if ("refusal" in selected) return yield* refuseChild(selected.refusal, audit);
-    const status = yield* localStanding(context.user, context.current);
+  if ("invalid" in selected) {
+    return yield* validationRejection("Invalid atomic batch input.");
+  }
 
-    const unentitled = Option.fromUndefinedOr(
-      selected.children.find(
-        (child) =>
-          !grantsRequiredTier({
-            requiredTier: child.operation.policy.requiredTier,
-            callerTier: status.accessTier,
-          })
-      )
+  const audit = hostedAudit(context);
+
+  if ("refusal" in selected) return yield* refuseChild(selected.refusal, audit);
+
+  const status = yield* localStanding(context.user, context.current);
+
+  const unentitled = Option.fromUndefinedOr(
+    selected.children.find(
+      (child) =>
+        !grantsRequiredTier({
+          requiredTier: child.operation.policy.requiredTier,
+          callerTier: status.accessTier,
+        })
+    )
+  );
+
+  if (Option.isSome(unentitled)) {
+    return yield* refuseChild(
+      {
+        ...unentitled.value,
+        code: "paywall_required",
+        message: "Your Subscription tier does not grant this operation.",
+        outcome: "validation_failed",
+      },
+      audit
     );
+  }
 
-    if (Option.isSome(unentitled)) {
-      return yield* refuseChild(
-        {
-          ...unentitled.value,
-          code: "paywall_required",
-          message: "Your Subscription tier does not grant this operation.",
-        },
-        audit
-      );
-    }
-
-    return yield* prepareChildren(selected.children, context).pipe(
-      Effect.map((plans): LocalMutationPlan => ({
-        targets: [],
-        removedTarget: Option.none(),
-        premises: [],
-        review: Option.some(
-          reviewPlans(plans, context.describe).pipe(
-            Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
-          )
-        ),
-        commit: commitChildren(plans, context, audit).pipe(
-          Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
-        ),
-      })),
-      Effect.catchTag("ChildRefused", (failure) => refuseChild(failure, audit))
-    );
-  },
-  Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
-);
+  return yield* prepareChildren(selected.children, context).pipe(
+    Effect.map((plans): LocalMutationPlan => ({
+      targets: [],
+      removedTarget: Option.none(),
+      premises: [],
+      transaction: "self",
+      review: Option.some(
+        reviewPlans(plans, context.describe).pipe(Effect.mapError(admissionFailure))
+      ),
+      commit: commitChildren(plans, context, audit).pipe(Effect.mapError(admissionFailure)),
+    })),
+    Effect.catchTag("ChildRefused", (failure) => refuseChild(failure, audit))
+  );
+}, Effect.mapError(admissionFailure));

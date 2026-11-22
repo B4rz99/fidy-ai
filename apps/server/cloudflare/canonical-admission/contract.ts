@@ -177,6 +177,8 @@ const assertChildRejection = (code: ErrorCode, outcome: CanonicalRejectionOutcom
   }
 };
 
+export const childRejectionMessage = "The requested record is unavailable.";
+
 export const childRejection = (
   failure: Readonly<{
     index: number;
@@ -194,7 +196,7 @@ export const childRejection = (
     code: failure.code,
     wireMessage: Option.some(
       failure.message === undefined || failure.message.length === 0
-        ? "The requested record is unavailable."
+        ? childRejectionMessage
         : failure.message
     ),
     fields: Option.some([]),

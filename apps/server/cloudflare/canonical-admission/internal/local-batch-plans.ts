@@ -7,6 +7,7 @@ import {
   type CanonicalRejectionOutcome,
   type LocalMutationPlan,
   type LocalMutationResult,
+  childRejectionMessage,
   childRejection as rejectChild,
 } from "../contract";
 import { recurringDiscoveryIntervalMs } from "../../recurring/contract";
@@ -53,8 +54,8 @@ const childFailure = (child: Child, rejection: CanonicalRejection): ChildRefused
     operation: child.operation,
     code: rejection.code,
     message: Option.match(rejection.wireMessage, {
-      onNone: () => "The requested record is unavailable.",
-      onSome: (message) => (message.length > 0 ? message : "The requested record is unavailable."),
+      onNone: () => childRejectionMessage,
+      onSome: (message) => (message.length > 0 ? message : childRejectionMessage),
     }),
     outcome: rejection.audit.kind === "accepted" ? "validation_failed" : rejection.audit.outcome,
   });

@@ -30,14 +30,22 @@ const minute = 60_000,
 
 const limits = {
   source: 60,
-  global: 600,
+  bootstrapGlobal: 300,
+  credentialGlobal: 300,
   registrationSource: 10,
   registrationGlobal: 100,
   concurrent: 32,
   concurrentSource: 8,
 } as const;
 
-const begin = Effect.fn(function* (source: string, registration: boolean) {
+type Flow = "bootstrap" | "credentialed";
+
+const flowWindow = (flow: Flow): Readonly<{ key: string; limit: number }> =>
+  flow === "bootstrap"
+    ? { key: "oauth/global/bootstrap", limit: limits.bootstrapGlobal }
+    : { key: "oauth/global/credentialed", limit: limits.credentialGlobal };
+
+const begin = Effect.fn(function* (source: string, flow: Flow, registration: boolean) {
   const sql = yield* SqliteClient;
 
   return yield* Effect.gen(function* () {
@@ -54,18 +62,12 @@ const begin = Effect.fn(function* (source: string, registration: boolean) {
 
     if (sourceLeases.length !== 0) return Option.none<string>();
 
-    const sourceWindows = [
-      { key: "oauth/source/" + source, limit: limits.source },
-      { key: "oauth/global", limit: limits.global },
-    ];
+    const windows = [{ key: "oauth/source/" + source, limit: limits.source }, flowWindow(flow)];
 
-    const windows = registration
-      ? [
-          ...sourceWindows,
-          { key: "oauth/reg/" + source, limit: limits.registrationSource },
-          { key: "oauth/registration", limit: limits.registrationGlobal },
-        ]
-      : sourceWindows;
+    if (registration) {
+      windows.push({ key: "oauth/reg/" + source, limit: limits.registrationSource });
+      windows.push({ key: "oauth/registration", limit: limits.registrationGlobal });
+    }
 
     const saturated = yield* Effect.forEach(
       windows,
@@ -168,6 +170,11 @@ const registerPublic = Effect.fn(function* (request: Request) {
   });
 });
 
+const flowForPath = (path: string): Flow =>
+  path === oauthPaths.token || path === oauthPaths.mcp || path.startsWith("/web/oauth/")
+    ? "credentialed"
+    : "bootstrap";
+
 export const nativePublicOAuth = Effect.fn(
   function* (input: {
     request: Request;
@@ -191,7 +198,7 @@ export const nativePublicOAuth = Effect.fn(
     const sql = yield* SqliteClient;
 
     return yield* Effect.acquireUseRelease(
-      begin(source.value, path === oauthPaths.register),
+      begin(source.value, flowForPath(path), path === oauthPaths.register),
       (lease) =>
         Effect.gen(function* () {
           if (Option.isNone(lease)) {

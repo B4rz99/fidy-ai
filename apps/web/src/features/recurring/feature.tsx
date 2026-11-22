@@ -231,7 +231,7 @@ const lifecycleMessages = {
   active:
     "está activo. Fidy volverá a mostrar las próximas fechas de este plan. Los registros existentes se conservan.",
   stopped:
-    "dejó de seguirse. No aparecerán nuevas fechas de este plan. Los registros existentes se conservan.",
+    "dejó de seguirse. No aparecerán nuevas fechas de este plan. Los registros existentes se conservan. Puedes reanudarlo desde Todos los recurrentes.",
 };
 const failureMessage = (state: SaveState): string => {
   if (state === "uncertain") {

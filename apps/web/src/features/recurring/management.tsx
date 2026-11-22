@@ -515,22 +515,25 @@ const PlanRow = ({
           <RecurringPlanBadge status={status} />
         </span>
       </button>
-      {plan.pauses.some((pause) => pause.through === undefined) ? (
+      {plan.pauses.some((pause) => pause.through === undefined) || status === "stopped" ? (
         <Button
           contentLayout="wrap"
           focusAppearance="subtle"
           variant="outline"
           size="sm"
+          aria-label={`Reanudar ${input.name}`}
           disabled={
             disabled ||
-            plan.stoppedOn !== undefined ||
-            plan.pauses.some((pause) => pause.through === undefined && pause.from > planToday(plan))
+            (status !== "stopped" &&
+              plan.pauses.some(
+                (pause) => pause.through === undefined && pause.from > planToday(plan)
+              ))
           }
           onClick={() =>
             save({ kind: "lifecycle", planId: plan.id, date: planToday(plan), action: "resume" })
           }
         >
-          Reanudar
+          {status === "stopped" ? "Reanudar seguimiento" : "Reanudar"}
         </Button>
       ) : null}
     </div>

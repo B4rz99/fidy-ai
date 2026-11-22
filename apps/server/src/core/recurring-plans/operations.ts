@@ -558,12 +558,36 @@ const scopedEdit = (
     exceptions: [...document.exceptions, ...frozen],
   });
 };
+const resumeStopped = ({
+  document,
+  plan,
+  stoppedOn,
+  edit,
+}: Readonly<{
+  document: RecurringDocument;
+  plan: RecurringPlan;
+  stoppedOn: string;
+  edit: Extract<RecurringEdit, { kind: "lifecycle" }>;
+}>): Option.Option<RecurringDocument> => {
+  if (edit.action !== "resume") return Option.none();
+  const { stoppedOn: _, ...rest } = plan;
+  if (edit.date < stoppedOn) return Option.some(withPlan(document, rest));
+  const open = plan.pauses.find((pause) => pause.through === undefined);
+  const pauses =
+    open !== undefined && open.from <= stoppedOn
+      ? plan.pauses.map((pause) => (pause === open ? { ...pause, through: edit.date } : pause))
+      : [...plan.pauses, { from: stoppedOn, through: edit.date }];
+  return Option.some(withPlan(document, { ...rest, pauses }));
+};
 const lifecycle = (
   document: RecurringDocument,
   edit: Extract<RecurringEdit, { kind: "lifecycle" }>
 ): Option.Option<RecurringDocument> => {
   const plan = document.plans.find((entry) => entry.id === edit.planId);
-  if (plan === undefined || plan.stoppedOn !== undefined) return Option.none();
+  if (plan === undefined) return Option.none();
+  if (plan.stoppedOn !== undefined) {
+    return resumeStopped({ document, plan, stoppedOn: plan.stoppedOn, edit });
+  }
   const open = plan.pauses.find((pause) => pause.through === undefined);
   if (edit.action === "stop") {
     return Option.some(withPlan(document, { ...plan, stoppedOn: edit.date }));

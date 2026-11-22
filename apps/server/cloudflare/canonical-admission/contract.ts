@@ -195,9 +195,7 @@ export const childRejection = (
     audit: { kind: "rejected", outcome: failure.outcome },
     code: failure.code,
     wireMessage: Option.some(
-      failure.message === undefined || failure.message.length === 0
-        ? childRejectionMessage
-        : failure.message
+      failure.message.length === 0 ? childRejectionMessage : failure.message
     ),
     fields: Option.some([]),
     detail: Option.none(),

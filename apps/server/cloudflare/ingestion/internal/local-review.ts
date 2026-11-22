@@ -167,7 +167,7 @@ export const dispatchLocalReview = Effect.fn(
       const id = new URL(unit.request.url).pathname.split("/").at(-1) ?? "";
 
       const invalid = Option.isNone(Schema.decodeOption(StatementSubmissionId)(id))
-        ? Option.some(missing())
+        ? Option.some(() => missing())
         : Option.none();
 
       return yield* runLocalMutation(

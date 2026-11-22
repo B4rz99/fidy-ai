@@ -80,9 +80,9 @@ export const isLocalTransactionOperation = (id: string): boolean =>
 
 const invalidTransactionTarget = (
   id: string
-): Option.Option<ReturnType<typeof missingLocalTransaction>> =>
+): Option.Option<() => ReturnType<typeof missingLocalTransaction>> =>
   Option.isNone(Schema.decodeOption(TransactionId)(id))
-    ? Option.some(missingLocalTransaction())
+    ? Option.some(() => missingLocalTransaction())
     : Option.none();
 
 type LocalTransactionRequest = Readonly<{

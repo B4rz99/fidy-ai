@@ -232,7 +232,7 @@ export const dispatchLocalBatchRoute = Effect.fn(
       (unit.operation.id === "categories.updateKeywordRule" ||
         unit.operation.id === "categories.deleteKeywordRule") &&
         Option.isNone(keywordRuleIdFromPath(unit.request))
-        ? Option.some(notFoundRejection("No keyword rule with that id belongs to you."))
+        ? Option.some(() => notFoundRejection("No keyword rule with that id belongs to you."))
         : Option.none()
     );
   },

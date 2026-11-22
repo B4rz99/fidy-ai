@@ -694,15 +694,16 @@ const sessionLookupFor = (operation: string): typeof boundSessionLookup =>
 
 export const runLocalMutation = Effect.fn(function* <A, E>(
   { request, storage, operation, owns, input, work }: Mutation<A, E>,
-  pathRejection: Option.Option<CanonicalRejection> = Option.none()
+  pathRejection: Option.Option<() => CanonicalRejection> = Option.none()
 ) {
   const resolve = yield* localProof(request, owns, sessionLookupFor(operation.id));
   const { keyValid, identity } = yield* prepareIdentity(request, operation);
   const argumentsForOwner = Option.product(yield* input, identity);
 
-  const invalidInput = Option.getOrElse(pathRejection, () =>
-    validationRejection("Invalid canonical operation input.")
-  );
+  const invalidInput = Option.match(pathRejection, {
+    onNone: () => validationRejection("Invalid canonical operation input."),
+    onSome: (rejection) => rejection(),
+  });
 
   const prepared = Option.match(argumentsForOwner, {
     onNone: () => ({ refusal: invalidInput }) as const,

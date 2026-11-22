@@ -46,7 +46,13 @@ export type Refusal = {
 export class ChildRefused extends Data.TaggedError("ChildRefused")<Refusal> {}
 
 export const childRejection = (failure: Refusal): CanonicalRejection =>
-  rejectChild({ ...failure, operation: failure.operation.id });
+  rejectChild({
+    index: failure.index,
+    operation: failure.operation.id,
+    code: failure.code,
+    message: failure.message,
+    outcome: failure.outcome,
+  });
 
 const childFailure = (child: Child, rejection: CanonicalRejection): ChildRefused =>
   new ChildRefused({

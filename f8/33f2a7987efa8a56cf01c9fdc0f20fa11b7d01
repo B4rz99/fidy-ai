@@ -1,0 +1,20 @@
+.oxlintrc.json
+  h_c6d49c804e0ad2 330,332,338,344,350,356,364,370,376,408
+package.json
+  h_c6d49c804e0ad2 12-13
+tools/oxlint/anti-slop/integrity/checks.ts
+  h_c6d49c804e0ad2 215-221,325-328
+tools/oxlint/anti-slop/jev/plugin.ts
+  h_c6d49c804e0ad2 12-15,20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f833f2a7987efa8a56cf01c9fdc0f20fa11b7d01",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

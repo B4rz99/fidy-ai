@@ -1,0 +1,21 @@
+apps/server/cloudflare/public-worker-erasure.test.ts
+  s_11e5ce607b21d8::t_0db9fbfa337e8b 13-18
+apps/server/cloudflare/public-worker.ts
+  s_11e5ce607b21d8::t_f7f52b55e7fada 671
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "77393828cc964de4ca85dcba7a1b8aef4d188fb3",
+  "prompts": {},
+  "sessions": {
+    "s_11e5ce607b21d8": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "wakeful-origin",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

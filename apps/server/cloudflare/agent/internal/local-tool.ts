@@ -7,7 +7,6 @@ import {
   type LocalMutationPlan,
   type LocalReviewFacts,
   canonicalRejectionStatus,
-  encodeRejection,
   isCanonicalRejection,
 } from "../../canonical-admission/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
@@ -36,6 +35,7 @@ import {
 import {
   admitLocalRequest,
   commitLocalPlan,
+  encodeLocalRejection,
   settleLocalPlan,
 } from "../../canonical-admission/operations";
 import { type LocalTurn, channelAuthority } from "./local-turn";
@@ -218,7 +218,7 @@ const refusedOutcome = Effect.fn(function* (
     return failure("user_action_required");
   }
 
-  return yield* decodedOutcome(encodeRejection(rejection), operation);
+  return yield* decodedOutcome(encodeLocalRejection(rejection), operation);
 });
 
 const admitTool = Effect.fn(function* (

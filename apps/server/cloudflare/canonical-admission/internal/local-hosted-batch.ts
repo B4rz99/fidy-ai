@@ -8,9 +8,9 @@ import {
   CanonicalAdmissionUnavailable,
   type CanonicalOutcome,
   type LocalMutationPlan,
-  admissionFailure,
   validationRejection,
 } from "../contract";
+import { admissionFailure } from "./rejection";
 import {
   type Audit,
   type Child,
@@ -147,7 +147,7 @@ export const prepareHostedBatch = Effect.fn(function* (
       targets: [],
       removedTarget: Option.none(),
       premises: [],
-      writes: false,
+      transaction: "self",
       review: Option.some(
         reviewPlans(plans, context.describe).pipe(Effect.mapError(admissionFailure))
       ),

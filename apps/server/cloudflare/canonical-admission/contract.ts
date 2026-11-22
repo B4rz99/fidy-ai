@@ -2,7 +2,7 @@ import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Context, Data, type Effect, Option, Schema } from "effect";
 import { OperationAccessCaller } from "../../src/shell/canonical-policy/contract";
 import type { AccessTier } from "../../src/core/access-tier/contract";
-import { ErrorCode, FieldIssue, NextOperations } from "../../src/shell/public-http/contract";
+import { ErrorCode, FieldIssue } from "../../src/shell/public-http/contract";
 import type { SuggestedOperation } from "../../src/shell/public-http/contract";
 
 export const CurrentSuggestionCaller = Context.Reference<
@@ -65,7 +65,10 @@ const rejectionAuditGuard = Schema.Union([
 ]);
 
 const rejectionDetailGuard = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal("rate_limited"), retryAfterSeconds: Schema.Finite }),
+  Schema.Struct({
+    kind: Schema.Literal("rate_limited"),
+    retryAfterSeconds: Schema.Int.check(Schema.isGreaterThan(0)),
+  }),
   Schema.Struct({ kind: Schema.Literal("reauthentication"), userId: Schema.String }),
 ]);
 
@@ -94,81 +97,73 @@ const rejectionGuard = Schema.TaggedStruct("CanonicalRejection", {
 export const isCanonicalRejection = (value: unknown): value is CanonicalRejection =>
   Schema.is(rejectionGuard)(value);
 
-export const admissionFailure = (cause: unknown): CanonicalAdmissionFailure =>
-  isCanonicalRejection(cause) ? cause : new CanonicalAdmissionUnavailable({ cause });
+const coherentRejections = [
+  {
+    status: canonicalRejectionStatus.badRequest,
+    code: "validation_failed",
+    outcome: "validation_failed",
+  },
+  {
+    status: canonicalRejectionStatus.unauthorized,
+    code: "unauthenticated",
+    outcome: "validation_failed",
+  },
+  {
+    status: canonicalRejectionStatus.forbidden,
+    code: "user_action_required",
+    outcome: "validation_failed",
+  },
+  { status: canonicalRejectionStatus.notFound, code: "not_found", outcome: "not_found" },
+  {
+    status: canonicalRejectionStatus.notFound,
+    code: "dashboard_uninitialized",
+    outcome: "success",
+  },
+  {
+    status: canonicalRejectionStatus.conflict,
+    code: "user_action_required",
+    outcome: "validation_failed",
+  },
+  {
+    status: canonicalRejectionStatus.conflict,
+    code: "quota_exhausted",
+    outcome: "resource_limit",
+  },
+  {
+    status: canonicalRejectionStatus.unprocessable,
+    code: "user_action_required",
+    outcome: "validation_failed",
+  },
+  {
+    status: canonicalRejectionStatus.tooManyRequests,
+    code: "rate_limited",
+    outcome: "validation_failed",
+  },
+] as const;
 
-const encodeNext = Schema.encodeSync(Schema.toCodecJson(NextOperations));
+const rejectionIsCoherent = (
+  status: CanonicalRejectionStatus,
+  code: ErrorCode,
+  outcome: CanonicalOutcome
+): boolean =>
+  coherentRejections.some(
+    (entry) => entry.status === status && entry.code === code && entry.outcome === outcome
+  );
 
-type RejectionDetailFields =
-  | Readonly<Record<never, never>>
-  | Readonly<{ retryAfterSeconds: number }>
-  | Readonly<{ reason: "reauthentication_required"; userId: string }>;
-
-const detailFields = (detail: Option.Option<CanonicalRejectionDetail>): RejectionDetailFields =>
-  Option.match(detail, {
-    onNone: () => ({}),
-    onSome: (value) => {
-      switch (value.kind) {
-        case "rate_limited":
-          return { retryAfterSeconds: value.retryAfterSeconds };
-        case "reauthentication":
-          return { reason: "reauthentication_required" as const, userId: value.userId };
-        default: {
-          const exhaustive: never = value;
-
-          return exhaustive;
-        }
-      }
-    },
-  });
-
-const errorDetail = (
-  rejection: CanonicalRejection,
-  detail: RejectionDetailFields
-): Schema.Json => ({
-  code: rejection.code,
-  ...Option.match(rejection.wireMessage, {
-    onNone: () => ({}),
-    onSome: (message) => ({ message }),
-  }),
-  ...Option.match(rejection.fields, {
-    onNone: () => ({}),
-    onSome: (fields) => ({ fields }),
-  }),
-  ...detail,
-});
-
-const childError = (
-  rejection: CanonicalRejection,
-  child: Readonly<{ index: number; operation: string }>
-): Schema.Json => ({
-  code: rejection.code,
-  message: Option.getOrElse(rejection.wireMessage, () => ""),
-  failedCallIndex: child.index,
-  operation: child.operation,
-  fields: Option.getOrElse(rejection.fields, () => []),
-});
-
-export const encodeRejection = (rejection: CanonicalRejection): CanonicalWireOutcome => {
-  const child = Option.getOrUndefined(rejection.batchChild);
-
-  if (child !== undefined) {
-    return {
-      status: canonicalRejectionStatus.badRequest,
-      outcome: "validation_failed",
-      body: { error: childError(rejection, child), next: [] },
-    };
+const assertRejection = (
+  status: CanonicalRejectionStatus,
+  code: ErrorCode,
+  outcome: CanonicalOutcome
+): void => {
+  if (!rejectionIsCoherent(status, code, outcome)) {
+    throw new Error("Incoherent canonical rejection");
   }
-
-  return {
-    status: rejection.status,
-    outcome: rejection.audit.outcome,
-    body: {
-      error: errorDetail(rejection, detailFields(rejection.detail)),
-      next: encodeNext(rejection.next),
-    },
-  };
 };
+
+const assertDetail = (
+  detail: Option.Option<CanonicalRejectionDetail>
+): Option.Option<CanonicalRejectionDetail> =>
+  Option.map(detail, (value) => Schema.decodeSync(rejectionDetailGuard)(value));
 
 export const rejection = (
   detail: Readonly<{
@@ -180,17 +175,20 @@ export const rejection = (
     detail: Option.Option<CanonicalRejectionDetail>;
     next: ReadonlyArray<SuggestedOperation>;
   }>
-): CanonicalRejection =>
-  new CanonicalRejection({
+): CanonicalRejection => {
+  assertRejection(detail.status, detail.code, detail.outcome);
+
+  return new CanonicalRejection({
     status: detail.status,
     audit: { kind: "rejected", outcome: detail.outcome },
     code: detail.code,
     wireMessage: detail.wireMessage,
     fields: detail.fields,
-    detail: detail.detail,
+    detail: assertDetail(detail.detail),
     next: detail.next,
     batchChild: Option.none(),
   });
+};
 
 export const acceptedReadRejection = (
   detail: Readonly<{
@@ -201,17 +199,20 @@ export const acceptedReadRejection = (
     detail: Option.Option<CanonicalRejectionDetail>;
     next: ReadonlyArray<SuggestedOperation>;
   }>
-): CanonicalRejection =>
-  new CanonicalRejection({
+): CanonicalRejection => {
+  assertRejection(detail.status, detail.code, "success");
+
+  return new CanonicalRejection({
     status: detail.status,
     audit: { kind: "accepted", outcome: "success" },
     code: detail.code,
     wireMessage: detail.wireMessage,
     fields: detail.fields,
-    detail: detail.detail,
+    detail: assertDetail(detail.detail),
     next: detail.next,
     batchChild: Option.none(),
   });
+};
 
 export const validationRejection = (message: string): CanonicalRejection =>
   rejection({
@@ -300,11 +301,13 @@ export type CanonicalWireOutcome = Readonly<{
 
 export type LocalReviewFacts = { effect: string; revision: string };
 
+export type LocalMutationTransaction = "none" | "caller" | "self";
+
 export type LocalMutationPlan = Readonly<{
   review: Option.Option<Effect.Effect<LocalReviewFacts, CanonicalAdmissionFailure, SqliteClient>>;
   premises: ReadonlyArray<string>;
   targets: ReadonlyArray<string>;
   removedTarget: Option.Option<string>;
-  writes: boolean;
+  transaction: LocalMutationTransaction;
   commit: Effect.Effect<LocalMutationResult, CanonicalAdmissionFailure, SqliteClient>;
 }>;

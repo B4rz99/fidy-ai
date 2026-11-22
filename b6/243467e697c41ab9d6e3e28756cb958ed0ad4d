@@ -1,0 +1,18 @@
+apps/server/cloudflare/oauth-agents/internal/native-directory.ts
+  h_c6d49c804e0ad2 33-34,41-48,65,67-70,173-177,201
+apps/server/cloudflare/oauth-agents/native-admission.test.ts
+  h_c6d49c804e0ad2 1-76
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b6243467e697c41ab9d6e3e28756cb958ed0ad4d",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

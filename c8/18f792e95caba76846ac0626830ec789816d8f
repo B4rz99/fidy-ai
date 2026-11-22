@@ -1,0 +1,16 @@
+apps/server/cloudflare/canonical-admission/contract.ts
+  h_c6d49c804e0ad2 163-168,219,244
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c818f792e95caba76846ac0626830ec789816d8f",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

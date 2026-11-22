@@ -1,0 +1,18 @@
+apps/server/cloudflare/canonical-admission/contract.ts
+  h_c6d49c804e0ad2 5-10,79,163-200
+apps/server/cloudflare/canonical-admission/internal/local-batch-plans.ts
+  h_c6d49c804e0ad2 6,10,48,55-58
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9411a9a51edc4dc98f12b36f20d64716819d62bf",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+apps/server/cloudflare/agent/internal/local-tool.ts
+  h_c6d49c804e0ad2 38,221
+apps/server/cloudflare/canonical-admission/contract.ts
+  h_c6d49c804e0ad2 5,68-71,100-142,144-159,163-167,178-181,187,191,202-205,211,215,304-305,311
+apps/server/cloudflare/canonical-admission/internal/local-hosted-batch.ts
+  h_c6d49c804e0ad2 13,150
+apps/server/cloudflare/canonical-admission/internal/rejection.ts
+  h_c6d49c804e0ad2 1-2,4-5,7,9,13-88
+apps/server/cloudflare/canonical-admission/operations.ts
+  h_c6d49c804e0ad2 26,30,33-36,41-46,85,90,105,114,119
+apps/server/cloudflare/canonical-operations/internal/local-owners.ts
+  h_c6d49c804e0ad2 70-74
+apps/server/cloudflare/connections/internal/sqlite-connections.ts
+  h_c6d49c804e0ad2 13
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "66201e375408d1f67206c61dce093ffa24b63e40",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

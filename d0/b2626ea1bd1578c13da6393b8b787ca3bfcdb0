@@ -1,0 +1,23 @@
+apps/server/cloudflare/categories/keyword-rules.test.ts
+  s_370e136601c9b6::t_98b17a146cf83b 547,565-577,593-597
+apps/server/cloudflare/ingestion/internal/local-statement-decision.ts
+  s_370e136601c9b6::t_2fa55e00b9354c 148-150
+apps/server/cloudflare/tokens/internal/pat-shared.ts
+  s_370e136601c9b6::t_5c08a731d9d655 36-37,39,43,45,47-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d0b2626ea1bd1578c13da6393b8b787ca3bfcdb0",
+  "prompts": {},
+  "sessions": {
+    "s_370e136601c9b6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "tabby-puppet",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

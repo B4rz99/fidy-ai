@@ -1,0 +1,39 @@
+apps/server/cloudflare/transactions/operations.ts
+  s_370e136601c9b6::t_1e3d9da7869566 121
+apps/server/cloudflare/ingestion/internal/local-review-snapshot.ts
+  s_370e136601c9b6::t_68f33381846cfb 5-9,40
+apps/server/cloudflare/budgets/internal/sqlite-planning.ts
+  s_370e136601c9b6::t_6b1235e0ba1aa7 14,16-17,42-43,45,277,279,284,290,418,421,470,488
+apps/server/cloudflare/tokens/internal/native-management.ts
+  s_370e136601c9b6::t_b0914113c201db 32-37,56,81,86,142-143,160,183,219
+apps/server/cloudflare/recurring/internal/sqlite-series.ts
+  s_370e136601c9b6::t_95a4aa0a5ee3d8 7,141,166,212-214
+apps/server/cloudflare/insights/internal/recurring-report.ts
+  s_370e136601c9b6::t_93e0ba30ad9d1b 2,35
+apps/server/cloudflare/canonical-admission/internal/local-batch.ts
+  s_370e136601c9b6::t_3d3ab68e79f4ac 12,41-42,201-209,286-288,291,297,305-307,310,315,321,365,497,501
+apps/server/cloudflare/dashboard/internal/sqlite-dashboard.ts
+  s_370e136601c9b6::t_9e2dbc21229737 26-31,56-63,65-66,68-70,89-92,101-103,118-119,177
+apps/server/cloudflare/memory/internal/local-memory.ts
+  s_370e136601c9b6::t_45e7a83fa89f3a 10-15,24-28,58,84-86,98,116
+apps/server/cloudflare/connections/internal/sqlite-connections.ts
+  s_370e136601c9b6::t_ccb2e7f9f7bf4b 6,8-9,13,26,28-33,35-37,39,41-42,44-54,56-58,60,62,64-65,67-68,70-73,83,85
+apps/server/cloudflare/canonical-admission/contract.ts
+  s_370e136601c9b6::t_2648a4a4dc2b63 2,5-6,21-128,139-145,152,156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f2e761563a5973638c322eef38fe2ebf47630244",
+  "prompts": {},
+  "sessions": {
+    "s_370e136601c9b6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "tabby-puppet",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

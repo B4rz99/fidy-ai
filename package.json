@@ -98,7 +98,7 @@
     "oxlint-plugin-effect": "0.32.3",
     "oxlint-tsgolint": "7.0.2007",
     "parse5": "8.1.1",
-    "sh-syntax": "0.8.6",
+    "sh-syntax": "0.8.7",
     "synckit": "0.12.3",
     "toml-eslint-parser": "1.0.3",
     "typescript": "7.0.2",

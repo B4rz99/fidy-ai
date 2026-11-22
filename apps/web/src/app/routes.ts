@@ -110,6 +110,12 @@ const signedInIndexRoute = createRoute({
 const dashboardRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/dashboard",
+  validateSearch: (search) =>
+    Schema.decodeSync(
+      Schema.Struct({
+        data: Schema.optionalKey(Schema.Literals(["demo", "worst", "empty"])),
+      })
+    )(search),
   component: DashboardRoute,
 });
 
@@ -164,6 +170,7 @@ const needsReviewRoute = createRoute({
         offset: Schema.optionalKey(
           Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10000 }))
         ),
+        data: Schema.optionalKey(Schema.Literals(["demo", "worst", "empty", "one", "many"])),
       })
     )(search),
   preloadStaleTime: 0,
@@ -253,6 +260,21 @@ const cliConnectionRoute = createRoute({
   component: CLIConnectionFeature,
 });
 
+const AccessManagementComponent = import.meta.env.DEV
+  ? lazyRouteComponent(() => import("./access-page-dev-preview"), "AccessDataPreview")
+  : AccessManagementPage;
+
+const PrivacyComponent = import.meta.env.DEV
+  ? lazyRouteComponent(() => import("@/features/privacy/dev-preview"), "PrivacyDataPreview")
+  : lazyRouteComponent(() => import("@/features/privacy/feature"), "PrivacyFeature");
+
+const SubscriptionOffersComponent = import.meta.env.DEV
+  ? lazyRouteComponent(
+      () => import("@/features/subscription/dev-preview"),
+      "SubscriptionDataPreview"
+    )
+  : SubscriptionOffersFeature;
+
 const accessManagementRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/settings/access",
@@ -261,9 +283,10 @@ const accessManagementRoute = createRoute({
       Schema.Struct({
         resume: Schema.optionalKey(Schema.Literal("pat")),
         after: OAuthConnectionListQuery.fields.after.from,
+        data: Schema.optionalKey(Schema.Literals(["demo", "worst", "empty", "one", "many"])),
       })
     )(search),
-  component: AccessManagementPage,
+  component: AccessManagementComponent,
 });
 
 const independentApplicationRoute = createRoute({
@@ -303,13 +326,25 @@ const transactionsRoute = createRoute({
 const privacyRoute = createRoute({
   getParentRoute: () => independentApplicationRoute,
   path: "/settings/privacy",
-  component: lazyRouteComponent(() => import("@/features/privacy/feature"), "PrivacyFeature"),
+  validateSearch: (search) =>
+    Schema.decodeSync(
+      Schema.Struct({
+        data: Schema.optionalKey(Schema.Literals(["demo", "granted", "missing", "revoked"])),
+      })
+    )(search),
+  component: PrivacyComponent,
 });
 
 const subscriptionOffersRoute = createRoute({
   getParentRoute: () => independentApplicationRoute,
   path: "/upgrade",
-  component: SubscriptionOffersFeature,
+  validateSearch: (search) =>
+    Schema.decodeSync(
+      Schema.Struct({
+        data: Schema.optionalKey(Schema.Literals(["demo", "worst"])),
+      })
+    )(search),
+  component: SubscriptionOffersComponent,
 });
 
 const oauthReviewRoute = createRoute({

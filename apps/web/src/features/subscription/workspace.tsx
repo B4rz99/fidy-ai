@@ -31,15 +31,16 @@ import {
   paymentMethodCopy,
 } from "./presentation";
 import { StandingViewState } from "./view-state";
+import { WorkspaceHeader } from "@/ui/components/workspace-layout";
 import "@/ui/components/subscription.css";
 
 export const SubscriptionWorkspace = ({
   children,
 }: Readonly<{ children: ReactNode }>): JSX.Element => (
   <main className="subscription-workspace">
-    <header className="subscription-header">
-      <h1>Suscripción y pagos</h1>
-    </header>
+    <WorkspaceHeader title="Suscripción y pagos" context={null}>
+      {null}
+    </WorkspaceHeader>
     {children}
   </main>
 );

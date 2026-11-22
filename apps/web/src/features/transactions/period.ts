@@ -26,6 +26,7 @@ export const TransactionSearch = Schema.Struct({
   month: Schema.optionalKey(TransactionMonth),
   date: Schema.optionalKey(TransactionDay),
   capture: Schema.optionalKey(Schema.Literal("manual")),
+  data: Schema.optionalKey(Schema.Literals(["demo", "worst", "empty", "one", "many"])),
 }).check(
   Schema.makeFilter(
     ({ month, date }) => month === undefined || date === undefined || date.startsWith(`${month}-`)

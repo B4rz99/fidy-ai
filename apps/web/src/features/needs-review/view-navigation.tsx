@@ -59,7 +59,6 @@ export const ReviewNavigation = (props: Props): JSX.Element => {
         <RefreshButton variant="ghost" onClick={props.refresh} label="Actualizar" />
       </nav>
       <p data-review="search-help" id={searchHelp}>
-        Solo en esta página. Busca en los datos disponibles y los fragmentos del original.
         {props.contextFeedback}
       </p>
     </>
@@ -67,9 +66,7 @@ export const ReviewNavigation = (props: Props): JSX.Element => {
 };
 
 const searchLabel = (filter: Filter): string =>
-  filter === "pending"
-    ? "Buscar pendientes en esta página"
-    : "Buscar en el historial de esta página";
+  filter === "pending" ? "Buscar pendientes" : "Buscar en el historial";
 
 const ReviewFilters = (props: Props & Readonly<{ searchHelp: string }>): JSX.Element => (
   <div data-review="filters">

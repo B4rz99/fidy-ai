@@ -266,6 +266,16 @@
     @apply font-sans;
     font-size: 100%;
     line-height: 1.7;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+
+  :where(button, a, [role="button"], summary, label, input, select, textarea) {
+    touch-action: manipulation;
   }
 }
 

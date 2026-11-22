@@ -100,3 +100,16 @@
     display: none;
   }
 }
+
+.budget-workspace {
+  min-width: 0;
+  min-height: 100svh;
+}
+@media (min-width: 901px) {
+  .application-shell .application-workspace:has(.budget-workspace) {
+    padding-top: 0;
+  }
+  .budget-workspace > .workspace-page-header {
+    padding-right: 180px;
+  }
+}

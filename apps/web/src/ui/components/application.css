@@ -184,7 +184,7 @@
   position: absolute;
   z-index: 40;
   right: 42px;
-  top: 34px;
+  top: 13px;
 }
 .application-theme-button {
   width: 46px;
@@ -201,7 +201,7 @@
 .application-agent-trigger {
   position: absolute;
   right: 100px;
-  top: 34px;
+  top: 13px;
   width: 46px;
   height: 46px;
   border-radius: 50%;
@@ -213,6 +213,11 @@
 .application-shell :is(a, button):focus-visible {
   outline: 2px solid var(--fidy-focus-ring-color);
   outline-offset: 4px;
+}
+@media (min-width: 901px) {
+  .application-shell:not(:has(.application-agent-trigger)) .workspace-page-header {
+    padding-right: 122px;
+  }
 }
 @media (max-width: 900px) {
   .application-sidebar {

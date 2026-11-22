@@ -7,7 +7,7 @@ import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Effect, Option, Predicate, Schema } from "effect";
 import { AsyncResult, Atom, Reactivity } from "effect/reactivity";
-import { type JSX, useState } from "react";
+import { type JSX, useContext, useState } from "react";
 import {
   type OAuthConnectionId,
   type OAuthConnectionList,
@@ -22,6 +22,7 @@ import {
 } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import { OAuthManagementView } from "./management-view";
+import { ConnectionListPreviewContext } from "./fixture-context";
 import { workspaceQueryRetention } from "@/transport/workspace-query";
 import { reportBrowserDefect } from "@/transport/browser-defects";
 
@@ -180,6 +181,12 @@ const connectionListing = (
       })
     );
 
+const previewListing = <E,>(
+  state: CanonicalQueryState<OAuthConnectionList, E>,
+  preview: (list: OAuthConnectionList) => OAuthConnectionList
+): CanonicalQueryState<OAuthConnectionList, E> =>
+  Predicate.isTagged(state, "Ready") ? { ...state, value: preview(state.value) } : state;
+
 export const ManagementPage = ({
   after,
 }: Readonly<{ after: Option.Option<OAuthConnectionId> }>): JSX.Element => {
@@ -187,7 +194,8 @@ export const ManagementPage = ({
   const client = router.options.context.webAuthClient;
   const [query] = useState(() => connectionListing(client, after));
   const listingResult = useAtomValue(query);
-  const listing = presentCanonicalQuery(listingResult);
+  const preview = useContext(ConnectionListPreviewContext);
+  const listing = previewListing(presentCanonicalQuery(listingResult), preview);
   const refreshQuery = useAtomRefresh(query);
   const [command] = useState(() => makeRevocation(client));
   const result = useAtomValue(command);

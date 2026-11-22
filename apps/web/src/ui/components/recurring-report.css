@@ -6,7 +6,7 @@
 }
 .recurring-report-main {
   min-width: 0;
-  padding: 28px 32px 40px 42px;
+  padding: 28px 32px 40px 20px;
 }
 .recurring-report-heading {
   display: flex;
@@ -100,7 +100,7 @@
   .recurring-report-columns {
     display: flex;
     flex-direction: column;
-    padding: 24px 42px 48px;
+    padding: 24px 42px 48px 20px;
   }
   .recurring-report-main,
   .recurring-report-context {
@@ -179,7 +179,7 @@
   }
 }
 .recurring-report-problem {
-  padding: 40px 42px;
+  padding: 40px 42px 40px 20px;
   max-width: 826px;
 }
 .recurring-report-problem {

@@ -1,6 +1,6 @@
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { Option, Predicate } from "effect";
-import { type JSX, type ReactNode } from "react";
+import { type JSX, type ReactNode, useContext } from "react";
 import { SensitiveClipboardBoundary } from "@/browser/use-sensitive-clipboard";
 import { type BrowserAuthentication, useSession } from "@/session/session-context";
 import { type FidyClient } from "@/transport/client";
@@ -10,6 +10,7 @@ import { ManualPATCreation } from "./creation";
 import { usePATManagement } from "./management";
 import { ActivePATManagementState } from "./management-state";
 import { ActivePATManagementView } from "./management-view";
+import { PATListPreviewContext } from "./fixture-context";
 
 type PATManagementContentProps = Readonly<{
   children: (
@@ -87,9 +88,11 @@ export const PATManagementFeature = ({
     });
   }
 
+  const preview = useContext(PATListPreviewContext);
+
   if (Predicate.isTagged(queryState, "Ready")) {
     activePATState = ActivePATManagementState.Ready({
-      result: queryState.value.data,
+      result: preview(queryState.value.data),
       onRetry: refreshActivePATs,
       refreshing: queryState.waiting,
       refreshFailed: Option.isSome(queryState.refreshFailure),

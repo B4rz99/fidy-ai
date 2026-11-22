@@ -287,6 +287,7 @@ const WhatsAppStatus = ({ pairing }: Pick<PairingViewProps, "pairing">): JSX.Ele
           <AccessAction
             kind="primary"
             aria-label="Abrir WhatsApp"
+            nativeButton={false}
             render={
               <a
                 aria-label="Abrir WhatsApp"

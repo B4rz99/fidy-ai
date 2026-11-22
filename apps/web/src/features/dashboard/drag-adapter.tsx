@@ -101,7 +101,7 @@ export const DashboardDragHandle = ({
       aria-pressed={isDragging}
       data-dashboard-source={JSON.stringify(source)}
       disabled={disabled}
-      className="inline-flex size-8 touch-none items-center justify-center rounded-md border bg-background text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="inline-flex size-8 shrink-0 touch-none items-center justify-center rounded-md border bg-background text-muted-foreground pointer-coarse:size-11 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       ref={(element) => {
         ref(element);
         handleRef(element);

@@ -23,7 +23,7 @@ const resumeDestinations = {
 export const destinationAfterLogin = (input: unknown): string => {
   const search = Schema.decodeUnknownOption(LoginSearch)(input);
 
-  if (Option.isNone(search)) return "/app/transactions";
+  if (Option.isNone(search)) return "/app/dashboard";
   const requested = search.value;
 
   if (requested.resume !== undefined) return resumeDestinations[requested.resume];
@@ -40,5 +40,5 @@ export const destinationAfterLogin = (input: unknown): string => {
     return `/connections/continue?attempt=${encodeURIComponent(requested.connectionAttempt)}`;
   }
 
-  return "/app/transactions";
+  return "/app/dashboard";
 };

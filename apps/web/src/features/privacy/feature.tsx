@@ -11,14 +11,15 @@ import { ErasureRequest } from "./erasure-request";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Data, DateTime, Effect, Option, Predicate } from "effect";
-import { Atom, Reactivity } from "effect/reactivity";
-import { type JSX, type ReactNode, useState } from "react";
+import { type AsyncResult, Atom, Reactivity } from "effect/reactivity";
+import { type JSX, type ReactNode, useContext, useState } from "react";
 import type { ProcessingConsentStatus, WebAuthClient } from "@/transport/client";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Checkbox } from "@/ui/components/checkbox";
 import { WorkspaceHeader } from "@/ui/components/workspace-layout";
+import { ConsentStatusPreviewContext } from "./fixture-context";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { Badge } from "@/ui/components/badge";
 import { formatPrivacyTime } from "./presentation";
@@ -227,7 +228,12 @@ const SavedTransactionsLink = (): JSX.Element => (
       </div>
       <div className="settings-section-actions">
         <div>
-          <Button contentLayout="wrap" variant="outline" render={<Link to="/app/transactions" />}>
+          <Button
+            contentLayout="wrap"
+            variant="outline"
+            nativeButton={false}
+            render={<Link to="/app/transactions" />}
+          >
             Ver mis transacciones
           </Button>
         </div>
@@ -236,24 +242,37 @@ const SavedTransactionsLink = (): JSX.Element => (
   </section>
 );
 
+const previewStatus = <E,>(
+  state: CanonicalQueryState<ProcessingConsentStatus, E>,
+  preview: (status: ProcessingConsentStatus) => ProcessingConsentStatus
+): CanonicalQueryState<ProcessingConsentStatus, E> =>
+  Predicate.isTagged(state, "Ready") ? { ...state, value: preview(state.value) } : state;
+
+const consentStatusQuery = (
+  client: WebAuthClient
+): Atom.Atom<AsyncResult.AsyncResult<ProcessingConsentStatus, unknown>> =>
+  client.query("processingConsent", "status", {
+    reactivityKeys: [consentKey],
+    timeToLive: "0 seconds",
+  });
+
 export const PrivacyFeature = (): JSX.Element => {
   const client = useRouter().options.context.webAuthClient;
 
-  const [query] = useState(() =>
-    client.query("processingConsent", "status", {
-      reactivityKeys: [consentKey],
-      timeToLive: "0 seconds",
-    })
-  );
+  const [query] = useState(() => consentStatusQuery(client));
 
   const statusResult = useAtomValue(query);
-  const status = presentCanonicalQuery(statusResult);
+
+  const status = previewStatus(
+    statusResult.pipe(presentCanonicalQuery),
+    useContext(ConsentStatusPreviewContext)
+  );
+
   const refresh = useAtomRefresh(query);
   const [command] = useState(() => makeWithdrawal(client));
   const result = useAtomValue(command);
   const withdraw = useAtomSet(command);
   const [confirmed, setConfirmed] = useState(false);
-  const attempted = !Predicate.isTagged(result, "Initial");
   const busy = result.waiting || (Predicate.isTagged(status, "Ready") && status.waiting);
 
   return (
@@ -268,7 +287,7 @@ export const PrivacyFeature = (): JSX.Element => {
       <AuthorizationSection status={status}>
         <ConsentContent status={status} client={client}>
           <WithdrawalChoice
-            disabled={busy || attempted}
+            disabled={busy || !Predicate.isTagged(result, "Initial")}
             waiting={result.waiting}
             confirmed={confirmed}
             confirm={setConfirmed}
@@ -286,6 +305,7 @@ export const PrivacyFeature = (): JSX.Element => {
             <Button
               contentLayout="wrap"
               variant="outline"
+              nativeButton={false}
               render={<Link to="/login" reloadDocument />}
             >
               Iniciar sesión

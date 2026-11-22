@@ -19,7 +19,7 @@ import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { type RegisteredRouter, useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import { Data, DateTime, Effect, Match, Option, Predicate, Schema } from "effect";
 import { browserRuntime } from "@/transport/browser-runtime";
-import { type RefCallback, Suspense, useState } from "react";
+import { type RefCallback, Suspense, lazy, useState } from "react";
 import { toast } from "sonner";
 import { TransactionCorrectionContext } from "./correction-context";
 import { type TransactionCorrections, transactionCorrections } from "./corrections";
@@ -243,7 +243,7 @@ const notifySavedCorrection = (
     scope: `${transactionMonth(period)}:${period.timeZone}`,
   });
 
-  const search = Schema.decodeOption(TransactionSearch)(router.latestLocation.search);
+  const search = Schema.decodeUnknownOption(TransactionSearch)(router.latestLocation.search);
 
   const date = Option.getOrElse(
     Option.map(search, (value) => value.date ?? ""),
@@ -495,6 +495,12 @@ const TransactionResourceContent = (
   );
 };
 
+const Workspace = import.meta.env.DEV
+  ? lazy(() =>
+      import("./dev-preview").then((module) => ({ default: module.TransactionsDataPreview }))
+    )
+  : TransactionWorkspace;
+
 type ReadyQueries = Omit<TransactionQueries, "categoryState" | "transactionState"> &
   Readonly<{
     categoryState: Data.TaggedEnum.Value<TransactionQueries["categoryState"], "Ready">;
@@ -524,7 +530,7 @@ const ReadyTransactionResources = ({
 
   return (
     <Suspense fallback={<TransactionListView state={TransactionPageState.Loading()} />}>
-      <TransactionWorkspace
+      <Workspace
         key={Option.getOrElse(locate, () => "browse")}
         generation={corrections.workspaceGeneration}
         locate={history.location === "Located" ? locate : Option.none()}

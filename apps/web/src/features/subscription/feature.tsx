@@ -10,7 +10,7 @@ import { Atom } from "effect/reactivity";
 import { type EnrollmentInteraction, createEnrollmentInteraction } from "./interaction";
 import { SubscriptionConsentBoundary } from "./consent-boundary";
 import { DaviplataAuthorizationLock } from "./daviplata-activity";
-import { type JSX, type RefCallback, Suspense, useState } from "react";
+import { type JSX, type RefCallback, Suspense, useContext, useState } from "react";
 import { useSession } from "@/session/session-context";
 import { useSubscriptionEnrollmentClient } from "@/session/subscription-enrollment-context";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
@@ -23,6 +23,7 @@ import {
   presentSubscriptionOffer,
 } from "./presentation";
 import { type EnrollmentGateway, createEnrollmentGateway } from "./enrollment-gateway";
+import { OffersPreviewContext } from "./fixture-context";
 import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -494,6 +495,7 @@ const AuthorizedSubscriptionOffers = (): JSX.Element => {
   const standing = useSubscriptionStanding();
   const enrollmentClient = useSubscriptionEnrollmentClient();
   const [gateway] = useState(() => createEnrollmentGateway(enrollmentClient));
+  const previewOffers = useContext(OffersPreviewContext);
   const offers = subscriptionOffersQuery(router.options.context.apiClient);
   const result = useAtomValue(offers);
   const refresh = useAtomRefresh(offers);
@@ -536,7 +538,7 @@ const AuthorizedSubscriptionOffers = (): JSX.Element => {
         standing={standing}
         gateway={Option.some(gateway)}
         state={readyOffersState({
-          offers: value.data,
+          offers: previewOffers(value.data),
           refreshFailure: Option.isSome(refreshFailure),
           refreshing: waiting,
           onRetry: refresh,

@@ -856,7 +856,7 @@ const CatalogDragSources = ({
 );
 
 const DashboardCatalogTray = ({ editor }: Readonly<{ editor: DashboardEditor }>): JSX.Element => (
-  <section className="grid min-w-0 grid-cols-1 gap-3 rounded-xl border bg-background p-4">
+  <section className="mb-5.5 grid min-w-0 grid-cols-1 gap-3 rounded-xl border bg-background p-4">
     <h2 className="font-medium">Widgets disponibles</h2>
     <CatalogDragSources catalog={editor.catalog} disabled={editor.disabled} />
   </section>
@@ -997,7 +997,7 @@ const EditableDashboardTitle = ({
           }}
         />
       ) : (
-        <h1 className="font-heading text-3xl font-semibold tracking-tight break-words">{title}</h1>
+        <h1 className="font-heading text-2xl font-semibold tracking-tight break-words">{title}</h1>
       )}
       <Button
         aria-label="Renombrar tablero"
@@ -1036,7 +1036,7 @@ export const DashboardViewComponent = ({
           {Option.match(activeEditor, {
             onSome: (current) => <EditableDashboardTitle editor={current} title={view.title} />,
             onNone: () => (
-              <h1 className="font-heading text-3xl font-semibold tracking-tight break-words">
+              <h1 className="font-heading text-2xl font-semibold tracking-tight break-words">
                 {view.title}
               </h1>
             ),

@@ -8,9 +8,10 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@/ui/components/button";
+import { WorkspaceHeader as SharedHeader } from "@/ui/components/workspace-layout";
 import { Summary } from "./summary";
 import { MonthPicker } from "./month-picker";
-import { type Workspace } from "./model";
+import { type Workspace, monthLabel } from "./model";
 
 type ToolbarProps = Readonly<{
   tab: string;
@@ -31,12 +32,8 @@ export const RecurringToolbar = ({
   toggleFilters,
   filterCount,
 }: ToolbarProps): JSX.Element => (
-  <header data-recurring-slot="page-header">
-    <div data-recurring-slot="title-tabs">
-      <h1 className="text-lg font-semibold tracking-tight">Recurrentes</h1>
-      <ToolbarTabs tab={tab} setTab={setTab} />
-    </div>
-    <div data-recurring-slot="header-actions">
+  <>
+    <SharedHeader title="Recurrentes" context={null}>
       <Button
         contentLayout="wrap"
         focusAppearance="subtle"
@@ -70,8 +67,9 @@ export const RecurringToolbar = ({
         <HugeiconsIcon icon={Add01Icon} data-icon="inline-start" />
         Nuevo recurrente
       </Button>
-    </div>
-  </header>
+    </SharedHeader>
+    <ToolbarTabs tab={tab} setTab={setTab} />
+  </>
 );
 
 const ToolbarTabs = ({ tab, setTab }: Pick<ToolbarProps, "tab" | "setTab">): JSX.Element => (
@@ -126,7 +124,15 @@ export const MonthlyOverview = (props: MonthProps): JSX.Element => (
 const MonthControls = ({ view, calendar, setCalendar, selectMonth }: MonthProps): JSX.Element => (
   <div data-recurring-slot="month-controls">
     <h2>
-      <MonthPicker key={view.month} month={view.month} today={view.today} select={selectMonth} />
+      <MonthPicker
+        key={view.month}
+        month={view.month}
+        today={view.today}
+        select={selectMonth}
+        label={monthLabel(view.month)}
+        disabled={false}
+        variant="ghost"
+      />
     </h2>
     <div className="flex flex-wrap items-center gap-3">
       <MonthPresentation calendar={calendar} setCalendar={setCalendar} />

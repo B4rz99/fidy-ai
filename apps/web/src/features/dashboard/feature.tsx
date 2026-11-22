@@ -30,6 +30,10 @@ const DashboardRoutePresentation = lazyRouteComponent(
 
 const DashboardViewComponent = lazyRouteComponent(() => import("./view"), "DashboardViewComponent");
 
+const DashboardComponent = import.meta.env.DEV
+  ? lazyRouteComponent(() => import("./dev-preview"), "DashboardDataPreview")
+  : DashboardViewComponent;
+
 DashboardRoutePresentation.preload?.()?.catch(() => undefined);
 
 DashboardViewComponent.preload?.()?.catch(() => undefined);
@@ -246,7 +250,7 @@ export const DashboardRouteContent = ({
           onRefresh={refresh}
           refreshCatalog={refreshCatalog}
         />
-        <DashboardViewComponent
+        <DashboardComponent
           initialEditing={false}
           editor={Option.some({
             catalog: Predicate.isTagged(catalogState, "Ready") ? catalogState.value.data : [],

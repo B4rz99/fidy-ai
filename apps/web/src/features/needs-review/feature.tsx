@@ -10,10 +10,18 @@ const Workspace = lazyRouteComponent(() =>
   import("./workspace").then((module) => ({ default: memo(module.NeedsReviewFeature) }))
 );
 
+const PreviewWorkspace = import.meta.env.DEV
+  ? lazyRouteComponent(() =>
+      import("./dev-preview").then((module) => ({
+        default: memo(module.NeedsReviewDataPreview),
+      }))
+    )
+  : Workspace;
+
 const Route = lazyRouteComponent(() => import("./workspace"), "NeedsReviewRoute");
 
 export const NeedsReviewFeature = (props: ComponentProps<typeof Workspace>): JSX.Element => (
-  <Workspace {...props} />
+  <PreviewWorkspace {...props} />
 );
 
 NeedsReviewFeature.preload = (): Promise<void> =>

@@ -4,15 +4,56 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fffaf6" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#141414" />
+    <link rel="icon" type="image/png" href="./src/ui/assets/fidy-logo.png" />
     <link rel="preconnect" href="%VITE_API_ORIGIN%" crossorigin="use-credentials" />
     <title>Fidy — Tu aplicación</title>
+    <style>
+      body {
+        margin: 0;
+      }
+      [data-boot-splash] {
+        color-scheme: light dark;
+        min-height: 100svh;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 16px;
+        margin: 0;
+        background: light-dark(#fffaf6, #141414);
+        color: light-dark(#141414, #fff6ef);
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+      [data-boot-mark] {
+        display: grid;
+        place-content: center;
+        width: 56px;
+        height: 56px;
+        border-radius: 16px;
+        background: light-dark(#141414, #88cc20);
+        color: light-dark(#fffaf6, #141414);
+        font-weight: 700;
+        font-size: 24px;
+        letter-spacing: -0.03em;
+      }
+      [data-boot-label] {
+        font-size: 14px;
+        color: light-dark(#514d48, #c7c7c7);
+      }
+    </style>
   </head>
   <body>
     <noscript
       >La aplicación de Fidy necesita JavaScript.
       <a href="https://fidyapp.com">Conoce Fidy</a>.</noscript
     >
-    <div id="root"></div>
+    <div id="root">
+      <div data-boot-splash>
+        <span data-boot-mark>fidy</span>
+        <span data-boot-label>Cargando…</span>
+      </div>
+    </div>
     <script type="module" async fetchpriority="high" src="/src/main.tsx"></script>
   </body>
 </html>

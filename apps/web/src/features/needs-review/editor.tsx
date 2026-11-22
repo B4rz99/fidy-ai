@@ -5,6 +5,7 @@ import { workspaceCategoriesQuery } from "@/transport/workspace-query";
 import { ReviewDraftFooter, ReviewNotice } from "@/ui/components/review-workspace";
 import { useReviewExpired } from "./expiry";
 import type { ReviewDecisions, ReviewEditorState, ReviewWorkspaceQuery } from "./decisions";
+import type { CanonicalSuccess } from "@/transport/client";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Option, Predicate } from "effect";
@@ -21,8 +22,9 @@ import {
 } from "@hugeicons/core-free-icons";
 import { Badge } from "@/ui/components/badge";
 import { reviewExpiry, reviewReason, reviewTitle } from "./presentation";
-import { type JSX, type ReactNode, useState } from "react";
-import { presentCanonicalQuery } from "@/transport/canonical-query";
+import { type JSX, type ReactNode, useContext, useState } from "react";
+import { FixtureDetailContext } from "./fixture-context";
+import { canonicalReady, presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import { ReviewFields } from "./fields";
 import { OriginalMaterial, ReviewMaterialPreload } from "./original";
@@ -82,6 +84,23 @@ const ExpiredReviewItem = ({
   </section>
 );
 
+const useItemDetail = ({
+  fixtureDetail,
+  query,
+}: Readonly<{
+  fixtureDetail: Option.Option<Detail>;
+  query: ReturnType<typeof reviewItemQuery>;
+}>): ReturnType<
+  typeof presentCanonicalQuery<CanonicalSuccess<"ingestion.getReviewItem">, unknown>
+> => {
+  const atomDetail = useAtomValue(query).pipe(presentCanonicalQuery);
+
+  return Option.match(fixtureDetail, {
+    onNone: () => atomDetail,
+    onSome: (data) => canonicalReady({ data, next: [] }),
+  });
+};
+
 const ReviewItemEditor = ({
   item,
   decisions,
@@ -100,10 +119,12 @@ const ReviewItemEditor = ({
   );
 
   const [categoryQuery] = useState(() => workspaceCategoriesQuery(apiClient).view);
-  const detail = useAtomValue(query).pipe(presentCanonicalQuery);
+  const fixtureDetail = useContext(FixtureDetailContext)(item);
   const categories = useAtomValue(categoryQuery).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
   const refreshCategories = useAtomRefresh(categoryQuery);
+
+  const detail = useItemDetail({ fixtureDetail, query });
 
   const recover = (): void => {
     if (Predicate.isTagged(detail, "Ready")) decisions.editor(detail.value.data).recover();

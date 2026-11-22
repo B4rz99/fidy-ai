@@ -1,0 +1,35 @@
+.oxfmtrc.json
+  s_11e5ce607b21d8::t_94c4fedc6a4a77 28
+.oxlintrc.json
+  s_11e5ce607b21d8::t_b381a184bf0854 42,321
+CODING_STANDARDS.md
+  s_11e5ce607b21d8::t_8cf1939e834268 166,174-184,202-227,250-252,267-271
+apps/server/scripts/check-lint-guards.ts
+  s_11e5ce607b21d8::t_6f62db8a18cd08 160
+package.json
+  s_11e5ce607b21d8::t_ccf34d64a98316 105
+scripts/check-comments.ts
+  s_11e5ce607b21d8::t_68e074395dee8d 15
+scripts/check-lint-suppressions.ts
+  s_11e5ce607b21d8::t_3e912ad22c9e6d 30
+scripts/oxlint/lint-rules.test.js
+  s_11e5ce607b21d8::t_66269ce5731c00 270,295,357
+tools/oxlint/anti-slop/UPSTREAM.md
+  s_11e5ce607b21d8::t_1c372f1b858a84 5,12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cfd45a66c3cba9523d1ce9c053cf4525552ab61c",
+  "prompts": {},
+  "sessions": {
+    "s_11e5ce607b21d8": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "wakeful-origin",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

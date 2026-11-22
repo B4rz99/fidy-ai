@@ -1,0 +1,20 @@
+.github/workflows/merge-gate.yml
+  h_c6d49c804e0ad2 1-32
+package.json
+  h_c6d49c804e0ad2 45
+scripts/merge-gate.test.ts
+  h_c6d49c804e0ad2 1-103
+scripts/merge-gate.ts
+  h_c6d49c804e0ad2 1-331
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a017bd4e0b765dc9f678a21847e554852adfe0be",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

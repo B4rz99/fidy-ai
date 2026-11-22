@@ -1,0 +1,34 @@
+apps/server/cloudflare/budgets/internal/sqlite-dispatch.ts
+  h_c6d49c804e0ad2 46
+apps/server/cloudflare/canonical-admission/contract.ts
+  h_c6d49c804e0ad2 198
+apps/server/cloudflare/canonical-admission/internal/local-batch-plans.ts
+  h_c6d49c804e0ad2 49-55
+apps/server/cloudflare/canonical-admission/internal/local-mutation.ts
+  h_c6d49c804e0ad2 697,703-706
+apps/server/cloudflare/canonical-operations/operations.ts
+  h_c6d49c804e0ad2 235
+apps/server/cloudflare/canonical-operations/user-store.test.ts
+  h_c6d49c804e0ad2 225-230,235,241,251-256
+apps/server/cloudflare/ingestion/internal/local-review.ts
+  h_c6d49c804e0ad2 170
+apps/server/cloudflare/recurring/internal/sqlite-series.ts
+  h_c6d49c804e0ad2 190-191,193,195-200,209-222,229
+apps/server/cloudflare/transactions/internal/sqlite-history.ts
+  h_c6d49c804e0ad2 56-62,71,75,103-109,113,144-153,156,162
+apps/server/cloudflare/transactions/internal/transaction-history.ts
+  h_c6d49c804e0ad2 24,166-168,170,182,185-200
+apps/server/cloudflare/transactions/operations.ts
+  h_c6d49c804e0ad2 83,85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "321694d46a17359993ec6aab42542d0ca3f2b803",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

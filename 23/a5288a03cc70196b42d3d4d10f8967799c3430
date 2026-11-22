@@ -1,0 +1,33 @@
+apps/server/cloudflare/public-worker-wompi.test.ts
+  s_370e136601c9b6::t_2a37d576be5573 1-64
+apps/server/cloudflare/public-worker.ts
+  s_370e136601c9b6::t_c4c174f50533a6 435-442
+apps/server/cloudflare/subscription/wompi-event.test.ts
+  s_370e136601c9b6::t_5547e138bbdce3 33-39,63-82
+infra/cloudflare/verify-edge-policy.ts
+  s_11e5ce607b21d8::t_033f9ff572bfa8 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "23a5288a03cc70196b42d3d4d10f8967799c3430",
+  "prompts": {},
+  "sessions": {
+    "s_11e5ce607b21d8": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "wakeful-origin",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_370e136601c9b6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "tabby-puppet",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

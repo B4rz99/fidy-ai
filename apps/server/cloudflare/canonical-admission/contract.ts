@@ -69,6 +69,17 @@ const rejectionDetailGuard = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("reauthentication"), userId: Schema.String }),
 ]);
 
+const suggestedOperationGuard = Schema.Union([
+  Schema.Struct({ tool: Schema.String, hint: Schema.String }),
+  Schema.Struct({
+    tool: Schema.String,
+    args: Schema.Option(Schema.Unknown),
+    hint: Schema.String,
+  }),
+]);
+
+const nextGuard = Schema.Array(suggestedOperationGuard).check(Schema.isMaxLength(3));
+
 const rejectionGuard = Schema.TaggedStruct("CanonicalRejection", {
   status: Schema.Literals(canonicalRejectionStatuses),
   audit: rejectionAuditGuard,
@@ -76,7 +87,7 @@ const rejectionGuard = Schema.TaggedStruct("CanonicalRejection", {
   wireMessage: Schema.Option(Schema.String),
   fields: Schema.Option(Schema.Array(FieldIssue)),
   detail: Schema.Option(rejectionDetailGuard),
-  next: NextOperations,
+  next: nextGuard,
   batchChild: Schema.Option(Schema.Struct({ index: Schema.Int, operation: Schema.String })),
 });
 
@@ -177,7 +188,7 @@ export const rejection = (
     wireMessage: detail.wireMessage,
     fields: detail.fields,
     detail: detail.detail,
-    next: Schema.decodeSync(NextOperations)(detail.next),
+    next: detail.next,
     batchChild: Option.none(),
   });
 
@@ -198,7 +209,7 @@ export const acceptedReadRejection = (
     wireMessage: detail.wireMessage,
     fields: detail.fields,
     detail: detail.detail,
-    next: Schema.decodeSync(NextOperations)(detail.next),
+    next: detail.next,
     batchChild: Option.none(),
   });
 

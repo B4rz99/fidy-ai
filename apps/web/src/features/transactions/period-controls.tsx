@@ -3,12 +3,14 @@ import { type ComponentProps, type JSX } from "react";
 import { cn } from "@/ui/class-names";
 import { MonthPicker } from "@/features/recurring/month-picker";
 
+const dateFormatter = new Intl.DateTimeFormat("en-US", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
 const localToday = (): string => {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(DateTime.nowUnsafe().epochMilliseconds);
+  const parts = dateFormatter.formatToParts(DateTime.nowUnsafe().epochMilliseconds);
 
   const get = (type: Intl.DateTimeFormatPartTypes): string =>
     parts.find((part) => part.type === type)?.value ?? "";

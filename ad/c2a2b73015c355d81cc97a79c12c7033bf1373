@@ -1,0 +1,25 @@
+apps/server/cloudflare/dashboard/internal/sqlite-dashboard.ts
+  s_370e136601c9b6::t_9e2dbc21229737 62
+apps/server/cloudflare/canonical-operations/operations.ts
+  s_370e136601c9b6::t_6403279d93c283 37,358,375
+apps/server/cloudflare/canonical-admission/contract.ts
+  s_370e136601c9b6::t_2648a4a4dc2b63 50,52,57-62,64,69,73,79,81
+apps/server/cloudflare/ingestion/internal/local-review-edit.ts
+  s_370e136601c9b6::t_8960961190ecf1 10,87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "adc2a2b73015c355d81cc97a79c12c7033bf1373",
+  "prompts": {},
+  "sessions": {
+    "s_370e136601c9b6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "tabby-puppet",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

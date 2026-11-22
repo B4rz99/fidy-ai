@@ -11,6 +11,12 @@ const cases = [
   { path: "/internal/titular-erasure", assertion: "", origin: "", forwarded: true },
   { path: "/internal/support-recovery", assertion: "untrusted", origin: "", forwarded: true },
   {
+    path: "/internal/titular-erasure",
+    assertion: "untrusted",
+    origin: "",
+    forwarded: true,
+  },
+  {
     path: "/categories",
     assertion: "untrusted",
     origin: "https://app.fidyapp.com",

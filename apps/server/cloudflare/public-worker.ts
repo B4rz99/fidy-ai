@@ -668,12 +668,7 @@ const forwardCandidateVersionOverride = (
 ): void => {
   headers.delete(smokeVersionHeader);
 
-  const operatorRoute =
-    new URL(request.url).pathname === erasureSupportPath &&
-    request.method === "POST" &&
-    (request.headers.get("cf-access-jwt-assertion") ?? "") !== "";
-
-  if (!operatorRoute && !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) {
+  if (!smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) {
     return;
   }
 

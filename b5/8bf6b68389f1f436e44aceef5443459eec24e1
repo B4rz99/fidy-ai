@@ -1,0 +1,16 @@
+apps/server/cloudflare/connections/native-connections.test.ts
+  h_c6d49c804e0ad2 2,90-91,96,556,580,583,588-590,594-643
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b58bf6b68389f1f436e44aceef5443459eec24e1",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

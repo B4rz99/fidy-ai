@@ -5,13 +5,13 @@ import type { UserId } from "../../../src/core/identity/contract";
 import {
   type CanonicalRejection,
   type LocalMutationResult,
+  admissionFailure,
   notFoundRejection,
   validationRejection,
 } from "../../canonical-admission/contract";
 import { preserveStoreAlarm } from "../../runtime/sqlite/operations";
 import { newId } from "../../secret-material/operations";
 import { prepareLocalWrite } from "../../canonical-admission/operations";
-import { admissionFailure } from "../../canonical-admission/rejection";
 import { institutionsForUser } from "./institution-registration";
 
 const accountPosition = -2;

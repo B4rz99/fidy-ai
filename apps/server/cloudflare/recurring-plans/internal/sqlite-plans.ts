@@ -1,6 +1,6 @@
 import {
   canonicalAdmissionUnavailable,
-  commitLocalWrite,
+  commitLocalPlan,
   prepareLocalWrite,
   runLocalMutation,
 } from "../../canonical-admission/operations";
@@ -158,7 +158,7 @@ export const editLocalRecurringPlan = Effect.fnUntraced(function* (
   current: number
 ) {
   return yield* prepareLocalRecurringEdit(input, user, current).pipe(
-    Effect.flatMap(commitLocalWrite)
+    Effect.flatMap(commitLocalPlan)
   );
 });
 

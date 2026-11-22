@@ -22,12 +22,16 @@ import {
 } from "./internal/local-mutation";
 import {
   type CanonicalAdmissionFailure,
+  type CanonicalAdmissionUnavailable,
+  type CanonicalWireOutcome,
   type LocalMutationPlan,
   type LocalMutationResult,
+  admissionFailure,
+  encodeRejection,
+  isCanonicalRejection,
 } from "./contract";
 import { Effect, Option } from "effect";
 import { type QuotaStatus } from "../../src/core/quotas/contract";
-import { admissionFailure } from "./rejection";
 
 import { localCanonicalArguments as readArguments } from "./internal/request-input";
 
@@ -100,7 +104,7 @@ export const prepareLocalRead = <E, Failure = never>(
       })
 ): LocalMutationPlan => localPlan(write, false);
 
-export const commitLocalWrite = (
+export const commitLocalPlan = (
   preparation: LocalMutationPlan
 ): Effect.Effect<LocalMutationResult, CanonicalAdmissionFailure, SqliteClient> => {
   if (!preparation.writes) return preparation.commit;
@@ -111,6 +115,13 @@ export const commitLocalWrite = (
     return yield* sql.withTransaction(preparation.commit).pipe(Effect.mapError(admissionFailure));
   });
 };
+
+export const settleLocalPlan = (
+  preparation: LocalMutationPlan
+): Effect.Effect<CanonicalWireOutcome, CanonicalAdmissionUnavailable, SqliteClient> =>
+  commitLocalPlan(preparation).pipe(
+    Effect.catchIf(isCanonicalRejection, (rejection) => Effect.succeed(encodeRejection(rejection)))
+  );
 
 export const runLocalBatch: typeof executeBatch = (unit, owners) => executeBatch(unit, owners);
 

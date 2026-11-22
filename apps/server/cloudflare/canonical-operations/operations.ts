@@ -30,7 +30,7 @@ import {
 import { keywordRuleIdFromPath, localKeywordRules } from "../categories/operations";
 import {
   canonicalAdmissionUnavailable,
-  commitLocalWrite,
+  commitLocalPlan,
   isNativeAccountQuery,
   localCanonicalArguments,
   prepareHostedBatch,
@@ -220,7 +220,7 @@ export const dispatchLocalBatchRoute = Effect.fn(
         input: localCanonicalArguments(unit.request, unit.operation),
         work: (input, user, current) =>
           prepare(input, { user, current, storage: unit.storage }).pipe(
-            Effect.flatMap(commitLocalWrite),
+            Effect.flatMap(commitLocalPlan),
             Effect.tap((result) =>
               unit.operation.id === "transactions.updateTransactions" &&
               result.status === successfulMutationStatus

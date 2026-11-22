@@ -1,7 +1,7 @@
 import { describeDashboardEffect } from "./oauth-review";
 import {
   canonicalAdmissionUnavailable,
-  commitLocalWrite,
+  commitLocalPlan,
   prepareLocalWrite,
   runLocalMutation,
 } from "../../canonical-admission/operations";
@@ -171,7 +171,7 @@ const runDashboard = Effect.fn(function* (
     operation === "dashboard.initializeDashboard"
   ) {
     return yield* prepareDashboardDocument(user, stored, edit).pipe(
-      Effect.flatMap(commitLocalWrite)
+      Effect.flatMap(commitLocalPlan)
     );
   }
 

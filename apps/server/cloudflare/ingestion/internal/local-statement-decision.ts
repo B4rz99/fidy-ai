@@ -133,8 +133,6 @@ export const prepareLocalDecision = Effect.fn(function* (
   if (!(yield* eligible(row.id, owner))) return yield* missing();
   const capture = yield* reviewedLineCapture(row, owner, extraction);
 
-  if (Option.isSome(capture) && !("commit" in capture.value)) return capture.value;
-
   return prepareLocalWrite({
     targets: ["review:" + id],
     review: localClarificationReview({
@@ -147,10 +145,9 @@ export const prepareLocalDecision = Effect.fn(function* (
       extraction,
     }),
     commit: Effect.gen(function* () {
-      const response =
-        Option.isSome(capture) && "commit" in capture.value
-          ? Option.some(yield* capture.value.commit)
-          : Option.none();
+      const response = Option.isSome(capture)
+        ? Option.some(yield* capture.value.commit)
+        : Option.none();
 
       const tx = Option.isSome(response)
         ? (yield* Schema.decodeUnknownEffect(capturedId)(response.value.body)).data.id

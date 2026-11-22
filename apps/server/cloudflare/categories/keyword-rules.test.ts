@@ -544,7 +544,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       ).toEqual([{ n: 0 }]);
 
       yield* Effect.forEach(
-        Array.from({ length: 100 }, (_, index) => index),
+        Array.from({ length: 99 }, (_, index) => index),
         Effect.fnUntraced(function* (index) {
           yield* awaitPromise(
             db.exec(
@@ -562,6 +562,19 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         { discard: true }
       );
 
+      yield* awaitPromise(
+        db.exec(
+          `CREATE TRIGGER force_keyword_limit BEFORE INSERT ON keyword_rules
+           WHEN NEW.id <> '82000000-0000-4000-8000-000000000001'
+           BEGIN
+             INSERT INTO keyword_rules (id,user_id,keyword,category_id,category_revision,created_at_ms,updated_at_ms)
+             SELECT '82000000-0000-4000-8000-000000000001',user_id,'filler',category_id,category_revision,created_at_ms,updated_at_ms
+             FROM keyword_rules WHERE user_id=NEW.user_id LIMIT 1;
+             SELECT RAISE(IGNORE);
+           END`
+        )
+      );
+
       const refused = yield* awaitPromise(
         send({
           path: "/category-keyword-rules",
@@ -575,6 +588,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       expect(
         yield* awaitPromise(db.exec("SELECT count(*) AS n FROM categories WHERE id=?", domicilios))
       ).toEqual([{ n: 0 }]);
+      expect(
+        yield* awaitPromise(
+          db.exec("SELECT count(*) AS n FROM keyword_rules WHERE user_id=?", userA)
+        )
+      ).toEqual([{ n: 99 }]);
       expect(
         yield* awaitPromise(
           db.exec(

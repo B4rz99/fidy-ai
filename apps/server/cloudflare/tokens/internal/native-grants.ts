@@ -46,10 +46,10 @@ import {
   iso,
   newBearer,
   pairingMilliseconds,
+  pairingRateLimitedBody,
   pairingRejectedMessage,
 } from "./pat-shared";
 import { expiryFor, issuedResult } from "./pat-manual";
-import { reviewRetrySeconds } from "./pat-pairing";
 import { PATUnavailable } from "../contract";
 
 type Session = { id: string; user_id: UserId };
@@ -61,28 +61,26 @@ type Commit = (
 
 export type StagedPAT = { targets: ReadonlyArray<string>; commit: Commit };
 
-const rejectedRejection = (): CanonicalRejection => bareValidationRejection(pairingRejectedMessage);
-
 const rateLimitedRejection = (): CanonicalRejection =>
   rejection({
     status: canonicalRejectionStatus.tooManyRequests,
     outcome: "validation_failed",
     code: "rate_limited",
-    message: Option.some(pairingRejectedMessage),
+    wireMessage: Option.some(pairingRateLimitedBody.error.message),
     fields: Option.none(),
-    detail: Option.some({ kind: "rate_limited", retryAfterSeconds: reviewRetrySeconds }),
+    detail: Option.some({
+      kind: "rate_limited",
+      retryAfterSeconds: pairingRateLimitedBody.error.retryAfterSeconds,
+    }),
     next: [],
   });
-
-const unauthorizedRejection = (): CanonicalRejection =>
-  unauthenticatedRejection("Present a valid credential and retry.");
 
 const consumedRejection = (): CanonicalRejection =>
   rejection({
     status: canonicalRejectionStatus.conflict,
     outcome: "validation_failed",
     code: "user_action_required",
-    message: Option.some(issuanceConsumedMessage),
+    wireMessage: Option.some(issuanceConsumedMessage),
     fields: Option.none(),
     detail: Option.none(),
     next: [],
@@ -93,7 +91,7 @@ const expiredReviewRejection = (): CanonicalRejection =>
     status: canonicalRejectionStatus.unprocessable,
     outcome: "validation_failed",
     code: "user_action_required",
-    message: Option.some(reviewExpiredMessage),
+    wireMessage: Option.some(reviewExpiredMessage),
     fields: Option.none(),
     detail: Option.none(),
     next: [],
@@ -104,7 +102,7 @@ const issuanceLimitRejection = (): CanonicalRejection =>
     status: canonicalRejectionStatus.tooManyRequests,
     outcome: "validation_failed",
     code: "rate_limited",
-    message: Option.some(issuanceLimitedMessage),
+    wireMessage: Option.some(issuanceLimitedMessage),
     fields: Option.none(),
     detail: Option.some({ kind: "rate_limited", retryAfterSeconds: 600 }),
     next: [],
@@ -115,7 +113,7 @@ const staleSessionRejection = (session: Session): CanonicalRejection =>
     status: canonicalRejectionStatus.forbidden,
     outcome: "validation_failed",
     code: "user_action_required",
-    message: Option.none(),
+    wireMessage: Option.none(),
     fields: Option.none(),
     detail: Option.some({ kind: "reauthentication", userId: session.user_id }),
     next: [],
@@ -186,7 +184,7 @@ const review = Effect.fn(function* (directory: Directory, session: Session, payl
     payload
   );
 
-  if (Option.isNone(code)) return refuse(rejectedRejection());
+  if (Option.isNone(code)) return refuse(bareValidationRejection(pairingRejectedMessage));
 
   const found = yield* directoryEvidence(
     directory,
@@ -194,20 +192,20 @@ const review = Effect.fn(function* (directory: Directory, session: Session, payl
     FrozenPAT
   );
 
-  if (Option.isNone(found)) return refuse(rejectedRejection());
+  if (Option.isNone(found)) return refuse(bareValidationRejection(pairingRejectedMessage));
   const pairing = found.value;
 
   return {
     targets: ["pat-pairing:" + pairing.id],
     commit: Effect.fn(function* (user: UserId, current: number) {
       if (user !== session.user_id || pairing.expires_at_ms <= current) {
-        return yield* rejectedRejection();
+        return yield* bareValidationRejection(pairingRejectedMessage);
       }
 
       const closed =
         yield* sql`SELECT 1 FROM pat_pairings WHERE id=${pairing.id} AND state<>'pending_approval'`;
 
-      if (closed.length > 0) return yield* rejectedRejection();
+      if (closed.length > 0) return yield* bareValidationRejection(pairingRejectedMessage);
 
       return success({
         pairingId: pairing.id,
@@ -223,7 +221,7 @@ const review = Effect.fn(function* (directory: Directory, session: Session, payl
 const approve = Effect.fn(function* (directory: Directory, session: Session, payload: unknown) {
   const decoded = Schema.decodeUnknownOption(ApprovePATPairingPayload)(payload);
 
-  if (Option.isNone(decoded)) return refuse(rejectedRejection());
+  if (Option.isNone(decoded)) return refuse(bareValidationRejection(pairingRejectedMessage));
 
   const found = yield* directoryEvidence(
     directory,
@@ -231,7 +229,7 @@ const approve = Effect.fn(function* (directory: Directory, session: Session, pay
     FrozenPAT
   );
 
-  if (Option.isNone(found)) return refuse(rejectedRejection());
+  if (Option.isNone(found)) return refuse(bareValidationRejection(pairingRejectedMessage));
   const pairing = found.value;
   const proof = yield* Effect.fromResult(Hex.decode(pairing.proof_digest));
   const sql = yield* SqliteClient;
@@ -240,13 +238,13 @@ const approve = Effect.fn(function* (directory: Directory, session: Session, pay
     targets: ["pat-pairing:" + pairing.id],
     commit: Effect.fn(function* (user: UserId, current: number) {
       if (user !== session.user_id || pairing.expires_at_ms <= current) {
-        return yield* rejectedRejection();
+        return yield* bareValidationRejection(pairingRejectedMessage);
       }
 
       const [prior] =
         yield* sql`SELECT 1 FROM pat_pairings WHERE id=${pairing.id} AND state<>'pending_approval'`;
 
-      if (prior !== undefined) return yield* rejectedRejection();
+      if (prior !== undefined) return yield* bareValidationRejection(pairingRejectedMessage);
       yield* sql`INSERT INTO pat_pairings(id,user_id,public_code,proof_digest,recipient_label,scopes_json,lifetime_days,expires_at_ms,wrong_attempts,last_poll_at_ms,minimum_poll_seconds)
     VALUES(${pairing.id},${user},${pairing.public_code},${proof},${pairing.recipient_label},${yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))([...pairing.scopes_json])},${pairing.lifetime_days},${pairing.expires_at_ms},${pairing.wrong_attempts},${pairing.last_poll_at_ms},${pairing.minimum_poll_seconds}) ON CONFLICT(id) DO NOTHING`;
       const expires = current + pairing.lifetime_days * dayMilliseconds;
@@ -300,7 +298,9 @@ const prepareManual = Effect.fn(function* ({ reservation, input, session }: Manu
   return {
     targets: ["manual-pat:" + requestId],
     commit: Effect.fn(function* (user: UserId, current: number) {
-      if (user !== session.user_id) return yield* unauthorizedRejection();
+      if (user !== session.user_id) {
+        return yield* unauthenticatedRejection("Present a valid credential and retry.");
+      }
 
       if (
         (yield* sql`SELECT 1 FROM pats WHERE user_id=${user} AND request_id=${requestId}`).length >
@@ -363,7 +363,7 @@ export const manual = Effect.fn(function* (
 ) {
   const input = Schema.decodeUnknownOption(Schema.toCodecJson(CreateManualPATPayload))(payload);
 
-  if (Option.isNone(input)) return refuse(rejectedRejection());
+  if (Option.isNone(input)) return refuse(bareValidationRejection(pairingRejectedMessage));
   const { grant, requestId } = input.value;
   const sql = yield* SqliteClient;
   const now = yield* Clock.currentTimeMillis;
@@ -411,7 +411,9 @@ export const stageGrant = Effect.fn(function* (input: {
 }) {
   const session = yield* preflightSession(input.request, input.owns);
 
-  if (Option.isNone(session)) return refuse(unauthorizedRejection());
+  if (Option.isNone(session)) {
+    return refuse(unauthenticatedRejection("Present a valid credential and retry."));
+  }
 
   if (input.operation === "pats.inspectPATPairing") {
     return yield* review(input.directory, session.value, input.payload);

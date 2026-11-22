@@ -88,8 +88,6 @@ const capturedTransaction = Effect.fnUntraced(function* (
 ) {
   if (Option.isNone(capture)) return null;
 
-  if (!("commit" in capture.value)) return null;
-
   const result = yield* capture.value.commit;
   const decoded = yield* Schema.decodeUnknownEffect(captured)(result.body);
 

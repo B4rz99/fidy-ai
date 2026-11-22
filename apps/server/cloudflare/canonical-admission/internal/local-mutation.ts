@@ -45,9 +45,10 @@ import {
   CanonicalAdmissionUnavailable,
   type CanonicalOutcome,
   type CanonicalRejection,
+  type CanonicalWireOutcome,
   CurrentSuggestionCaller,
-  type LocalMutationOutcome,
   type LocalMutationResult,
+  canonicalRejectionStatus,
   canonicalRequestProtection,
   validationRejection,
 } from "../contract";
@@ -59,7 +60,7 @@ import {
   rateLimited,
   scopeMissing,
 } from "./responses";
-import { catchRejection, rejectionResponse } from "../rejection";
+import { catchRejection, rejectionResponse } from "./rejection";
 import { cryptoHash, validatedCanonicalInput } from "./request-input";
 
 export const admitLocalRequest = Effect.fn(function* ({
@@ -300,7 +301,7 @@ export const reject = Effect.fn(function* (call: Call, response: Response) {
   return attachStanding({ ...call, response });
 });
 
-const firstFailureStatus = 400;
+const firstFailureStatus = canonicalRejectionStatus.badRequest;
 
 const validateOutput = Effect.fn(function* (
   operation: CatalogOperation,
@@ -531,7 +532,7 @@ const receiptStorage = (operation: string, retain: boolean, body: string): Recei
 export const complete = Effect.fn(function* (
   call: Call,
   invocation: Invocation,
-  outcome: LocalMutationOutcome & { retain: boolean }
+  outcome: CanonicalWireOutcome & { retain: boolean }
 ) {
   const { subject, operation, current } = call;
   const { retain } = outcome;

@@ -1,5 +1,5 @@
 import { BudgetThresholdEvaluation } from "../../budgets/contract";
-import { commitLocalWrite, prepareLocalWrite } from "../../canonical-admission/operations";
+import { commitLocalPlan, prepareLocalWrite } from "../../canonical-admission/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { UserContext, type UserId } from "../../../src/core/identity/contract";
@@ -218,7 +218,7 @@ export const captureLocalTransaction = Effect.fnUntraced(function* (
   user: UserId,
   current: number
 ) {
-  return yield* prepareLocalCapture(input, user, current).pipe(Effect.flatMap(commitLocalWrite));
+  return yield* prepareLocalCapture(input, user, current).pipe(Effect.flatMap(commitLocalPlan));
 });
 
 export const prepareConnectionMovement = Effect.fn(function* (

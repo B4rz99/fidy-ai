@@ -33,19 +33,25 @@ export const shortLength = patShortIdLength;
 
 const sampleSize = 16;
 
-export const httpBadRequest = 400;
+export const pairingRejectedMessage =
+  "This PAT pairing is invalid or no longer available. Start a new request.";
 
-export const httpUnauthorized = 401;
+export const httpBadRequest = 400;
 
 export const httpUnavailable = 503;
 
-export const httpConflict = 409;
-
-export const httpTooManyRequests = 429;
-
-export const httpReviewExpired = 422;
-
 export const httpRateLimited = 429;
+
+export const pairingRateLimitedSeconds = 60;
+
+export const pairingRateLimitedBody = {
+  error: {
+    code: "rate_limited",
+    message: pairingRejectedMessage,
+    retryAfterSeconds: pairingRateLimitedSeconds,
+  },
+  next: [],
+} as const;
 
 const unbiasedBase36Limit = 252;
 
@@ -173,6 +179,3 @@ export const invalid = (): Response =>
     },
     status: httpBadRequest,
   });
-
-export const pairingRejectedMessage =
-  "This PAT pairing is invalid or no longer available. Start a new request.";

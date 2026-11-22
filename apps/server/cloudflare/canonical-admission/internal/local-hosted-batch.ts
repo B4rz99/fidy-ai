@@ -8,6 +8,7 @@ import {
   CanonicalAdmissionUnavailable,
   type CanonicalOutcome,
   type LocalMutationPlan,
+  admissionFailure,
   validationRejection,
 } from "../contract";
 import {
@@ -21,7 +22,6 @@ import {
 } from "./local-batch-plans";
 import { selectChildren } from "./local-batch";
 import { localStanding } from "./local-mutation";
-import { admissionFailure } from "../rejection";
 
 type HostedContext = Context & {
   turnId: string;
@@ -147,7 +147,7 @@ export const prepareHostedBatch = Effect.fn(function* (
       targets: [],
       removedTarget: Option.none(),
       premises: [],
-      writes: true,
+      writes: false,
       review: Option.some(
         reviewPlans(plans, context.describe).pipe(Effect.mapError(admissionFailure))
       ),

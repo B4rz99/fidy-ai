@@ -7,6 +7,7 @@ import {
   type CanonicalRejectionOutcome,
   type LocalMutationPlan,
   type LocalMutationResult,
+  canonicalRejectionStatus,
 } from "../contract";
 import { recurringDiscoveryIntervalMs } from "../../recurring/contract";
 import { preserveStoreAlarm } from "../../runtime/sqlite/operations";
@@ -45,7 +46,7 @@ export class ChildRefused extends Data.TaggedError("ChildRefused")<Refusal> {}
 
 export const childRejection = (failure: Refusal): CanonicalRejection =>
   new CanonicalRejection({
-    status: 400,
+    status: canonicalRejectionStatus.badRequest,
     audit: { kind: "rejected", outcome: failure.outcome },
     code: failure.code,
     wireMessage: Option.some(failure.message),

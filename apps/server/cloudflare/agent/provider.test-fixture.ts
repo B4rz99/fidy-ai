@@ -5,6 +5,8 @@ type Environment = { CONTROL: DurableObjectNamespace; INGRESS: Fetcher };
 
 const browserBearerLength = 43;
 
+const capacityTextLength = 2_000;
+
 class BrowserRequestAborted extends Data.TaggedError("BrowserRequestAborted")<{
   readonly cause: unknown;
 }> {}
@@ -24,7 +26,27 @@ type FixtureTool = Readonly<{ name: string; arguments: string }>;
 const fixtureTool = (mode: string): FixtureTool => {
   const id = "22460000-0000-4000-8000-000000000020";
 
-  if (mode === "/batch") {
+  if (mode === "/batch-capacity") {
+    return {
+      name: "operations__executeAtomicBatch",
+      arguments: JSON.stringify({
+        payload: {
+          calls: [
+            {
+              callId: "22460000-0000-4000-8000-000000000011",
+              operation: "memory.revise",
+              input: {
+                params: { id: "22460000-0000-4000-8000-000000000020" },
+                payload: { text: "x".repeat(capacityTextLength) },
+              },
+            },
+          ],
+        },
+      }),
+    };
+  }
+
+  if (mode === "/batch" || mode === "/batch-absent") {
     return {
       name: "operations__executeAtomicBatch",
       arguments: JSON.stringify({
@@ -60,6 +82,8 @@ const fixtureTool = (mode: string): FixtureTool => {
 
 const textModes = [
   "/batch",
+  "/batch-absent",
+  "/batch-capacity",
   "/forget",
   "/malformed",
   "/repair-after-query",

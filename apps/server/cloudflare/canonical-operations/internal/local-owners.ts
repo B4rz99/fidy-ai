@@ -65,10 +65,10 @@ import {
   type CanonicalRejection,
   type LocalMutationPlan,
   type LocalMutationResult,
+  admissionFailure,
   isCanonicalRejection,
 } from "../../canonical-admission/contract";
 import { prepareLocalRead, prepareLocalWrite } from "../../canonical-admission/operations";
-import { admissionFailure } from "../../canonical-admission/rejection";
 
 type Context = { user: UserId; current: number; storage: DurableObjectStorage } & Partial<{
   hostedTurn: string;

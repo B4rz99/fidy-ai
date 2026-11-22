@@ -1,7 +1,7 @@
 import { BudgetThresholdEvaluation } from "../../budgets/contract";
 import { localCorrectionReview } from "./oauth-review";
 import { CategoryReference } from "../../../src/core/categories/contract";
-import { commitLocalWrite, prepareLocalWrite } from "../../canonical-admission/operations";
+import { commitLocalPlan, prepareLocalWrite } from "../../canonical-admission/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { encodeMoneyAmount } from "../../../src/core/_shared/money";
@@ -230,7 +230,7 @@ export const correctLocalTransaction = Effect.fnUntraced(function* (
   user: UserId,
   current: number
 ) {
-  return yield* prepareLocalCorrection(input, user, current).pipe(Effect.flatMap(commitLocalWrite));
+  return yield* prepareLocalCorrection(input, user, current).pipe(Effect.flatMap(commitLocalPlan));
 });
 
 export const inspectLocalTransaction = Effect.fn(function* (id: string, user: UserId) {
@@ -365,7 +365,7 @@ export const reconcileLocalTransactions = Effect.fnUntraced(function* (
   user: UserId,
   current: number
 ) {
-  return yield* prepareLocalPair(input, user, current).pipe(Effect.flatMap(commitLocalWrite));
+  return yield* prepareLocalPair(input, user, current).pipe(Effect.flatMap(commitLocalPlan));
 });
 
 export const prepareLocalDeletion = Effect.fn(function* (
@@ -406,5 +406,5 @@ export const deleteLocalTransaction = Effect.fnUntraced(function* (
   user: UserId,
   current: number
 ) {
-  return yield* prepareLocalDeletion(id, user, current).pipe(Effect.flatMap(commitLocalWrite));
+  return yield* prepareLocalDeletion(id, user, current).pipe(Effect.flatMap(commitLocalPlan));
 });

@@ -1,5 +1,5 @@
 import { BudgetThresholdEvaluation } from "../contract";
-import { commitLocalWrite, prepareLocalWrite } from "../../canonical-admission/operations";
+import { commitLocalPlan, prepareLocalWrite } from "../../canonical-admission/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Array as Arr, Data, DateTime, Effect, Option, Schema } from "effect";
 import type { SqlError } from "effect/sql";
@@ -478,7 +478,7 @@ export const saveLocalBudget = Effect.fn(function* (
   user: UserId,
   current: number
 ) {
-  return yield* prepareLocalBudget(save, user, current).pipe(Effect.flatMap(commitLocalWrite));
+  return yield* prepareLocalBudget(save, user, current).pipe(Effect.flatMap(commitLocalPlan));
 });
 
 export const prepareLocalBudgetDeletion = Effect.fn(function* (id: BudgetId, user: UserId) {
@@ -505,5 +505,5 @@ export const prepareLocalBudgetDeletion = Effect.fn(function* (id: BudgetId, use
 });
 
 export const deleteLocalBudget = Effect.fnUntraced(function* (id: BudgetId, user: UserId) {
-  return yield* prepareLocalBudgetDeletion(id, user).pipe(Effect.flatMap(commitLocalWrite));
+  return yield* prepareLocalBudgetDeletion(id, user).pipe(Effect.flatMap(commitLocalPlan));
 });

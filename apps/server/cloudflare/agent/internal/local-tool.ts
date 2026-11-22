@@ -1,13 +1,15 @@
 import { type ConfirmationRead, describeConfirmation } from "./confirmation-description";
 import { meterHistory } from "./local-history";
 import { stageChallenge } from "./local-challenge";
-import type {
-  CanonicalRejection,
-  LocalMutationOutcome,
-  LocalMutationPlan,
-  LocalReviewFacts,
+import {
+  type CanonicalRejection,
+  type CanonicalWireOutcome,
+  type LocalMutationPlan,
+  type LocalReviewFacts,
+  canonicalRejectionStatus,
+  encodeRejection,
+  isCanonicalRejection,
 } from "../../canonical-admission/contract";
-import { isCanonicalRejection } from "../../canonical-admission/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
 import { atomicBatchOperation } from "../../../src/shell/operations/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
@@ -31,8 +33,11 @@ import {
   prepareHostedBatchOwner,
   prepareHostedOwner,
 } from "../../canonical-operations/operations";
-import { admitLocalRequest, commitLocalWrite } from "../../canonical-admission/operations";
-import { catchRejection, encodeRejection } from "../../canonical-admission/rejection";
+import {
+  admitLocalRequest,
+  commitLocalPlan,
+  settleLocalPlan,
+} from "../../canonical-admission/operations";
 import { type LocalTurn, channelAuthority } from "./local-turn";
 import { appendEntry, entryIdentity, liveTurn } from "./local-turn-store";
 import { AgentUnavailable } from "../contract";
@@ -53,7 +58,7 @@ const Subject = Data.taggedEnum<ConsentSubject>();
 const failure = (code: string): CanonicalToolOutcome =>
   Outcome.CanonicalOperationFailed({ failure: { error: { code } } });
 
-const firstFailureStatus = 400;
+const firstFailureStatus = canonicalRejectionStatus.badRequest;
 
 const currentConsent = Effect.fn(function* (turn: LocalTurn) {
   const sql = yield* SqliteClient;
@@ -78,7 +83,7 @@ const grantsTier = Effect.fn(function* (turn: LocalTurn, now: number, tier: stri
 });
 
 const decodedOutcome = Effect.fn(function* (
-  result: LocalMutationOutcome,
+  result: CanonicalWireOutcome,
   operation: CatalogOperation
 ) {
   if (result.status >= firstFailureStatus) {
@@ -143,7 +148,7 @@ const describeBatchChild = Effect.fnUntraced(function* (
 
       if (Option.isNone(prepared)) return Option.none<Schema.Json>();
 
-      return yield* commitLocalWrite(prepared.value).pipe(
+      return yield* commitLocalPlan(prepared.value).pipe(
         Effect.map((result) => Option.some(result.body)),
         Effect.catchIf(isCanonicalRejection, (rejection) =>
           Effect.logDebug({
@@ -286,7 +291,7 @@ const executeOwner = Effect.fn(function* (
     return failure("user_action_required");
   }
 
-  const result = yield* catchRejection(commitLocalWrite(prepared.plan.value));
+  const result = yield* settleLocalPlan(prepared.plan.value);
 
   return yield* decodedOutcome(result, operation);
 });

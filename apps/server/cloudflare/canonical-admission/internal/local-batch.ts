@@ -42,8 +42,9 @@ import {
   CanonicalAdmissionUnavailable,
   type CanonicalOutcome,
   type CanonicalRejectionOutcome,
+  canonicalRejectionStatus,
 } from "../contract";
-import { catchRejection, rejectionResponse } from "../rejection";
+import { catchRejection, rejectionResponse } from "./rejection";
 import {
   type Call,
   type Invocation,
@@ -73,7 +74,7 @@ import {
 
 const isResponse = Schema.is(Schema.instanceOf(Response));
 
-const firstFailureStatus = 400;
+const firstFailureStatus = canonicalRejectionStatus.badRequest;
 
 const envelope = Schema.Struct({
   calls: Schema.NonEmptyArray(Schema.Json).check(Schema.isMaxLength(maximumAtomicBatchCalls)),

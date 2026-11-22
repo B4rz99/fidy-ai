@@ -43,9 +43,14 @@ import {
 import { newId } from "../../secret-material/operations";
 import {
   CanonicalAdmissionUnavailable,
+  type CanonicalOutcome,
+  type CanonicalRejection,
+  type CanonicalWireOutcome,
   CurrentSuggestionCaller,
   type LocalMutationResult,
+  canonicalRejectionStatus,
   canonicalRequestProtection,
+  validationRejection,
 } from "../contract";
 import {
   attachStanding,
@@ -55,6 +60,7 @@ import {
   rateLimited,
   scopeMissing,
 } from "./responses";
+import { catchRejection, rejectionResponse } from "./rejection";
 import { cryptoHash, validatedCanonicalInput } from "./request-input";
 
 export const admitLocalRequest = Effect.fn(function* ({
@@ -191,7 +197,7 @@ type Mutation<A, E> = Readonly<{
     input: A,
     userId: UserId,
     current: number
-  ) => Effect.Effect<LocalMutationResult, E, SqliteClient>;
+  ) => Effect.Effect<LocalMutationResult, E | CanonicalRejection, SqliteClient>;
 }>;
 
 type Subject = Exclude<
@@ -232,7 +238,7 @@ const oneStored = (
     : Effect.fail(new CanonicalAdmissionUnavailable({ cause: "incomplete_local_mutation" }));
 
 const sessionOutcome = (
-  outcome: LocalMutationResult["outcome"]
+  outcome: CanonicalOutcome
 ): { kind: string; reason: Option.Option<string> } =>
   outcome === "resource_limit"
     ? { kind: "validation_failed", reason: Option.some(outcome) }
@@ -240,7 +246,7 @@ const sessionOutcome = (
 
 export const audit = Effect.fn(function* (
   { subject, operation, current }: Call,
-  outcome: LocalMutationResult["outcome"]
+  outcome: CanonicalOutcome
 ) {
   const sql = yield* SqliteClient;
   const { userId } = subject;
@@ -295,7 +301,7 @@ export const reject = Effect.fn(function* (call: Call, response: Response) {
   return attachStanding({ ...call, response });
 });
 
-const firstFailureStatus = 400;
+const firstFailureStatus = canonicalRejectionStatus.badRequest;
 
 const validateOutput = Effect.fn(function* (
   operation: CatalogOperation,
@@ -526,7 +532,7 @@ const receiptStorage = (operation: string, retain: boolean, body: string): Recei
 export const complete = Effect.fn(function* (
   call: Call,
   invocation: Invocation,
-  outcome: LocalMutationResult & { retain: boolean }
+  outcome: CanonicalWireOutcome & { retain: boolean }
 ) {
   const { subject, operation, current } = call;
   const { retain } = outcome;
@@ -620,7 +626,7 @@ const authorizedWork = Effect.fn(function* <E>({
   call: Call;
   invocation: Invocation;
   admission: Effect.Effect<void, StoreCapacityUnavailable>;
-  work: () => Effect.Effect<LocalMutationResult, E, SqliteClient>;
+  work: () => Effect.Effect<LocalMutationResult, E | CanonicalRejection, SqliteClient>;
 }>) {
   const confirmation = yield* confirmCall(call);
 
@@ -633,7 +639,7 @@ const authorizedWork = Effect.fn(function* <E>({
 
   if (Option.isSome(refusal)) return refusal.value;
   yield* admission;
-  const result = yield* work();
+  const result = yield* catchRejection(work());
 
   if (result.status < firstFailureStatus) yield* confirmation.consume;
 
@@ -688,24 +694,15 @@ const sessionLookupFor = (operation: string): typeof boundSessionLookup =>
 
 export const runLocalMutation = Effect.fn(function* <A, E>(
   { request, storage, operation, owns, input, work }: Mutation<A, E>,
-  invalidTarget: Option.Option<LocalMutationResult> = Option.none()
+  pathRejection: Option.Option<() => CanonicalRejection> = Option.none()
 ) {
   const resolve = yield* localProof(request, owns, sessionLookupFor(operation.id));
   const { keyValid, identity } = yield* prepareIdentity(request, operation);
   const argumentsForOwner = Option.product(yield* input, identity);
 
-  const invalidInput = Option.match(invalidTarget, {
-    onNone: () => ({
-      response: invalid("Invalid canonical operation input."),
-      outcome: "validation_failed" as const,
-    }),
-    onSome: (target) => ({
-      response: Response.json(target.body, {
-        status: target.status,
-        headers: { "cache-control": "no-store" },
-      }),
-      outcome: target.outcome,
-    }),
+  const invalidInput = Option.match(pathRejection, {
+    onNone: () => validationRejection("Invalid canonical operation input."),
+    onSome: (rejection) => rejection(),
   });
 
   const prepared = Option.match(argumentsForOwner, {
@@ -714,10 +711,7 @@ export const runLocalMutation = Effect.fn(function* <A, E>(
       keyValid
         ? ({ value, invocation } as const)
         : ({
-            refusal: {
-              response: invalid("Invalid canonical retry key."),
-              outcome: "validation_failed" as const,
-            },
+            refusal: validationRejection("Invalid canonical retry key."),
           } as const),
   });
 
@@ -741,9 +735,12 @@ export const runLocalMutation = Effect.fn(function* <A, E>(
       if (Option.isSome(forbidden)) return forbidden.value;
 
       if (prepared.refusal !== undefined) {
-        yield* audit(call, prepared.refusal.outcome);
+        yield* audit(call, prepared.refusal.audit.outcome);
 
-        return attachStanding({ ...call, response: prepared.refusal.response });
+        return attachStanding({
+          ...call,
+          response: rejectionResponse(prepared.refusal),
+        });
       }
 
       return yield* authorizedWork({
@@ -769,7 +766,7 @@ export const readNativeAccountQuery = Effect.fn(function* (
       status: 200,
       outcome: "success" as const,
       body: { data: [...listLaunchCategories()], next: [] },
-    };
+    } satisfies LocalMutationResult;
   }
 
   if (operation === "quota.getQuota") {
@@ -782,7 +779,7 @@ export const readNativeAccountQuery = Effect.fn(function* (
         data: yield* Schema.encodeEffect(Schema.toCodecJson(QuotaStatus))(standing),
         next: [],
       },
-    };
+    } satisfies LocalMutationResult;
   }
 
   return yield* new CanonicalAdmissionUnavailable({ cause: "unsupported account query" });

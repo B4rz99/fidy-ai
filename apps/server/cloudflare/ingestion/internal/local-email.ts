@@ -417,7 +417,6 @@ const settleEmail = Effect.fn(function* (
       }
     );
 
-    if (!("commit" in plan)) return yield* fail();
     const response = yield* plan.commit;
 
     const { data } = yield* Schema.decodeUnknownEffect(

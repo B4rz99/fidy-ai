@@ -1,6 +1,6 @@
 import { prepareHostedBatch as prepareBatchForTurn } from "./internal/local-hosted-batch";
 import { runLocalBatch as executeBatch } from "./internal/local-batch";
-import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 
 import { withStoreCapacity } from "../runtime/sqlite/operations";
 import {
@@ -21,15 +21,28 @@ import {
   sweepLocalReceipts as sweepReceipts,
 } from "./internal/local-mutation";
 import {
-  CanonicalAdmissionUnavailable,
+  type CanonicalAdmissionFailure,
+  type CanonicalAdmissionUnavailable,
+  type CanonicalRejection,
+  type CanonicalWireOutcome,
   type LocalMutationPlan,
-  type LocalMutationPreparation,
   type LocalMutationResult,
+  type LocalMutationTransaction,
+  isCanonicalRejection,
 } from "./contract";
+import {
+  encodeRejection,
+  admissionFailure as normalizeAdmissionFailure,
+} from "./internal/rejection";
 import { Effect, Option } from "effect";
 import { type QuotaStatus } from "../../src/core/quotas/contract";
-
 import { localCanonicalArguments as readArguments } from "./internal/request-input";
+
+export const admissionFailure = (cause: unknown): CanonicalAdmissionFailure =>
+  normalizeAdmissionFailure(cause);
+
+export const encodeLocalRejection = (rejection: CanonicalRejection): CanonicalWireOutcome =>
+  encodeRejection(rejection);
 
 export const canonicalAdmissionUnavailable = (): Response => unavailable();
 
@@ -47,8 +60,8 @@ export const attachCanonicalStanding = ({
 }: Readonly<{ response: Response; status: QuotaStatus; current: number }>): Response =>
   attachStanding(response, status, current);
 
-export const runLocalMutation: typeof mutateLocal = (input, invalidTarget) =>
-  mutateLocal(input, invalidTarget);
+export const runLocalMutation: typeof mutateLocal = (input, pathRejection) =>
+  mutateLocal(input, pathRejection);
 
 export const admitLocalRequest: typeof admitLocal = (input) => admitLocal(input);
 
@@ -62,6 +75,26 @@ type LocalWrite<E> = {
   commit: Effect.Effect<LocalMutationResult, E, SqliteClient>;
 };
 
+const localPlan = <E, Failure = never>(
+  write:
+    | LocalWrite<E>
+    | (LocalWrite<E> & { premises: ReadonlyArray<string> })
+    | (LocalWrite<E> & {
+        review: Effect.Effect<{ effect: string; revision: string }, Failure, SqliteClient>;
+      }),
+  transaction: LocalMutationTransaction
+): LocalMutationPlan => ({
+  removedTarget: Option.none(),
+  premises: "premises" in write ? write.premises : [],
+  targets: write.targets,
+  transaction,
+  review:
+    "review" in write
+      ? Option.some(write.review.pipe(Effect.mapError(admissionFailure)))
+      : Option.none(),
+  commit: write.commit.pipe(Effect.mapError(admissionFailure)),
+});
+
 export const prepareLocalWrite = <E, Failure = never>(
   write:
     | LocalWrite<E>
@@ -69,27 +102,35 @@ export const prepareLocalWrite = <E, Failure = never>(
     | (LocalWrite<E> & {
         review: Effect.Effect<{ effect: string; revision: string }, Failure, SqliteClient>;
       })
-): LocalMutationPlan => ({
-  removedTarget: Option.none(),
-  premises: "premises" in write ? write.premises : [],
-  targets: write.targets,
-  review:
-    "review" in write
-      ? Option.some(
-          write.review.pipe(
-            Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
-          )
-        )
-      : Option.none(),
-  commit: write.commit.pipe(
-    Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
-  ),
-});
+): LocalMutationPlan => localPlan(write, "caller");
 
-export const commitLocalWrite = (
-  preparation: LocalMutationPreparation
-): LocalMutationPlan["commit"] =>
-  "commit" in preparation ? preparation.commit : Effect.succeed(preparation);
+export const prepareLocalRead = <E, Failure = never>(
+  write:
+    | LocalWrite<E>
+    | (LocalWrite<E> & { premises: ReadonlyArray<string> })
+    | (LocalWrite<E> & {
+        review: Effect.Effect<{ effect: string; revision: string }, Failure, SqliteClient>;
+      })
+): LocalMutationPlan => localPlan(write, "none");
+
+export const commitLocalPlan = (
+  preparation: LocalMutationPlan
+): Effect.Effect<LocalMutationResult, CanonicalAdmissionFailure, SqliteClient> => {
+  if (preparation.transaction !== "caller") return preparation.commit;
+
+  return Effect.gen(function* () {
+    const sql = yield* SqliteClient;
+
+    return yield* sql.withTransaction(preparation.commit).pipe(Effect.mapError(admissionFailure));
+  });
+};
+
+export const settleLocalPlan = (
+  preparation: LocalMutationPlan
+): Effect.Effect<CanonicalWireOutcome, CanonicalAdmissionUnavailable, SqliteClient> =>
+  commitLocalPlan(preparation).pipe(
+    Effect.catchIf(isCanonicalRejection, (rejection) => Effect.succeed(encodeRejection(rejection)))
+  );
 
 export const runLocalBatch: typeof executeBatch = (unit, owners) => executeBatch(unit, owners);
 

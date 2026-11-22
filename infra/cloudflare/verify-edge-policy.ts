@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "3ea2a004e560725693c4644bc77ab78075fc3eed556a76859d2e3655b7182305";
+const expectedEdgePolicyDigest = "83cff3af4d30fa9a3538ee0a1c9589195d1eb55aace67e51333c9df8f80617eb";
 
 const securityArtifacts = [
   ...(await Promise.all(
@@ -541,6 +541,9 @@ const securityArtifacts = [
     new URL("../../apps/server/cloudflare/recurring-plans/internal/mutation.ts", import.meta.url)
   ).text(),
   await Bun.file(
+    new URL("../../apps/server/cloudflare/recurring-plans/internal/review.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
     new URL("../../apps/server/cloudflare/transactions/internal/planning-read.ts", import.meta.url)
   ).text(),
   await Bun.file(
@@ -804,6 +807,12 @@ const securityArtifacts = [
   await Bun.file(
     new URL(
       "../../apps/server/cloudflare/canonical-admission/internal/responses.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/canonical-admission/internal/rejection.ts",
       import.meta.url
     )
   ).text(),

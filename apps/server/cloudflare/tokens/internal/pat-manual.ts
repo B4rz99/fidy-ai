@@ -1,59 +1,9 @@
 import { type CreateManualPATPayload, TokenBearer } from "../../../src/core/tokens/contract";
-import {
-  IssuedManualPATResponse,
-  ManualPATIssuanceConsumed,
-  ManualPATIssuanceRateLimited,
-  ManualPATReviewExpired,
-  issuanceConsumedMessage,
-  issuanceLimitedMessage,
-  reviewExpiredMessage,
-} from "../../../src/shell/tokens/contract";
-import { DateTime, Option, Redacted, Schema } from "effect";
-import {
-  type SessionRow,
-  canonical,
-  dayMilliseconds,
-  httpConflict,
-  httpReviewExpired,
-  httpTooManyRequests,
-  pairingMilliseconds,
-  patFrom,
-  response,
-  serviceUnavailable as unavailable,
-} from "./pat-shared";
-
-export const expiredReview = (): Response =>
-  response({
-    body: Schema.encodeSync(Schema.toCodecJson(ManualPATReviewExpired))(
-      ManualPATReviewExpired.make({
-        error: { code: "user_action_required", message: reviewExpiredMessage },
-        next: [],
-      })
-    ),
-    status: httpReviewExpired,
-  });
-
-export const issuanceLimit = (): Response =>
-  response({
-    body: Schema.encodeSync(Schema.toCodecJson(ManualPATIssuanceRateLimited))(
-      ManualPATIssuanceRateLimited.make({
-        error: { code: "rate_limited", message: issuanceLimitedMessage, retryAfterSeconds: 600 },
-        next: [],
-      })
-    ),
-    status: httpTooManyRequests,
-  });
-
-export const consumed = (): Response =>
-  response({
-    body: Schema.encodeSync(Schema.toCodecJson(ManualPATIssuanceConsumed))(
-      ManualPATIssuanceConsumed.make({
-        error: { code: "user_action_required", message: issuanceConsumedMessage },
-        next: [],
-      })
-    ),
-    status: httpConflict,
-  });
+import { IssuedManualPATResponse } from "../../../src/shell/tokens/contract";
+import { DateTime, Effect, Option, Redacted, Schema } from "effect";
+import type { LocalMutationResult } from "../../canonical-admission/contract";
+import { PATUnavailable } from "../contract";
+import { type SessionRow, dayMilliseconds, pairingMilliseconds, patFrom } from "./pat-shared";
 
 type Issuance = Readonly<{
   input: CreateManualPATPayload;
@@ -65,7 +15,9 @@ type Issuance = Readonly<{
   bearer: string;
 }>;
 
-export const issuedResponse = (issue: Issuance): Response => {
+export const issuedResult = (
+  issue: Issuance
+): Effect.Effect<LocalMutationResult, PATUnavailable> => {
   const { input, session, current, expires, patId, shortId, bearer } = issue;
 
   const pat = patFrom({
@@ -81,14 +33,21 @@ export const issuedResponse = (issue: Issuance): Response => {
     revoked_at_ms: null,
   });
 
-  if (Option.isNone(pat)) return unavailable();
-
-  return canonical(
-    Schema.encodeSync(Schema.toCodecJson(IssuedManualPATResponse))({
-      pat: { ...pat.value, idleExpiresAt: DateTime.makeUnsafe(expires) },
-      bearer: Redacted.make(Schema.decodeSync(TokenBearer)(bearer)),
-    })
-  );
+  return Option.match(pat, {
+    onNone: () => Effect.fail(new PATUnavailable({ cause: Option.none() })),
+    onSome: (value) =>
+      Effect.succeed({
+        status: 200,
+        outcome: "success" as const,
+        body: {
+          data: Schema.encodeSync(Schema.toCodecJson(IssuedManualPATResponse))({
+            pat: { ...value, idleExpiresAt: DateTime.makeUnsafe(expires) },
+            bearer: Redacted.make(Schema.decodeSync(TokenBearer)(bearer)),
+          }),
+          next: [],
+        },
+      }),
+  });
 };
 
 export const expiryFor = ({

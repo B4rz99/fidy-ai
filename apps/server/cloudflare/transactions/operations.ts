@@ -80,9 +80,9 @@ export const isLocalTransactionOperation = (id: string): boolean =>
 
 const invalidTransactionTarget = (
   id: string
-): Option.Option<ReturnType<typeof missingLocalTransaction>> =>
+): Option.Option<() => ReturnType<typeof missingLocalTransaction>> =>
   Option.isNone(Schema.decodeOption(TransactionId)(id))
-    ? Option.some(missingLocalTransaction())
+    ? Option.some(() => missingLocalTransaction())
     : Option.none();
 
 type LocalTransactionRequest = Readonly<{
@@ -118,9 +118,7 @@ const wakeForFacts = <A, E>(
   Effect.fn(function* (input: A, user: UserId, current: number) {
     const outcome = yield* work(input, user, current);
 
-    if (outcome.outcome === "success") {
-      yield* preserveStoreAlarm(storage, current + recurringDiscoveryIntervalMs);
-    }
+    yield* preserveStoreAlarm(storage, current + recurringDiscoveryIntervalMs);
 
     return outcome;
   });

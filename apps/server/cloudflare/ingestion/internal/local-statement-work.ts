@@ -17,7 +17,7 @@ import { parseStatementFile } from "../../../src/shell/ingestion/operations";
 import { TransactionExtraction } from "../../../src/core/transactions/contract";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import { ConsentSubject } from "../../../src/shell/consent/contract";
-import { commitLocalWrite } from "../../canonical-admission/operations";
+import { commitLocalPlan } from "../../canonical-admission/operations";
 import { CanonicalAdmissionUnavailable } from "../../canonical-admission/contract";
 import { prepareSourcedCapture } from "../../transactions/operations";
 import { withStoreCapacity } from "../../runtime/sqlite/operations";
@@ -238,7 +238,7 @@ const settleRow = Effect.fn(function* (row: typeof Stored.Type, current: number,
       }
     );
 
-    if ((yield* commitLocalWrite(plan)).status !== createdStatus) {
+    if ((yield* commitLocalPlan(plan)).status !== createdStatus) {
       return yield* new CanonicalAdmissionUnavailable({ cause: "statement_capture" });
     }
 

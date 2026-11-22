@@ -1,5 +1,5 @@
 import { BudgetThresholdEvaluation } from "../../budgets/contract";
-import { commitLocalWrite, prepareLocalWrite } from "../../canonical-admission/operations";
+import { commitLocalPlan, prepareLocalWrite } from "../../canonical-admission/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { UserContext, type UserId } from "../../../src/core/identity/contract";
@@ -9,7 +9,10 @@ import { resolveLocalCategory, retainLocalCategory } from "../../categories/oper
 import { newId } from "../../secret-material/operations";
 import {
   CanonicalAdmissionUnavailable,
+  type CanonicalRejection,
   type LocalMutationResult,
+  notFoundRejection,
+  validationRejection,
 } from "../../canonical-admission/contract";
 import { TransactionOutput, decodeTransactionRow } from "./transaction-history";
 
@@ -19,20 +22,12 @@ const missingStatus = 404;
 
 export const localTransactionRefusal = ({
   status,
-  code,
   message,
 }: Readonly<{
-  status: number;
-  code: "not_found" | "validation_failed";
+  status: typeof invalidStatus | typeof missingStatus;
   message: string;
-}>): LocalMutationResult => ({
-  status,
-  outcome: code,
-  body: {
-    error: code === "validation_failed" ? { code, message, fields: [] } : { code, message },
-    next: [],
-  },
-});
+}>): CanonicalRejection =>
+  status === missingStatus ? notFoundRejection(message) : validationRejection(message);
 
 const captureDecisionKeys = (input: CreateTransactionInput): ReadonlyArray<string> => [
   "money",
@@ -109,7 +104,11 @@ const captureReadback = Effect.fn(function* (userId: UserId, id: string, current
   const data = yield* Schema.encodeEffect(TransactionOutput)(decoded.value);
   yield* (yield* BudgetThresholdEvaluation)(userId, current);
 
-  return { status: 201, outcome: "success" as const, body: { data, next: [] } };
+  return {
+    status: 201,
+    outcome: "success" as const,
+    body: { data, next: [] },
+  } satisfies LocalMutationResult;
 });
 
 const captureProvenance = (
@@ -136,9 +135,8 @@ const prepareCapture = Effect.fn(function* (
   const occurredAt = DateTime.toEpochMillis(input.occurredAt);
 
   if (occurredAt > current) {
-    return localTransactionRefusal({
+    return yield* localTransactionRefusal({
       status: invalidStatus,
-      code: "validation_failed",
       message: "A Transaction cannot occur in the future.",
     });
   }
@@ -169,9 +167,8 @@ const prepareCapture = Effect.fn(function* (
   );
 
   if (Option.isNone(reference)) {
-    return localTransactionRefusal({
+    return yield* localTransactionRefusal({
       status: missingStatus,
-      code: "not_found",
       message: "The Category does not exist; correct categoryId and retry.",
     });
   }
@@ -221,7 +218,7 @@ export const captureLocalTransaction = Effect.fnUntraced(function* (
   user: UserId,
   current: number
 ) {
-  return yield* prepareLocalCapture(input, user, current).pipe(Effect.flatMap(commitLocalWrite));
+  return yield* prepareLocalCapture(input, user, current).pipe(Effect.flatMap(commitLocalPlan));
 });
 
 export const prepareConnectionMovement = Effect.fn(function* (

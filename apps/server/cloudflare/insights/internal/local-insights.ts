@@ -16,7 +16,12 @@ import {
   allowedInsightTransitions,
   nextReminderOccurrence,
 } from "../../../src/core/insights/operations";
-import { type LocalMutationResult } from "../../canonical-admission/contract";
+import {
+  type CanonicalRejection,
+  type LocalMutationResult,
+  notFoundRejection,
+  validationRejection,
+} from "../../canonical-admission/contract";
 import { newId } from "../../secret-material/operations";
 import { prepareLocalWrite } from "../../canonical-admission/operations";
 import { preserveStoreAlarm } from "../../runtime/sqlite/operations";
@@ -35,20 +40,9 @@ const success = (data: Schema.Json): LocalMutationResult => ({
   body: { data, next: [] },
 });
 
-const missing: LocalMutationResult = {
-  status: 404,
-  outcome: "not_found",
-  body: { error: { code: "not_found", message: "Insight unavailable." }, next: [] },
-};
+const missing = (): CanonicalRejection => notFoundRejection("Insight unavailable.");
 
-const invalid: LocalMutationResult = {
-  status: 400,
-  outcome: "validation_failed",
-  body: {
-    error: { code: "validation_failed", message: "Insight transition unavailable.", fields: [] },
-    next: [],
-  },
-};
+const invalid = (): CanonicalRejection => validationRejection("Insight transition unavailable.");
 
 type Transition = { id: InsightEventId } & (
   | { target: "delivered"; evidence: DeliveryEvidenceInput }
@@ -61,7 +55,7 @@ export const prepareTransition = Effect.fn(function* (edit: Transition, user: Us
   const [raw] =
     yield* sql`SELECT event_json,receipt_json FROM insight_events WHERE user_id=${user} AND id=${edit.id}`;
 
-  if (raw === undefined) return missing;
+  if (raw === undefined) return yield* missing();
 
   const held = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
@@ -72,7 +66,10 @@ export const prepareTransition = Effect.fn(function* (edit: Transition, user: Us
 
   const event = held.event_json;
 
-  if (!allowedInsightTransitions(event.lifecycleState).includes(edit.target)) return invalid;
+  if (!allowedInsightTransitions(event.lifecycleState).includes(edit.target)) {
+    return yield* invalid();
+  }
+
   const observed = yield* Schema.encodeEffect(eventCodec)(event);
 
   const receipt =
@@ -112,7 +109,7 @@ export const prepareTransition = Effect.fn(function* (edit: Transition, user: Us
         yield* sql`UPDATE insight_events SET event_json=${yield* jsonText(insight)},receipt_json=coalesce(${deliveryAttempt === null ? null : yield* jsonText(deliveryAttempt)},receipt_json)
         WHERE user_id=${user} AND id=${edit.id} AND json_extract(event_json,'$.lifecycleState')=${event.lifecycleState} RETURNING id`;
 
-      if (updated.length !== 1) return invalid;
+      if (updated.length !== 1) return yield* invalid();
 
       return success(deliveryAttempt === null ? insight : { insight, deliveryAttempt });
     }),
@@ -160,10 +157,10 @@ export const prepareSchedule = Effect.fn(function* (
 ) {
   const held = yield* heldSchedule(user);
 
-  if (Option.isNone(held)) return missing;
+  if (Option.isNone(held)) return yield* missing();
   const old = held.value.snapshot_json;
 
-  if (old.version !== edit.expectedVersion) return invalid;
+  if (old.version !== edit.expectedVersion) return yield* invalid();
   const sql = yield* SqliteClient;
 
   const updated = ReminderSchedule.make({
@@ -191,7 +188,7 @@ export const prepareSchedule = Effect.fn(function* (
         WHERE user_id=${user} AND id=${old.id} AND revision=${old.version} AND grant_id=${held.value.grant_id}
         AND EXISTS(SELECT 1 FROM proactive_grants WHERE user_id=${user} AND id=${held.value.grant_id} AND kind='manual-entry-reminder' AND revoked_at_ms IS NULL) RETURNING id`;
 
-      if (changed.length !== 1) return invalid;
+      if (changed.length !== 1) return yield* invalid();
       yield* sql`INSERT INTO reminder_revisions VALUES(${old.id},${updated.version},${snapshotText})`;
 
       if (updated.enabled) {
@@ -207,7 +204,7 @@ export const pendingInsights = Effect.fn(function* (request: Request, user: User
   const url = new URL(request.url),
     cursor = pendingCursor(url);
 
-  if (Option.isNone(cursor)) return { result: invalid, next: Option.none<string>() };
+  if (Option.isNone(cursor)) return yield* invalid();
 
   const sql = yield* SqliteClient,
     at = Option.getOrNull(cursor.value.scheduledAt);

@@ -9,8 +9,8 @@ import {
   type Prepare,
   type Refusal,
   type SelectedChild,
+  childRejection,
   commitChildren,
-  failed,
   prepareChildren,
   refuseChild,
 } from "./local-batch-plans";
@@ -38,7 +38,13 @@ import {
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBodyWithSize } from "../../http/operations";
 import { withStoreAdmission } from "../../runtime/sqlite/operations";
-import { CanonicalAdmissionUnavailable, type LocalMutationResult } from "../contract";
+import {
+  CanonicalAdmissionUnavailable,
+  type CanonicalOutcome,
+  type CanonicalRejectionOutcome,
+  canonicalRejectionStatus,
+} from "../contract";
+import { catchRejection, rejectionResponse } from "./rejection";
 import {
   type Call,
   type Invocation,
@@ -68,7 +74,7 @@ import {
 
 const isResponse = Schema.is(Schema.instanceOf(Response));
 
-const firstFailureStatus = 400;
+const firstFailureStatus = canonicalRejectionStatus.badRequest;
 
 const envelope = Schema.Struct({
   calls: Schema.NonEmptyArray(Schema.Json).check(Schema.isMaxLength(maximumAtomicBatchCalls)),
@@ -143,6 +149,9 @@ const exceedsChildLimit = (operation: CatalogOperation, input: Schema.Json): boo
   return new TextEncoder().encode(JSON.stringify(input)).length > limit;
 };
 
+const refusalOutcome = (code: ErrorCode): CanonicalRejectionOutcome =>
+  code === "not_found" ? "not_found" : "validation_failed";
+
 const invalidChildInput = (operation: CatalogOperation, input: Schema.Json): boolean =>
   exceedsChildLimit(operation, input) ||
   Option.isNone(Schema.decodeOption(operation.input, { onExcessProperty: "error" })(input));
@@ -197,7 +206,15 @@ export const selectChildren = <Owner>({
     const child = eligibleChild(eligible, operation.id, raw);
 
     const refusal = (code: ErrorCode, message: string): Selection<Owner> =>
-      ({ refusal: { index, operation, code, message } }) as const;
+      ({
+        refusal: {
+          index,
+          operation,
+          code,
+          message,
+          outcome: refusalOutcome(code),
+        },
+      }) as const;
 
     if (Option.isNone(child)) {
       return refusal(
@@ -274,16 +291,18 @@ const childAccess = Effect.fn(function* (call: Call, children: ReadonlyArray<Chi
     yield* audit({ ...call, operation: child.operation }, "validation_failed");
 
     if (access.reason === "caller_ineligible") {
-      const failure = failed({
-        ...child,
+      const failure = childRejection({
+        index: child.index,
+        operation: child.operation,
         code: "scope_missing",
         message: "This caller cannot invoke the child operation.",
+        outcome: "validation_failed",
       });
 
       return Option.some(
         attachStanding({
           ...call,
-          response: Response.json(failure.body, { status: failure.status }),
+          response: rejectionResponse(failure),
         })
       );
     }
@@ -291,24 +310,23 @@ const childAccess = Effect.fn(function* (call: Call, children: ReadonlyArray<Chi
     return Option.some(yield* reject(call, scopeMissing()));
   }
 
-  const failure = failed({
-    ...child,
+  const failure = childRejection({
+    index: child.index,
+    operation: child.operation,
     code: "paywall_required",
     message: "Your Subscription tier does not grant this operation.",
+    outcome: "validation_failed",
   });
 
   yield* audit({ ...call, operation: child.operation }, "validation_failed");
 
-  return Option.some(yield* reject(call, Response.json(failure.body, { status: 400 })));
+  return Option.some(yield* reject(call, rejectionResponse(failure)));
 });
 
 const applyChildren = Effect.fn(function* (call: Call, children: ReadonlyArray<Child>) {
   const context = { user: call.subject.userId, current: call.current, storage: call.storage };
 
-  const record: Audit = (
-    child: Pick<Child, "operation" | "index">,
-    outcome: LocalMutationResult["outcome"]
-  ) =>
+  const record: Audit = (child: Pick<Child, "operation" | "index">, outcome: CanonicalOutcome) =>
     audit({ ...call, operation: child.operation }, outcome).pipe(
       Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
     );
@@ -352,7 +370,7 @@ const commitAuthorizedBatch = Effect.fn(function* (
   if (Option.isSome(refused)) return refused.value;
 
   if (children.some((child) => requiresGrowthAdmission(child.operation.id))) yield* admitGrowth;
-  const outcome = yield* applyChildren(call, children);
+  const outcome = yield* catchRejection(applyChildren(call, children));
 
   if (outcome.status < firstFailureStatus) yield* confirmation.consume;
 
@@ -484,14 +502,11 @@ export const runLocalBatch = Effect.fn(
 
         if ("refusal" in selected) {
           const attempted = { ...call, operation: selected.refusal.operation };
-          yield* audit(
-            attempted,
-            selected.refusal.code === "not_found" ? "not_found" : "validation_failed"
-          );
+          yield* audit(attempted, selected.refusal.outcome);
 
           return attachStanding({
             ...call,
-            response: Response.json(failed(selected.refusal).body, { status: 400 }),
+            response: rejectionResponse(childRejection(selected.refusal)),
           });
         }
 

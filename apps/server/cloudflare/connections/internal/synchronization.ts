@@ -7,7 +7,7 @@ import { type SynchronizationProvider, SynchronizationWork } from "../contract";
 import { newId } from "../../secret-material/operations";
 import { preserveStoreAlarm, withStoreCapacity } from "../../runtime/sqlite/operations";
 import { prepareConnectionMovement } from "../../transactions/operations";
-import { commitLocalWrite } from "../../canonical-admission/operations";
+import { commitLocalPlan } from "../../canonical-admission/operations";
 import { institutionsForUser } from "./institution-registration";
 import { failed, one } from "./sqlite-browser";
 import { grantPurpose, openGrant } from "./grant";
@@ -186,7 +186,7 @@ const commitPage = Effect.fn(function* (
             userId: work.userId,
             current: now,
             movementId: id,
-          }).pipe(Effect.flatMap(commitLocalWrite));
+          }).pipe(Effect.flatMap(commitLocalPlan));
 
           if (result.status !== createdStatus) return yield* failed();
           yield* sql`INSERT INTO connection_movements VALUES(${job.accountId},${movement.reference},${id})`;

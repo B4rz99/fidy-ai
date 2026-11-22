@@ -69,7 +69,7 @@ export const localReviewMaterial = Effect.fn(function* (unit: {
           Option.isNone(subject) ||
           subject.value !== user
         ) {
-          return missing();
+          return yield* missing();
         }
 
         if (after.value.expires <= current) return result({ available: false, reason: "expired" });

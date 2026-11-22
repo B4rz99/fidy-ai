@@ -6,7 +6,7 @@ import { sampleSchema } from "./internal/sample-schema";
 import { hostedSchema } from "./internal/hosted-schema";
 import { ingestionSchema } from "./internal/ingestion-schema";
 import { billingAdmissionSchema } from "./internal/billing-admission-schema";
-import { connectionSchema } from "./internal/connection-schema";
+import { connectionGrantCleanupSchema, connectionSchema } from "./internal/connection-schema";
 import {
   connectionAuditSchema,
   hostedMetadataAuditSchema,
@@ -1288,6 +1288,11 @@ export const userStoreHistory: StoreHistory = {
         "ALTER TABLE pro_grant_events ADD COLUMN mailbox_revision INTEGER",
         "CREATE UNIQUE INDEX pro_grant_request ON pro_grant_events(request_id) WHERE request_id IS NOT NULL",
       ],
+    },
+    {
+      version: 41,
+      id: "connection-erasure-suppression-repair",
+      statements: connectionGrantCleanupSchema(),
     },
   ],
 };

@@ -222,16 +222,23 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
       yield* Effect.forEach(
         [
-          { operation: "categories.listKeywordRules", input: {}, code: "validation_failed" },
+          {
+            operation: "categories.listKeywordRules",
+            input: {},
+            code: "validation_failed",
+            message: "Each child must identify one eligible mutation and its inputs.",
+          },
           {
             operation: "operations.executeAtomicBatch",
             input: { payload: { calls: [] } },
             code: "validation_failed",
+            message: "Each child must identify one eligible mutation and its inputs.",
           },
           {
             operation: "categories.deleteKeywordRule",
             input: { params: { id: foreign } },
             code: "not_found",
+            message: `No keyword rule ${foreign} belongs to you. List your keyword rules to find an id you can change.`,
           },
         ],
         Effect.fnUntraced(function* (child) {
@@ -241,7 +248,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
           expect(refusal.status).toBe(400);
           expect(yield* native(() => refusal.json())).toMatchObject({
-            error: { failedCallIndex: 1, operation: child.operation, code: child.code },
+            error: {
+              failedCallIndex: 1,
+              operation: child.operation,
+              code: child.code,
+              message: child.message,
+            },
           });
         }),
         { discard: true }

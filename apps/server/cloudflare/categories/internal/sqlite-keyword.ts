@@ -14,10 +14,14 @@ import {
 import { validateKeywordRuleChange } from "../../../src/core/categories/operations";
 import { normalizeSearchText } from "../../../src/core/search/operations";
 import type { UserId } from "../../../src/core/identity/contract";
-import { CurrentSuggestionCaller } from "../../canonical-admission/contract";
+import {
+  type CanonicalRejection,
+  CurrentSuggestionCaller,
+  canonicalRejectionStatus,
+  rejection,
+} from "../../canonical-admission/contract";
 import type { SuggestedOperationCaller } from "../../../src/shell/canonical-operations/operations";
 import { toApiFailure } from "../../../src/shell/categories/operations";
-import { NotFound, ValidationFailed } from "../../../src/shell/public-http/contract";
 import { prepareLocalWrite } from "../../canonical-admission/operations";
 import type { LocalMutationPlan, LocalMutationResult } from "../../canonical-admission/contract";
 import { newId } from "../../secret-material/operations";
@@ -49,26 +53,34 @@ export const localKeywordRules = Effect.fn(function* (user: UserId) {
       data: yield* Schema.encodeEffect(Schema.toCodecJson(Schema.Array(KeywordRule)))(rules),
       next: [],
     },
-  };
+  } satisfies LocalMutationResult;
 });
 
 const refusal = (
   failure: CategoryFailure,
   caller: SuggestedOperationCaller
-): LocalMutationResult => {
+): CanonicalRejection => {
   const value = toApiFailure({ failure, caller });
 
   return Predicate.isTagged(value, "NotFound")
-    ? {
-        status: 404,
+    ? rejection({
+        status: canonicalRejectionStatus.notFound,
         outcome: "not_found",
-        body: Schema.encodeSync(Schema.toCodecJson(NotFound))(value),
-      }
-    : {
-        status: 400,
+        code: "not_found",
+        wireMessage: Option.some(value.error.message),
+        fields: Option.none(),
+        detail: Option.none(),
+        next: value.next,
+      })
+    : rejection({
+        status: canonicalRejectionStatus.badRequest,
         outcome: "validation_failed",
-        body: Schema.encodeSync(Schema.toCodecJson(ValidationFailed))(value),
-      };
+        code: "validation_failed",
+        wireMessage: Option.some(value.error.message),
+        fields: Option.some(value.error.fields),
+        detail: Option.none(),
+        next: value.next,
+      });
 };
 
 type Command =
@@ -137,8 +149,23 @@ const savedKeyword = Effect.fn(function* (row: unknown, create: boolean) {
       data: yield* Schema.encodeEffect(Schema.toCodecJson(KeywordRule))(saved.value),
       next: [],
     },
-  };
+  } satisfies LocalMutationResult;
 });
+
+type NormalizedCommand =
+  | Extract<Command, { operation: "categories.deleteKeywordRule" }>
+  | (Extract<
+      Command,
+      { operation: "categories.createKeywordRule" | "categories.updateKeywordRule" }
+    > & { keyword: CategoryKeyword });
+
+const normalizedCommand = (command: Command): NormalizedCommand =>
+  command.operation === "categories.deleteKeywordRule"
+    ? command
+    : {
+        ...command,
+        keyword: CategoryKeyword.make(normalizeSearchText(command.payload.keyword)),
+      };
 
 export const prepareLocalKeywordRule = Effect.fn(function* (
   command: Command,
@@ -150,14 +177,11 @@ export const prepareLocalKeywordRule = Effect.fn(function* (
   const sql = yield* SqliteClient;
   const rules = yield* rulesFor(user);
 
-  const change =
-    command.operation === "categories.deleteKeywordRule"
-      ? command
-      : { ...command, keyword: CategoryKeyword.make(normalizeSearchText(command.payload.keyword)) };
+  const change = normalizedCommand(command);
 
   const failure = yield* validateKeywordRuleChange({ rules, change });
 
-  if (Option.isSome(failure)) return refusal(failure.value, suggestionCaller);
+  if (Option.isSome(failure)) return yield* refusal(failure.value, suggestionCaller);
 
   const target = "keyword-rule:" + ruleId;
 
@@ -169,7 +193,10 @@ export const prepareLocalKeywordRule = Effect.fn(function* (
   const reference = yield* selectedCategory(user, payload.categoryId);
 
   if (Option.isNone(reference)) {
-    return refusal(new CategoryNotFound({ categoryId: payload.categoryId }), suggestionCaller);
+    return yield* refusal(
+      new CategoryNotFound({ categoryId: payload.categoryId }),
+      suggestionCaller
+    );
   }
 
   const revision = reference.value.revision;
@@ -198,7 +225,7 @@ export const prepareLocalKeywordRule = Effect.fn(function* (
 
       if (changed.length !== 1) {
         if (create && (yield* rulesFor(user)).length >= maximumKeywordRulesPerUser) {
-          return refusal(
+          return yield* refusal(
             new KeywordRuleLimitReached({ maximum: maximumKeywordRulesPerUser }),
             suggestionCaller
           );

@@ -3,7 +3,10 @@ import { Clock, Effect, Match, Option, Schema } from "effect";
 import type { OAuthConfirmationAttempt } from "../../../src/shell/mcp/contract";
 import { digestBytes, newId } from "../../secret-material/operations";
 import type { LocalOAuthInvocation } from "../../oauth-agents/contract";
-import { CanonicalAdmissionUnavailable } from "../../canonical-admission/contract";
+import {
+  CanonicalAdmissionUnavailable,
+  isCanonicalRejection,
+} from "../../canonical-admission/contract";
 import { OAuthNativeReview, OAuthReviewBinding } from "../contract";
 import {
   acceptedNativeResponse,
@@ -143,7 +146,15 @@ export const localConfirmation = Effect.fn(function* <E, R>(
   const { subject, admission } = oauth,
     attempt = admission.confirmation;
 
-  const read = yield* oauth.review(current);
+  const read = yield* oauth.review(current).pipe(
+    Effect.catchIf(isCanonicalRejection, (rejection) =>
+      Effect.logDebug({
+        component: "oauth-confirmation",
+        operation: "review",
+        outcome: rejection.code,
+      }).pipe(Effect.as(Option.none()))
+    )
+  );
 
   if (Option.isNone(read)) return refuse();
 

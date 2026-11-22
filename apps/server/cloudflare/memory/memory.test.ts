@@ -370,6 +370,63 @@ it("rejects aggregate capacity overflow without dropping Memories or echoing pro
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
+it("rolls back an earlier batch child when a later Memory write exceeds capacity", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* nativeTransactionJourney;
+      const text = "x".repeat(2_000);
+
+      yield* Effect.forEach(
+        Array.from({ length: 6 }, (_, index) => index),
+        () => fromTestPromise(() => remembered(db, text, cookie(0))),
+        { discard: true }
+      );
+
+      const batch = yield* fromTestPromise(() =>
+        send(db, {
+          path: "/operations/atomic-batch",
+          method: "POST",
+          session: cookie(0),
+          payload: {
+            calls: [newId(), newId()].map((callId) => ({
+              callId,
+              operation: "memory.remember",
+              input: { payload: { text } },
+            })),
+          },
+        })
+      );
+
+      expect(batch.status).toBe(400);
+      expect(
+        (yield* decode(
+          Schema.Struct({
+            error: Schema.Struct({
+              code: ErrorCode,
+              failedCallIndex: Schema.Int,
+              operation: Schema.String,
+            }),
+          }),
+          batch
+        )).error
+      ).toMatchObject({
+        code: "quota_exhausted",
+        failedCallIndex: 1,
+        operation: "memory.remember",
+      });
+      expect(yield* fromTestPromise(() => memoryTextRows(db, users[0]))).toHaveLength(6);
+
+      const audits = yield* fromTestPromise(() => auditRows(db, users[0]));
+
+      expect(audits.filter((row) => row.outcome === "success")).toHaveLength(6);
+      expect(audits).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ operation: "memory.remember", outcome: "resource_limit" }),
+        ])
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
+  ));
+
 it("bounds concurrent remember calls so one User's aggregate is never oversubscribed", () =>
   Effect.runPromise(
     Effect.gen(function* () {

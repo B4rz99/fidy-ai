@@ -1,0 +1,16 @@
+apps/server/cloudflare/recurring-plans/internal/review.ts
+  h_c6d49c804e0ad2 82
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a1ae579914a2bba3a7fe57e1addde551368a38fc",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

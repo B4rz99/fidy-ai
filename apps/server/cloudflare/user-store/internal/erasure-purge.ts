@@ -86,6 +86,20 @@ type LocalErasureUnit = {
   owns: (id: string) => boolean;
 };
 
+const repairConnectionSuppression = Effect.fn(function* (user: string, now: number) {
+  const sql = yield* SqliteClient;
+
+  yield* sql`UPDATE connection_grants SET cleaned_at_ms=${now} WHERE attempt_id IN(
+    SELECT g.attempt_id FROM connection_grants g JOIN connection_attempts a ON a.id=g.attempt_id JOIN connections c ON c.id=a.connection_id
+    WHERE c.user_id=${user} AND g.state='cleanup_required' AND g.envelope IS NULL AND g.expires_at_ms IS NULL AND g.cleaned_at_ms IS NULL LIMIT ${pageSize})`;
+
+  yield* sql`DELETE FROM connection_authorizations WHERE rowid IN(
+    SELECT b.rowid FROM connection_authorizations b JOIN connection_attempts a ON a.id=b.attempt_id JOIN connections c ON c.id=a.connection_id
+    WHERE c.user_id=${user} AND b.phase!='preparing'
+    AND NOT EXISTS(SELECT 1 FROM connection_grants g WHERE g.attempt_id=b.attempt_id AND g.cleaned_at_ms IS NULL)
+    LIMIT ${pageSize})`;
+});
+
 export const drainLocalUser = Effect.fn(function* (
   request: Request,
   { env, storage, owns }: LocalErasureUnit
@@ -127,6 +141,9 @@ export const drainLocalUser = Effect.fn(function* (
         yield* sql`UPDATE connection_grants SET state='cleanup_required',cleanup_after_ms=${now} WHERE attempt_id IN(SELECT attempt_id FROM connection_grants WHERE state IN('active','quarantined') LIMIT ${pageSize}) RETURNING attempt_id`;
 
       if (routable.length > 0) yield* preserveStoreAlarm(storage, now);
+
+      yield* repairConnectionSuppression(scope.userId, now);
+
       const institutions = yield* ConnectionInstitutions;
       const registered = sql.in("institution_id", institutions);
 

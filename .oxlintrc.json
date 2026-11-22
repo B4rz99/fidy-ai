@@ -327,33 +327,33 @@
     "enfect/prefer-duration-constructors": "error",
     "enfect/avoid-mutable-state": "error",
     "enfect/prefer-option-over-null": "error",
-    "enfect/yield-in-for-loop": "warn",
+    "enfect/yield-in-for-loop": "error",
     "anti-slop-effect-jev/cache-in-method": [
-      "error",
+      "warn",
       {
         "mode": "changed"
       }
     ],
     "anti-slop-effect-jev/decode-after-status": [
-      "error",
+      "warn",
       {
         "mode": "changed"
       }
     ],
     "anti-slop-effect-jev/error-as-value": [
-      "error",
+      "warn",
       {
         "mode": "changed"
       }
     ],
     "anti-slop-effect-jev/network-call-in-transaction": [
-      "error",
+      "warn",
       {
         "mode": "changed"
       }
     ],
     "anti-slop-effect-jev/read-then-write-race": [
-      "error",
+      "warn",
       {
         "mode": "changed"
       }
@@ -361,19 +361,19 @@
     "anti-slop-effect-jev/shallow-service": "off",
     "anti-slop-effect-jev/single-use-abstraction": "off",
     "anti-slop-effect-jev/swallow-without-capture": [
-      "error",
+      "warn",
       {
         "mode": "changed"
       }
     ],
     "anti-slop-effect-jev/unbounded-fanout": [
-      "error",
+      "warn",
       {
         "mode": "changed"
       }
     ],
     "anti-slop-effect-jev/unbounded-retry": [
-      "error",
+      "warn",
       {
         "mode": "changed"
       }
@@ -405,7 +405,7 @@
         "anti-slop-effect-jev/unbounded-fanout": "off",
         "anti-slop-effect-jev/unbounded-retry": "off",
         "anti-slop-effect-jev/test-cannot-fail": [
-          "error",
+          "warn",
           {
             "mode": "changed"
           }

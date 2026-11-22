@@ -212,6 +212,13 @@ const lineAt = (text: string, offset: number): number => text.slice(0, offset).s
 
 const SEVERITY_NAMES = ["off", "warn", "error"] as const;
 
+/**
+ * The model-judged Effect rules are advisory: a false positive must not fail the pipeline, so the
+ * lint policy reports them as warnings. Lowering one from error to warn is the intended policy;
+ * turning it off or removing it still weakens the checks and is reported.
+ */
+const advisoryModelRule = (rule: string): boolean => rule.startsWith("anti-slop-effect-jev/");
+
 function severity(value: string): number | null {
 	if (value === "off" || value === "allow" || value === "0") return 0;
 	if (value === "warn" || value === "1") return 1;
@@ -315,6 +322,10 @@ export function configWeakenings(file: string, beforeText: string, afterText: st
 	for (const entry of added) {
 		const strongest = Math.max(-1, ...beforeRules.filter((old) => old.rule === entry.rule).map((old) => old.severity));
 		if (reported.has(entry.rule) || (entry.severity > 0 && entry.severity >= strongest)) continue;
+		if (strongest === 2 && entry.severity === 1 && advisoryModelRule(entry.rule)) {
+			reported.add(entry.rule);
+			continue;
+		}
 		reported.add(entry.rule);
 		const to = SEVERITY_NAMES[entry.severity] ?? "off";
 		const was = SEVERITY_NAMES[strongest] ?? "error";

@@ -160,6 +160,12 @@ const assertDetail = (
 ): Option.Option<CanonicalRejectionDetail> =>
   Option.map(detail, (value) => Schema.decodeSync(rejectionDetailGuard)(value));
 
+const assertNext = (next: ReadonlyArray<SuggestedOperation>): void => {
+  if (!Schema.is(nextGuard)(next)) {
+    throw new Error("Invalid canonical rejection suggestions");
+  }
+};
+
 const childRejectionIsCoherent = (code: ErrorCode, outcome: CanonicalRejectionOutcome): boolean =>
   (code === "not_found" && outcome === "not_found") ||
   (code === "quota_exhausted" && outcome === "resource_limit") ||
@@ -210,6 +216,7 @@ export const rejection = (
   }>
 ): CanonicalRejection => {
   assertRejection(detail.status, detail.code, detail.outcome);
+  assertNext(detail.next);
 
   return new CanonicalRejection({
     status: detail.status,
@@ -234,6 +241,7 @@ export const acceptedReadRejection = (
   }>
 ): CanonicalRejection => {
   assertRejection(detail.status, detail.code, "success");
+  assertNext(detail.next);
 
   return new CanonicalRejection({
     status: detail.status,

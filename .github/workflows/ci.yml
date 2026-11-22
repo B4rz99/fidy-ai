@@ -102,8 +102,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-typegraph-v1-${{ hashFiles('bun.lock', 'tsconfig*.json', 'apps/*/tsconfig*.json', 'infra/*/tsconfig*.json', 'tools/astro/tsconfig.json', 'tools/astro/bun.lock') }}-
             ${{ runner.os }}-typegraph-v1-
-      - name: Allow oxlint plugins to fork git for Jev changed lines
-        run: sudo sysctl -w vm.overcommit_memory=1
       - name: Static repository validation
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
@@ -112,8 +110,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERIFY_TIMING_REPORT: test-results/verify-static.json
           ANTI_SLOP_BASE: origin/${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
-          JEV_CHANGED_BASE: origin/${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
-          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
         run: |
           if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then unset PR_TITLE; fi
           /usr/bin/time -p bun run verify -- --group static

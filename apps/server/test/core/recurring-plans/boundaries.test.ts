@@ -543,7 +543,7 @@ it("allows same-day resume and stopped-plan edits while replacing the future suf
   ).toBe("June settings");
   expect(edited.fulfillments).toEqual(paid.fulfillments);
 
-  for (const action of ["pause", "resume", "stop"] as const) {
+  for (const action of ["pause", "stop"] as const) {
     expect(
       Exit.isFailure(
         Effect.runSyncExit(

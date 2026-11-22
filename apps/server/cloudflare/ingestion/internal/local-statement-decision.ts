@@ -60,7 +60,7 @@ export const prepareLocalAbandon = Effect.fn(function* (id: string, owner: Decis
   const sql = yield* SqliteClient;
   const { user, current } = owner;
 
-  if (!(yield* eligible(id, owner))) return missing();
+  if (!(yield* eligible(id, owner))) return yield* missing();
 
   return prepareLocalWrite({
     targets: ["statement:" + id],
@@ -127,10 +127,10 @@ export const prepareLocalDecision = Effect.fn(function* (
   const { user, current } = owner;
   const raw = yield* selectReview(user, id, current);
 
-  if (raw === undefined) return missing();
+  if (raw === undefined) return yield* missing();
   const row = yield* Schema.decodeUnknownEffect(selected)(raw);
 
-  if (!(yield* eligible(row.id, owner))) return missing();
+  if (!(yield* eligible(row.id, owner))) return yield* missing();
   const capture = yield* reviewedLineCapture(row, owner, extraction);
 
   if (Option.isSome(capture) && !("commit" in capture.value)) return capture.value;

@@ -9,7 +9,9 @@ import { resolveLocalCategory, retainLocalCategory } from "../../categories/oper
 import { newId } from "../../secret-material/operations";
 import {
   CanonicalAdmissionUnavailable,
-  type LocalMutationResult,
+  type CanonicalRejection,
+  notFoundRejection,
+  validationRejection,
 } from "../../canonical-admission/contract";
 import { TransactionOutput, decodeTransactionRow } from "./transaction-history";
 
@@ -19,20 +21,12 @@ const missingStatus = 404;
 
 export const localTransactionRefusal = ({
   status,
-  code,
   message,
 }: Readonly<{
-  status: number;
-  code: "not_found" | "validation_failed";
+  status: typeof invalidStatus | typeof missingStatus;
   message: string;
-}>): LocalMutationResult => ({
-  status,
-  outcome: code,
-  body: {
-    error: code === "validation_failed" ? { code, message, fields: [] } : { code, message },
-    next: [],
-  },
-});
+}>): CanonicalRejection =>
+  status === missingStatus ? notFoundRejection(message) : validationRejection(message);
 
 const captureDecisionKeys = (input: CreateTransactionInput): ReadonlyArray<string> => [
   "money",
@@ -136,9 +130,8 @@ const prepareCapture = Effect.fn(function* (
   const occurredAt = DateTime.toEpochMillis(input.occurredAt);
 
   if (occurredAt > current) {
-    return localTransactionRefusal({
+    return yield* localTransactionRefusal({
       status: invalidStatus,
-      code: "validation_failed",
       message: "A Transaction cannot occur in the future.",
     });
   }
@@ -169,9 +162,8 @@ const prepareCapture = Effect.fn(function* (
   );
 
   if (Option.isNone(reference)) {
-    return localTransactionRefusal({
+    return yield* localTransactionRefusal({
       status: missingStatus,
-      code: "not_found",
       message: "The Category does not exist; correct categoryId and retry.",
     });
   }

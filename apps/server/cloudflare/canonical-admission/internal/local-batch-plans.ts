@@ -1,16 +1,17 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Data, Effect, Option, Schema } from "effect";
-import type {
-  CanonicalAdmissionUnavailable,
-  LocalMutationPlan,
-  LocalMutationPreparation,
-  LocalMutationResult,
+import {
+  type CanonicalAdmissionFailure,
+  type CanonicalOutcome,
+  CanonicalRejection,
+  type LocalMutationPlan,
+  type LocalMutationPreparation,
 } from "../contract";
 import { recurringDiscoveryIntervalMs } from "../../recurring/contract";
 import { preserveStoreAlarm } from "../../runtime/sqlite/operations";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
 import type { UserId } from "../../../src/core/identity/contract";
-import { ErrorCode } from "../../../src/shell/public-http/contract";
+import type { ErrorCode } from "../../../src/shell/public-http/contract";
 
 export type Context = { user: UserId; current: number; storage: DurableObjectStorage } & Partial<{
   hostedTurn: string;
@@ -19,7 +20,7 @@ export type Context = { user: UserId; current: number; storage: DurableObjectSto
 export type Prepare = (
   input: unknown,
   context: Context
-) => Effect.Effect<LocalMutationPreparation, CanonicalAdmissionUnavailable, SqliteClient>;
+) => Effect.Effect<LocalMutationPreparation, CanonicalAdmissionFailure, SqliteClient>;
 
 export type SelectedChild<Owner> = {
   callId: string;
@@ -36,47 +37,38 @@ export type Refusal = {
   index: number;
   code: ErrorCode;
   message: string;
+  outcome: CanonicalOutcome;
 };
 
 export class ChildRefused extends Data.TaggedError("ChildRefused")<Refusal> {}
 
-export const failed = ({ index, operation, code, message }: Refusal): LocalMutationResult => ({
-  status: 400,
-  outcome: "validation_failed",
-  body: {
-    error: { code, message, failedCallIndex: index, operation: operation.id, fields: [] },
+export const childRejection = (failure: Refusal): CanonicalRejection =>
+  new CanonicalRejection({
+    status: 400,
+    outcome: failure.outcome,
+    code: failure.code,
+    message: Option.some(failure.message),
+    fields: Option.some([]),
+    detail: Option.none(),
     next: [],
-  },
-});
+    batchChild: Option.some({ index: failure.index, operation: failure.operation.id }),
+  });
 
-export const refusalOutcome = (failure: Refusal): LocalMutationResult["outcome"] => {
-  if (failure.code === "not_found") return "not_found";
-
-  if (failure.code === "quota_exhausted" && failure.operation.id.startsWith("memory.")) {
-    return "resource_limit";
-  }
-
-  return "validation_failed";
-};
-
-const childFailure = (child: Child, outcome: LocalMutationResult): ChildRefused => {
-  const decoded = Schema.decodeUnknownSync(
-    Schema.Struct({ error: Schema.Struct({ code: ErrorCode, message: Schema.String }) })
-  )(outcome.body);
-
-  return new ChildRefused({ ...child, ...decoded.error });
-};
-
-const firstFailureStatus = 400;
+const childFailure = (child: Child, rejection: CanonicalRejection): ChildRefused =>
+  new ChildRefused({
+    index: child.index,
+    operation: child.operation,
+    code: rejection.code,
+    message: Option.getOrElse(rejection.message, () => ""),
+    outcome: rejection.outcome,
+  });
 
 type Planned = { child: Child; plan: LocalMutationPlan };
 
-type Outcome = LocalMutationResult["outcome"];
-
 export type Audit = (
   child: Pick<Child, "operation" | "index">,
-  outcome: Outcome
-) => Effect.Effect<void, CanonicalAdmissionUnavailable, SqliteClient>;
+  outcome: CanonicalOutcome
+) => Effect.Effect<void, CanonicalAdmissionFailure, SqliteClient>;
 
 const reserveTargets = (
   plan: LocalMutationPlan,
@@ -108,9 +100,17 @@ export const prepareChildren = Effect.fn(function* (
   yield* Effect.forEach(
     children,
     Effect.fnUntraced(function* (child) {
-      const plan = yield* child.prepare(child.input, context);
+      const plan = yield* child
+        .prepare(child.input, context)
+        .pipe(
+          Effect.catchTag("CanonicalRejection", (rejection) =>
+            Effect.fail(childFailure(child, rejection))
+          )
+        );
 
-      if (!("commit" in plan)) return yield* childFailure(child, plan);
+      if (!("commit" in plan)) {
+        return yield* Effect.die("child preparation returned a result value");
+      }
 
       if (
         plans.some(
@@ -119,17 +119,21 @@ export const prepareChildren = Effect.fn(function* (
         )
       ) {
         return yield* new ChildRefused({
-          ...child,
+          index: child.index,
+          operation: child.operation,
           code: "not_found",
           message: "The requested record is unavailable.",
+          outcome: "not_found",
         });
       }
 
       if (!reserveTargets(plan, targets, premises)) {
         return yield* new ChildRefused({
-          ...child,
+          index: child.index,
+          operation: child.operation,
           code: "validation_failed",
           message: "Two children address the same retained target.",
+          outcome: "validation_failed",
         });
       }
 
@@ -142,7 +146,30 @@ export const prepareChildren = Effect.fn(function* (
 });
 
 export const refuseChild = Effect.fnUntraced(function* (failure: Refusal, audit: Audit) {
-  return yield* audit(failure, refusalOutcome(failure)).pipe(Effect.as(failed(failure)));
+  yield* audit(failure, failure.outcome);
+
+  return yield* childRejection(failure);
+});
+
+const commitChild = Effect.fnUntraced(function* (
+  { child, plan }: Planned,
+  context: Context,
+  audit: Audit
+) {
+  const result = yield* plan.commit.pipe(
+    Effect.catchTag("CanonicalRejection", (rejection) =>
+      Effect.fail(childFailure(child, rejection))
+    )
+  );
+
+  yield* Schema.decodeEffect(child.operation.success, { onExcessProperty: "error" })(result.body);
+  yield* audit(child, "success");
+
+  return {
+    callId: child.callId,
+    operation: child.operation.id,
+    output: result.body,
+  };
 });
 
 export const commitChildren = Effect.fn(function* (
@@ -157,21 +184,8 @@ export const commitChildren = Effect.fn(function* (
       Effect.gen(function* () {
         const results = yield* Effect.forEach(
           plans,
-          Effect.fnUntraced(function* ({ child, plan }) {
-            const result = yield* plan.commit;
-
-            if (result.status >= firstFailureStatus) return yield* childFailure(child, result);
-            yield* Schema.decodeEffect(child.operation.success, { onExcessProperty: "error" })(
-              result.body
-            );
-            yield* audit(child, result.outcome);
-
-            return {
-              callId: child.callId,
-              operation: child.operation.id,
-              output: result.body,
-            };
-          })
+          (planned) => commitChild(planned, context, audit),
+          { concurrency: 1 }
         );
 
         if (plans.some(({ child }) => child.operation.id.startsWith("transactions."))) {

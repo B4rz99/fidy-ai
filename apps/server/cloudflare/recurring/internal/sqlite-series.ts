@@ -4,7 +4,7 @@ import { Effect, Option, Schema } from "effect";
 import { UserContext, UserId } from "../../../src/core/identity/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
-import type { LocalMutationResult } from "../../canonical-admission/contract";
+import { type CanonicalRejection, validationRejection } from "../../canonical-admission/contract";
 import {
   canonicalAdmissionUnavailable,
   runLocalMutation,
@@ -138,14 +138,7 @@ export const recoverSeries = Effect.fn(function* (
   );
 });
 
-const invalid: LocalMutationResult = {
-  status: 400,
-  outcome: "validation_failed",
-  body: {
-    error: { code: "validation_failed", message: "Invalid recurring-series cursor.", fields: [] },
-    next: [],
-  },
-};
+const invalid = (): CanonicalRejection => validationRejection("Invalid recurring-series cursor.");
 
 const browse = Effect.fn(function* (cursor: Option.Option<typeof Cursor.Type>, user: UserId) {
   const sql = yield* SqliteClient;
@@ -170,7 +163,7 @@ const browse = Effect.fn(function* (cursor: Option.Option<typeof Cursor.Type>, u
     Option.isSome(cursor) &&
     cursor.value.revision !== Option.getOrNull(status)?.evaluatedRevision
   ) {
-    return invalid;
+    return yield* invalid();
   }
 
   const start = Option.match(cursor, {
@@ -216,5 +209,7 @@ export const dispatchSeries = Effect.fn(
 export const readSeries = Effect.fn(function* (cursor: Option.Option<string>, user: UserId) {
   const selected = decodeCursor(cursor);
 
-  return Option.isNone(selected) ? invalid : yield* browse(selected.value, user);
+  if (Option.isNone(selected)) return yield* invalid();
+
+  return yield* browse(selected.value, user);
 });

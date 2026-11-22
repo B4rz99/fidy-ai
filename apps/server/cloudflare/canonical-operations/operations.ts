@@ -40,10 +40,10 @@ import {
   runLocalMutation,
 } from "../canonical-admission/operations";
 import { preserveStoreAlarm } from "../runtime/sqlite/operations";
-import { CanonicalAdmissionUnavailable } from "../canonical-admission/contract";
+import { CanonicalAdmissionUnavailable, notFoundRejection } from "../canonical-admission/contract";
 import { requestFor } from "./internal/canonical-request";
 
-import { Cause, Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { type CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import { atomicBatchOperation } from "../../src/shell/operations/contract";
 import { operationCatalog } from "../../src/shell/api";
@@ -132,8 +132,7 @@ const pendingPageResponse = Effect.fn(function* (unit: LocalBatchRoute) {
           continuation = page.next;
 
           return page.result;
-        }),
-        Effect.mapError((cause) => new Cause.UnknownError(cause))
+        })
       ),
   });
 
@@ -191,8 +190,7 @@ const localBatchQuery = Effect.fn(function* (unit: LocalBatchRoute) {
     yield* runLocalMutation({
       ...unit,
       input: Effect.succeedSome(true),
-      work: (_input, user) =>
-        read(user).pipe(Effect.mapError((cause) => new Cause.UnknownError(cause))),
+      work: (_input, user) => read(user),
     })
   );
 });
@@ -234,14 +232,7 @@ export const dispatchLocalBatchRoute = Effect.fn(
       (unit.operation.id === "categories.updateKeywordRule" ||
         unit.operation.id === "categories.deleteKeywordRule") &&
         Option.isNone(keywordRuleIdFromPath(unit.request))
-        ? Option.some({
-            status: 404,
-            outcome: "not_found",
-            body: {
-              error: { code: "not_found", message: "No keyword rule with that id belongs to you." },
-              next: [],
-            },
-          })
+        ? Option.some(notFoundRejection("No keyword rule with that id belongs to you."))
         : Option.none()
     );
   },
@@ -372,7 +363,7 @@ export const prepareHostedOwner = Effect.fn(function* (
           }
 
           return yield* readParameter(operation, input, context);
-        }).pipe(Effect.mapError((cause) => new Cause.UnknownError(cause))),
+        }),
       })
     );
   }
@@ -383,7 +374,7 @@ export const prepareHostedOwner = Effect.fn(function* (
     return Option.some(
       prepareLocalWrite({
         targets: [],
-        commit: read(context.user).pipe(Effect.mapError((cause) => new Cause.UnknownError(cause))),
+        commit: read(context.user),
       })
     );
   }

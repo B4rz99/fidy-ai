@@ -1,9 +1,13 @@
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
-import { Deferred, Effect, Option, Schema } from "effect";
+import { Data, Deferred, Effect, Option, Schema } from "effect";
 
 type Environment = { CONTROL: DurableObjectNamespace; INGRESS: Fetcher };
 
 const browserBearerLength = 43;
+
+class BrowserRequestInterrupted extends Data.TaggedError("BrowserRequestInterrupted")<{
+  readonly cause: unknown;
+}> {}
 
 const completion = (content: string): Response =>
   Response.json({
@@ -184,22 +188,35 @@ export class HostedProviderControl extends DurableObject<Environment> {
       const path = request.url.endsWith("admission") ? "" : "/progress";
 
       return Option.some(
-        request
-          .text()
-          .then((body) =>
-            this.env.INGRESS.fetch("https://api.fidyapp.com/web/hosted-turns" + path, {
-              method: "POST",
-              headers: {
-                origin: "https://app.fidyapp.com",
-                cookie: "__Host-fidy_session=" + "1".repeat(browserBearerLength),
-                "Fidy-Session-Binding": "10000000-0000-4000-8000-000000000061",
-                "content-type": "application/json",
-              },
-              body,
-              signal: this.browserClient.signal,
-            })
+        Effect.runPromise(
+          Effect.tryPromise({
+            try: () =>
+              request.text().then((body) =>
+                this.env.INGRESS.fetch("https://api.fidyapp.com/web/hosted-turns" + path, {
+                  method: "POST",
+                  headers: {
+                    origin: "https://app.fidyapp.com",
+                    cookie: "__Host-fidy_session=" + "1".repeat(browserBearerLength),
+                    "Fidy-Session-Binding": "10000000-0000-4000-8000-000000000061",
+                    "content-type": "application/json",
+                  },
+                  body,
+                  signal: this.browserClient.signal,
+                })
+              ),
+            catch: (cause) => new BrowserRequestInterrupted({ cause }),
+          }).pipe(
+            Effect.catchTag("BrowserRequestInterrupted", (failure) =>
+              this.browserClient.signal.aborted
+                ? Effect.logWarning({
+                    component: "hosted-provider-fixture",
+                    outcome: "browser_aborted",
+                    cause: failure.cause,
+                  }).pipe(Effect.as(new Response(null, { status: 499 })))
+                : Effect.fail(failure)
+            )
           )
-          .catch(() => new Response(null, { status: 499 }))
+        )
       );
     }
 

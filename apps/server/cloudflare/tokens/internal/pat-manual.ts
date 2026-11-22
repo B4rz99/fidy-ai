@@ -8,10 +8,11 @@ import {
   issuanceLimitedMessage,
   reviewExpiredMessage,
 } from "../../../src/shell/tokens/contract";
-import { DateTime, Option, Redacted, Schema } from "effect";
+import { DateTime, Effect, Option, Redacted, Schema } from "effect";
+import type { LocalMutationResult } from "../../canonical-admission/contract";
+import { PATUnavailable } from "../contract";
 import {
   type SessionRow,
-  canonical,
   dayMilliseconds,
   httpConflict,
   httpReviewExpired,
@@ -19,7 +20,6 @@ import {
   pairingMilliseconds,
   patFrom,
   response,
-  serviceUnavailable as unavailable,
 } from "./pat-shared";
 
 export const expiredReview = (): Response =>
@@ -65,7 +65,9 @@ type Issuance = Readonly<{
   bearer: string;
 }>;
 
-export const issuedResponse = (issue: Issuance): Response => {
+export const issuedResult = (
+  issue: Issuance
+): Effect.Effect<LocalMutationResult, PATUnavailable> => {
   const { input, session, current, expires, patId, shortId, bearer } = issue;
 
   const pat = patFrom({
@@ -81,14 +83,21 @@ export const issuedResponse = (issue: Issuance): Response => {
     revoked_at_ms: null,
   });
 
-  if (Option.isNone(pat)) return unavailable();
-
-  return canonical(
-    Schema.encodeSync(Schema.toCodecJson(IssuedManualPATResponse))({
-      pat: { ...pat.value, idleExpiresAt: DateTime.makeUnsafe(expires) },
-      bearer: Redacted.make(Schema.decodeSync(TokenBearer)(bearer)),
-    })
-  );
+  return Option.match(pat, {
+    onNone: () => Effect.fail(new PATUnavailable({ cause: Option.none() })),
+    onSome: (value) =>
+      Effect.succeed({
+        status: 200,
+        outcome: "success" as const,
+        body: {
+          data: Schema.encodeSync(Schema.toCodecJson(IssuedManualPATResponse))({
+            pat: { ...value, idleExpiresAt: DateTime.makeUnsafe(expires) },
+            bearer: Redacted.make(Schema.decodeSync(TokenBearer)(bearer)),
+          }),
+          next: [],
+        },
+      }),
+  });
 };
 
 export const expiryFor = ({

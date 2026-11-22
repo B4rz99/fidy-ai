@@ -200,12 +200,15 @@ export const invalid = (): Response =>
     status: httpBadRequest,
   });
 
+export const pairingRejectedMessage =
+  "This PAT pairing is invalid or no longer available. Start a new request.";
+
 export const rejected = (): Response =>
   response({
     body: {
       error: {
         code: "validation_failed",
-        message: "This PAT pairing is invalid or no longer available. Start a new request.",
+        message: pairingRejectedMessage,
       },
       next: [],
     },

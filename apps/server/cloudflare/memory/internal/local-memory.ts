@@ -7,7 +7,12 @@ import {
   maximumAggregateMemoryTokens,
 } from "../../../src/core/memory/contract";
 import type { UserId } from "../../../src/core/identity/contract";
-import { type LocalMutationResult } from "../../canonical-admission/contract";
+import {
+  type CanonicalRejection,
+  type LocalMutationResult,
+  notFoundRejection,
+  resourceLimitRejection,
+} from "../../canonical-admission/contract";
 import { prepareLocalWrite } from "../../canonical-admission/operations";
 import { newId } from "../../secret-material/operations";
 import { memoriesFromRows } from "./storage";
@@ -16,26 +21,11 @@ const quote = Schema.encodeSync(Schema.fromJsonString(Schema.String));
 
 const MemoryJson = Schema.toCodecJson(Memory);
 
-const absent: LocalMutationResult = {
-  status: 404,
-  outcome: "not_found",
-  body: {
-    error: { code: "not_found", message: "No current Memory with that identifier belongs to you." },
-    next: [],
-  },
-};
+const absent = (): CanonicalRejection =>
+  notFoundRejection("No current Memory with that identifier belongs to you.");
 
-const full: LocalMutationResult = {
-  status: 409,
-  outcome: "resource_limit",
-  body: {
-    error: {
-      code: "quota_exhausted",
-      message: "Saving this text would exceed the User's current Memory capacity.",
-    },
-    next: [],
-  },
-};
+const full = (): CanonicalRejection =>
+  resourceLimitRejection("Saving this text would exceed the User's current Memory capacity.");
 
 const writeStatus = { remember: 201, revise: 200 } as const;
 
@@ -65,7 +55,7 @@ export const prepareMemory = Effect.fn(function* (edit: Edit, user: UserId, curr
   const id = edit.kind === "remember" ? MemoryId.make(newId()) : edit.id;
   const previous = before.find((item) => item.id === id);
 
-  if (edit.kind !== "remember" && previous === undefined) return absent;
+  if (edit.kind !== "remember" && previous === undefined) return yield* absent();
 
   const review = Effect.gen(function* () {
     const snapshot = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Array(MemoryJson)))(
@@ -91,7 +81,9 @@ export const prepareMemory = Effect.fn(function* (edit: Edit, user: UserId, curr
         const removed =
           yield* sql`DELETE FROM memories WHERE user_id=${user} AND id=${id} RETURNING id`;
 
-        return removed.length === 1 ? success(id) : absent;
+        if (removed.length !== 1) return yield* absent();
+
+        return success(id);
       }
 
       const [size] =
@@ -103,7 +95,7 @@ export const prepareMemory = Effect.fn(function* (edit: Edit, user: UserId, curr
         (yield* Schema.decodeUnknownEffect(Schema.Struct({ bytes: Schema.Int }))(size)).bytes >
         maximumAggregateMemoryTokens
       ) {
-        return full;
+        return yield* full();
       }
 
       const now = DateTime.makeUnsafe(current);
@@ -121,7 +113,7 @@ export const prepareMemory = Effect.fn(function* (edit: Edit, user: UserId, curr
         const changed =
           yield* sql`UPDATE memories SET text=${edit.text},updated_at_ms=${current} WHERE user_id=${user} AND id=${id} RETURNING id`;
 
-        if (changed.length !== 1) return absent;
+        if (changed.length !== 1) return yield* absent();
       }
 
       return {

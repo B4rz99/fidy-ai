@@ -18,7 +18,7 @@ import {
 } from "../../tokens/operations";
 import { prepareLocalPreferences } from "../../identity/operations";
 import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Array as Arr, Cause, Effect, Option, Predicate, Result, Schema } from "effect";
+import { Cause, Effect, Option, Predicate, Schema } from "effect";
 import type { OperationId } from "../../../src/shell/api";
 import type { UserId } from "../../../src/core/identity/contract";
 import { getCanonicalOperationInput } from "../../../src/shell/canonical-operations/operations";
@@ -60,34 +60,15 @@ import {
   upgradeLocation,
 } from "../../subscription/operations";
 import {
+  type CanonicalAdmissionFailure,
   CanonicalAdmissionUnavailable,
+  type CanonicalRejection,
   type LocalMutationPlan,
   type LocalMutationPreparation,
   type LocalMutationResult,
+  isCanonicalRejection,
 } from "../../canonical-admission/contract";
-import { prepareLocalWrite } from "../../canonical-admission/operations";
-
-const firstFailureStatus = 400;
-
-type PreparedCorrections = Result.Result<ReadonlyArray<LocalMutationPlan>, LocalMutationResult>;
-
-const acceptCorrection =
-  (accepted: ReadonlyArray<LocalMutationPlan>) =>
-  (plan: LocalMutationPreparation): PreparedCorrections =>
-    "commit" in plan ? Result.succeed(Arr.append(accepted, plan)) : Result.fail(plan);
-
-const refusal = (value: LocalMutationResult): Option.Option<LocalMutationResult> =>
-  value.status >= firstFailureStatus ? Option.some(value) : Option.none();
-
-const commitUntilRefused = (
-  plans: ReadonlyArray<LocalMutationPlan>
-): Effect.Effect<Option.Option<LocalMutationResult>, CanonicalAdmissionUnavailable, SqliteClient> =>
-  Effect.reduce(
-    plans,
-    () => Option.none<LocalMutationResult>(),
-    (prior, plan) =>
-      Option.isSome(prior) ? Effect.succeed(prior) : plan.commit.pipe(Effect.map(refusal))
-  );
+import { admissionFailure, prepareLocalWrite } from "../../canonical-admission/operations";
 
 type Context = { user: UserId; current: number; storage: DurableObjectStorage } & Partial<{
   hostedTurn: string;
@@ -98,7 +79,7 @@ type Context = { user: UserId; current: number; storage: DurableObjectStorage } 
 type Prepare = (
   input: unknown,
   context: Context
-) => Effect.Effect<LocalMutationPreparation, CanonicalAdmissionUnavailable, SqliteClient>;
+) => Effect.Effect<LocalMutationPreparation, CanonicalAdmissionFailure, SqliteClient>;
 
 const owner = <Id extends OperationId, E>(
   id: Id,
@@ -113,7 +94,7 @@ const owner = <Id extends OperationId, E>(
       input
     ).pipe(
       Effect.flatMap((decoded) => prepare(decoded, context)),
-      Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
+      Effect.mapError(admissionFailure)
     ),
 ];
 
@@ -151,12 +132,8 @@ const wakeAfterCapture = (
     ? {
         ...plan,
         commit: plan.commit.pipe(
-          Effect.tap((result) =>
-            result.outcome === "success"
-              ? preserveStoreAlarm(storage, current + recurringDiscoveryIntervalMs)
-              : Effect.void
-          ),
-          Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
+          Effect.tap(() => preserveStoreAlarm(storage, current + recurringDiscoveryIntervalMs)),
+          Effect.mapError(admissionFailure)
         ),
       }
     : plan;
@@ -280,6 +257,45 @@ export const hostedOwners = new Map<string, Prepare>([
   ),
 ]);
 
+type CorrectionChanges = Parameters<typeof prepareLocalCorrection>[0]["input"]["changes"];
+
+const prepareCorrection = Effect.fnUntraced(function* ({
+  entry,
+  changes,
+  user,
+  current,
+}: Readonly<{
+  entry: Readonly<{ id: string; expectedRevision: number }>;
+  changes: CorrectionChanges;
+  user: UserId;
+  current: number;
+}>) {
+  const preparation = yield* prepareLocalCorrection(
+    { id: entry.id, input: { expectedRevision: entry.expectedRevision, changes } },
+    user,
+    current
+  );
+
+  if (!("commit" in preparation)) {
+    return yield* Effect.die("correction preparation returned a result value");
+  }
+
+  return preparation;
+});
+
+const commitCorrections = Effect.fnUntraced(function* (plans: ReadonlyArray<LocalMutationPlan>) {
+  yield* Effect.forEach(plans, (plan) => plan.commit, {
+    concurrency: 1,
+    discard: true,
+  });
+
+  return {
+    status: 200,
+    outcome: "success" as const,
+    body: { data: { updated: plans.length }, next: [] },
+  };
+});
+
 export const localBatchOwners = new Map<string, Prepare>([
   owner("insights.markInsightDelivered", ({ params, payload }, { user }) =>
     prepareLocalInsight({ id: params.id, target: "delivered", evidence: payload }, user)
@@ -361,36 +377,18 @@ export const localBatchOwners = new Map<string, Prepare>([
   ),
   owner("transactions.updateTransactions", ({ payload }, { user, current }) =>
     Effect.gen(function* () {
-      const prepared = yield* Effect.reduce(
+      const plans = yield* Effect.forEach(
         payload.transactions,
-        (): PreparedCorrections => Result.succeed([]),
-        (accepted, { id, expectedRevision }) =>
-          Result.isFailure(accepted)
-            ? Effect.succeed(accepted)
-            : prepareLocalCorrection(
-                { id, input: { expectedRevision, changes: payload.changes } },
-                user,
-                current
-              ).pipe(Effect.map(acceptCorrection(accepted.success)))
+        (entry) => prepareCorrection({ entry, changes: payload.changes, user, current }),
+        { concurrency: 1 }
       );
 
-      if (Result.isFailure(prepared)) return prepared.failure;
-      const plans = prepared.success;
+      const targets = plans.flatMap((plan) => plan.targets);
 
       return prepareLocalWrite({
-        targets: plans.flatMap((plan) => plan.targets),
+        targets,
         review: groupReview(plans),
-        commit: Effect.gen(function* () {
-          const refused = yield* commitUntilRefused(plans);
-
-          if (Option.isSome(refused)) return refused.value;
-
-          return {
-            status: 200,
-            outcome: "success",
-            body: { data: { updated: plans.length }, next: [] },
-          };
-        }),
+        commit: commitCorrections(plans),
       });
     })
   ),
@@ -459,11 +457,7 @@ const reserveGrant = Effect.fn(function* (unit: GrantUnit, operation: string, in
         targets: staged.targets,
         commit: staged
           .commit(user, current)
-          .pipe(
-            Effect.tap((result) =>
-              result.outcome === "success" ? repairLocalPATExpiry(current, storage) : Effect.void
-            )
-          ),
+          .pipe(Effect.tap(() => repairLocalPATExpiry(current, storage))),
       })
     );
 
@@ -532,6 +526,10 @@ export const localReviewBinding = Effect.fn(
 
     return entries.some((entry) => entry.sensitive) ? entries.map((entry) => entry.binding) : [];
   },
+  Effect.catchIf(
+    (error): error is CanonicalRejection => isCanonicalRejection(error),
+    () => Effect.fail(new Cause.NoSuchElementError())
+  ),
   Effect.catchNoSuchElement,
-  Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
+  Effect.mapError(admissionFailure)
 );

@@ -8,6 +8,11 @@ import {
   CreateManualPATPayload,
   PATPairingPublicCodeInput,
 } from "../../../src/core/tokens/contract";
+import {
+  issuanceConsumedMessage,
+  issuanceLimitedMessage,
+  reviewExpiredMessage,
+} from "../../../src/shell/tokens/contract";
 import { buildPATDisclosure, buildPairedPATDisclosure } from "../../../src/core/tokens/operations";
 import { approvePairingGrant, issueManualPAT } from "../../../src/shell/tokens/operations";
 import {
@@ -17,7 +22,13 @@ import {
 import { recordSessionPATTransition } from "../../../src/shell/audit/operations";
 import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { type CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
-import { type LocalMutationResult } from "../../canonical-admission/contract";
+import {
+  type CanonicalRejection,
+  type LocalMutationResult,
+  canonicalRejectionStatus,
+  isCanonicalRejection,
+  rejection,
+} from "../../canonical-admission/contract";
 import {
   boundSessionLookup,
   readBoundWebSessionProof,
@@ -33,11 +44,10 @@ import {
   iso,
   newBearer,
   pairingMilliseconds,
-  rejected,
-  unauthorized,
+  pairingRejectedMessage,
 } from "./pat-shared";
-import { consumed, expiredReview, expiryFor, issuanceLimit, issuedResponse } from "./pat-manual";
-import { rateLimited } from "./pat-pairing";
+import { expiryFor, issuedResult } from "./pat-manual";
+import { reviewRetrySeconds } from "./pat-pairing";
 import { PATUnavailable } from "../contract";
 
 type Session = { id: string; user_id: UserId };
@@ -45,27 +55,97 @@ type Session = { id: string; user_id: UserId };
 type Commit = (
   user: UserId,
   current: number
-) => Effect.Effect<LocalMutationResult, PATUnavailable, SqliteClient>;
+) => Effect.Effect<LocalMutationResult, PATUnavailable | CanonicalRejection, SqliteClient>;
 
 export type StagedPAT = { targets: ReadonlyArray<string>; commit: Commit };
 
-const result = Effect.fn(
-  function* (response: Response) {
-    return {
-      status: response.status,
-      outcome: response.ok ? ("success" as const) : ("validation_failed" as const),
-      body: yield* Schema.decodeUnknownEffect(Schema.Json)(
-        yield* Effect.tryPromise(() => response.json())
-      ),
-    };
-  },
-  Effect.mapError((cause) => new PATUnavailable({ cause: Option.some(cause) }))
-);
+const rejectedRejection = (): CanonicalRejection =>
+  rejection({
+    status: canonicalRejectionStatus.badRequest,
+    outcome: "validation_failed",
+    code: "validation_failed",
+    message: Option.some(pairingRejectedMessage),
+    fields: Option.none(),
+    extra: Option.none(),
+    next: [],
+  });
 
-const refuse = (response: () => Response): StagedPAT => ({
+const rateLimitedRejection = (): CanonicalRejection =>
+  rejection({
+    status: canonicalRejectionStatus.tooManyRequests,
+    outcome: "validation_failed",
+    code: "rate_limited",
+    message: Option.some(pairingRejectedMessage),
+    fields: Option.none(),
+    extra: Option.some({ retryAfterSeconds: reviewRetrySeconds }),
+    next: [],
+  });
+
+const unauthorizedRejection = (): CanonicalRejection =>
+  rejection({
+    status: canonicalRejectionStatus.unauthorized,
+    outcome: "validation_failed",
+    code: "unauthenticated",
+    message: Option.some("Present a valid credential and retry."),
+    fields: Option.none(),
+    extra: Option.none(),
+    next: [],
+  });
+
+const consumedRejection = (): CanonicalRejection =>
+  rejection({
+    status: canonicalRejectionStatus.conflict,
+    outcome: "validation_failed",
+    code: "user_action_required",
+    message: Option.some(issuanceConsumedMessage),
+    fields: Option.none(),
+    extra: Option.none(),
+    next: [],
+  });
+
+const expiredReviewRejection = (): CanonicalRejection =>
+  rejection({
+    status: canonicalRejectionStatus.unprocessable,
+    outcome: "validation_failed",
+    code: "user_action_required",
+    message: Option.some(reviewExpiredMessage),
+    fields: Option.none(),
+    extra: Option.none(),
+    next: [],
+  });
+
+const issuanceLimitRejection = (): CanonicalRejection =>
+  rejection({
+    status: canonicalRejectionStatus.tooManyRequests,
+    outcome: "validation_failed",
+    code: "rate_limited",
+    message: Option.some(issuanceLimitedMessage),
+    fields: Option.none(),
+    extra: Option.some({ retryAfterSeconds: 600 }),
+    next: [],
+  });
+
+const staleSessionRejection = (session: Session): CanonicalRejection =>
+  rejection({
+    status: canonicalRejectionStatus.forbidden,
+    outcome: "validation_failed",
+    code: "user_action_required",
+    message: Option.none(),
+    fields: Option.none(),
+    extra: Option.some({
+      reason: "reauthentication_required",
+      userId: session.user_id,
+    }),
+    next: [],
+  });
+
+const refuse = (failure: CanonicalRejection): StagedPAT => ({
   targets: [],
-  commit: () => result(response()),
+  commit: () => Effect.fail(failure),
 });
+
+const patFailure = (cause: unknown): CanonicalRejection | PATUnavailable =>
+  isCanonicalRejection(cause) ? cause : new PATUnavailable({ cause: Option.some(cause) });
 
 const success = (data: Schema.Json): LocalMutationResult => ({
   status: 200,
@@ -118,13 +198,13 @@ const review = Effect.fn(function* (directory: Directory, session: Session, payl
       WHERE (SELECT count(*) FROM pat_review_events WHERE session_id=${session.id} AND expires_at_ms>${now})<${reviewLimit} RETURNING id`;
   }).pipe(withStoreCapacity("growth"));
 
-  if (count.length === 0) return refuse(rateLimited);
+  if (count.length === 0) return refuse(rateLimitedRejection());
 
   const code = Schema.decodeUnknownOption(Schema.Struct({ publicCode: PATPairingPublicCodeInput }))(
     payload
   );
 
-  if (Option.isNone(code)) return refuse(rejected);
+  if (Option.isNone(code)) return refuse(rejectedRejection());
 
   const found = yield* directoryEvidence(
     directory,
@@ -132,39 +212,36 @@ const review = Effect.fn(function* (directory: Directory, session: Session, payl
     FrozenPAT
   );
 
-  if (Option.isNone(found)) return refuse(rejected);
+  if (Option.isNone(found)) return refuse(rejectedRejection());
   const pairing = found.value;
 
   return {
     targets: ["pat-pairing:" + pairing.id],
-    commit: Effect.fn(
-      function* (user: UserId, current: number) {
-        if (user !== session.user_id || pairing.expires_at_ms <= current) {
-          return yield* result(rejected());
-        }
+    commit: Effect.fn(function* (user: UserId, current: number) {
+      if (user !== session.user_id || pairing.expires_at_ms <= current) {
+        return yield* rejectedRejection();
+      }
 
-        const closed =
-          yield* sql`SELECT 1 FROM pat_pairings WHERE id=${pairing.id} AND state<>'pending_approval'`;
+      const closed =
+        yield* sql`SELECT 1 FROM pat_pairings WHERE id=${pairing.id} AND state<>'pending_approval'`;
 
-        if (closed.length > 0) return yield* result(rejected());
+      if (closed.length > 0) return yield* rejectedRejection();
 
-        return success({
-          pairingId: pairing.id,
-          recipientLabel: pairing.recipient_label,
-          scopes: [...pairing.scopes_json],
-          lifetimeDays: pairing.lifetime_days,
-          claimBy: iso(pairing.expires_at_ms),
-        });
-      },
-      Effect.mapError((cause) => new PATUnavailable({ cause: Option.some(cause) }))
-    ),
+      return success({
+        pairingId: pairing.id,
+        recipientLabel: pairing.recipient_label,
+        scopes: [...pairing.scopes_json],
+        lifetimeDays: pairing.lifetime_days,
+        claimBy: iso(pairing.expires_at_ms),
+      });
+    }, Effect.mapError(patFailure)),
   } satisfies StagedPAT;
 });
 
 const approve = Effect.fn(function* (directory: Directory, session: Session, payload: unknown) {
   const decoded = Schema.decodeUnknownOption(ApprovePATPairingPayload)(payload);
 
-  if (Option.isNone(decoded)) return refuse(rejected);
+  if (Option.isNone(decoded)) return refuse(rejectedRejection());
 
   const found = yield* directoryEvidence(
     directory,
@@ -172,73 +249,57 @@ const approve = Effect.fn(function* (directory: Directory, session: Session, pay
     FrozenPAT
   );
 
-  if (Option.isNone(found)) return refuse(rejected);
+  if (Option.isNone(found)) return refuse(rejectedRejection());
   const pairing = found.value;
   const proof = yield* Effect.fromResult(Hex.decode(pairing.proof_digest));
   const sql = yield* SqliteClient;
 
   return {
     targets: ["pat-pairing:" + pairing.id],
-    commit: Effect.fn(
-      function* (user: UserId, current: number) {
-        if (user !== session.user_id || pairing.expires_at_ms <= current) {
-          return yield* result(rejected());
-        }
+    commit: Effect.fn(function* (user: UserId, current: number) {
+      if (user !== session.user_id || pairing.expires_at_ms <= current) {
+        return yield* rejectedRejection();
+      }
 
-        const [prior] =
-          yield* sql`SELECT 1 FROM pat_pairings WHERE id=${pairing.id} AND state<>'pending_approval'`;
+      const [prior] =
+        yield* sql`SELECT 1 FROM pat_pairings WHERE id=${pairing.id} AND state<>'pending_approval'`;
 
-        if (prior !== undefined) return yield* result(rejected());
-        yield* sql`INSERT INTO pat_pairings(id,user_id,public_code,proof_digest,recipient_label,scopes_json,lifetime_days,expires_at_ms,wrong_attempts,last_poll_at_ms,minimum_poll_seconds)
+      if (prior !== undefined) return yield* rejectedRejection();
+      yield* sql`INSERT INTO pat_pairings(id,user_id,public_code,proof_digest,recipient_label,scopes_json,lifetime_days,expires_at_ms,wrong_attempts,last_poll_at_ms,minimum_poll_seconds)
     VALUES(${pairing.id},${user},${pairing.public_code},${proof},${pairing.recipient_label},${yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))([...pairing.scopes_json])},${pairing.lifetime_days},${pairing.expires_at_ms},${pairing.wrong_attempts},${pairing.last_poll_at_ms},${pairing.minimum_poll_seconds}) ON CONFLICT(id) DO NOTHING`;
-        const expires = current + pairing.lifetime_days * dayMilliseconds;
+      const expires = current + pairing.lifetime_days * dayMilliseconds;
 
-        const disclosure = buildPairedPATDisclosure({
-          grant: {
-            recipientLabel: pairing.recipient_label,
-            scopes: pairing.scopes_json,
-            lifetimeDays: pairing.lifetime_days,
-          },
-          expiresAt: DateTime.makeUnsafe(expires),
-        });
+      const disclosure = buildPairedPATDisclosure({
+        grant: {
+          recipientLabel: pairing.recipient_label,
+          scopes: pairing.scopes_json,
+          lifetimeDays: pairing.lifetime_days,
+        },
+        expiresAt: DateTime.makeUnsafe(expires),
+      });
 
-        yield* execute(
-          approvePairingGrant({ session, input: { pairingId: pairing.id, current, expires } })
-        );
-        yield* execute(
-          grantPairedPATConsent({
-            session,
-            input: { id: newId(), pairingId: pairing.id, disclosure, current },
-          })
-        );
-        yield* recordGrant(session, current, {
-          operation: "pats.approvePATPairing",
-          patId: Option.none(),
-        });
+      yield* execute(
+        approvePairingGrant({ session, input: { pairingId: pairing.id, current, expires } })
+      );
+      yield* execute(
+        grantPairedPATConsent({
+          session,
+          input: { id: newId(), pairingId: pairing.id, disclosure, current },
+        })
+      );
+      yield* recordGrant(session, current, {
+        operation: "pats.approvePATPairing",
+        patId: Option.none(),
+      });
 
-        return success({
-          pairingId: pairing.id,
-          patExpiresAt: iso(expires),
-          claimBy: iso(pairing.expires_at_ms),
-        });
-      },
-      Effect.mapError((cause) => new PATUnavailable({ cause: Option.some(cause) }))
-    ),
+      return success({
+        pairingId: pairing.id,
+        patExpiresAt: iso(expires),
+        claimBy: iso(pairing.expires_at_ms),
+      });
+    }, Effect.mapError(patFailure)),
   } satisfies StagedPAT;
 });
-
-const staleSession = (session: Session): Response =>
-  Response.json(
-    {
-      error: {
-        code: "user_action_required",
-        reason: "reauthentication_required",
-        userId: session.user_id,
-      },
-      next: [],
-    },
-    { status: 403 }
-  );
 
 type ManualInput = {
   reservation: typeof Reservation.Type;
@@ -256,57 +317,60 @@ const prepareManual = Effect.fn(function* ({ reservation, input, session }: Manu
 
   return {
     targets: ["manual-pat:" + requestId],
-    commit: Effect.fn(
-      function* (user: UserId, current: number) {
-        if (user !== session.user_id) return yield* result(unauthorized());
+    commit: Effect.fn(function* (user: UserId, current: number) {
+      if (user !== session.user_id) return yield* unauthorizedRejection();
 
-        if (
-          (yield* sql`SELECT 1 FROM pats WHERE user_id=${user} AND request_id=${requestId}`)
-            .length > 0
-        ) {
-          return yield* result(consumed());
-        }
+      if (
+        (yield* sql`SELECT 1 FROM pats WHERE user_id=${user} AND request_id=${requestId}`).length >
+        0
+      ) {
+        return yield* consumedRejection();
+      }
 
-        if (
-          (yield* sql`SELECT 1 FROM web_sessions WHERE id=${session.id} AND fresh_until_ms>${current}`)
-            .length === 0
-        ) {
-          return yield* result(staleSession(session));
-        }
+      if (
+        (yield* sql`SELECT 1 FROM web_sessions WHERE id=${session.id} AND fresh_until_ms>${current}`)
+          .length === 0
+      ) {
+        return yield* staleSessionRejection(session);
+      }
 
-        if (Option.isNone(expiryFor({ grant, current }))) return yield* result(expiredReview());
+      if (Option.isNone(expiryFor({ grant, current }))) return yield* expiredReviewRejection();
 
-        const command = issueManualPAT({
+      const command = issueManualPAT({
+        session,
+        input: { grant, requestId, patId, shortId, bearerDigest, current, expires },
+      });
+
+      if ((yield* sql.unsafe(command.sql + " RETURNING id", command.params)).length === 0) {
+        return yield* issuanceLimitRejection();
+      }
+
+      yield* execute(
+        grantManualPATConsent({
           session,
-          input: { grant, requestId, patId, shortId, bearerDigest, current, expires },
-        });
+          input: {
+            id: newId(),
+            requestId,
+            disclosure: buildPATDisclosure({ grant, expiresAt: DateTime.makeUnsafe(expires) }),
+            current,
+          },
+        })
+      );
+      yield* recordGrant(session, current, {
+        operation: "pats.createManualPAT",
+        patId: Option.some(patId),
+      });
 
-        if ((yield* sql.unsafe(command.sql + " RETURNING id", command.params)).length === 0) {
-          return yield* result(issuanceLimit());
-        }
-
-        yield* execute(
-          grantManualPATConsent({
-            session,
-            input: {
-              id: newId(),
-              requestId,
-              disclosure: buildPATDisclosure({ grant, expiresAt: DateTime.makeUnsafe(expires) }),
-              current,
-            },
-          })
-        );
-        yield* recordGrant(session, current, {
-          operation: "pats.createManualPAT",
-          patId: Option.some(patId),
-        });
-
-        return yield* result(
-          issuedResponse({ input, session, current, expires, shortId, patId, bearer })
-        );
-      },
-      Effect.mapError((cause) => new PATUnavailable({ cause: Option.some(cause) }))
-    ),
+      return yield* issuedResult({
+        input,
+        session,
+        current,
+        expires,
+        shortId,
+        patId,
+        bearer,
+      });
+    }, Effect.mapError(patFailure)),
   } satisfies StagedPAT;
 });
 
@@ -317,7 +381,7 @@ export const manual = Effect.fn(function* (
 ) {
   const input = Schema.decodeUnknownOption(Schema.toCodecJson(CreateManualPATPayload))(payload);
 
-  if (Option.isNone(input)) return refuse(rejected);
+  if (Option.isNone(input)) return refuse(rejectedRejection());
   const { grant, requestId } = input.value;
   const sql = yield* SqliteClient;
   const now = yield* Clock.currentTimeMillis;
@@ -325,10 +389,10 @@ export const manual = Effect.fn(function* (
   const fresh =
     yield* sql`SELECT 1 FROM web_sessions WHERE id=${session.id} AND user_id=${session.user_id} AND fresh_until_ms>${now}`;
 
-  if (fresh.length === 0) return refuse(() => staleSession(session));
+  if (fresh.length === 0) return refuse(staleSessionRejection(session));
   const expiry = expiryFor({ grant, current: now });
 
-  if (Option.isNone(expiry)) return refuse(expiredReview);
+  if (Option.isNone(expiry)) return refuse(expiredReviewRejection());
 
   const encoded = yield* Schema.encodeEffect(
     Schema.fromJsonString(Schema.toCodecJson(CreateManualPATPayload))
@@ -348,7 +412,7 @@ export const manual = Effect.fn(function* (
     Reservation
   );
 
-  if (Option.isNone(reservation)) return refuse(consumed);
+  if (Option.isNone(reservation)) return refuse(consumedRejection());
 
   return yield* prepareManual({ reservation: reservation.value, input: input.value, session });
 });
@@ -365,7 +429,7 @@ export const stageGrant = Effect.fn(function* (input: {
 }) {
   const session = yield* preflightSession(input.request, input.owns);
 
-  if (Option.isNone(session)) return refuse(unauthorized);
+  if (Option.isNone(session)) return refuse(unauthorizedRejection());
 
   if (input.operation === "pats.inspectPATPairing") {
     return yield* review(input.directory, session.value, input.payload);
@@ -407,11 +471,7 @@ export const dispatchGrant = Effect.fn(function* (unit: {
     work: Effect.fnUntraced(function* (_input: unknown, user: UserId, current: number) {
       return yield* staged
         .commit(user, current)
-        .pipe(
-          Effect.tap((result) =>
-            result.outcome === "success" ? repairPATExpiry(current, unit.storage) : Effect.void
-          )
-        );
+        .pipe(Effect.tap(() => repairPATExpiry(current, unit.storage)));
     }),
   };
 });

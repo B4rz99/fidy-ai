@@ -118,9 +118,7 @@ const wakeForFacts = <A, E>(
   Effect.fn(function* (input: A, user: UserId, current: number) {
     const outcome = yield* work(input, user, current);
 
-    if (outcome.outcome === "success") {
-      yield* preserveStoreAlarm(storage, current + recurringDiscoveryIntervalMs);
-    }
+    yield* preserveStoreAlarm(storage, current + recurringDiscoveryIntervalMs);
 
     return outcome;
   });

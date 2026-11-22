@@ -130,9 +130,8 @@ export const readLocalTransactionPage = Effect.fn(function* (request: Request, u
   const query = parseQuery(selection);
 
   if (Option.isNone(query)) {
-    return localTransactionRefusal({
+    return yield* localTransactionRefusal({
       status: 400,
-      code: "validation_failed",
       message: "Invalid Transaction history query.",
     });
   }

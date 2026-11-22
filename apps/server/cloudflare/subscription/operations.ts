@@ -1,4 +1,4 @@
-import { CanonicalAdmissionUnavailable } from "../canonical-admission/contract";
+import { CanonicalAdmissionUnavailable, notFoundRejection } from "../canonical-admission/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { SqlClient } from "effect/sql";
 
@@ -36,16 +36,7 @@ export const cancelLocalSubscription = Effect.fnUntraced(function* (
   const result = yield* retainCancellation(input);
 
   if (Option.isNone(result)) {
-    const absent: LocalMutationResult = {
-      status: 404,
-      outcome: "not_found",
-      body: {
-        error: { code: "not_found", message: "No paid Subscription belongs to you." },
-        next: [],
-      },
-    };
-
-    return absent;
+    return yield* notFoundRejection("No paid Subscription belongs to you.");
   }
 
   const data = yield* Schema.encodeEffect(SubscriptionCancellation)(result.value);

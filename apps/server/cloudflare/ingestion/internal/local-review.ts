@@ -221,6 +221,6 @@ export const readReviewItem = Effect.fn(function* (
   const detail = yield* readDetail(user, target, { current, origin });
 
   return Option.isNone(detail)
-    ? missing()
+    ? yield* missing()
     : result(yield* Schema.encodeEffect(Schema.toCodecJson(ReviewDetail))(detail.value));
 });

@@ -117,6 +117,15 @@ export const monthLabel = (month: string): string =>
     timeZone: "UTC",
   });
 
+export const dayLabel = (date: string): string =>
+  DateTime.format(DateTime.makeUnsafe(date), {
+    locale: "es-CO",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+
 export const shortMonthLabel = (month: string): string =>
   DateTime.format(DateTime.makeUnsafe(`${month}-01`), {
     locale: "es-CO",

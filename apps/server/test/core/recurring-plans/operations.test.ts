@@ -774,7 +774,7 @@ const rejects = (
   );
 };
 
-it("rejects stale revisions, duplicate plans and lifecycle transitions without an eligible plan", () => {
+it("rejects stale revisions, duplicate plans and ineligible lifecycle transitions", () => {
   const document = createdPlan();
   const create: RecurringEdit = { kind: "create", id: planId, plan: monthly };
   rejects(document, create, 0);
@@ -817,7 +817,7 @@ it("rejects stale revisions, duplicate plans and lifecycle transitions without a
     action: "stop",
   });
 
-  for (const action of ["pause", "resume", "stop"] as const) {
+  for (const action of ["pause", "stop"] as const) {
     rejects(stopped, { kind: "lifecycle", planId, date: "2026-03-01", action });
   }
 
@@ -828,6 +828,132 @@ it("rejects stale revisions, duplicate plans and lifecycle transitions without a
       now: DateTime.makeUnsafe("2026-03-01"),
     })
   ).toEqual([]);
+});
+
+it("resumes a stopped plan as a closed pause and cancels a scheduled stop", () => {
+  const onlyPlan = (document: RecurringDocument): RecurringDocument["plans"][number] => {
+    const [plan] = document.plans;
+
+    if (plan === undefined) throw new Error("Expected a plan");
+
+    return plan;
+  };
+
+  const paused = command(createdPlan(), {
+    kind: "lifecycle",
+    planId,
+    date: "2026-02-01",
+    action: "pause",
+  });
+
+  const resumed = command(paused, {
+    kind: "lifecycle",
+    planId,
+    date: "2026-02-01",
+    action: "resume",
+  });
+
+  const stopped = command(resumed, {
+    kind: "lifecycle",
+    planId,
+    date: "2026-03-01",
+    action: "stop",
+  });
+
+  const cancelled = command(stopped, {
+    kind: "lifecycle",
+    planId,
+    date: "2026-02-28",
+    action: "resume",
+  });
+
+  expect(onlyPlan(cancelled).stoppedOn).toBeUndefined();
+  expect(onlyPlan(cancelled).pauses).toEqual([{ from: "2026-02-01", through: "2026-02-01" }]);
+
+  const tracked = command(stopped, {
+    kind: "lifecycle",
+    planId,
+    date: "2026-04-01",
+    action: "resume",
+  });
+
+  expect(onlyPlan(tracked).stoppedOn).toBeUndefined();
+  expect(onlyPlan(tracked).pauses).toEqual([
+    { from: "2026-02-01", through: "2026-02-01" },
+    { from: "2026-03-01", through: "2026-04-01" },
+  ]);
+  expect(
+    projectRecurringMonth({
+      document: tracked,
+      month: "2026-03",
+      now: DateTime.makeUnsafe("2026-04-02"),
+    })
+  ).toEqual([]);
+  expect(
+    projectRecurringMonth({
+      document: tracked,
+      month: "2026-04",
+      now: DateTime.makeUnsafe("2026-04-02"),
+    }).map((item) => item.date)
+  ).toEqual(["2026-04-30"]);
+
+  const pausedAgain = command(tracked, {
+    kind: "lifecycle",
+    planId,
+    date: "2026-05-01",
+    action: "pause",
+  });
+
+  const stoppedWhilePaused = command(pausedAgain, {
+    kind: "lifecycle",
+    planId,
+    date: "2026-05-10",
+    action: "stop",
+  });
+
+  const resumedAgain = command(stoppedWhilePaused, {
+    kind: "lifecycle",
+    planId,
+    date: "2026-05-20",
+    action: "resume",
+  });
+
+  expect(onlyPlan(resumedAgain).stoppedOn).toBeUndefined();
+  expect(onlyPlan(resumedAgain).pauses).toEqual([
+    { from: "2026-02-01", through: "2026-02-01" },
+    { from: "2026-03-01", through: "2026-04-01" },
+    { from: "2026-05-01", through: "2026-05-20" },
+  ]);
+
+  const scheduledPause = command(resumedAgain, {
+    kind: "lifecycle",
+    planId,
+    date: "2026-06-01",
+    action: "pause",
+  });
+
+  const stoppedBeforePause = command(scheduledPause, {
+    kind: "lifecycle",
+    planId,
+    date: "2026-05-25",
+    action: "stop",
+  });
+
+  const resumedBeforePause = command(stoppedBeforePause, {
+    kind: "lifecycle",
+    planId,
+    date: "2026-05-30",
+    action: "resume",
+  });
+
+  expect(onlyPlan(resumedBeforePause).stoppedOn).toBeUndefined();
+  expect(onlyPlan(resumedBeforePause).pauses).toEqual([
+    { from: "2026-02-01", through: "2026-02-01" },
+    { from: "2026-03-01", through: "2026-04-01" },
+    { from: "2026-05-01", through: "2026-05-20" },
+    { from: "2026-06-01" },
+    { from: "2026-05-25", through: "2026-05-30" },
+  ]);
 });
 
 it("updates one suggestion disposition without altering other decisions and can restore it", () => {

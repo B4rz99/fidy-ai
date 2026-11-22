@@ -87,41 +87,48 @@ const PaymentForm = ({ item, save, disabled, today }: Props): JSX.Element => {
   );
 };
 
-const TrackingActions = ({ item, save, disabled, stopTracking }: Props): JSX.Element => (
-  <div className="grid gap-3 border-t pt-4">
-    <Button
-      contentLayout="wrap"
-      focusAppearance="subtle"
-      variant={item.status === "skipped" ? "outline" : "destructive"}
-      disabled={disabled || item.fulfillments.length > 0}
-      onClick={() =>
-        save({
-          kind: "skip",
-          planId: item.planId,
-          date: item.date,
-          skipped: item.status !== "skipped",
-        })
-      }
-    >
-      {item.status === "skipped" ? "Volver a incluir" : "Omitir esta vez"}
-    </Button>
-    <Disclosure title="Dejar de seguir">
-      <p className="my-3 text-sm text-muted-foreground">
-        Deja de generar expectativas futuras y conserva el historial. No cancela el servicio ni
-        detiene un pago bancario.
-      </p>
+const TrackingActions = ({ item, document, save, disabled, stopTracking }: Props): JSX.Element => {
+  const stopped = document.plans.find((entry) => entry.id === item.planId)?.stoppedOn !== undefined;
+
+  return (
+    <div className="grid gap-3 border-t pt-4">
       <Button
         contentLayout="wrap"
         focusAppearance="subtle"
-        variant="destructive"
-        disabled={disabled}
-        onClick={stopTracking}
+        variant={item.status === "skipped" ? "outline" : "destructive"}
+        disabled={disabled || item.fulfillments.length > 0}
+        onClick={() =>
+          save({
+            kind: "skip",
+            planId: item.planId,
+            date: item.date,
+            skipped: item.status !== "skipped",
+          })
+        }
       >
-        Confirmar dejar de seguir
+        {item.status === "skipped" ? "Volver a incluir" : "Omitir esta vez"}
       </Button>
-    </Disclosure>
-  </div>
-);
+      {stopped ? null : (
+        <Disclosure title="Dejar de seguir">
+          <p className="my-3 text-sm text-muted-foreground">
+            Deja de generar fechas a partir de hoy y conserva el historial. Puedes reanudarlo cuando
+            quieras; mientras no lo reanudes no se generan fechas. Si solo necesitas un descanso,
+            pausa el plan. No cancela el servicio ni detiene un pago bancario.
+          </p>
+          <Button
+            contentLayout="wrap"
+            focusAppearance="subtle"
+            variant="destructive"
+            disabled={disabled}
+            onClick={stopTracking}
+          >
+            Confirmar dejar de seguir
+          </Button>
+        </Disclosure>
+      )}
+    </div>
+  );
+};
 
 export const OccurrenceDetails = (props: Props): JSX.Element => {
   const { item, save, disabled } = props;

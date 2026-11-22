@@ -414,7 +414,7 @@ export const fixtureWorkspace = ({
   const plans = selected.map((seed, index) => makePlan({ seed, index, categories, many }));
 
   const all = plans.flatMap((plan, index) =>
-    plan.pauses.length > 0 || plan.stoppedOn !== undefined
+    plan.pauses.some((pause) => pause.through === undefined) || plan.stoppedOn !== undefined
       ? []
       : Array.from({ length: many ? weeks : 1 }, (_, week) =>
           makeOccurrence({ plan, seed: selected[index] ?? base, index, week, many })

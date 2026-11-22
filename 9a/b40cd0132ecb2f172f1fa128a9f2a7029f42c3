@@ -1,0 +1,19 @@
+apps/web/src/features/transactions/period-controls.tsx
+  s_370e136601c9b6::t_4a13094eecc5b6 6-11,13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9ab40cd0132ecb2f172f1fa128a9f2a7029f42c3",
+  "prompts": {},
+  "sessions": {
+    "s_370e136601c9b6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "tabby-puppet",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

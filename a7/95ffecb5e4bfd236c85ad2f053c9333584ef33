@@ -1,0 +1,20 @@
+apps/server/cloudflare/canonical-admission/contract.ts
+  h_c6d49c804e0ad2 184-204
+apps/server/cloudflare/categories/internal/sqlite-keyword.ts
+  h_c6d49c804e0ad2 18,21,66,68,75,77
+apps/server/cloudflare/dashboard/internal/sqlite-dashboard.ts
+  h_c6d49c804e0ad2 27,29,59
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a795ffecb5e4bfd236c85ad2f053c9333584ef33",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

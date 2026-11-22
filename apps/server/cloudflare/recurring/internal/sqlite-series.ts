@@ -4,7 +4,11 @@ import { Effect, Option, Schema } from "effect";
 import { UserContext, UserId } from "../../../src/core/identity/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
-import { type CanonicalRejection, validationRejection } from "../../canonical-admission/contract";
+import {
+  type CanonicalRejection,
+  type LocalMutationResult,
+  validationRejection,
+} from "../../canonical-admission/contract";
 import {
   canonicalAdmissionUnavailable,
   runLocalMutation,
@@ -176,7 +180,11 @@ const browse = Effect.fn(function* (cursor: Option.Option<typeof Cursor.Type>, u
 
   const data = yield* pageData({ raw: rows, status });
 
-  return { status: 200, outcome: "success" as const, body: { data, next: [] } };
+  return {
+    status: 200,
+    outcome: "success" as const,
+    body: { data, next: [] },
+  } satisfies LocalMutationResult;
 });
 
 const decodeCursor = (

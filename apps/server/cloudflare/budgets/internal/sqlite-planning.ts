@@ -464,7 +464,7 @@ export const prepareLocalBudget = Effect.fn(function* (
           return {
             ...budgetSuccess(yield* Schema.encodeEffect(Schema.toCodecJson(Budget))(saved)),
             status: Option.isNone(id) ? createdStatus : updatedStatus,
-          };
+          } satisfies LocalMutationResult;
         })
       )
       .pipe(Effect.catchTag("BudgetWriteConflict", () => Effect.fail(invalidBudget()))),

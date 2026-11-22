@@ -14,11 +14,15 @@ import {
 import { validateKeywordRuleChange } from "../../../src/core/categories/operations";
 import { normalizeSearchText } from "../../../src/core/search/operations";
 import type { UserId } from "../../../src/core/identity/contract";
-import { CanonicalRejection, CurrentSuggestionCaller } from "../../canonical-admission/contract";
+import {
+  CanonicalRejection,
+  CurrentSuggestionCaller,
+  canonicalRejectionStatus,
+} from "../../canonical-admission/contract";
 import type { SuggestedOperationCaller } from "../../../src/shell/canonical-operations/operations";
 import { toApiFailure } from "../../../src/shell/categories/operations";
 import { prepareLocalWrite } from "../../canonical-admission/operations";
-import type { LocalMutationPlan } from "../../canonical-admission/contract";
+import type { LocalMutationPlan, LocalMutationResult } from "../../canonical-admission/contract";
 import { newId } from "../../secret-material/operations";
 import { CategoriesUnavailable, KeywordRuleChange, KeywordRuleRemoval } from "../contract";
 import { resolveLocalCategory, retainLocalCategory } from "./native-categorization";
@@ -48,7 +52,7 @@ export const localKeywordRules = Effect.fn(function* (user: UserId) {
       data: yield* Schema.encodeEffect(Schema.toCodecJson(Schema.Array(KeywordRule)))(rules),
       next: [],
     },
-  };
+  } satisfies LocalMutationResult;
 });
 
 const refusal = (
@@ -59,20 +63,20 @@ const refusal = (
 
   return Predicate.isTagged(value, "NotFound")
     ? new CanonicalRejection({
-        status: 404,
-        outcome: "not_found",
+        status: canonicalRejectionStatus.notFound,
+        audit: { kind: "rejected", outcome: "not_found" },
         code: "not_found",
-        message: Option.some(value.error.message),
+        wireMessage: Option.some(value.error.message),
         fields: Option.none(),
         detail: Option.none(),
         next: value.next,
         batchChild: Option.none(),
       })
     : new CanonicalRejection({
-        status: 400,
-        outcome: "validation_failed",
+        status: canonicalRejectionStatus.badRequest,
+        audit: { kind: "rejected", outcome: "validation_failed" },
         code: "validation_failed",
-        message: Option.some(value.error.message),
+        wireMessage: Option.some(value.error.message),
         fields: Option.some(value.error.fields),
         detail: Option.none(),
         next: value.next,
@@ -146,17 +150,15 @@ const savedKeyword = Effect.fn(function* (row: unknown, create: boolean) {
       data: yield* Schema.encodeEffect(Schema.toCodecJson(KeywordRule))(saved.value),
       next: [],
     },
-  };
+  } satisfies LocalMutationResult;
 });
 
 type NormalizedCommand =
   | Extract<Command, { operation: "categories.deleteKeywordRule" }>
-  | {
-      operation: "categories.createKeywordRule" | "categories.updateKeywordRule";
-      ruleId: KeywordRuleId;
-      payload: CreateKeywordRuleInput;
-      keyword: CategoryKeyword;
-    };
+  | (Extract<
+      Command,
+      { operation: "categories.createKeywordRule" | "categories.updateKeywordRule" }
+    > & { keyword: CategoryKeyword });
 
 const normalizedCommand = (command: Command): NormalizedCommand =>
   command.operation === "categories.deleteKeywordRule"

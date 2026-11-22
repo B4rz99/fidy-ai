@@ -4,8 +4,9 @@ import {
   type CanonicalAdmissionFailure,
   type CanonicalOutcome,
   CanonicalRejection,
+  type CanonicalRejectionOutcome,
   type LocalMutationPlan,
-  type LocalMutationPreparation,
+  type LocalMutationResult,
 } from "../contract";
 import { recurringDiscoveryIntervalMs } from "../../recurring/contract";
 import { preserveStoreAlarm } from "../../runtime/sqlite/operations";
@@ -20,7 +21,7 @@ export type Context = { user: UserId; current: number; storage: DurableObjectSto
 export type Prepare = (
   input: unknown,
   context: Context
-) => Effect.Effect<LocalMutationPreparation, CanonicalAdmissionFailure, SqliteClient>;
+) => Effect.Effect<LocalMutationPlan, CanonicalAdmissionFailure, SqliteClient>;
 
 export type SelectedChild<Owner> = {
   callId: string;
@@ -37,7 +38,7 @@ export type Refusal = {
   index: number;
   code: ErrorCode;
   message: string;
-  outcome: CanonicalOutcome;
+  outcome: CanonicalRejectionOutcome;
 };
 
 export class ChildRefused extends Data.TaggedError("ChildRefused")<Refusal> {}
@@ -45,9 +46,9 @@ export class ChildRefused extends Data.TaggedError("ChildRefused")<Refusal> {}
 export const childRejection = (failure: Refusal): CanonicalRejection =>
   new CanonicalRejection({
     status: 400,
-    outcome: failure.outcome,
+    audit: { kind: "rejected", outcome: failure.outcome },
     code: failure.code,
-    message: Option.some(failure.message),
+    wireMessage: Option.some(failure.message),
     fields: Option.some([]),
     detail: Option.none(),
     next: [],
@@ -59,8 +60,8 @@ const childFailure = (child: Child, rejection: CanonicalRejection): ChildRefused
     index: child.index,
     operation: child.operation,
     code: rejection.code,
-    message: Option.getOrElse(rejection.message, () => ""),
-    outcome: rejection.outcome,
+    message: Option.getOrElse(rejection.wireMessage, () => ""),
+    outcome: rejection.audit.kind === "accepted" ? "validation_failed" : rejection.audit.outcome,
   });
 
 type Planned = { child: Child; plan: LocalMutationPlan };
@@ -107,10 +108,6 @@ export const prepareChildren = Effect.fn(function* (
             Effect.fail(childFailure(child, rejection))
           )
         );
-
-      if (!("commit" in plan)) {
-        return yield* Effect.die("child preparation returned a result value");
-      }
 
       if (
         plans.some(
@@ -195,7 +192,11 @@ export const commitChildren = Effect.fn(function* (
           );
         }
 
-        return { status: 200, outcome: "success" as const, body: { data: { results }, next: [] } };
+        return {
+          status: 200,
+          outcome: "success" as const,
+          body: { data: { results }, next: [] },
+        } satisfies LocalMutationResult;
       })
     )
     .pipe(Effect.catchTag("ChildRefused", (failure) => refuseChild(failure, audit)));

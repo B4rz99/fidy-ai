@@ -1,6 +1,6 @@
 import type { ReservedIdentity } from "../directory/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import type { LocalMutationPlan } from "../canonical-admission/contract";
+import type { LocalMutationPlan, LocalMutationResult } from "../canonical-admission/contract";
 import { prepareLocalWrite } from "../canonical-admission/operations";
 import { prepareCurrentUser } from "../../src/shell/identity/operations";
 import { IdentityUnavailable } from "./contract";
@@ -16,7 +16,7 @@ export const readLocalProfile = Effect.fn(function* (user: UserId) {
     status: 200,
     outcome: "success" as const,
     body: { data: yield* Schema.encodeEffect(User)(result.data), next: [] },
-  };
+  } satisfies LocalMutationResult;
 });
 
 export const prepareLocalPreferences = ({

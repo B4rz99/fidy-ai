@@ -10,6 +10,7 @@ import { newId } from "../../secret-material/operations";
 import {
   CanonicalAdmissionUnavailable,
   type CanonicalRejection,
+  type LocalMutationResult,
   notFoundRejection,
   validationRejection,
 } from "../../canonical-admission/contract";
@@ -103,7 +104,11 @@ const captureReadback = Effect.fn(function* (userId: UserId, id: string, current
   const data = yield* Schema.encodeEffect(TransactionOutput)(decoded.value);
   yield* (yield* BudgetThresholdEvaluation)(userId, current);
 
-  return { status: 201, outcome: "success" as const, body: { data, next: [] } };
+  return {
+    status: 201,
+    outcome: "success" as const,
+    body: { data, next: [] },
+  } satisfies LocalMutationResult;
 });
 
 const captureProvenance = (

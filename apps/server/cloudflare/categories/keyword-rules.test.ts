@@ -6,6 +6,7 @@ import {
   alice,
   bob,
   nativeTransactionJourney,
+  category as retainedCategory,
   seedNativePAT,
 } from "../financial-user-store.test-fixture";
 import { native } from "../user-store.test-fixture";
@@ -531,6 +532,57 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(afterReuse.some((rule) => rule.id === first.id)).toBe(false);
         expect(afterReuse.some((rule) => rule.keyword === "nueva")).toBe(true);
       })
+  );
+
+  test.effect("rolls back a retained Category when the keyword limit rejects the create", () =>
+    Effect.gen(function* () {
+      const { db, send, sessions } = yield* setup;
+      const current = clock();
+
+      expect(
+        yield* awaitPromise(db.exec("SELECT count(*) AS n FROM categories WHERE id=?", domicilios))
+      ).toEqual([{ n: 0 }]);
+
+      yield* Effect.forEach(
+        Array.from({ length: 100 }, (_, index) => index),
+        Effect.fnUntraced(function* (index) {
+          yield* awaitPromise(
+            db.exec(
+              `INSERT INTO keyword_rules (id,user_id,keyword,category_id,category_revision,created_at_ms,updated_at_ms)
+               VALUES (?,?,?,?,'co-1',?,?)`,
+              `81000000-0000-4000-8000-${index.toString().padStart(12, "0")}`,
+              userA,
+              `limite ${index}`,
+              retainedCategory,
+              current,
+              current
+            )
+          );
+        }),
+        { discard: true }
+      );
+
+      const refused = yield* awaitPromise(
+        send({
+          path: "/category-keyword-rules",
+          method: "POST",
+          session: sessions[0],
+          payload: { keyword: "sin categoria", categoryId: domicilios },
+        })
+      );
+
+      expect(refused.status).toBe(400);
+      expect(
+        yield* awaitPromise(db.exec("SELECT count(*) AS n FROM categories WHERE id=?", domicilios))
+      ).toEqual([{ n: 0 }]);
+      expect(
+        yield* awaitPromise(
+          db.exec(
+            "SELECT count(*) AS n FROM audit_entries WHERE record_type='session_call' AND operation='categories.createKeywordRule' AND outcome='success'"
+          )
+        )
+      ).toEqual([{ n: 0 }]);
+    })
   );
 
   test.effect("updates and deletes only the caller's own rule", () =>

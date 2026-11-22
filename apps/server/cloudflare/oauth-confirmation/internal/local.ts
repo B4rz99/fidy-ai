@@ -146,9 +146,15 @@ export const localConfirmation = Effect.fn(function* <E, R>(
   const { subject, admission } = oauth,
     attempt = admission.confirmation;
 
-  const read = yield* oauth
-    .review(current)
-    .pipe(Effect.catchIf(isCanonicalRejection, () => Effect.succeedNone));
+  const read = yield* oauth.review(current).pipe(
+    Effect.catchIf(isCanonicalRejection, (rejection) =>
+      Effect.logDebug({
+        component: "oauth-confirmation",
+        operation: "review",
+        outcome: rejection.code,
+      }).pipe(Effect.as(Option.none()))
+    )
+  );
 
   if (Option.isNone(read)) return refuse();
 

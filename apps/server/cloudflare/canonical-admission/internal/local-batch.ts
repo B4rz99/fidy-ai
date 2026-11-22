@@ -38,8 +38,12 @@ import {
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBodyWithSize } from "../../http/operations";
 import { withStoreAdmission } from "../../runtime/sqlite/operations";
-import { CanonicalAdmissionUnavailable, type CanonicalOutcome } from "../contract";
-import { catchRejection, rejectionResponse } from "./rejection";
+import {
+  CanonicalAdmissionUnavailable,
+  type CanonicalOutcome,
+  type CanonicalRejectionOutcome,
+} from "../contract";
+import { catchRejection, rejectionResponse } from "../rejection";
 import {
   type Call,
   type Invocation,
@@ -144,6 +148,9 @@ const exceedsChildLimit = (operation: CatalogOperation, input: Schema.Json): boo
   return new TextEncoder().encode(JSON.stringify(input)).length > limit;
 };
 
+const refusalOutcome = (code: ErrorCode): CanonicalRejectionOutcome =>
+  code === "not_found" ? "not_found" : "validation_failed";
+
 const invalidChildInput = (operation: CatalogOperation, input: Schema.Json): boolean =>
   exceedsChildLimit(operation, input) ||
   Option.isNone(Schema.decodeOption(operation.input, { onExcessProperty: "error" })(input));
@@ -204,7 +211,7 @@ export const selectChildren = <Owner>({
           operation,
           code,
           message,
-          outcome: code === "not_found" ? "not_found" : "validation_failed",
+          outcome: refusalOutcome(code),
         },
       }) as const;
 

@@ -49,7 +49,7 @@ import {
   type LocalMutationOutcome,
   type LocalMutationResult,
   canonicalRequestProtection,
-  unfieldedValidationRejection,
+  validationRejection,
 } from "../contract";
 import {
   attachStanding,
@@ -59,7 +59,7 @@ import {
   rateLimited,
   scopeMissing,
 } from "./responses";
-import { catchRejection, rejectionResponse } from "./rejection";
+import { catchRejection, rejectionResponse } from "../rejection";
 import { cryptoHash, validatedCanonicalInput } from "./request-input";
 
 export const admitLocalRequest = Effect.fn(function* ({
@@ -693,14 +693,14 @@ const sessionLookupFor = (operation: string): typeof boundSessionLookup =>
 
 export const runLocalMutation = Effect.fn(function* <A, E>(
   { request, storage, operation, owns, input, work }: Mutation<A, E>,
-  invalidTarget: Option.Option<CanonicalRejection> = Option.none()
+  pathRejection: Option.Option<CanonicalRejection> = Option.none()
 ) {
   const resolve = yield* localProof(request, owns, sessionLookupFor(operation.id));
   const { keyValid, identity } = yield* prepareIdentity(request, operation);
   const argumentsForOwner = Option.product(yield* input, identity);
 
-  const invalidInput = Option.getOrElse(invalidTarget, () =>
-    unfieldedValidationRejection("Invalid canonical operation input.")
+  const invalidInput = Option.getOrElse(pathRejection, () =>
+    validationRejection("Invalid canonical operation input.")
   );
 
   const prepared = Option.match(argumentsForOwner, {
@@ -709,7 +709,7 @@ export const runLocalMutation = Effect.fn(function* <A, E>(
       keyValid
         ? ({ value, invocation } as const)
         : ({
-            refusal: unfieldedValidationRejection("Invalid canonical retry key."),
+            refusal: validationRejection("Invalid canonical retry key."),
           } as const),
   });
 
@@ -733,7 +733,7 @@ export const runLocalMutation = Effect.fn(function* <A, E>(
       if (Option.isSome(forbidden)) return forbidden.value;
 
       if (prepared.refusal !== undefined) {
-        yield* audit(call, prepared.refusal.outcome);
+        yield* audit(call, prepared.refusal.audit.outcome);
 
         return attachStanding({
           ...call,
@@ -764,7 +764,7 @@ export const readNativeAccountQuery = Effect.fn(function* (
       status: 200,
       outcome: "success" as const,
       body: { data: [...listLaunchCategories()], next: [] },
-    };
+    } satisfies LocalMutationResult;
   }
 
   if (operation === "quota.getQuota") {
@@ -777,7 +777,7 @@ export const readNativeAccountQuery = Effect.fn(function* (
         data: yield* Schema.encodeEffect(Schema.toCodecJson(QuotaStatus))(standing),
         next: [],
       },
-    };
+    } satisfies LocalMutationResult;
   }
 
   return yield* new CanonicalAdmissionUnavailable({ cause: "unsupported account query" });

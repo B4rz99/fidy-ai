@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "0632ffc9af2a4e56d90e808d4f3eaa7ad02d655c6767c4f5f05880b41f6f68df";
+const expectedEdgePolicyDigest = "a1988534ba1edc63109d1440a10e7ad2f2d91cc58cd3ca7acac48563539db1d3";
 
 const securityArtifacts = [
   ...(await Promise.all(
@@ -808,10 +808,7 @@ const securityArtifacts = [
     )
   ).text(),
   await Bun.file(
-    new URL(
-      "../../apps/server/cloudflare/canonical-admission/internal/rejection.ts",
-      import.meta.url
-    )
+    new URL("../../apps/server/cloudflare/canonical-admission/rejection.ts", import.meta.url)
   ).text(),
   await Bun.file(
     new URL(

@@ -25,8 +25,6 @@ export { pairingMilliseconds };
 
 export const dayMilliseconds = 86_400_000;
 
-const successStatus = 200;
-
 export const digestBytes = 32;
 
 export { maxActivePATs, issuanceWindowMilliseconds, maxIssuancesPerUserWindow };
@@ -162,32 +160,8 @@ export const patFrom = (row: PATRow): Option.Option<PAT> => {
 export const response = ({ body, status }: Readonly<{ body: unknown; status: number }>): Response =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
 
-export const canonical = (data: unknown): Response =>
-  response({ body: { data, next: [] }, status: successStatus });
-
-export const unauthorized = (): Response =>
-  response({
-    body: {
-      error: { code: "unauthenticated", message: "Present a valid credential and retry." },
-      next: [],
-    },
-    status: httpUnauthorized,
-  });
-
 export const unavailable = (): Response =>
   response({ body: patPairingUnavailableBody, status: httpUnavailable });
-
-export const serviceUnavailable = (): Response =>
-  response({
-    body: {
-      error: {
-        code: "unavailable",
-        message: "PAT service is temporarily unavailable. Try again later.",
-      },
-      next: [],
-    },
-    status: httpUnavailable,
-  });
 
 export const invalid = (): Response =>
   response({
@@ -202,15 +176,3 @@ export const invalid = (): Response =>
 
 export const pairingRejectedMessage =
   "This PAT pairing is invalid or no longer available. Start a new request.";
-
-export const rejected = (): Response =>
-  response({
-    body: {
-      error: {
-        code: "validation_failed",
-        message: pairingRejectedMessage,
-      },
-      next: [],
-    },
-    status: httpBadRequest,
-  });

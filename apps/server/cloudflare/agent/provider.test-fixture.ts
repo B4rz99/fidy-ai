@@ -5,7 +5,11 @@ type Environment = { CONTROL: DurableObjectNamespace; INGRESS: Fetcher };
 
 const browserBearerLength = 43;
 
-class BrowserRequestInterrupted extends Data.TaggedError("BrowserRequestInterrupted")<{
+class BrowserRequestAborted extends Data.TaggedError("BrowserRequestAborted")<{
+  readonly cause: unknown;
+}> {}
+
+class BrowserRequestFailed extends Data.TaggedError("BrowserRequestFailed")<{
   readonly cause: unknown;
 }> {}
 
@@ -204,16 +208,17 @@ export class HostedProviderControl extends DurableObject<Environment> {
                   signal: this.browserClient.signal,
                 })
               ),
-            catch: (cause) => new BrowserRequestInterrupted({ cause }),
-          }).pipe(
-            Effect.catchTag("BrowserRequestInterrupted", (failure) =>
+            catch: (cause) =>
               this.browserClient.signal.aborted
-                ? Effect.logWarning({
-                    component: "hosted-provider-fixture",
-                    outcome: "browser_aborted",
-                    cause: failure.cause,
-                  }).pipe(Effect.as(new Response(null, { status: 499 })))
-                : Effect.fail(failure)
+                ? new BrowserRequestAborted({ cause })
+                : new BrowserRequestFailed({ cause }),
+          }).pipe(
+            Effect.catchTag("BrowserRequestAborted", (failure) =>
+              Effect.logWarning({
+                component: "hosted-provider-fixture",
+                outcome: "browser_aborted",
+                cause: failure.cause,
+              }).pipe(Effect.as(new Response(null, { status: 499 })))
             )
           )
         )

@@ -10,7 +10,8 @@ import {
 } from "../../canonical-admission/contract";
 import { preserveStoreAlarm } from "../../runtime/sqlite/operations";
 import { newId } from "../../secret-material/operations";
-import { admissionFailure, prepareLocalWrite } from "../../canonical-admission/operations";
+import { prepareLocalWrite } from "../../canonical-admission/operations";
+import { admissionFailure } from "../../canonical-admission/rejection";
 import { institutionsForUser } from "./institution-registration";
 
 const accountPosition = -2;

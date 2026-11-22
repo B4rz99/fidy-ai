@@ -1,13 +1,14 @@
 import { Effect, Option, Schema } from "effect";
-import { NextOperations } from "../../../src/shell/public-http/contract";
+import { NextOperations } from "../../src/shell/public-http/contract";
 import {
   type CanonicalAdmissionFailure,
   CanonicalAdmissionUnavailable,
   type CanonicalRejection,
+  type CanonicalRejectionDetail,
   type LocalMutationOutcome,
   canonicalRejectionStatus,
   isCanonicalRejection,
-} from "../contract";
+} from "./contract";
 
 const encodeNext = Schema.encodeSync(Schema.toCodecJson(NextOperations));
 
@@ -24,9 +25,26 @@ export const catchRejection = <A, E, R>(
     )
   );
 
-const errorDetail = (rejection: CanonicalRejection): Schema.Json => ({
+type RejectionDetailFields =
+  | Readonly<Record<never, never>>
+  | Readonly<{ retryAfterSeconds: number }>
+  | Readonly<{ reason: "reauthentication_required"; userId: string }>;
+
+const detailFields = (detail: Option.Option<CanonicalRejectionDetail>): RejectionDetailFields =>
+  Option.match(detail, {
+    onNone: () => ({}),
+    onSome: (value) =>
+      value.kind === "rate_limited"
+        ? { retryAfterSeconds: value.retryAfterSeconds }
+        : { reason: "reauthentication_required" as const, userId: value.userId },
+  });
+
+const errorDetail = (
+  rejection: CanonicalRejection,
+  detail: RejectionDetailFields
+): Schema.Json => ({
   code: rejection.code,
-  ...Option.match(rejection.message, {
+  ...Option.match(rejection.wireMessage, {
     onNone: () => ({}),
     onSome: (message) => ({ message }),
   }),
@@ -34,7 +52,7 @@ const errorDetail = (rejection: CanonicalRejection): Schema.Json => ({
     onNone: () => ({}),
     onSome: (fields) => ({ fields }),
   }),
-  ...Option.getOrElse(rejection.detail, () => ({})),
+  ...detail,
 });
 
 const childError = (
@@ -42,7 +60,7 @@ const childError = (
   child: Readonly<{ index: number; operation: string }>
 ): Schema.Json => ({
   code: rejection.code,
-  message: Option.getOrElse(rejection.message, () => ""),
+  message: Option.getOrElse(rejection.wireMessage, () => ""),
   failedCallIndex: child.index,
   operation: child.operation,
   fields: Option.getOrElse(rejection.fields, () => []),
@@ -61,9 +79,9 @@ export const encodeRejection = (rejection: CanonicalRejection): LocalMutationOut
 
   return {
     status: rejection.status,
-    outcome: rejection.outcome,
+    outcome: rejection.audit.outcome,
     body: {
-      error: errorDetail(rejection),
+      error: errorDetail(rejection, detailFields(rejection.detail)),
       next: encodeNext(rejection.next),
     },
   };

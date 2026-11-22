@@ -25,9 +25,11 @@ import { type CatalogOperation } from "../../../src/shell/canonical-catalog/cont
 import {
   type CanonicalRejection,
   type LocalMutationResult,
+  bareValidationRejection,
   canonicalRejectionStatus,
   isCanonicalRejection,
   rejection,
+  unauthenticatedRejection,
 } from "../../canonical-admission/contract";
 import {
   boundSessionLookup,
@@ -59,16 +61,7 @@ type Commit = (
 
 export type StagedPAT = { targets: ReadonlyArray<string>; commit: Commit };
 
-const rejectedRejection = (): CanonicalRejection =>
-  rejection({
-    status: canonicalRejectionStatus.badRequest,
-    outcome: "validation_failed",
-    code: "validation_failed",
-    message: Option.some(pairingRejectedMessage),
-    fields: Option.none(),
-    extra: Option.none(),
-    next: [],
-  });
+const rejectedRejection = (): CanonicalRejection => bareValidationRejection(pairingRejectedMessage);
 
 const rateLimitedRejection = (): CanonicalRejection =>
   rejection({
@@ -77,20 +70,12 @@ const rateLimitedRejection = (): CanonicalRejection =>
     code: "rate_limited",
     message: Option.some(pairingRejectedMessage),
     fields: Option.none(),
-    extra: Option.some({ retryAfterSeconds: reviewRetrySeconds }),
+    detail: Option.some({ kind: "rate_limited", retryAfterSeconds: reviewRetrySeconds }),
     next: [],
   });
 
 const unauthorizedRejection = (): CanonicalRejection =>
-  rejection({
-    status: canonicalRejectionStatus.unauthorized,
-    outcome: "validation_failed",
-    code: "unauthenticated",
-    message: Option.some("Present a valid credential and retry."),
-    fields: Option.none(),
-    extra: Option.none(),
-    next: [],
-  });
+  unauthenticatedRejection("Present a valid credential and retry.");
 
 const consumedRejection = (): CanonicalRejection =>
   rejection({
@@ -99,7 +84,7 @@ const consumedRejection = (): CanonicalRejection =>
     code: "user_action_required",
     message: Option.some(issuanceConsumedMessage),
     fields: Option.none(),
-    extra: Option.none(),
+    detail: Option.none(),
     next: [],
   });
 
@@ -110,7 +95,7 @@ const expiredReviewRejection = (): CanonicalRejection =>
     code: "user_action_required",
     message: Option.some(reviewExpiredMessage),
     fields: Option.none(),
-    extra: Option.none(),
+    detail: Option.none(),
     next: [],
   });
 
@@ -121,7 +106,7 @@ const issuanceLimitRejection = (): CanonicalRejection =>
     code: "rate_limited",
     message: Option.some(issuanceLimitedMessage),
     fields: Option.none(),
-    extra: Option.some({ retryAfterSeconds: 600 }),
+    detail: Option.some({ kind: "rate_limited", retryAfterSeconds: 600 }),
     next: [],
   });
 
@@ -132,10 +117,7 @@ const staleSessionRejection = (session: Session): CanonicalRejection =>
     code: "user_action_required",
     message: Option.none(),
     fields: Option.none(),
-    extra: Option.some({
-      reason: "reauthentication_required",
-      userId: session.user_id,
-    }),
+    detail: Option.some({ kind: "reauthentication", userId: session.user_id }),
     next: [],
   });
 

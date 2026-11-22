@@ -64,11 +64,11 @@ import {
   CanonicalAdmissionUnavailable,
   type CanonicalRejection,
   type LocalMutationPlan,
-  type LocalMutationPreparation,
   type LocalMutationResult,
   isCanonicalRejection,
 } from "../../canonical-admission/contract";
-import { admissionFailure, prepareLocalWrite } from "../../canonical-admission/operations";
+import { prepareLocalRead, prepareLocalWrite } from "../../canonical-admission/operations";
+import { admissionFailure } from "../../canonical-admission/rejection";
 
 type Context = { user: UserId; current: number; storage: DurableObjectStorage } & Partial<{
   hostedTurn: string;
@@ -79,14 +79,14 @@ type Context = { user: UserId; current: number; storage: DurableObjectStorage } 
 type Prepare = (
   input: unknown,
   context: Context
-) => Effect.Effect<LocalMutationPreparation, CanonicalAdmissionFailure, SqliteClient>;
+) => Effect.Effect<LocalMutationPlan, CanonicalAdmissionFailure, SqliteClient>;
 
 const owner = <Id extends OperationId, E>(
   id: Id,
   prepare: (
     input: CanonicalInput<Id>,
     context: Context
-  ) => Effect.Effect<LocalMutationPreparation, E, SqliteClient>
+  ) => Effect.Effect<LocalMutationPlan, E, SqliteClient>
 ): readonly [string, Prepare] => [
   id,
   (input, context) =>
@@ -125,18 +125,15 @@ const decisionOwner = Effect.fn(function* (target: string, context: Context) {
 });
 
 const wakeAfterCapture = (
-  plan: LocalMutationPreparation,
+  plan: LocalMutationPlan,
   { current, storage }: Context
-): LocalMutationPreparation =>
-  "commit" in plan
-    ? {
-        ...plan,
-        commit: plan.commit.pipe(
-          Effect.tap(() => preserveStoreAlarm(storage, current + recurringDiscoveryIntervalMs)),
-          Effect.mapError(admissionFailure)
-        ),
-      }
-    : plan;
+): LocalMutationPlan => ({
+  ...plan,
+  commit: plan.commit.pipe(
+    Effect.tap(() => preserveStoreAlarm(storage, current + recurringDiscoveryIntervalMs)),
+    Effect.mapError(admissionFailure)
+  ),
+});
 
 const readOwner = <Id extends OperationId, E>(
   id: Id,
@@ -147,7 +144,7 @@ const readOwner = <Id extends OperationId, E>(
 ): readonly [string, Prepare] =>
   owner(id, (input, context) =>
     Effect.succeed(
-      prepareLocalWrite({
+      prepareLocalRead({
         targets: [],
         commit: read(input, context),
       })
@@ -270,17 +267,11 @@ const prepareCorrection = Effect.fnUntraced(function* ({
   user: UserId;
   current: number;
 }>) {
-  const preparation = yield* prepareLocalCorrection(
+  return yield* prepareLocalCorrection(
     { id: entry.id, input: { expectedRevision: entry.expectedRevision, changes } },
     user,
     current
   );
-
-  if (!("commit" in preparation)) {
-    return yield* Effect.die("correction preparation returned a result value");
-  }
-
-  return preparation;
 });
 
 const commitCorrections = Effect.fnUntraced(function* (plans: ReadonlyArray<LocalMutationPlan>) {
@@ -293,7 +284,7 @@ const commitCorrections = Effect.fnUntraced(function* (plans: ReadonlyArray<Loca
     status: 200,
     outcome: "success" as const,
     body: { data: { updated: plans.length }, next: [] },
-  };
+  } satisfies LocalMutationResult;
 });
 
 export const localBatchOwners = new Map<string, Prepare>([
@@ -508,7 +499,7 @@ const reviewEntry = Effect.fnUntraced(function* (
   const prepare = yield* Effect.fromNullishOr(localBatchOwners.get(operation.id));
   const plan = yield* prepare(child.input, context);
 
-  if (!("commit" in plan) || Option.isNone(plan.review)) {
+  if (Option.isNone(plan.review)) {
     return yield* new Cause.NoSuchElementError();
   }
 
@@ -528,7 +519,12 @@ export const localReviewBinding = Effect.fn(
   },
   Effect.catchIf(
     (error): error is CanonicalRejection => isCanonicalRejection(error),
-    () => Effect.fail(new Cause.NoSuchElementError())
+    (rejection) =>
+      Effect.logDebug({
+        component: "canonical-operations",
+        operation: "localReviewBinding",
+        outcome: rejection.code,
+      }).pipe(Effect.andThen(Effect.fail(new Cause.NoSuchElementError())))
   ),
   Effect.catchNoSuchElement,
   Effect.mapError(admissionFailure)

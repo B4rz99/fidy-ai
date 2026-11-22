@@ -26,6 +26,7 @@ import { renderDashboardView } from "../../../src/shell/dashboard/operations";
 import {
   CanonicalRejection,
   type LocalMutationResult,
+  canonicalRejectionStatus,
   notFoundRejection,
   validationRejection,
 } from "../../canonical-admission/contract";
@@ -55,10 +56,10 @@ const success = (data: Schema.Json): LocalMutationResult => ({
 
 const missing = (): CanonicalRejection =>
   new CanonicalRejection({
-    status: 404,
-    outcome: "success",
+    status: canonicalRejectionStatus.notFound,
+    audit: { kind: "accepted", outcome: "success" },
     code: "dashboard_uninitialized",
-    message: Option.some("Initialize your Dashboard explicitly, then read it again."),
+    wireMessage: Option.some("Initialize your Dashboard explicitly, then read it again."),
     fields: Option.none(),
     detail: Option.none(),
     next: [],

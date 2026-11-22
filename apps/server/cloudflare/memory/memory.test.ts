@@ -415,7 +415,11 @@ it("rolls back an earlier batch child when a later Memory write exceeds capacity
         operation: "memory.remember",
       });
       expect(yield* fromTestPromise(() => memoryTextRows(db, users[0]))).toHaveLength(6);
-      expect(yield* fromTestPromise(() => auditRows(db, users[0]))).toEqual(
+
+      const audits = yield* fromTestPromise(() => auditRows(db, users[0]));
+
+      expect(audits.filter((row) => row.outcome === "success")).toHaveLength(6);
+      expect(audits).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ operation: "memory.remember", outcome: "resource_limit" }),
         ])

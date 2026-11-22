@@ -4,10 +4,12 @@ import { stageChallenge } from "./local-challenge";
 import type {
   CanonicalRejection,
   LocalMutationOutcome,
-  LocalMutationPreparation,
+  LocalMutationPlan,
   LocalReviewFacts,
 } from "../../canonical-admission/contract";
+import { isCanonicalRejection } from "../../canonical-admission/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
+import { atomicBatchOperation } from "../../../src/shell/operations/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import {
@@ -29,12 +31,8 @@ import {
   prepareHostedBatchOwner,
   prepareHostedOwner,
 } from "../../canonical-operations/operations";
-import {
-  admitLocalRequest,
-  catchRejection,
-  commitLocalWrite,
-  encodeRejection,
-} from "../../canonical-admission/operations";
+import { admitLocalRequest, commitLocalWrite } from "../../canonical-admission/operations";
+import { catchRejection, encodeRejection } from "../../canonical-admission/rejection";
 import { type LocalTurn, channelAuthority } from "./local-turn";
 import { appendEntry, entryIdentity, liveTurn } from "./local-turn-store";
 import { AgentUnavailable } from "../contract";
@@ -93,13 +91,11 @@ const decodedOutcome = Effect.fn(function* (
 });
 
 const approve = Effect.fn(function* (
-  plan: LocalMutationPreparation,
+  plan: LocalMutationPlan,
   tool: HostedTextToolCall,
   { action, required }: { action: Action; required: boolean }
 ) {
   if (!required) return true;
-
-  if (!("commit" in plan)) return tool.operation === "operations.executeAtomicBatch";
 
   if (Option.isNone(plan.review)) return false;
   const fresh = yield* plan.review.value;
@@ -147,9 +143,14 @@ const describeBatchChild = Effect.fnUntraced(function* (
 
       if (Option.isNone(prepared)) return Option.none<Schema.Json>();
 
-      return yield* catchRejection(commitLocalWrite(prepared.value)).pipe(
-        Effect.map((result) =>
-          result.outcome === "success" ? Option.some(result.body) : Option.none<Schema.Json>()
+      return yield* commitLocalWrite(prepared.value).pipe(
+        Effect.map((result) => Option.some(result.body)),
+        Effect.catchIf(isCanonicalRejection, (rejection) =>
+          Effect.logDebug({
+            component: "agent",
+            operation: "describeBatchChild",
+            outcome: rejection.code,
+          }).pipe(Effect.as(Option.none<Schema.Json>()))
         )
       );
     }).pipe(
@@ -187,7 +188,7 @@ const ownerForTool = Effect.fnUntraced(function* (
   const context =
     action.commercial === undefined ? base : { ...base, commercial: action.commercial };
 
-  return operation.id === "operations.executeAtomicBatch"
+  return operation.id === atomicBatchOperation
     ? Option.some(
         yield* prepareHostedBatchOwner(input, {
           ...context,
@@ -207,7 +208,7 @@ const refusedOutcome = Effect.fn(function* (
 ) {
   if (
     operation.policy.agentConfirmation === "required" &&
-    tool.operation !== "operations.executeAtomicBatch"
+    tool.operation !== atomicBatchOperation
   ) {
     return failure("user_action_required");
   }

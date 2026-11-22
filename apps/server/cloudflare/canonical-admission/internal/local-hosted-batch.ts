@@ -8,7 +8,7 @@ import {
   CanonicalAdmissionUnavailable,
   type CanonicalOutcome,
   type LocalMutationPlan,
-  unfieldedValidationRejection,
+  validationRejection,
 } from "../contract";
 import {
   type Audit,
@@ -21,7 +21,7 @@ import {
 } from "./local-batch-plans";
 import { selectChildren } from "./local-batch";
 import { localStanding } from "./local-mutation";
-import { admissionFailure } from "./rejection";
+import { admissionFailure } from "../rejection";
 
 type HostedContext = Context & {
   turnId: string;
@@ -95,13 +95,13 @@ export const prepareHostedBatch = Effect.fn(function* (
   const payload = Schema.decodeUnknownOption(AtomicBatchAdmission)(input);
 
   if (Option.isNone(payload)) {
-    return yield* unfieldedValidationRejection("Invalid atomic batch input.");
+    return yield* validationRejection("Invalid atomic batch input.");
   }
 
   const wire = Schema.decodeUnknownOption(Schema.Array(Schema.Json))(payload.value.payload.calls);
 
   if (Option.isNone(wire)) {
-    return yield* unfieldedValidationRejection("Invalid atomic batch input.");
+    return yield* validationRejection("Invalid atomic batch input.");
   }
 
   const selected = selectChildren({
@@ -111,7 +111,7 @@ export const prepareHostedBatch = Effect.fn(function* (
   });
 
   if ("invalid" in selected) {
-    return yield* unfieldedValidationRejection("Invalid atomic batch input.");
+    return yield* validationRejection("Invalid atomic batch input.");
   }
 
   const audit = hostedAudit(context);
@@ -147,6 +147,7 @@ export const prepareHostedBatch = Effect.fn(function* (
       targets: [],
       removedTarget: Option.none(),
       premises: [],
+      writes: true,
       review: Option.some(
         reviewPlans(plans, context.describe).pipe(Effect.mapError(admissionFailure))
       ),

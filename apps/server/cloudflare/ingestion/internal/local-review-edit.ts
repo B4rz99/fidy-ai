@@ -7,7 +7,7 @@ import { prepareLocalWrite } from "../../canonical-admission/operations";
 import {
   CanonicalAdmissionUnavailable,
   type CanonicalRejection,
-  type LocalMutationPreparation,
+  type LocalMutationPlan,
   validationRejection,
 } from "../../canonical-admission/contract";
 import { prepareSourcedCapture } from "../../transactions/operations";
@@ -84,7 +84,7 @@ const completeReviewStatements = Effect.fnUntraced(function* (
 });
 
 const capturedTransaction = Effect.fnUntraced(function* (
-  capture: Option.Option<LocalMutationPreparation>
+  capture: Option.Option<LocalMutationPlan>
 ) {
   if (Option.isNone(capture)) return null;
 

@@ -1,5 +1,5 @@
 import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Context, Data, type Effect, Option, Predicate, type Schema } from "effect";
+import { Context, Data, type Effect, Option, Schema } from "effect";
 import { OperationAccessCaller } from "../../src/shell/canonical-policy/contract";
 import type { AccessTier } from "../../src/core/access-tier/contract";
 import { type FieldIssue } from "../../src/shell/public-http/contract";
@@ -20,6 +20,16 @@ export class CanonicalAdmissionUnavailable extends Data.TaggedError(
 
 export type CanonicalOutcome = "success" | "validation_failed" | "not_found" | "resource_limit";
 
+export type CanonicalRejectionOutcome = Exclude<CanonicalOutcome, "success">;
+
+export type CanonicalRejectionAudit =
+  | Readonly<{ kind: "rejected"; outcome: CanonicalRejectionOutcome }>
+  | Readonly<{ kind: "accepted"; outcome: "success" }>;
+
+export type CanonicalRejectionDetail =
+  | Readonly<{ kind: "rate_limited"; retryAfterSeconds: number }>
+  | Readonly<{ kind: "reauthentication"; userId: string }>;
+
 export const canonicalRejectionStatus = {
   badRequest: 400,
   unauthorized: 401,
@@ -35,36 +45,42 @@ export type CanonicalRejectionStatus =
 
 export class CanonicalRejection extends Data.TaggedError("CanonicalRejection")<{
   readonly status: CanonicalRejectionStatus;
-  readonly outcome: CanonicalOutcome;
+  readonly audit: CanonicalRejectionAudit;
   readonly code: ErrorCode;
-  readonly message: Option.Option<string>;
+  readonly wireMessage: Option.Option<string>;
   readonly fields: Option.Option<ReadonlyArray<typeof FieldIssue.Type>>;
-  readonly detail: Option.Option<Readonly<Record<string, Schema.Json>>>;
+  readonly detail: Option.Option<CanonicalRejectionDetail>;
   readonly next: ReadonlyArray<SuggestedOperation>;
   readonly batchChild: Option.Option<Readonly<{ index: number; operation: string }>>;
 }> {}
 
+const rejectionGuard = Schema.TaggedStruct("CanonicalRejection", {
+  status: Schema.Finite,
+  code: Schema.String,
+  audit: Schema.Unknown,
+});
+
 export const isCanonicalRejection = (value: unknown): value is CanonicalRejection =>
-  Predicate.isTagged("CanonicalRejection")(value);
+  Schema.is(rejectionGuard)(value);
 
 export const rejection = (
   detail: Readonly<{
     status: CanonicalRejectionStatus;
-    outcome: CanonicalOutcome;
+    outcome: CanonicalRejectionOutcome;
     code: ErrorCode;
     message: Option.Option<string>;
     fields: Option.Option<ReadonlyArray<typeof FieldIssue.Type>>;
-    extra: Option.Option<Readonly<Record<string, Schema.Json>>>;
+    detail: Option.Option<CanonicalRejectionDetail>;
     next: ReadonlyArray<SuggestedOperation>;
   }>
 ): CanonicalRejection =>
   new CanonicalRejection({
     status: detail.status,
-    outcome: detail.outcome,
+    audit: { kind: "rejected", outcome: detail.outcome },
     code: detail.code,
-    message: detail.message,
+    wireMessage: detail.message,
     fields: detail.fields,
-    detail: detail.extra,
+    detail: detail.detail,
     next: detail.next,
     batchChild: Option.none(),
   });
@@ -76,18 +92,18 @@ export const validationRejection = (message: string): CanonicalRejection =>
     code: "validation_failed",
     message: Option.some(message),
     fields: Option.some([]),
-    extra: Option.none(),
+    detail: Option.none(),
     next: [],
   });
 
-export const unfieldedValidationRejection = (message: string): CanonicalRejection =>
+export const bareValidationRejection = (message: string): CanonicalRejection =>
   rejection({
     status: canonicalRejectionStatus.badRequest,
     outcome: "validation_failed",
     code: "validation_failed",
     message: Option.some(message),
     fields: Option.none(),
-    extra: Option.none(),
+    detail: Option.none(),
     next: [],
   });
 
@@ -98,7 +114,7 @@ export const notFoundRejection = (message: string): CanonicalRejection =>
     code: "not_found",
     message: Option.some(message),
     fields: Option.none(),
-    extra: Option.none(),
+    detail: Option.none(),
     next: [],
   });
 
@@ -109,7 +125,7 @@ export const resourceLimitRejection = (message: string): CanonicalRejection =>
     code: "quota_exhausted",
     message: Option.some(message),
     fields: Option.none(),
-    extra: Option.none(),
+    detail: Option.none(),
     next: [],
   });
 
@@ -120,7 +136,7 @@ export const unauthenticatedRejection = (message: string): CanonicalRejection =>
     code: "unauthenticated",
     message: Option.some(message),
     fields: Option.none(),
-    extra: Option.none(),
+    detail: Option.none(),
     next: [],
   });
 
@@ -134,8 +150,16 @@ export const canonicalRequestProtection = {
   retryAfterSeconds: 1,
 } as const;
 
+export const canonicalSuccessStatus = {
+  ok: 200,
+  created: 201,
+} as const;
+
+export type CanonicalSuccessStatus =
+  (typeof canonicalSuccessStatus)[keyof typeof canonicalSuccessStatus];
+
 export type LocalMutationResult = Readonly<{
-  status: number;
+  status: CanonicalSuccessStatus;
   outcome: "success";
   body: Schema.Json;
 }>;
@@ -153,7 +177,6 @@ export type LocalMutationPlan = Readonly<{
   premises: ReadonlyArray<string>;
   targets: ReadonlyArray<string>;
   removedTarget: Option.Option<string>;
+  writes: boolean;
   commit: Effect.Effect<LocalMutationResult, CanonicalAdmissionFailure, SqliteClient>;
 }>;
-
-export type LocalMutationPreparation = LocalMutationResult | LocalMutationPlan;

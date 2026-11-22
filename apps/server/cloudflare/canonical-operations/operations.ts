@@ -34,7 +34,7 @@ import {
   isNativeAccountQuery,
   localCanonicalArguments,
   prepareHostedBatch,
-  prepareLocalWrite,
+  prepareLocalRead,
   readNativeAccountQuery,
   runLocalBatch,
   runLocalMutation,
@@ -355,7 +355,7 @@ export const prepareHostedOwner = Effect.fn(function* (
 ) {
   if (parameterizedReads.includes(operation.id)) {
     return Option.some(
-      prepareLocalWrite({
+      prepareLocalRead({
         targets: [],
         commit: Effect.gen(function* () {
           if (isNativeAccountQuery(operation.id)) {
@@ -372,7 +372,7 @@ export const prepareHostedOwner = Effect.fn(function* (
 
   if (read !== undefined) {
     return Option.some(
-      prepareLocalWrite({
+      prepareLocalRead({
         targets: [],
         commit: read(context.user),
       })

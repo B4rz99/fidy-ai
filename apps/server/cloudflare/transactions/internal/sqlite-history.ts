@@ -7,6 +7,7 @@ import { currentCategoryRelease, interpretCategory } from "../../../src/core/cat
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import { recordAuthorizedCall } from "../../../src/shell/audit/operations";
+import type { LocalMutationResult } from "../../canonical-admission/contract";
 import {
   admitLocalRequest,
   attachCanonicalStanding,
@@ -151,5 +152,5 @@ export const readLocalTransactionPage = Effect.fn(function* (request: Request, u
     status: 200,
     outcome: "success" as const,
     body: yield* Schema.encodeEffect(Schema.toCodecJson(TransactionListResponse))(records),
-  };
+  } satisfies LocalMutationResult;
 });

@@ -1,5 +1,6 @@
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { DisclosureSnapshot } from "../../src/shell/consent/contract";
+import { Budget } from "../../src/core/budgets/contract";
 import { HostedTurnProcessing, HostedTurnProposal } from "../../src/shell/agent/contract";
 import { native, nativeConnectionProfile, nativeHostedPlatform } from "../user-store.test-fixture";
 import { NodeFileSystem } from "@effect/platform-node";
@@ -9,6 +10,7 @@ import { expect } from "vitest";
 import {
   alice,
   bob,
+  category,
   history,
   nativeBrowserWrite,
   nativeTransactionJourney,
@@ -281,20 +283,7 @@ const verifyQueryTools = Effect.fnUntraced(function* (
   return false;
 });
 
-const nativeTurnJourney = Effect.fnUntraced(function* (
-  mode:
-    | "account"
-    | "planning"
-    | "ordinary"
-    | "confirm"
-    | "stale"
-    | "withdraw"
-    | "connection"
-    | "batch"
-    | "batch-stale"
-    | "batch-absent"
-    | "batch-capacity"
-) {
+const hostedSetup = Effect.fnUntraced(function* () {
   const create = yield* nativeHostedPlatform;
 
   const runtime = yield* create(undefined, [], {
@@ -320,10 +309,10 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
     disclosure
   );
 
-  const post = (subject: typeof alice, path: string, body: unknown): Effect.Effect<Response> =>
+  const send = (subject: typeof alice, path: string, body: unknown): Effect.Effect<Response> =>
     Effect.gen(function* () {
       const reply = yield* native(() =>
-        runtime.dispatchFetch("https://api.fidyapp.com/web/hosted-turns" + path, {
+        runtime.dispatchFetch("https://api.fidyapp.com" + path, {
           method: "POST",
           headers: {
             origin: "https://app.fidyapp.com",
@@ -331,18 +320,40 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
             "Fidy-Session-Binding": subject.session,
             "content-type": "application/json",
           },
-          body: JSON.stringify(body),
+          body: body === undefined ? null : JSON.stringify(body),
         })
       );
 
       return new Response(yield* native(() => reply.text()), { status: reply.status });
     });
 
+  const post = (subject: typeof alice, path: string, body: unknown): Effect.Effect<Response> =>
+    send(subject, "/web/hosted-turns" + path, body);
+
   const controls = yield* native(() =>
     runtime.getDurableObjectNamespace("CONTROL", "hosted-provider")
   );
 
   const provider = controls.getByName("provider");
+
+  return { owner, post, provider, runtime, send };
+});
+
+const nativeTurnJourney = Effect.fnUntraced(function* (
+  mode:
+    | "account"
+    | "planning"
+    | "ordinary"
+    | "confirm"
+    | "stale"
+    | "withdraw"
+    | "connection"
+    | "batch"
+    | "batch-stale"
+    | "batch-absent"
+    | "batch-capacity"
+) {
+  const { runtime, owner, provider, post } = yield* hostedSetup();
 
   const providerPath = {
     account: "waiting",
@@ -586,6 +597,260 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
   ).toEqual([{ original: 0 }]);
 });
 
+const turnCycle = Effect.fnUntraced(function* ({
+  post,
+  provider,
+  text,
+  tools,
+}: Readonly<{
+  post: (subject: typeof alice, path: string, body: unknown) => Effect.Effect<Response>;
+  provider: HostedProvider;
+  text: string;
+  tools: ReadonlyArray<Readonly<{ name: string; arguments: unknown }>>;
+}>) {
+  yield* native(() =>
+    provider.fetch("https://fixture.invalid/tools", {
+      method: "POST",
+      body: JSON.stringify(
+        tools.map((tool) => ({ name: tool.name, arguments: JSON.stringify(tool.arguments) }))
+      ),
+    })
+  );
+
+  const admitted = yield* post(alice, "", { text });
+  expect(admitted.status).toBe(202);
+
+  const identity = yield* Schema.decodeUnknownEffect(HostedTurnProcessing)(
+    yield* native(() => admitted.json())
+  );
+
+  const proposal = yield* Effect.retry(
+    Effect.gen(function* () {
+      const reply = yield* post(alice, "/progress", { turnId: identity.turnId });
+
+      return yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
+        yield* native(() => reply.json())
+      );
+    }),
+    { times: 50, schedule: Schedule.spaced("50 millis") }
+  );
+
+  const delivered = yield* post(alice, "/delivery", {
+    turnId: identity.turnId,
+    receipt: proposal.receipt,
+  });
+
+  expect(delivered.status).toBe(200);
+
+  return proposal;
+});
+
+const confirmCycle = Effect.fnUntraced(function* (
+  post: (subject: typeof alice, path: string, body: unknown) => Effect.Effect<Response>,
+  proposal: typeof HostedTurnProposal.Type
+) {
+  expect(proposal.confirmation?.command).toMatch(/^CONFIRMAR [a-f0-9]{64}$/u);
+
+  const confirmed = yield* post(alice, "", { text: proposal.confirmation?.command });
+
+  const accepted = yield* Schema.decodeUnknownEffect(HostedTurnProcessing)(
+    yield* native(() => confirmed.json())
+  );
+
+  const settled = yield* Effect.retry(
+    Effect.gen(function* () {
+      const reply = yield* post(alice, "/progress", { turnId: accepted.turnId });
+
+      return yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
+        yield* native(() => reply.json())
+      );
+    }),
+    { times: 50, schedule: Schedule.spaced("50 millis") }
+  );
+
+  const delivered = yield* post(alice, "/delivery", {
+    turnId: accepted.turnId,
+    receipt: settled.receipt,
+  });
+
+  expect(delivered.status).toBe(200);
+
+  return settled;
+});
+
+const budgetConfirmationJourney = Effect.fnUntraced(function* () {
+  const { owner, post, provider, send } = yield* hostedSetup();
+
+  const created = yield* send(alice, "/budgets", {
+    categoryId: category,
+    cap: { amount: "2000000", currency: "COP" },
+  });
+
+  expect(created.status).toBe(201);
+
+  const { data } = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({ data: Schema.toCodecJson(Budget) })
+  )(yield* native(() => created.json()));
+
+  yield* native(() => provider.fetch("https://fixture.invalid/release"));
+
+  const vivienda = "10000000-0000-4000-8000-000000000005";
+
+  const proposal = yield* turnCycle({
+    post,
+    provider,
+    text: "Cambia el presupuesto",
+    tools: [
+      {
+        name: "budgets__updateBudget",
+        arguments: {
+          params: { id: data.id },
+          payload: {
+            categoryId: vivienda,
+            cap: { amount: "9999999", currency: "COP" },
+            month: "2026-12",
+          },
+        },
+      },
+    ],
+  });
+
+  expect(proposal.text).toContain(
+    `Cambiar el presupuesto ${data.id}, categoría Otros, límite actual 2.000.000 pesos.`
+  );
+  expect(proposal.text).toContain(
+    "Nuevo presupuesto: Vivienda, de 9.999.999 pesos para diciembre de 2026"
+  );
+
+  yield* confirmCycle(post, proposal);
+
+  expect(yield* owner.exec("SELECT category_id,cap FROM budgets WHERE id=?", data.id)).toEqual([
+    { category_id: vivienda, cap: "2000000" },
+  ]);
+  expect(
+    yield* owner.exec(
+      "SELECT month,cap FROM budget_month_plan_records WHERE kind='cap' AND budget_id=?",
+      data.id
+    )
+  ).toEqual([{ month: "2026-12", cap: "9999999" }]);
+});
+
+const recurringConfirmationJourney = Effect.fnUntraced(function* () {
+  const { owner, post, provider } = yield* hostedSetup();
+  yield* preparePublishedSeries(owner);
+
+  yield* native(() => provider.fetch("https://fixture.invalid/release"));
+
+  const plan = {
+    name: "Arriendo",
+    kind: "expense",
+    currency: "COP",
+    amountMode: "fixed",
+    money: { amount: "1500000", currency: "COP" },
+    frequency: "monthly",
+    firstDate: "2026-12-01",
+    timeZone: "America/Bogota",
+    counterparty: "Inversiones Metrópolis",
+  };
+
+  const planId = "22460000-0000-4000-8000-000000000030";
+
+  const created = yield* turnCycle({
+    post,
+    provider,
+    text: "Sigue el arriendo",
+    tools: [
+      {
+        name: "recurringPlans__applyRecurringEdit",
+        arguments: {
+          payload: { edit: { kind: "create", id: planId, plan }, expectedRevision: 0 },
+        },
+      },
+    ],
+  });
+
+  expect(created.text).toContain("Crear el compromiso recurrente «Arriendo»");
+  expect(created.text).toContain("gasto, 1.500.000 pesos, cada mes, hora de Bogota");
+  expect(created.text).toContain("desde el 1 de diciembre de 2026, con «Inversiones Metrópolis»");
+  expect(created.text).toContain("No hará pagos por ti.");
+
+  yield* confirmCycle(post, created);
+
+  expect(
+    yield* owner.exec("SELECT revision FROM user_documents WHERE kind='recurring-plan'")
+  ).toEqual([{ revision: 1 }]);
+
+  const edited = yield* turnCycle({
+    post,
+    provider,
+    text: "Cambia el valor del arriendo",
+    tools: [
+      {
+        name: "recurringPlans__applyRecurringEdit",
+        arguments: {
+          payload: {
+            edit: {
+              kind: "edit",
+              planId,
+              date: "2027-01-01",
+              scope: "forward",
+              plan: { ...plan, money: { amount: "2000000", currency: "COP" } },
+            },
+            expectedRevision: 1,
+          },
+        },
+      },
+    ],
+  });
+
+  expect(edited.text).toContain("Cambiar «Arriendo» a partir de el 1 de enero de 2027");
+  expect(edited.text).toContain("Nuevos datos: «Arriendo»: gasto, 2.000.000 pesos, cada mes");
+
+  yield* confirmCycle(post, edited);
+
+  expect(
+    yield* owner.exec(
+      "SELECT from_date,json_extract(plan_json,'$.money.amount') AS amount FROM recurring_plan_revisions WHERE plan_id=? ORDER BY position",
+      planId
+    )
+  ).toEqual([
+    { from_date: "2026-12-01", amount: "1500000" },
+    { from_date: "2027-01-01", amount: "2000000" },
+  ]);
+
+  const dismissed = yield* turnCycle({
+    post,
+    provider,
+    text: "Oculta esa sugerencia",
+    tools: [
+      {
+        name: "recurringPlans__applyRecurringEdit",
+        arguments: {
+          payload: {
+            edit: {
+              kind: "suggestion",
+              seriesId: "40000000-0000-4000-8000-000000000001",
+              action: "dismiss",
+            },
+            expectedRevision: 2,
+          },
+        },
+      },
+    ],
+  });
+
+  expect(dismissed.text).toContain("Ocultar la sugerencia de «Merchant 001», por 10 pesos al mes");
+  expect(dismissed.text).toContain("No cancela servicios ni hace pagos.");
+
+  yield* confirmCycle(post, dismissed);
+
+  expect(
+    yield* owner.exec(
+      "SELECT json_extract(document_json,'$.suggestions[0].disposition') AS disposition FROM user_documents WHERE kind='recurring-plan'"
+    )
+  ).toEqual([{ disposition: "dismissed" }]);
+});
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "reads statement, digest and credential metadata under the admitted hosted Turn",
@@ -667,5 +932,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "continues hosted work through a failed Reminder recovery, permits unrelated work during inference, and preserves ordered Transcript and Compaction",
     () => nativeTurnJourney("ordinary")
+  );
+
+  test.effect(
+    "discloses the committed Budget category, cap and month in the hosted confirmation and commits them after redemption",
+    () => budgetConfirmationJourney()
+  );
+
+  test.effect(
+    "discloses the committed recurring plan, amount, cadence, counterparty and edit kind in the hosted confirmation and applies them after redemption",
+    () => recurringConfirmationJourney()
   );
 });

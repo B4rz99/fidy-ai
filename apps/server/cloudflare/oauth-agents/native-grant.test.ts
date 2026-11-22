@@ -400,7 +400,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           yield* native(() => ask.json())
         );
 
-        expect(firstReview.result.inputRequests.review.params.message).toContain("1000 COP");
+        expect(firstReview.result.inputRequests.review.params.message).toContain("1.000 pesos");
         yield* owner.exec(
           "UPDATE budgets SET cap='1200',updated_at_ms=updated_at_ms+1 WHERE id=?",
           id
@@ -413,7 +413,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           yield* native(() => refreshed.json())
         );
 
-        expect(secondReview.result.inputRequests.review.params.message).toContain("1200 COP");
+        expect(secondReview.result.inputRequests.review.params.message).toContain("1.200 pesos");
 
         const consumption = (): ReturnType<typeof owner.exec> =>
           owner.exec(

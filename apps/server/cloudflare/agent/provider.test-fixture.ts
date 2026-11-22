@@ -286,6 +286,7 @@ export class HostedProviderControl extends DurableObject<Environment> {
           this.requested = yield* Schema.decodeUnknownEffect(
             Schema.Array(Schema.Struct({ name: Schema.String, arguments: Schema.String }))
           )(yield* Effect.tryPromise(() => request.json()));
+          this.rounds = 0;
 
           return new Response(null, { status: 204 });
         })

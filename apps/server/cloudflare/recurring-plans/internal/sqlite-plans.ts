@@ -37,6 +37,7 @@ import {
 import { displayDocument } from "./display";
 import { linkedTransactionIds } from "./facts";
 import { validLinkedFulfillment, validPlanCategories } from "./mutation";
+import { recurringReview } from "./review";
 import {
   automaticFromFacts,
   matchingRange,
@@ -135,11 +136,7 @@ export const prepareLocalRecurringEdit = Effect.fn(function* (
 
   return prepareLocalWrite({
     targets: ["recurring-document"],
-    review: Effect.succeed({
-      revision: String(base.revision),
-      effect:
-        "Actualizar el seguimiento recurrente según la decisión explícita siguiente. No mueve dinero ni cancela servicios.",
-    }),
+    review: recurringReview({ base, edit, user }),
     commit: Effect.gen(function* () {
       yield* writeLocalDocument(user, base, next.value);
 

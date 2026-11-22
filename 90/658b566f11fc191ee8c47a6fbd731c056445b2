@@ -1,0 +1,63 @@
+apps/web/src/features/recurring/dev-fixtures.ts
+  s_1e2b4744deafe9::t_31d5a39511136e 346
+apps/server/src/core/recurring-plans/operations.ts
+  s_1e2b4744deafe9::t_46c0007369753f 573,575-576,578,580-581
+  s_1e2b4744deafe9::t_d0d7a079da9596 577,579
+  s_1e2b4744deafe9::t_33483c568b0cbc 561-571
+  s_1e2b4744deafe9::t_784954bd1a6423 587
+  s_1e2b4744deafe9::t_41bdf049bcbc2a 572,574
+  s_1e2b4744deafe9::t_ecaef56f33629e 588-590
+apps/web/src/features/recurring/FEATURE.md
+  s_1e2b4744deafe9::t_76c44b504aca09 90-96,98-104
+  s_1e2b4744deafe9::t_c16e611e5d9605 97
+apps/web/src/features/recurring/lifecycle.tsx
+  s_1e2b4744deafe9::t_0ec0c658dec65f 4,56,61,69
+  s_1e2b4744deafe9::t_517ce9c95dc6d2 6-10,12-16
+  s_1e2b4744deafe9::t_55c3d602b9ed53 11,17-42
+  s_1e2b4744deafe9::t_66ac02d42dd17a 62-68
+  s_1e2b4744deafe9::t_558b27c423af43 5
+apps/web/src/features/recurring/lifecycle.test.ts
+  s_1e2b4744deafe9::t_561fb630127976 42
+  s_1e2b4744deafe9::t_e2ff33c65923a7 4,28,48-58,65,72-102,112
+  s_1e2b4744deafe9::t_2477acd7affc5f 1-3,6-9,11-21,23-27,29-30,32-41,43-47,59-64,103-111,113-117
+  s_1e2b4744deafe9::t_126a66aa19b46c 10,31
+  s_1e2b4744deafe9::t_89f721a045b9c8 66,68-71
+  s_1e2b4744deafe9::t_38e068452d9a2d 22
+  s_1e2b4744deafe9::t_7ac5e968e5a586 67
+  s_1e2b4744deafe9::t_2a20e19dcdceae 5
+apps/web/src/features/recurring/feature.tsx
+  s_1e2b4744deafe9::t_14acbfde26ea56 234
+apps/server/src/core/recurring-plans/operations.test.ts
+  s_1e2b4744deafe9::t_09c13bc1bf9654 715
+  s_1e2b4744deafe9::t_0d9f9be53e71d7 764-767
+  s_1e2b4744deafe9::t_369c5c80c57ee9 797,803,809-816,818,822,828,834,840-841,846,852,858,864-867
+  s_1e2b4744deafe9::t_1b1b8ac4f7b457 763
+  s_1e2b4744deafe9::t_d6f1cc1951e937 786-791,805-808,817,839,842-845,847-851,853-857,859-860
+  s_1e2b4744deafe9::t_785a719dc01458 762,768-785
+  s_1e2b4744deafe9::t_a2eaba0d5aaa95 750,794-796,798-799,802,804,819-821,823-827,829-833,835-836,863,868
+  s_1e2b4744deafe9::t_f0a6a17c9bf30e 792-793,800-801,837-838,861-862
+  s_1e2b4744deafe9::t_75075681790b09 869-870
+apps/web/src/features/recurring/details.tsx
+  s_1e2b4744deafe9::t_98906ffa9122db 85,87-88,92-101,103,105-107,111-125
+  s_1e2b4744deafe9::t_76c44b504aca09 86,108-110
+apps/web/src/features/recurring/model.ts
+  s_1e2b4744deafe9::t_09ac2798f4ad16 90-97
+apps/web/src/features/recurring/management.tsx
+  s_1e2b4744deafe9::t_7b623241c441a0 518,524,527-530,536
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "90658b566f11fc191ee8c47a6fbd731c056445b2",
+  "prompts": {},
+  "sessions": {
+    "s_1e2b4744deafe9": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "flaxen-cheese",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

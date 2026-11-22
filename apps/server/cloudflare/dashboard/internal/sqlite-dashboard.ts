@@ -24,8 +24,9 @@ import type { CatalogOperation } from "../../../src/shell/canonical-catalog/cont
 import { DashboardUnavailable, DashboardView } from "../../../src/shell/dashboard/contract";
 import { renderDashboardView } from "../../../src/shell/dashboard/operations";
 import {
-  CanonicalRejection,
+  type CanonicalRejection,
   type LocalMutationResult,
+  acceptedReadRejection,
   canonicalRejectionStatus,
   notFoundRejection,
   validationRejection,
@@ -55,15 +56,13 @@ const success = (data: Schema.Json): LocalMutationResult => ({
 });
 
 const missing = (): CanonicalRejection =>
-  new CanonicalRejection({
+  acceptedReadRejection({
     status: canonicalRejectionStatus.notFound,
-    audit: { kind: "accepted", outcome: "success" },
     code: "dashboard_uninitialized",
     wireMessage: Option.some("Initialize your Dashboard explicitly, then read it again."),
     fields: Option.none(),
     detail: Option.none(),
     next: [],
-    batchChild: Option.none(),
   });
 
 const invalidEdit = (): CanonicalRejection => validationRejection("Invalid Dashboard edit.");

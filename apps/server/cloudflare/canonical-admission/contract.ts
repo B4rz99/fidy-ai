@@ -181,6 +181,27 @@ export const rejection = (
     batchChild: Option.none(),
   });
 
+export const acceptedReadRejection = (
+  detail: Readonly<{
+    status: CanonicalRejectionStatus;
+    code: ErrorCode;
+    wireMessage: Option.Option<string>;
+    fields: Option.Option<ReadonlyArray<typeof FieldIssue.Type>>;
+    detail: Option.Option<CanonicalRejectionDetail>;
+    next: ReadonlyArray<SuggestedOperation>;
+  }>
+): CanonicalRejection =>
+  new CanonicalRejection({
+    status: detail.status,
+    audit: { kind: "accepted", outcome: "success" },
+    code: detail.code,
+    wireMessage: detail.wireMessage,
+    fields: detail.fields,
+    detail: detail.detail,
+    next: Schema.decodeSync(NextOperations)(detail.next),
+    batchChild: Option.none(),
+  });
+
 export const validationRejection = (message: string): CanonicalRejection =>
   rejection({
     status: canonicalRejectionStatus.badRequest,

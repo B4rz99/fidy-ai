@@ -15,9 +15,10 @@ import { validateKeywordRuleChange } from "../../../src/core/categories/operatio
 import { normalizeSearchText } from "../../../src/core/search/operations";
 import type { UserId } from "../../../src/core/identity/contract";
 import {
-  CanonicalRejection,
+  type CanonicalRejection,
   CurrentSuggestionCaller,
   canonicalRejectionStatus,
+  rejection,
 } from "../../canonical-admission/contract";
 import type { SuggestedOperationCaller } from "../../../src/shell/canonical-operations/operations";
 import { toApiFailure } from "../../../src/shell/categories/operations";
@@ -62,25 +63,23 @@ const refusal = (
   const value = toApiFailure({ failure, caller });
 
   return Predicate.isTagged(value, "NotFound")
-    ? new CanonicalRejection({
+    ? rejection({
         status: canonicalRejectionStatus.notFound,
-        audit: { kind: "rejected", outcome: "not_found" },
+        outcome: "not_found",
         code: "not_found",
         wireMessage: Option.some(value.error.message),
         fields: Option.none(),
         detail: Option.none(),
         next: value.next,
-        batchChild: Option.none(),
       })
-    : new CanonicalRejection({
+    : rejection({
         status: canonicalRejectionStatus.badRequest,
-        audit: { kind: "rejected", outcome: "validation_failed" },
+        outcome: "validation_failed",
         code: "validation_failed",
         wireMessage: Option.some(value.error.message),
         fields: Option.some(value.error.fields),
         detail: Option.none(),
         next: value.next,
-        batchChild: Option.none(),
       });
 };
 

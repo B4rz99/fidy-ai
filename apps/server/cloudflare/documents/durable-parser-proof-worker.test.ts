@@ -9,9 +9,20 @@ const buildProof = (): Promise<string> =>
     target: "browser",
   }).then((built) => {
     const output = built.outputs[0];
+
     if (!built.success || output === undefined) throw new Error("Durable parser bundle failed");
+
     return output.text();
   });
+
+const parsedReply = Effect.fn(function* (
+  reply: Awaited<ReturnType<Miniflare["dispatchFetch"]>>,
+  index: number
+) {
+  expect(reply.status).toBe(200);
+  const value = yield* Effect.tryPromise(() => reply.json());
+  expect(value).toMatchObject({ outcome: "parsed", format: "csv", rowCount: index + 1 });
+});
 
 it.live(
   "authenticates synthetic parser work before forwarding to a real SQLite Durable Object",
@@ -20,6 +31,7 @@ it.live(
       const module = yield* Effect.tryPromise(buildProof);
       const name = "durable-parser-proof";
       const key = "synthetic-proof-key";
+
       const runtime = yield* Effect.acquireRelease(
         Effect.sync(
           () =>
@@ -50,12 +62,14 @@ it.live(
         ),
         (instance) => Effect.tryPromise(() => instance.dispose()).pipe(Effect.orDie)
       );
+
       const send = (proofKey: string, body: string): ReturnType<Miniflare["dispatchFetch"]> =>
         runtime.dispatchFetch("https://durable-parser.internal/statement", {
           method: "POST",
           headers: { "X-Xlsx-Proof-Key": proofKey },
           body,
         });
+
       const refused = yield* Effect.tryPromise(() => send("wrong", "Date,Amount\n2026-01-01,1"));
       expect(refused.status).toBe(404);
       const malformed = yield* Effect.tryPromise(() => send(key, ""));
@@ -64,16 +78,14 @@ it.live(
         outcome: "rejected",
         reason: "malformed-file",
       });
+
       const replies = yield* Effect.tryPromise(() =>
         Promise.all([
           send(key, "Date,Amount\n2026-01-01,1"),
           send(key, "Date,Amount\n2026-01-01,1\n2026-01-02,2"),
         ])
       );
-      for (const [index, reply] of replies.entries()) {
-        expect(reply.status).toBe(200);
-        const value = yield* Effect.tryPromise(() => reply.json());
-        expect(value).toMatchObject({ outcome: "parsed", format: "csv", rowCount: index + 1 });
-      }
+
+      yield* Effect.forEach(replies, parsedReply, { discard: true });
     })
 );

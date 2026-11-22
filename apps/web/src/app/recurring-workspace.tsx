@@ -11,9 +11,11 @@ import { useWorkspaceResume } from "./workspace-resume";
 
 export const RetainedRecurringWorkspace = (): JSX.Element => {
   const { authentication } = useSession();
+
   const privacy = useRouterState({
     select: (state) => state.location.pathname === "/settings/privacy",
   });
+
   return privacy || authentication === "expired" ? <></> : <VisitedRecurringWorkspace />;
 };
 
@@ -25,7 +27,9 @@ const VisitedRecurringWorkspace = (): JSX.Element => {
       select: (match) => (match.status === "success" ? match.search : undefined),
     })
   );
+
   const [previous, setPrevious] = useState(search);
+
   if (
     Option.isSome(search) &&
     !Option.exists(
@@ -36,10 +40,13 @@ const VisitedRecurringWorkspace = (): JSX.Element => {
   ) {
     setPrevious(search);
   }
+
   const current = Option.orElse(search, () => previous);
   const active = Option.isSome(search);
   const resume = useWorkspaceResume({ active, key: "recurring-resume" });
+
   if (Option.isNone(current)) return <></>;
+
   return (
     <div hidden={!active} inert={!active} ref={resume}>
       <Suspense fallback={<PendingRead label="Cargando recurrentes" />}>

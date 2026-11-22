@@ -1,4 +1,4 @@
-import type { ErasureProjection } from "../../erasure-store/contract";
+import { type ErasureProjection, ErasureQuiescence } from "../../erasure-store/contract";
 
 const storingInterruptionMs = 900000;
 
@@ -7,7 +7,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "ingestion_review_items",
     dataClass: "ingestion",
     dependencies: ["ingestion_review_state"],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM ingestion_review_items r WHERE r.source_kind<>'statement' AND r.user_id=?",
@@ -29,7 +29,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "ingestion_review_state",
     dataClass: "ingestion",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM ingestion_review_workspace_state r WHERE r.user_id=?",
@@ -50,7 +50,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "email_forwarding_addresses",
     dataClass: "ingestion",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM forwarding_addresses r WHERE r.user_id=?",
@@ -71,13 +71,12 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "forwarded_email_receipts",
     dataClass: "ingestion",
     dependencies: ["source_attestations", "ingestion_review_items"],
-    quiescence: {
-      _tag: "Durable",
+    quiescence: ErasureQuiescence.Durable({
       select: ({ current, userId }) => ({
         sql: "SELECT 1 FROM forwarded_email_receipts r WHERE r.user_id=? AND r.state IN('storing','queued') AND r.expires_at_ms>? AND (r.state='queued' OR r.received_at_ms>?) AND r.outcome IS NULL",
         params: [userId, current, current - storingInterruptionMs],
       }),
-    },
+    }),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM forwarded_email_receipts r WHERE r.user_id=?",
@@ -98,7 +97,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "media_submissions",
     dataClass: "ingestion",
     dependencies: ["media_submission_audit", "ingestion_review_items"],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM media_submissions r WHERE r.user_id=?",
@@ -119,7 +118,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "statement_backfill_entitlements",
     dataClass: "ingestion",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM statement_backfill_entitlements r WHERE r.user_id=?",
@@ -141,7 +140,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "statement_materializations",
     dataClass: "ingestion",
     dependencies: ["statement_materialization_parts"],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM statement_materializations r WHERE EXISTS(SELECT 1 FROM statement_submissions p WHERE p.id=r.submission_id AND p.user_id=?)",
@@ -163,7 +162,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "statement_materialization_parts",
     dataClass: "ingestion",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM statement_materialization_parts r WHERE EXISTS(SELECT 1 FROM statement_submissions p WHERE p.id=r.submission_id AND p.user_id=?)",
@@ -185,7 +184,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "statement_needs_review",
     dataClass: "ingestion",
     dependencies: ["ingestion_review_state"],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM statement_review_context r WHERE r.user_id=?",
@@ -206,7 +205,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "statement_record_outcomes",
     dataClass: "ingestion",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM statement_record_outcomes r WHERE r.user_id=?",
@@ -227,7 +226,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "statement_staging_objects",
     dataClass: "ingestion",
     dependencies: ["statement_submissions", "statement_whatsapp_documents"],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM statement_staging_objects r WHERE r.user_id=?",
@@ -254,13 +253,12 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       "statement_needs_review",
       "statement_record_outcomes",
     ],
-    quiescence: {
-      _tag: "Durable",
+    quiescence: ErasureQuiescence.Durable({
       select: ({ current, userId }) => ({
         sql: "SELECT 1 FROM statement_submissions s JOIN statement_staging_objects o ON o.id=s.staging_id WHERE s.user_id=? AND s.status IN('queued','processing') AND COALESCE(s.retention_expires_at_ms,o.expires_at_ms)>?",
         params: [userId, current],
       }),
-    },
+    }),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM statement_submissions r WHERE r.user_id=?",
@@ -281,7 +279,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "statement_whatsapp_documents",
     dataClass: "ingestion",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: ErasureQuiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,started_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL) r WHERE r.user_id=?",

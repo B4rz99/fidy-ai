@@ -1,24 +1,36 @@
 import { describe, expect, it } from "vitest";
 import {
+  type WorkerBindings,
   type WorkerResources,
   rollbackCompatible,
   verifiedVersionResources,
 } from "./rollback-compatibility";
 
-const worker = (
-  migrationTag: string,
-  bindings: Readonly<Record<string, unknown>>
-): WorkerResources => ({
+type VersionResponse = Readonly<{
+  success: true;
+  result: Readonly<{
+    id: string;
+    resources: Readonly<{
+      script: object;
+      script_runtime: object;
+      bindings: ReadonlyArray<object>;
+    }>;
+  }>;
+}>;
+
+const worker = (migrationTag: string, bindings: WorkerBindings): WorkerResources => ({
   runtime: {},
   migrationTag,
   bindings,
   exports: { Counter: { type: "durable-object", state: "created" } },
 });
+
 const base = {
   stable: worker("v1", { USER_STORE: { type: "durable_object_namespace" } }),
   candidate: worker("v1", { USER_STORE: { type: "durable_object_namespace" } }),
   workflowPaths: ["apps/server/cloudflare/subscription/runtime.ts"],
 };
+
 describe("rollback compatibility evidence", () => {
   it("accepts a code-only release with identical runtime resources", () => {
     expect(
@@ -35,6 +47,7 @@ describe("rollback compatibility evidence", () => {
     expect(rollbackCompatible({ ...base, changedPaths: ["infra/cloudflare/alchemy.run.ts"] })).toBe(
       false
     );
+
     for (const path of [
       ...base.workflowPaths,
       "infra/cloudflare/alchemy.storage.ts",
@@ -76,7 +89,8 @@ describe("rollback compatibility evidence", () => {
 it("compares immutable namespace IDs from the Worker Versions response before a code rollback", () => {
   const stable = "a".repeat(40);
   const candidate = "b".repeat(40);
-  const response = (revision: string, namespace: string, flip = false): unknown => {
+
+  const response = (revision: string, namespace: string, flip = false): VersionResponse => {
     const bindings = [
       {
         name: "USER_STORE",
@@ -86,6 +100,7 @@ it("compares immutable namespace IDs from the Worker Versions response before a 
       },
       { name: "RELEASE_GIT_SHA", type: "plain_text", text: revision },
     ];
+
     return {
       success: true,
       result: {
@@ -105,25 +120,31 @@ it("compares immutable namespace IDs from the Worker Versions response before a 
       },
     };
   };
+
   const version = "10000000-0000-4000-8000-000000000001";
+
   const established = verifiedVersionResources({
     raw: response(stable, "existing"),
     versionId: version,
     revision: stable,
   });
+
   const unchanged = verifiedVersionResources({
     raw: response(candidate, "existing", true),
     versionId: version,
     revision: candidate,
   });
+
   expect(
     rollbackCompatible({ ...base, stable: established, candidate: unchanged, changedPaths: [] })
   ).toBe(true);
+
   const replaced = verifiedVersionResources({
     raw: response(candidate, "replacement"),
     versionId: version,
     revision: candidate,
   });
+
   expect(
     rollbackCompatible({ ...base, stable: established, candidate: replaced, changedPaths: [] })
   ).toBe(false);

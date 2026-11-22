@@ -20,6 +20,7 @@ const advanced: StoreHistory = {
     },
   ],
 };
+
 export class Directory extends DurableObject<StoreReleaseEnvironment> {
   private readonly runtime;
   constructor(state: DurableObjectState, env: StoreReleaseEnvironment) {

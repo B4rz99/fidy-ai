@@ -1,4 +1,5 @@
-import { BackupRecoveryRotationPresentation, type RotationState } from "./view";
+import { BackupRecoveryRotationPresentation } from "./view";
+import { DisclosureState, RotationState } from "./view-state";
 import { RegistryContext, useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Option, Redacted } from "effect";
@@ -22,13 +23,9 @@ import { SensitiveClipboardBoundary } from "@/browser/use-sensitive-clipboard";
 import { authenticationEndedEvent } from "@/session/authentication-channel";
 import type { BackupRecoveryCode, FidyClient } from "@/transport/client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
-import { type RotateBackupRecoveryCommand, makeRotateCommand } from "./command";
+import { type RotateBackupRecoveryCommand, createRotateCommand } from "./command";
 
 const rotationUnresolved = Atom.make(false).pipe(Atom.keepAlive);
-
-type DisclosureState =
-  | Exclude<RotationState, { _tag: "Disclosed" }>
-  | Readonly<{ _tag: "Disclosed"; code: Redacted.Redacted<BackupRecoveryCode>; copied: boolean }>;
 
 type RotationViewProps = Readonly<{
   apiClient: FidyClient;
@@ -55,7 +52,10 @@ type RecoveryOwner = {
 };
 
 const publish = (owner: RecoveryOwner, next: DisclosureState): void => {
-  if (!owner.active) return;
+  if (!owner.active) {
+    return;
+  }
+
   owner.current = next;
   owner.setState(next);
 };
@@ -70,55 +70,75 @@ const confirmRotation = (
 ): void => {
   if (
     !owner.active ||
-    review._tag !== "Reviewing" ||
+    !DisclosureState.$is("Reviewing")(review) ||
     owner.current !== review ||
     operation.registry.get(rotationUnresolved)
   ) {
     return;
   }
-  const submitting = { _tag: "Rotating" } as const;
+
+  const submitting = DisclosureState.Rotating();
   operation.registry.set(rotationUnresolved, true);
   publish(owner, submitting);
+
   const complete = (next: DisclosureState): void => {
     if (owner.active && owner.current === submitting) {
-      if (next._tag !== "Uncertain") operation.registry.set(rotationUnresolved, false);
+      if (!DisclosureState.$is("Uncertain")(next)) {
+        operation.registry.set(rotationUnresolved, false);
+      }
+
       publish(owner, next);
-    } else if (next._tag === "Disclosed") Redacted.wipeUnsafe(next.code);
+    } else if (DisclosureState.$is("Disclosed")(next)) {
+      Redacted.wipeUnsafe(next.code);
+    }
   };
+
   operation.rotate({
-    onRotated: (code) => complete({ _tag: "Disclosed", code, copied: false }),
-    onUncertain: () => complete({ _tag: "Uncertain" }),
-    onUnauthenticated: () => complete({ _tag: "Unauthenticated" }),
-    onFreshSessionRequired: () => complete({ _tag: "FreshSessionRequired" }),
+    onRotated: (code) => complete(DisclosureState.Disclosed({ code, copied: false })),
+    onUncertain: () => complete(DisclosureState.Uncertain()),
+    onUnauthenticated: () => complete(DisclosureState.Unauthenticated()),
+    onFreshSessionRequired: () => complete(DisclosureState.FreshSessionRequired()),
   });
 };
 
 const mountRecoveryTask =
   (owner: RecoveryOwner, requiresObservation: boolean): RefCallback<HTMLDivElement> =>
   (node) => {
-    if (node === null) return;
+    if (node === null) {
+      return;
+    }
+
     owner.active = true;
-    if (owner.current._tag === "Disposed") {
-      owner.current = requiresObservation ? { _tag: "Uncertain" } : { _tag: "Idle" };
+
+    if (DisclosureState.$is("Disposed")(owner.current)) {
+      owner.current = requiresObservation ? DisclosureState.Uncertain() : DisclosureState.Idle();
       owner.setState(owner.current);
     }
+
     const dispose = (): void => {
       owner.active = false;
       const previous = owner.current;
-      owner.current = { _tag: "Disposed" };
+      owner.current = DisclosureState.Disposed();
       const copyRelease = owner.copyRelease;
       owner.copyRelease = Option.none();
-      if (previous._tag === "Disclosed") {
+
+      if (DisclosureState.$is("Disclosed")(previous)) {
         Redacted.wipeUnsafe(previous.code);
       }
-      if (Option.isSome(copyRelease)) copyRelease.value.release();
+
+      if (Option.isSome(copyRelease)) {
+        copyRelease.value.release();
+      }
     };
+
     const hide = (): void => {
       dispose();
-      owner.setState({ _tag: "Disposed" });
+      owner.setState(DisclosureState.Disposed());
     };
+
     window.addEventListener("pagehide", hide);
     window.addEventListener(authenticationEndedEvent, hide);
+
     return (): void => {
       dispose();
       window.removeEventListener("pagehide", hide);
@@ -126,48 +146,74 @@ const mountRecoveryTask =
     };
   };
 
+const beginReview = (owner: RecoveryOwner, unresolved: boolean): void => {
+  if (!owner.active || !DisclosureState.$is("Idle")(owner.current) || unresolved) {
+    return;
+  }
+
+  publish(owner, DisclosureState.Reviewing());
+};
+
+const rotationView = (state: DisclosureState): RotationState =>
+  DisclosureState.$is("Disclosed")(state)
+    ? RotationState.Disclosed({ copied: state.copied })
+    : state;
+
 const MountedRecoveryTask = ({ apiClient, clipboard }: RotationViewProps): JSX.Element => {
   const registry = useContext(RegistryContext);
+
   const [state, setState] = useState<DisclosureState>(() =>
-    registry.get(rotationUnresolved) ? { _tag: "Uncertain" } : { _tag: "Idle" }
+    registry.get(rotationUnresolved) ? DisclosureState.Uncertain() : DisclosureState.Idle()
   );
+
   const owner = useRef<RecoveryOwner>({
     current: state,
     copyRelease: Option.none(),
     active: false,
     setState,
   }).current;
+
   const lifecycleRef = useCallback<RefCallback<HTMLDivElement>>(
     (node) => mountRecoveryTask(owner, registry.get(rotationUnresolved))(node),
     [owner, registry]
   );
-  const [rotateAtom] = useState(() => makeRotateCommand({ apiClient }));
+
+  const [rotateAtom] = useState(() => createRotateCommand({ apiClient }));
   const rotate = useAtomSet(rotateAtom);
-  const review = (): void => {
-    if (!owner.active || owner.current._tag !== "Idle" || registry.get(rotationUnresolved)) return;
-    publish(owner, { _tag: "Reviewing" });
-  };
+
+  const review = (): void => beginReview(owner, registry.get(rotationUnresolved));
+
   const cancel = (): void => {
-    if (!owner.active || state._tag !== "Reviewing" || owner.current !== state) return;
-    publish(owner, { _tag: "Idle" });
+    if (!owner.active || !DisclosureState.$is("Reviewing")(state) || owner.current !== state) {
+      return;
+    }
+
+    publish(owner, DisclosureState.Idle());
   };
+
   const confirm = (): void => confirmRotation(owner, state, { registry, rotate });
+
   const copyCode = (): void => {
-    if (!owner.active || state._tag !== "Disclosed" || owner.current !== state) return;
+    if (!owner.active || !DisclosureState.$is("Disclosed")(state) || owner.current !== state) {
+      return;
+    }
+
     owner.copyRelease = Option.some(
       clipboard.copy(Redacted.value(state.code), () => {
-        if (owner.active && owner.current === state) publish(owner, { ...state, copied: true });
+        if (owner.active && owner.current === state) {
+          publish(owner, DisclosureState.Disclosed({ code: state.code, copied: true }));
+        }
       })
     );
   };
-  const view: RotationState =
-    state._tag === "Disclosed" ? { _tag: "Disclosed", copied: state.copied } : state;
 
   return (
     <div ref={lifecycleRef}>
       <BackupRecoveryRotationPresentation
-        state={view}
-        disclosure={state._tag === "Disclosed" ? <RecoveryDisclosure code={state.code} /> : null}
+        state={rotationView(state)}
+        disclosure={
+          DisclosureState.$is("Disclosed")(state) ? <RecoveryDisclosure code={state.code} /> : null
+        }
         onStart={review}
         onConfirm={confirm}
         onCancel={cancel}
@@ -179,6 +225,7 @@ const MountedRecoveryTask = ({ apiClient, clipboard }: RotationViewProps): JSX.E
 
 export const BackupRecoveryFeature = (): JSX.Element => {
   const router = useRouter();
+
   return (
     <SensitiveClipboardBoundary className={Option.none()} lifetime={sensitiveClipboardLifetime}>
       {(clipboard) => (

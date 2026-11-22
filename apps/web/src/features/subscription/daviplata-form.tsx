@@ -6,7 +6,7 @@ import { Redacted } from "effect";
 import { type FormEvent, type JSX, type RefCallback, useState } from "react";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
-import { type DaviplataStage, makeMountedDaviplata } from "./daviplata-task";
+import { type DaviplataStage, mountDaviplata } from "./daviplata-task";
 import {
   type EnrollmentGateway,
   type PaymentSubmission,
@@ -22,14 +22,18 @@ import { DaviplataAuthorizationLock } from "./daviplata-activity";
 import { PaymentFeedback } from "./workspace";
 
 type Stage = DaviplataStage;
+
 type FormProps = Readonly<{
   enrollment: PreparedEnrollment;
   start: EnrollmentGateway["startDaviplata"];
   onSubmitted: (email: string, submission: PaymentSubmission) => void;
   onUncertain: () => void;
 }>;
+
 type DocumentFields = Readonly<{ documentNumber: string; productNumber: string }>;
+
 const emptyFields: DocumentFields = { documentNumber: "", productNumber: "" };
+
 const digitsOnly = (value: string): string => value.replace(/\D/gu, "");
 
 const DocumentForm = ({
@@ -74,6 +78,7 @@ const DocumentForm = ({
     </label>
   </fieldset>
 );
+
 const OtpForm = ({
   otp,
   change,
@@ -118,6 +123,7 @@ const OtpForm = ({
     </div>
   </>
 );
+
 const OutcomeMessage = ({
   stage,
   retry,
@@ -156,11 +162,13 @@ type Draft = Readonly<{
   decisions: EnrollmentDecisions;
   setDecisions: (decisions: EnrollmentDecisions) => void;
 }>;
+
 const useDraft = (emailValue: string): Draft => {
   const [fields, setFields] = useState(emptyFields);
   const [email, setEmail] = useState(emailValue);
   const [otp, setOtp] = useState("");
   const [decisions, setDecisions] = useState(emptyDecisions);
+
   return {
     fields,
     setFields,
@@ -172,6 +180,7 @@ const useDraft = (emailValue: string): Draft => {
     setDecisions,
   };
 };
+
 type Commands = Readonly<{
   stage: Stage;
   lifetimeRef: RefCallback<HTMLFormElement>;
@@ -180,12 +189,14 @@ type Commands = Readonly<{
   retry: () => void;
   cancel: () => void;
 }>;
+
 const useMountedDaviplata = (props: FormProps): Draft & Commands => {
   const draft = useDraft(props.enrollment.billingEmail);
   const [stage, setStage] = useState<Stage>("fields");
   const lock = useAtomSet(DaviplataAuthorizationLock.use());
+
   const [task] = useState(() =>
-    makeMountedDaviplata({
+    mountDaviplata({
       ...props,
       lock,
       publish: (next) => {
@@ -193,33 +204,40 @@ const useMountedDaviplata = (props: FormProps): Draft & Commands => {
           draft.setOtp("");
           draft.setFields(emptyFields);
         }
+
         setStage(next);
       },
     })
   );
+
   const [lifetimeRef] = useState<RefCallback<HTMLFormElement>>(
     () =>
       (
         node: Parameters<RefCallback<HTMLFormElement>>[0]
       ): ReturnType<RefCallback<HTMLFormElement>> => {
         if (node === null) return;
+
         return task.mount();
       }
   );
+
   return {
     ...draft,
     stage,
     lifetimeRef,
     submit: (event) => {
       event.preventDefault();
+
       if (stage === "fields") {
         if (!allDecisionsAccepted(draft.decisions)) return;
+
         const fields = {
           email: draft.email,
           decisions: draft.decisions,
           documentNumber: Redacted.make(draft.fields.documentNumber),
           productNumber: Redacted.make(draft.fields.productNumber),
         };
+
         draft.setFields(emptyFields);
         task.begin(fields);
       } else {
@@ -241,9 +259,12 @@ const useMountedDaviplata = (props: FormProps): Draft & Commands => {
 
 const authorizationBusy = (stage: Stage): boolean =>
   stage === "sending" || stage === "confirming" || stage === "retrying-submission";
+
 const awaitingOtp = (stage: Stage): boolean => stage === "otp" || stage === "confirming";
+
 const cancellableStage = (stage: Stage): boolean =>
   stage === "otp" || stage === "submission-retry" || authorizationBusy(stage);
+
 const AuthorizationProgress = ({ stage }: Readonly<{ stage: Stage }>): JSX.Element => (
   <>
     {stage === "sending" ? <output>Solicitando código a Wompi…</output> : null}
@@ -275,6 +296,7 @@ const AuthorizationNotes = (): JSX.Element => (
 
 export const DaviplataEnrollmentForm = (props: FormProps): JSX.Element => {
   const interaction = useMountedDaviplata(props);
+
   const [mountForm] = useState<RefCallback<HTMLFormElement>>(
     () =>
       (
@@ -282,8 +304,10 @@ export const DaviplataEnrollmentForm = (props: FormProps): JSX.Element => {
       ): ReturnType<RefCallback<HTMLFormElement>> =>
         interaction.lifetimeRef(node)
   );
+
   const { stage } = interaction;
   const busy = authorizationBusy(stage);
+
   return (
     <form ref={mountForm} className="subscription-form" onSubmit={interaction.submit}>
       {stage === "fields" ? (

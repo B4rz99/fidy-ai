@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const script = fileURLToPath(new URL("./check-kapso-launch.sh", import.meta.url));
+
 const ready = {
   reviewedAt: "2026-10-01",
   reviewer: "operator",
@@ -33,12 +34,16 @@ const ready = {
   onboardingRevision: "onboarding-2026-10-08-providers",
 };
 
-const check = (evidence: unknown): { readonly code: number; readonly output: string } => {
+type LaunchCheck = { readonly code: number; readonly output: string };
+
+const check = (evidence: unknown): LaunchCheck => {
   const directory = mkdtempSync(join(tmpdir(), "kapso-gate-"));
+
   try {
     const path = join(directory, "evidence.json");
     writeFileSync(path, JSON.stringify(evidence));
     const result = spawnSync("bash", [script, path], { encoding: "utf8" });
+
     return { code: result.status ?? 1, output: `${result.stdout}${result.stderr}` };
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -53,11 +58,14 @@ describe("Kapso production launch check", () => {
         "utf8"
       )
     );
+
     expect(check(evidence).code).toBe(1);
+
     const workflow = readFileSync(
       new URL("../../../.github/workflows/native-storage-release.yml", import.meta.url),
       "utf8"
     );
+
     expect(workflow).not.toContain("bash infra/cloudflare/scripts/check-kapso-launch.sh");
   });
 

@@ -24,20 +24,22 @@ import {
 } from "./operations";
 
 const maximumPrivateKeyLength = 20000;
+
 const maximumProfileLength = 8192;
+
 const workerSecureRandom = SecureRandom.make((size) =>
   crypto.getRandomValues(new Uint8Array(size))
 );
-const workerDigest = Effect.runSync(Digest.Digest.pipe(Effect.provide(Digest.layerWebCrypto)));
 
-const withSandboxClient = <A, E>(
+const withSandboxClient = <A, E, R>(
   environment: BancolombiaSandboxEnvironment,
-  run: (input: Parameters<typeof authenticateBancolombiaSandbox>[0]) => Effect.Effect<A, E>
-): Effect.Effect<A, E | BancolombiaAuthenticationFailed> =>
+  run: (input: Parameters<typeof authenticateBancolombiaSandbox>[0]) => Effect.Effect<A, E, R>
+): Effect.Effect<A, E | BancolombiaAuthenticationFailed, R> =>
   Effect.gen(function* () {
     const binding = environment.BANCOLOMBIA_SANDBOX_MTLS;
     const clientId = environment.BANCOLOMBIA_SANDBOX_CLIENT_ID;
     const key = environment.BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM;
+
     if (
       binding === undefined ||
       clientId === undefined ||
@@ -48,16 +50,21 @@ const withSandboxClient = <A, E>(
     ) {
       return yield* new BancolombiaAuthenticationFailed({ stage: "bancolombia_configuration" });
     }
+
     const fetch: typeof globalThis.fetch = Object.assign(
       (input: string | URL | Request, init?: RequestInit) => binding.fetch(input, init),
       { preconnect: globalThis.fetch.preconnect }
     );
+
     const services = yield* Layer.build(OutboundHttpLive).pipe(
       Effect.provideService(FetchHttpClient.Fetch, fetch)
     );
+
+    const digest = Context.get(yield* Layer.build(Digest.layerWebCrypto), Digest.Digest);
+
     return yield* run({
       secureRandom: workerSecureRandom,
-      digest: workerDigest,
+      digest,
       clientId,
       privateKey: Redacted.make(key),
       publicKey: sandboxPublicKey,
@@ -96,13 +103,15 @@ const prepareProfile = (
 ): ReturnType<ConnectionBankPreparation["prepare"]> =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
+
     if (
       request.userId !== profile.userId ||
       now < profile.admission.startsAt.epochMilliseconds ||
       now >= profile.admission.expiresAt.epochMilliseconds
     ) {
-      return yield* new ConnectionAuthorizationUnavailable();
+      return yield* new ConnectionAuthorizationUnavailable({ cause: undefined });
     }
+
     return yield* withSandboxClient(environment, (client) =>
       authorizeBancolombiaSandbox({
         ...client,
@@ -115,12 +124,12 @@ const prepareProfile = (
         recordConsent: (consentId) =>
           request
             .recordConsent(consentId)
-            .pipe(Effect.mapError(() => new BancolombiaAuthorizationFailed())),
+            .pipe(Effect.mapError((cause) => new BancolombiaAuthorizationFailed({ cause }))),
       })
-    ).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable()));
+    ).pipe(Effect.mapError((cause) => new ConnectionAuthorizationUnavailable({ cause })));
   });
 
-export const makeBancolombiaSandboxPreparation = (
+export const bancolombiaSandboxPreparation = (
   input: Readonly<{ environment: BancolombiaSandboxEnvironment; userId: string }>
 ): Option.Option<ConnectionBankPreparation> =>
   Option.filter(
@@ -140,13 +149,15 @@ const activateProfile = (
 ): ReturnType<ConnectionBankActivation["activate"]> =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
+
     if (
       request.userId !== profile.userId ||
       now < profile.admission.startsAt.epochMilliseconds ||
       now >= profile.admission.expiresAt.epochMilliseconds
     ) {
-      return yield* new ConnectionAuthorizationUnavailable();
+      return yield* new ConnectionAuthorizationUnavailable({ cause: undefined });
     }
+
     return yield* withSandboxClient(environment, (client) =>
       activateBancolombiaSandbox({
         ...client,
@@ -158,12 +169,12 @@ const activateProfile = (
         retainGrant: (grant) =>
           request
             .retainGrant(grant)
-            .pipe(Effect.mapError(() => new BancolombiaAuthorizationFailed())),
+            .pipe(Effect.mapError((cause) => new BancolombiaAuthorizationFailed({ cause }))),
       })
     );
-  }).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable()));
+  }).pipe(Effect.mapError((cause) => new ConnectionAuthorizationUnavailable({ cause })));
 
-export const makeBancolombiaSandboxActivation = (
+export const bancolombiaSandboxActivation = (
   input: Readonly<{ environment: BancolombiaSandboxEnvironment; userId: string }>
 ): Option.Option<ConnectionBankActivation> =>
   Option.filter(
@@ -176,13 +187,15 @@ export const makeBancolombiaSandboxActivation = (
     }))
   );
 
-export const makeBancolombiaSandboxCleanup = (
+export const bancolombiaSandboxCleanup = (
   environment: BancolombiaSandboxEnvironment
 ): Option.Option<ConnectionBankCleanup> => {
   const clientId = environment.BANCOLOMBIA_SANDBOX_CLIENT_ID;
+
   if (clientId === undefined || !Schema.is(Schema.String.check(Schema.isUUID()))(clientId)) {
     return Option.none();
   }
+
   return Option.some({
     clientId,
     revoke: (input) =>
@@ -195,9 +208,9 @@ export const makeBancolombiaSandboxCleanup = (
             recordActive: (tokenType) =>
               input
                 .recordActive(tokenType)
-                .pipe(Effect.mapError(() => new BancolombiaAuthorizationFailed())),
+                .pipe(Effect.mapError((cause) => new BancolombiaAuthorizationFailed({ cause }))),
           }),
         })
-      ).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable())),
+      ).pipe(Effect.mapError((cause) => new ConnectionAuthorizationUnavailable({ cause }))),
   });
 };

@@ -1,14 +1,13 @@
+import type { Schema } from "effect";
+
 type Forward = (request: Request) => Promise<Response>;
+
 type BrowserOptions = Readonly<{
   forwardWeb: Forward;
   network: "ordinary";
   observations: number;
   turn: (index: number, action: () => Promise<void>) => Promise<void>;
-  afterRequest: (
-    route: string,
-    response: Response,
-    event: Readonly<Record<string, unknown>>
-  ) => Promise<void>;
+  afterRequest: (route: string, response: Response, event: Schema.JsonObject) => Promise<void>;
 }>;
 
 export function runBrowser(

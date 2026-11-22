@@ -11,21 +11,22 @@ import {
 
 import {
   keywordRuleIdFromPath as decodeRuleId,
-  keywordRuleInput as decodeRuleInput,
   keywordRuleUnknownId as unknownRuleId,
 } from "./internal/canonical-keyword-rules";
-
-export const keywordRuleInput: typeof decodeRuleInput = (input) => decodeRuleInput(input);
 
 export const keywordRuleIdFromPath: typeof decodeRuleId = (input) => decodeRuleId(input);
 
 export const keywordRuleUnknownId = (): Response => unknownRuleId();
 
 export const categorizeLocalCapture: typeof nativeCategory = (input) => nativeCategory(input);
+
 export const localKeywordRules: typeof listRules = (user) => listRules(user);
+
 export const newKeywordRuleId: typeof allocateRuleId = () => allocateRuleId();
+
 export const prepareLocalKeywordRule: typeof prepareRule = (command, user, current) =>
   prepareRule(command, user, current);
 
 export const resolveLocalCategory: typeof resolveCategory = (input) => resolveCategory(input);
+
 export const retainLocalCategory: typeof retainCategory = (reference) => retainCategory(reference);

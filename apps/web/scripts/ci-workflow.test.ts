@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 const repositoryRoot = `${process.cwd()}/../..`;
+
 const checksWorkflow = await Bun.file(`${repositoryRoot}/.github/workflows/ci.yml`).text();
+
 describe("pull-request checks workflow policy", () => {
   it("builds the application without uploading or deploying a PR preview artifact", () => {
     const buildsJob = checksWorkflow.slice(
@@ -12,6 +14,7 @@ describe("pull-request checks workflow policy", () => {
     expect(buildsJob).toContain("bun run verify -- --group builds");
     expect(buildsJob).not.toContain("upload-artifact");
     expect(checksWorkflow).not.toContain("build:preview");
+
     return Bun.file(`${repositoryRoot}/.github/workflows/preview.yml`)
       .exists()
       .then((exists) => expect(exists).toBe(false));
@@ -38,10 +41,12 @@ describe("pull-request checks workflow policy", () => {
       checksWorkflow.indexOf("\n  cli-native-package:\n"),
       checksWorkflow.indexOf("\n  cli-native:\n")
     );
+
     const nativeJob = checksWorkflow.slice(
       checksWorkflow.indexOf("\n  cli-native:\n"),
       checksWorkflow.indexOf("\n  required-checks:\n")
     );
+
     const requiredJob = checksWorkflow.slice(checksWorkflow.indexOf("\n  required-checks:\n"));
 
     expect(packageJob).toContain("runs-on: ubuntu-latest");
@@ -61,6 +66,7 @@ describe("pull-request checks workflow policy", () => {
 
   it("runs mutation testing weekly on Sundays without blocking pull requests", () => {
     expect(checksWorkflow).not.toContain("test:mutation");
+
     return Bun.file(`${repositoryRoot}/.github/workflows/mutation.yml`)
       .text()
       .then((workflow) => {
@@ -77,6 +83,9 @@ describe("pull-request checks workflow policy", () => {
     );
 
     expect(externalActions.length).toBeGreaterThan(0);
-    for (const action of externalActions) expect(action[2]).toMatch(/^[0-9a-f]{40}$/u);
+
+    for (const action of externalActions) {
+      expect(action[2]).toMatch(/^[0-9a-f]{40}$/u);
+    }
   });
 });

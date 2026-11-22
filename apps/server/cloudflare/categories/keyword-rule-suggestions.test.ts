@@ -26,6 +26,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         scopes: ["write"],
         current: yield* Clock.currentTimeMillis,
       });
+
       const update = (headers: Record<string, string>): Promise<Response> =>
         db.send(
           new Request(
@@ -44,22 +45,29 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }
           )
         );
+
       const denied = yield* native(() => update({ authorization: "Bearer " + token }));
       expect(denied.status).toBe(404);
+
       const denial = yield* Schema.decodeUnknownEffect(RefusalBody)(
         yield* native(() => denied.json())
       );
+
       expect(denial.next).toEqual([]);
+
       const advised = yield* native(() =>
         update({
           cookie: "__Host-fidy_session=" + alice.bearer,
           "Fidy-Session-Binding": alice.session,
         })
       );
+
       expect(advised.status).toBe(404);
+
       const advice = yield* Schema.decodeUnknownEffect(RefusalBody)(
         yield* native(() => advised.json())
       );
+
       expect(advice.next).toEqual([{ tool: "categories.listKeywordRules" }]);
     })
   );

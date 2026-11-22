@@ -1,25 +1,33 @@
 import { statusDeliveryUrl } from "../whatsapp/contract";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Clock, DateTime, Effect, Schedule, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Schedule, Schema } from "effect";
 import { expect } from "vitest";
 import { alice, seed } from "../financial-user-store.test-fixture";
 import { native, nativeHostedPlatform } from "../user-store.test-fixture";
 import { ownerCheckUrl } from "../maintenance/contract";
+import type { WhatsAppLifecycleWork } from "../whatsapp/contract";
+
+const LifecycleWire = Data.taggedEnum<typeof WhatsAppLifecycleWork.Encoded>();
 
 const testReminder = Effect.fn(function* (beforeClaim: boolean, attention: boolean = false) {
   const create = yield* nativeHostedPlatform,
     runtime = yield* create();
+
   const owner = yield* seed(runtime, alice);
   const current = yield* DateTime.now;
   const zone = DateTime.formatIso(current).slice(11, 13);
   const offset = 12 - Number(zone);
+
   const timeZone =
     offset === 0 ? "Etc/UTC" : "Etc/GMT" + (offset > 0 ? "-" : "+") + String(Math.abs(offset));
+
   const schedule = "22460000-0000-4000-8000-000000000001",
     grant = "22460000-0000-4000-8000-000000000002";
+
   const minute = DateTime.getPartUtc(current, "minute"),
     due = DateTime.startOf(current, "minute");
+
   const snapshot = {
     id: schedule,
     version: 1,
@@ -31,6 +39,7 @@ const testReminder = Effect.fn(function* (beforeClaim: boolean, attention: boole
     timing: { hour: 12, minute },
     nextScheduledAt: DateTime.formatIso(due),
   };
+
   yield* owner.exec(
     "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms) VALUES(?,?,'processing_grant',?)",
     schedule,
@@ -60,30 +69,36 @@ const testReminder = Effect.fn(function* (beforeClaim: boolean, attention: boole
     grant
   );
   const users = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
+
   const check = Effect.fnUntraced(function* () {
     return yield* native(() =>
       users.getByName(alice.user).fetch(ownerCheckUrl, { method: "POST" })
     );
   });
+
   if (beforeClaim) {
     yield* owner.exec(
       "CREATE TRIGGER withdraw_at_reserve AFTER INSERT ON whatsapp_deliveries BEGIN UPDATE proactive_grants SET revoked_at_ms=1 WHERE user_id=NEW.user_id; END"
     );
   }
+
   if (attention) {
     yield* owner.exec(
       "INSERT INTO reminder_attention(grant_id,unanswered,last_reply_ms) VALUES(?,2,0)",
       grant
     );
   }
+
   const checked = yield* check();
   expect(checked.status).toBe(204);
+
   const message = yield* Effect.retry(
     Effect.gen(function* () {
       const [row] = yield* owner.exec(
         "SELECT operation_id,correlation,original_deadline_ms,state FROM whatsapp_deliveries WHERE user_id=? AND family='proactivity'",
         alice.user
       );
+
       return yield* Schema.decodeUnknownEffect(
         Schema.Struct({
           operation_id: Schema.String,
@@ -95,14 +110,15 @@ const testReminder = Effect.fn(function* (beforeClaim: boolean, attention: boole
     }),
     { times: 80, schedule: Schedule.spaced("75 millis") }
   );
-  if (attention) {
+
+  yield* Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
+
     const body = {
       userId: alice.user,
       operationId: message.operation_id,
       family: "proactivity",
-      evidence: {
-        _tag: "WhatsAppLifecycleEvent",
+      evidence: LifecycleWire.WhatsAppLifecycleEvent({
         portfolio: "123456789012345",
         recipientUserId: "CO.13491208655302741918",
         correlationToken: message.correlation,
@@ -111,8 +127,9 @@ const testReminder = Effect.fn(function* (beforeClaim: boolean, attention: boole
         outcome: "delivered",
         occurredAtMs: now,
         receivedAtMs: now,
-      },
+      }),
     };
+
     const proof = Effect.fnUntraced(function* () {
       return yield* native(() =>
         users
@@ -120,6 +137,7 @@ const testReminder = Effect.fn(function* (beforeClaim: boolean, attention: boole
           .fetch(statusDeliveryUrl, { method: "POST", body: JSON.stringify(body) })
       );
     });
+
     expect((yield* proof()).status).toBe(204);
     expect((yield* proof()).status).toBe(204);
     expect(
@@ -129,14 +147,17 @@ const testReminder = Effect.fn(function* (beforeClaim: boolean, attention: boole
     ).toEqual([{ unanswered: 3, asked: 1 }]);
     expect(yield* owner.exec("SELECT count(*) AS n FROM reminder_disclosures")).toEqual([{ n: 1 }]);
     expect(yield* owner.exec("SELECT count(*) AS n FROM proactive_transcript")).toEqual([{ n: 1 }]);
-    return;
-  }
+  }).pipe(Effect.when(Effect.succeed(attention)));
+
+  if (attention) return;
+
   yield* owner.exec(
     "UPDATE proactive_grants SET revoked_at_ms=? WHERE id=?",
     current.epochMilliseconds,
     grant
   );
   yield* check();
+
   const replay = yield* native(() =>
     users.getByName(alice.user).fetch("https://coordinator/proactivity-work", {
       method: "POST",
@@ -149,19 +170,24 @@ const testReminder = Effect.fn(function* (beforeClaim: boolean, attention: boole
       }),
     })
   );
+
   expect(replay.status).toBe(200);
+
   const controls = yield* native(() =>
     runtime.getDurableObjectNamespace("CONTROL", "hosted-provider")
   );
+
   const report = yield* native(() =>
     controls.getByName("provider").fetch("https://fixture.invalid/sends")
   );
+
   expect(yield* native(() => report.json())).toMatchObject({
     sends: Number(!beforeClaim),
     correlation: beforeClaim ? "" : message.correlation,
   });
   expect(message.original_deadline_ms).toBe(due.epochMilliseconds + 86400000);
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "counts a verified Reminder only once and asks after three unanswered deliveries",

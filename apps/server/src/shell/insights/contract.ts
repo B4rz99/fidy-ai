@@ -14,6 +14,7 @@ import { NotFound, OperationResponse, ValidationFailed } from "~/shell/public-ht
 import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 
 const InsightParams = Schema.Struct({ id: InsightEventId });
+
 const InsightOperationFailures = [NotFound, ValidationFailed] as const;
 
 export const DeliveredInsight = Schema.Struct({

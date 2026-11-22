@@ -16,13 +16,15 @@ import { type NativeBinding, NativeBindings, requireSuccessorCoreBindings } from
 import { requireClosedBindings } from "./storage-installation";
 
 const pinId = "76a38a57-13ac-41e9-9004-0e1e1bf41d98";
+
 const pinFetch: typeof fetch = Object.assign(
   (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const url = new URL(input instanceof Request ? input.url : input);
+    const url = new URL(new Request(input).url);
     expect(url.pathname).toBe(
       "/client/v4/accounts/" + "0".repeat(32) + "/access/identity_providers"
     );
     expect(init?.method).toBe("GET");
+
     return Promise.resolve(
       Response.json({
         success: true,
@@ -34,20 +36,26 @@ const pinFetch: typeof fetch = Object.assign(
   },
   { preconnect: fetch.preconnect }
 );
+
 const expectedSigner = (worker: string, enabled: boolean): boolean => worker === "Core" && enabled;
+
 const rehearsalKey = Effect.gen(function* () {
   const pair = yield* Effect.tryPromise(() =>
     crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"])
   );
+
   const spki = yield* Effect.tryPromise(() => crypto.subtle.exportKey("spki", pair.publicKey));
   const pkcs8 = yield* Effect.tryPromise(() => crypto.subtle.exportKey("pkcs8", pair.privateKey));
   const digest = yield* Effect.tryPromise(() => crypto.subtle.digest("SHA-256", spki));
+
   return {
     fingerprint: Hex.encode(new Uint8Array(digest)),
     secret: Hex.encode(new Uint8Array(pkcs8)),
   };
 });
+
 const testSigner = await Effect.runPromise(rehearsalKey);
+
 const accountingConfiguration = {
   FIXTURE_ACCOUNTING_ROLLOUT: "true",
   FIXTURE_RELEASE_OPERATION: "rollout-fixture-successor",
@@ -61,11 +69,13 @@ const accountingConfiguration = {
   NATIVE_FIXTURE_SIGNER_SHA256: testSigner.fingerprint,
   CONTRACT_DIGEST: accountingFixture.contractDigest,
 } as const;
+
 const accountingMain = {
   Smoke: "../../apps/server/cloudflare/release-smoke-worker.ts",
   Core: fileURLToPath(new URL("../../apps/server/cloudflare/core-worker.ts", import.meta.url)),
   Ingress: fileURLToPath(new URL("../../apps/server/cloudflare/public-worker.ts", import.meta.url)),
 };
+
 it.effect.each([
   "unsigned",
   "original",
@@ -78,18 +88,23 @@ it.effect.each([
     const enabled = mode !== "unsigned";
     const successorPlan = mode.startsWith("successor-");
     const accounting = mode === "successor-accounting";
+
     const operation =
       mode === "successor-active" ? "rollout-fixture-successor" : "plan-fixture-successor";
+
     const revision = "1".repeat(40);
     const fingerprint = enabled ? testSigner.fingerprint : "";
+
+    const signerConfiguration = enabled
+      ? { NATIVE_FIXTURE_SIGNER_SHA256: fingerprint, NATIVE_FIXTURE_SIGNING_KEY: testSigner.secret }
+      : {};
+
+    const successorConfiguration = successorPlan ? { FIXTURE_RELEASE_OPERATION: operation } : {};
+    const accountingOverrides = accounting ? accountingConfiguration : {};
+
     const configuration = ConfigProvider.fromUnknown({
-      ...(enabled
-        ? {
-            NATIVE_FIXTURE_SIGNER_SHA256: fingerprint,
-            NATIVE_FIXTURE_SIGNING_KEY: testSigner.secret,
-          }
-        : {}),
-      ...(successorPlan ? { FIXTURE_RELEASE_OPERATION: operation } : {}),
+      ...signerConfiguration,
+      ...successorConfiguration,
       NATIVE_STORAGE_ADMISSION: "closed",
       RELEASE_GIT_SHA: revision,
       CONTRACT_DIGEST: "2".repeat(64),
@@ -100,13 +115,15 @@ it.effect.each([
       RECOVERY_OPERATOR_EMAIL: "operator@example.com",
       BETA_PRO_OPERATOR_EMAIL: "obarboza@fidyapp.com",
       SAMPLE_REVIEWER_EMAIL: "obarboza@fidyapp.com",
-      ...(accounting ? accountingConfiguration : {}),
+      ...accountingOverrides,
     });
+
     const stack = Alchemy.Stack(
       "NativePlanFixture",
       { providers: Cloudflare.providers(), state: Alchemy.inMemoryState() },
       nativeApplication.pipe(Effect.provideService(ConfigProvider.ConfigProvider, configuration))
     );
+
     const assertWorker = ({
       worker,
       observed,
@@ -123,7 +140,8 @@ it.effect.each([
       expect(observed).toContainEqual(
         expect.objectContaining({ name: "RELEASE_GIT_SHA", text: source })
       );
-      if (accounting) {
+
+      const assertAccounting = (): void => {
         expect(observed).toContainEqual(
           expect.objectContaining({
             name: "CONTRACT_DIGEST",
@@ -131,11 +149,9 @@ it.effect.each([
           })
         );
         expect(props).toMatchObject({ main: accountingMain[worker] });
-      }
-      expect(observed.some((item) => item.name === "NATIVE_FIXTURE_SIGNING_KEY")).toBe(
-        expectedSigner(worker, enabled)
-      );
-      if (expectedSigner(worker, enabled)) {
+      };
+
+      const assertSigner = (): void => {
         expect(
           observed.find((binding) => binding.name === "ACCEPTANCE_PROVIDER_REVISION")?.text
         ).toBe("8dd3b0d47d655868c1ab4f16b6145a06d99bd721");
@@ -145,48 +161,74 @@ it.effect.each([
         expect(() =>
           requireClosedBindings({ worker, bindings: observed, fingerprint: "0".repeat(64) })
         ).toThrow();
-      }
+      };
+
+      if (accounting) assertAccounting();
+
+      expect(observed.some((item) => item.name === "NATIVE_FIXTURE_SIGNING_KEY")).toBe(
+        expectedSigner(worker, enabled)
+      );
+
+      if (expectedSigner(worker, enabled)) assertSigner();
     };
+
     const regularGeneration =
       mode === "original" ? "aa447b8b781cdda48e021c1332f4377eae00f179" : revision;
+
     const generation = accounting ? accountingFixture.revision : regularGeneration;
+
     return evalStack(
       stack,
       (compiled) =>
         Effect.gen(function* () {
           const resources = Object.values(compiled.resources);
+
           const applications = resources.filter(
             (node) => node.Type === "Cloudflare.Access.Application"
           );
+
           expect(applications).toHaveLength(4);
           expect(resources.some((node) => node.Type === "Cloudflare.Access.IdentityProvider")).toBe(
             false
           );
-          for (const application of applications) {
-            const { allowedIdps } = yield* Schema.decodeUnknownEffect(
-              Schema.Struct({ allowedIdps: Schema.Unknown })
-            )(application.Props);
-            expect(
-              yield* evaluate(allowedIdps, {}).pipe(
-                Effect.provideService(FetchHttpClient.Fetch, pinFetch)
-              )
-            ).toEqual([pinId]);
-          }
+
+          yield* Effect.forEach(
+            applications,
+            Effect.fnUntraced(function* (application) {
+              const { allowedIdps } = yield* Schema.decodeUnknownEffect(
+                Schema.Struct({ allowedIdps: Schema.Unknown })
+              )(application.Props);
+
+              expect(
+                yield* evaluate(allowedIdps, {}).pipe(
+                  Effect.provideService(FetchHttpClient.Fetch, pinFetch)
+                )
+              ).toEqual([pinId]);
+            }),
+            { discard: true }
+          );
+
           const bindings = Schema.Struct({ bindings: Schema.optional(NativeBindings) });
+
           for (const worker of ["Core", "Ingress", "Smoke"] as const) {
             const id = worker === "Smoke" ? "ReleaseSmoke-" + generation : worker;
+
             const resource = Object.values(compiled.resources).find(
               (node) => node.LogicalId === id
             );
+
             if (resource === undefined) throw Error("Missing declared Worker " + worker);
             const rows = compiled.bindings[resource.FQN] ?? [];
+
             const observed = rows.flatMap(
               (row) => Schema.decodeUnknownSync(bindings)(row.data).bindings ?? []
             );
+
             assertWorker({ worker, observed, props: resource.Props });
-            if (accounting && worker === "Smoke") {
-              expect(resource.Props).not.toHaveProperty("build");
-            }
+
+            expect(accounting && worker === "Smoke" ? resource.Props : {}).not.toHaveProperty(
+              "build"
+            );
           }
         }),
       { stage: "production" }
@@ -208,10 +250,12 @@ it.effect.each([
   (override) =>
     Effect.gen(function* () {
       const configuration = ConfigProvider.fromUnknown({ ...accountingConfiguration, ...override });
+
       const exit = yield* fixtureArtifacts(accountingConfiguration.GITHUB_SHA).pipe(
         Effect.provideService(ConfigProvider.ConfigProvider, configuration),
         Effect.exit
       );
+
       expect(exit._tag).toBe("Failure");
     })
 );

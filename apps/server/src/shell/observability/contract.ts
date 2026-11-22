@@ -19,9 +19,11 @@ const requireNonEmpty: RequireNonEmpty = function (values) {
 };
 
 const canonicalOperationCodes = canonicalMetadata.map(({ id }) => CanonicalOperationId.make(id));
+
 const canonicalHttpRoutes = requireNonEmpty(
   Array.from(new Set(canonicalMetadata.map(({ route }) => route)))
 );
+
 const canonicalHttpRequests = requireNonEmpty(
   canonicalMetadata.map(({ method, route }) => `${method} ${route}`)
 );
@@ -220,6 +222,7 @@ export const maximumTelemetryDurationMilliseconds = 86_400_000;
 export const TelemetryCount = Schema.Int.check(
   Schema.isBetween({ minimum: 0, maximum: maximumTelemetryCount })
 ).pipe(Schema.brand("TelemetryCount"));
+
 export type TelemetryCount = typeof TelemetryCount.Type;
 
 export const boundedTelemetryCount = (value: number): TelemetryCount =>
@@ -228,6 +231,7 @@ export const boundedTelemetryCount = (value: number): TelemetryCount =>
 export const TelemetryAttempt = Schema.Int.check(
   Schema.isBetween({ minimum: 1, maximum: 100 })
 ).pipe(Schema.brand("TelemetryAttempt"));
+
 export type TelemetryAttempt = typeof TelemetryAttempt.Type;
 
 export const TelemetryDuration = Schema.Int.check(
@@ -236,6 +240,7 @@ export const TelemetryDuration = Schema.Int.check(
     maximum: maximumTelemetryDurationMilliseconds,
   })
 ).pipe(Schema.brand("TelemetryDuration"));
+
 export type TelemetryDuration = typeof TelemetryDuration.Type;
 
 export const boundedTelemetryDuration = (value: number): TelemetryDuration =>
@@ -246,17 +251,21 @@ export const boundedTelemetryDuration = (value: number): TelemetryDuration =>
 export const TelemetryGitRevision = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/u)).pipe(
   Schema.brand("TelemetryGitRevision")
 );
+
 export type TelemetryGitRevision = typeof TelemetryGitRevision.Type;
 
 export const TelemetryRelease = Schema.Union([TelemetryGitRevision, Schema.Literal("unknown")]);
+
 export type TelemetryRelease = typeof TelemetryRelease.Type;
 
 export const TelemetryHttpStatus = Schema.Int.check(
   Schema.isBetween({ minimum: 100, maximum: 599 })
 ).pipe(Schema.brand("TelemetryHttpStatus"));
+
 export type TelemetryHttpStatus = typeof TelemetryHttpStatus.Type;
 
 export const TelemetryHttpStatusClass = Schema.Literals(["1xx", "2xx", "3xx", "4xx", "5xx"]);
+
 export type TelemetryHttpStatusClass = typeof TelemetryHttpStatusClass.Type;
 
 export const TelemetrySpanId = Schema.String.check(
@@ -274,6 +283,7 @@ export const TelemetryWorkRecord = Schema.Struct({
   traceId: Schema.optionalKey(TelemetryTraceId),
   spanId: Schema.optionalKey(TelemetrySpanId),
 });
+
 export type TelemetryWorkRecord = typeof TelemetryWorkRecord.Type;
 
 export const TelemetryWorkDescriptor = Schema.Struct({
@@ -282,6 +292,7 @@ export const TelemetryWorkDescriptor = Schema.Struct({
   provider: Schema.Option(TelemetryCodeSchema.provider),
   attempt: TelemetryAttempt,
 });
+
 export type TelemetryWorkDescriptor = typeof TelemetryWorkDescriptor.Type;
 
 export type TelemetryWorkSuccess = Readonly<{
@@ -295,9 +306,11 @@ export type TelemetryWorkOptions<A> = Readonly<{
 }>;
 
 export const TelemetryTransportOutcome = Schema.Literals(["response", "failure", "interrupted"]);
+
 export type TelemetryTransportOutcome = typeof TelemetryTransportOutcome.Type;
 
 export const TelemetryHttpMethod = Schema.Literals(["GET", "POST", "PUT", "PATCH", "DELETE"]);
+
 export type TelemetryHttpMethod = typeof TelemetryHttpMethod.Type;
 
 export const TelemetryExternalHttpMethod = Schema.Literals([
@@ -311,28 +324,34 @@ export const TelemetryExternalHttpMethod = Schema.Literals([
   "QUERY",
   "TRACE",
 ]);
+
 export type TelemetryExternalHttpMethod = typeof TelemetryExternalHttpMethod.Type;
 
-const NoSpanMetadata = Schema.TaggedStruct("None", {});
+export const NoSpanMetadata = Schema.TaggedStruct("None", {});
+
 const HttpSpanMetadata = Schema.TaggedStruct("Http", {
   method: TelemetryHttpMethod,
   route: TelemetryCodeSchema.httpRoute,
   status: Schema.Option(TelemetryHttpStatus),
 });
+
 const DatabaseSpanMetadata = Schema.TaggedStruct("Database", {
   system: TelemetryCodeSchema.databaseSystem,
   repositoryOperation: TelemetryCodeSchema.repositoryOperation,
 });
+
 const QueueSpanMetadata = Schema.TaggedStruct("Queue", {
   attempt: TelemetryAttempt,
   inputCount: TelemetryCount,
   delayMilliseconds: Schema.Option(TelemetryDuration),
 });
-const ProviderSpanMetadata = Schema.TaggedStruct("Provider", {
+
+export const ProviderSpanMetadata = Schema.TaggedStruct("Provider", {
   provider: TelemetryCodeSchema.provider,
   attempt: TelemetryAttempt,
   status: Schema.Option(TelemetryHttpStatus),
 });
+
 const ModelSpanMetadata = Schema.TaggedStruct("Model", {
   model: TelemetryCodeSchema.model,
 });
@@ -342,7 +361,9 @@ export const TelemetryModelUsage = Schema.Struct({
   inputTokens: TelemetryCount,
   outputTokens: TelemetryCount,
 });
+
 export type TelemetryModelUsage = typeof TelemetryModelUsage.Type;
+
 const ScheduleSpanMetadata = Schema.TaggedStruct("Schedule", {
   attempt: TelemetryAttempt,
 });
@@ -392,6 +413,7 @@ export const SpanDescriptor = Schema.Union([
     metadata: NoSpanMetadata,
   }),
 ]);
+
 export type SpanDescriptor = typeof SpanDescriptor.Type;
 
 export const DeclaredOutcome = Schema.Union([
@@ -416,15 +438,18 @@ export const DeclaredOutcome = Schema.Union([
     retryable: Schema.Literal(false),
   }),
 ]);
+
 export type DeclaredOutcome = typeof DeclaredOutcome.Type;
 
+export const DefectFailure = Schema.TaggedStruct("Defect", {
+  component: TelemetryCodeSchema.component,
+  operation: TelemetryCodeSchema.operation,
+  error: TelemetryCodeSchema.error,
+  cause: Schema.Unknown,
+});
+
 export const ClassifiedFailure = Schema.Union([
-  Schema.TaggedStruct("Defect", {
-    component: TelemetryCodeSchema.component,
-    operation: TelemetryCodeSchema.operation,
-    error: TelemetryCodeSchema.error,
-    cause: Schema.Unknown,
-  }),
+  DefectFailure,
   Schema.TaggedStruct("ExhaustedOperationalFailure", {
     component: TelemetryCodeSchema.component,
     operation: TelemetryCodeSchema.operation,
@@ -434,6 +459,7 @@ export const ClassifiedFailure = Schema.Union([
     cause: Schema.Unknown,
   }),
 ]);
+
 export type ClassifiedFailure = typeof ClassifiedFailure.Type;
 
 export const TelemetryBreadcrumb = Schema.Struct({
@@ -445,6 +471,7 @@ export const TelemetryBreadcrumb = Schema.Struct({
   attempt: Schema.Option(TelemetryAttempt),
   durationMilliseconds: Schema.Option(TelemetryDuration),
 });
+
 export type TelemetryBreadcrumb = typeof TelemetryBreadcrumb.Type;
 
 export const DurableTraceContext = Schema.Struct({
@@ -454,6 +481,7 @@ export const DurableTraceContext = Schema.Struct({
   sampled: Schema.Boolean,
   capturedAtUnixMilliseconds: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 8.64e15 })),
 });
+
 export type DurableTraceContext = typeof DurableTraceContext.Type;
 
 export const TelemetrySpan = Schema.Struct({
@@ -462,6 +490,7 @@ export const TelemetrySpan = Schema.Struct({
   sampled: Schema.Boolean,
   state: Schema.Unknown,
 });
+
 export type TelemetrySpan = typeof TelemetrySpan.Type;
 
 export type TelemetryAdapter = {
@@ -529,7 +558,9 @@ export type TelemetryResource = Readonly<{
 }>;
 
 const safeFunctionPattern = /^[A-Za-z_$][A-Za-z0-9_.$<>-]{0,119}$/u;
+
 const safeSourceFilePattern = /^src\/[A-Za-z0-9_./-]{1,220}\.(?:ts|tsx|js|mjs)$/u;
+
 const safeSourceModulePattern = /^src\/[A-Za-z0-9_./-]{1,220}$/u;
 
 const PositiveStackCoordinate = Schema.Int.check(
@@ -543,6 +574,7 @@ export const ProjectedStackFrame = Schema.Struct({
   lineno: PositiveStackCoordinate,
   colno: PositiveStackCoordinate,
 });
+
 export type ProjectedStackFrame = typeof ProjectedStackFrame.Type;
 
 export const ProjectedBreadcrumb = Schema.Struct({
@@ -558,6 +590,7 @@ export const ProjectedBreadcrumb = Schema.Struct({
     duration_milliseconds: Schema.optionalKey(TelemetryDuration),
   }),
 });
+
 export type ProjectedBreadcrumb = typeof ProjectedBreadcrumb.Type;
 
 const ProjectedTraceCoordinates = {
@@ -594,6 +627,7 @@ export const ProjectedTraceData = Schema.Struct({
   "gen_ai.usage.input_tokens": Schema.optionalKey(TelemetryCount),
   "gen_ai.usage.output_tokens": Schema.optionalKey(TelemetryCount),
 });
+
 export type ProjectedTraceData = typeof ProjectedTraceData.Type;
 
 export const ProjectedTrace = Schema.Struct({
@@ -601,6 +635,7 @@ export const ProjectedTrace = Schema.Struct({
   status: Schema.Literals(["ok", "invalid_argument", "internal_error", "cancelled"]),
   data: ProjectedTraceData,
 });
+
 export type ProjectedTrace = typeof ProjectedTrace.Type;
 
 const ProjectedSpanName = Schema.Union([
@@ -620,6 +655,7 @@ export const ProjectedFinalSpan = Schema.Struct({
   trace_id: TelemetryTraceId,
   is_segment: Schema.optionalKey(Schema.Boolean),
 });
+
 export type ProjectedFinalSpan = typeof ProjectedFinalSpan.Type;
 
 export const ProjectedTransaction = Schema.Struct({
@@ -640,6 +676,7 @@ export const ProjectedTransaction = Schema.Struct({
   }),
   breadcrumbs: Schema.Array(ProjectedBreadcrumb),
 });
+
 export type ProjectedTransaction = typeof ProjectedTransaction.Type;
 
 export const ProjectedErrorEvent = Schema.Struct({
@@ -672,6 +709,7 @@ export const ProjectedErrorEvent = Schema.Struct({
     Schema.Struct({ trace: Schema.Struct(ProjectedErrorTraceCoordinates) })
   ),
 });
+
 export type ProjectedErrorEvent = typeof ProjectedErrorEvent.Type;
 
 export const TelemetryStrictDecoding = { onExcessProperty: "error" } as const;
@@ -680,9 +718,11 @@ export type ExternalHttpRequestAttributes = Readonly<{
   "fidy.provider": TelemetryCode<"provider">;
   "http.request.method": TelemetryExternalHttpMethod;
 }>;
+
 export type ExternalHttpResponseAttributes = Readonly<
   Partial<{ "http.response.status_class": TelemetryHttpStatusClass }>
 >;
+
 export type ExternalHttpOutcomeAttributes = Readonly<{
   "fidy.transport_outcome": TelemetryTransportOutcome;
 }>;

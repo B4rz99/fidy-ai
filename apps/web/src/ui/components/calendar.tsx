@@ -97,6 +97,7 @@ const CalendarDayButton = ({
 export { Calendar, CalendarDayButton };
 
 const defaultClassNames = getDefaultClassNames();
+
 const calendarClassNames = {
   root: cn("w-fit", defaultClassNames.root),
   months: cn("relative flex flex-col gap-4 md:flex-row", defaultClassNames.months),

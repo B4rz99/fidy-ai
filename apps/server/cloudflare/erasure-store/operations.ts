@@ -69,11 +69,14 @@ export const participantDrain = Effect.fn(function* (
   const scope = yield* Schema.decodeUnknownEffect(ErasureHandoff, { onExcessProperty: "error" })(
     yield* Effect.tryPromise(() => request.json())
   );
+
   const sql = yield* SqliteClient;
   const check = outstanding(scope.userId);
   const pending = sql.unsafe(check.sql, check.params);
+
   const reply =
     yield* sql`SELECT 1 FROM erasure_barriers WHERE user_id=${scope.userId} AND reference=${scope.reference} AND requested_at_ms=${scope.requestedAtMs} AND NOT (${pending})`;
+
   return new Response(null, { status: reply.length === 1 ? acknowledged : conflictStatus });
 });
 
@@ -81,6 +84,7 @@ export const erasureBarrierSchema =
   "CREATE TABLE erasure_barriers(user_id TEXT PRIMARY KEY,reference TEXT NOT NULL UNIQUE,requested_at_ms INTEGER NOT NULL) STRICT";
 
 const acknowledged = 204;
+
 const conflictStatus = 409;
 
 export const fenceErasureParticipant = Effect.fn(function* (
@@ -91,18 +95,24 @@ export const fenceErasureParticipant = Effect.fn(function* (
   const handoff = yield* Schema.decodeUnknownEffect(ErasureHandoff, { onExcessProperty: "error" })(
     yield* Effect.tryPromise(() => request.json())
   );
+
   const sql = yield* SqliteClient;
   const exact = sql`SELECT 1 FROM erasure_barriers WHERE user_id=${handoff.userId} AND reference=${handoff.reference} AND requested_at_ms=${handoff.requestedAtMs}`;
+
   if ((yield* exact).length === 1) return new Response(null, { status: acknowledged });
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(ErasureHandoff))(handoff);
+
   const confirmed = yield* Effect.tryPromise((signal) =>
     users.getByName(handoff.userId).fetch(confirmHandoffUrl, { method: "POST", body, signal })
   ).pipe(Effect.timeout("5 seconds"));
+
   if (confirmed.status !== acknowledged) return new Response(null, { status: conflictStatus });
+
   return yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       yield* sql`INSERT INTO erasure_barriers(user_id,reference,requested_at_ms) VALUES(${handoff.userId},${handoff.reference},${handoff.requestedAtMs}) ON CONFLICT DO NOTHING`;
       yield* preserveStoreAlarm(storage, yield* Clock.currentTimeMillis);
+
       return new Response(null, {
         status: (yield* exact).length === 1 ? acknowledged : conflictStatus,
       });
@@ -129,13 +139,16 @@ type CleanupOwner<R, E> = (
   scope: typeof CleanupCommand.Type,
   permission: typeof CleanupPermission.Type
 ) => Effect.Effect<boolean, E, R>;
+
 const refused = (): Response => new Response(null, { status: 409 });
 
 const expireBarrier = Effect.fn(function* (scope: typeof CleanupCommand.Type) {
   const sql = yield* SqliteClient;
   yield* sql`DELETE FROM erasure_barriers WHERE user_id=${scope.userId} AND reference=${scope.reference} AND requested_at_ms=${scope.requestedAtMs} AND cleaned=1`;
+
   const conflict =
     yield* sql`SELECT 1 FROM erasure_barriers WHERE user_id=${scope.userId} OR reference=${scope.reference}`;
+
   return new Response(null, { status: conflict.length === 0 ? acknowledged : conflictStatus });
 });
 
@@ -147,39 +160,54 @@ export const handleSharedCleanup = Effect.fn(function* <R, E>(
   const scope = yield* Schema.decodeUnknownEffect(CleanupCommand, { onExcessProperty: "error" })(
     yield* Effect.tryPromise(() => request.json())
   );
+
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(CleanupCommand))(scope);
+
   const permission = yield* Effect.tryPromise((signal) =>
     registry
       .getByName(erasureRegistryName)
       .fetch(confirmCleanupUrl, { method: "POST", body, signal })
   ).pipe(Effect.timeout("5 seconds"));
+
   if (!permission.ok) return refused();
+
   const grants = yield* Schema.decodeUnknownEffect(CleanupPermission)(
     yield* Effect.tryPromise(() => permission.json())
   );
+
   const sql = yield* SqliteClient;
+
   return yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       const exact = sql`user_id=${scope.userId} AND reference=${scope.reference} AND requested_at_ms=${scope.requestedAtMs}`;
       const [row] = yield* sql`SELECT cleaned,released FROM erasure_barriers WHERE ${exact}`;
+
       if (scope.action === "expire") return yield* expireBarrier(scope);
+
       if (row === undefined) return refused();
+
       if (scope.action === "release") {
         if (row.cleaned !== 1) return refused();
+
         if (row.released === 1) return new Response(null, { status: 204 });
+
         if (!(yield* clean(scope, grants))) return new Response(null, { status: 202 });
         yield* sql`UPDATE erasure_barriers SET released=1 WHERE ${exact}`;
+
         return new Response(null, { status: 204 });
       }
+
       if (row.cleaned !== 1) {
         const done = yield* clean(scope, grants);
         yield* sql`UPDATE erasure_barriers SET cleaned=${Number(done)} WHERE ${exact}`;
       }
+
       const [progress] = yield* Schema.decodeUnknownEffect(Schema.Tuple([CleanupProgress]))(
         (yield* sql`SELECT cleaned AS done,last_erased_at_ms AS lastErasedAtMs,protect_until_ms AS protectUntilMs FROM erasure_barriers WHERE ${exact}`).map(
           (row) => ({ ...row, done: row.done === 1 })
         )
       );
+
       return Response.json(progress);
     })
   );

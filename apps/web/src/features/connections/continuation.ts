@@ -1,7 +1,8 @@
+import { browserRuntime } from "@/transport/browser-runtime";
 import { useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Clock, type DateTime, Effect, Option } from "effect";
-import { Atom } from "effect/reactivity";
+import { Clock, Data, type DateTime, Effect, Option, Predicate } from "effect";
+import { AsyncResult, Atom } from "effect/reactivity";
 import { type RefCallback, useCallback, useState } from "react";
 import type {
   ConnectionAttemptReference,
@@ -11,20 +12,25 @@ import type {
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 
 type Review = typeof ConnectionContinuationReview.Type;
+
 type Attempt = typeof ConnectionAttemptReference.Type;
+
 type Lifetime = Readonly<{
   attach: (dispose: () => void) => () => void;
   active: () => boolean;
   generation: () => number;
 }>;
+
 const makeLifetime = (): Lifetime => {
   let active = false;
   let generation = 0;
+
   return {
     active: () => active,
     generation: () => generation,
     attach: (dispose) => {
       active = true;
+
       return () => {
         active = false;
         generation += 1;
@@ -33,11 +39,14 @@ const makeLifetime = (): Lifetime => {
     },
   };
 };
+
 export const continuationDeadline = (review: Review): DateTime.Utc =>
   review.authorization?.expiresAt ?? review.expiresAt;
-const now = (): number => Effect.runSync(Clock.currentTimeMillis);
+
+const now = (): number => browserRuntime.runSync(Clock.currentTimeMillis);
+
 const freshReview = (result: CanonicalQueryState<Review, unknown>): Option.Option<Review> =>
-  result._tag === "Ready" &&
+  Predicate.isTagged(result, "Ready") &&
   !result.waiting &&
   Option.isNone(result.refreshFailure) &&
   continuationDeadline(result.value).epochMilliseconds > now()
@@ -46,9 +55,15 @@ const freshReview = (result: CanonicalQueryState<Review, unknown>): Option.Optio
 
 const canRefresh = (result: CanonicalQueryState<Review, unknown>): boolean =>
   !result.waiting &&
-  (result._tag !== "Ready" || continuationDeadline(result.value).epochMilliseconds > now());
+  (!Predicate.isTagged(result, "Ready") ||
+    continuationDeadline(result.value).epochMilliseconds > now());
 
 type Submission = Readonly<{ generation: number; deadline: number }>;
+
+class ContinuationUncertain extends Data.TaggedError("ContinuationUncertain")<{
+  readonly cause: unknown;
+}> {}
+
 const prepareContinuation = (
   {
     client,
@@ -62,11 +77,12 @@ const prepareContinuation = (
     refresh: () => void;
   }>,
   submission: Submission
-): Effect.Effect<boolean> => {
+): Effect.Effect<void, ContinuationUncertain> => {
   const current = (): boolean =>
     lifetime.active() &&
     lifetime.generation() === submission.generation &&
     submission.deadline > now();
+
   return Effect.suspend(() =>
     current()
       ? client.pipe(
@@ -76,10 +92,10 @@ const prepareContinuation = (
               if (current()) refresh();
             })
           ),
-          Effect.as(false),
-          Effect.catchCause(() => Effect.succeed(true))
+          Effect.asVoid,
+          Effect.mapError((error) => new ContinuationUncertain({ cause: error }))
         )
-      : Effect.succeed(false)
+      : Effect.void
   );
 };
 
@@ -98,9 +114,11 @@ export const useContinuation = (attempt: Attempt): Continuation => {
   const { webAuthClient: client, registry } = useRouter().options.context;
   const [lifetime] = useState(makeLifetime);
   const [submitted] = useState(() => Atom.make(false));
+
   const [query] = useState(() =>
     client.query("connectionBrowser", "review", { query: { attempt }, timeToLive: "0 seconds" })
   );
+
   const [command] = useState(() =>
     client.runtime.fn<Submission>()(
       (submission) =>
@@ -111,24 +129,30 @@ export const useContinuation = (attempt: Attempt): Continuation => {
       { concurrent: false }
     )
   );
-  const execution = useAtomValue(command).pipe(presentCanonicalQuery);
+
+  const execution = useAtomValue(command);
+
   const mounted = useCallback(
     (_node: HTMLDivElement): (() => void) =>
       lifetime.attach(() => registry.set(command, Atom.Interrupt)),
     [command, lifetime, registry]
   );
+
   return {
     result: useAtomValue(query).pipe(presentCanonicalQuery),
     busy: execution.waiting,
-    uncertain: execution._tag === "Ready" && execution.value,
+    uncertain: AsyncResult.isFailure(execution),
     submitted: useAtomValue(submitted),
     mounted,
     begin: () => {
       const fresh = registry.get(query).pipe(presentCanonicalQuery, freshReview);
+
       if (!lifetime.active() || registry.get(submitted)) return;
+
       if (Option.isNone(fresh) || fresh.value.phase !== "ready") {
         return;
       }
+
       registry.set(submitted, true);
       registry.set(command, {
         generation: lifetime.generation(),

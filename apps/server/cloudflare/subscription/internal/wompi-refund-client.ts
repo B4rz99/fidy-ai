@@ -1,11 +1,15 @@
 import { Effect, Option, Schema } from "effect";
+import { OutboundHttpRequest } from "../../../src/shell/outbound-http/contract";
 import { type OutboundHttpService } from "../../../src/shell/outbound-http/operations";
 import { type RefundAttemptId } from "../../../src/core/subscription/contract";
 import { WompiTransactionId } from "./wompi-model";
 
 const maximumReferenceLength = 128;
+
 const successMinimum = 200;
+
 const successMaximumExclusive = 300;
+
 const RefundBody = Schema.fromJsonString(
   Schema.Struct({
     transaction_id: WompiTransactionId,
@@ -14,6 +18,7 @@ const RefundBody = Schema.fromJsonString(
     reason: Schema.String,
   })
 );
+
 const RefundResponse = Schema.fromJsonString(
   Schema.Struct({
     data: Schema.Struct({
@@ -30,6 +35,7 @@ const RefundResponse = Schema.fromJsonString(
     }),
   })
 );
+
 const VoidResponse = Schema.fromJsonString(
   Schema.Struct({
     data: Schema.Struct({
@@ -42,6 +48,7 @@ const VoidResponse = Schema.fromJsonString(
     }),
   })
 );
+
 export type RefundSubmission = Readonly<{
   id: RefundAttemptId;
   kind: "refund" | "card-void";
@@ -52,11 +59,14 @@ export type RefundSubmission = Readonly<{
   sourceId: number;
   reason: string;
 }>;
+
 export type RefundEvidence = Readonly<{
   providerId: string;
   status: "APPROVED" | "DECLINED" | "CANCELLED" | "VOIDED";
 }>;
+
 const refundReference = (id: RefundAttemptId): string => `fidy-refund-${id}`;
+
 const parseRefund = (
   body: Uint8Array,
   input: RefundSubmission
@@ -70,11 +80,15 @@ const parseRefund = (
       ) {
         return Option.none();
       }
+
       if (data.status === "ERROR" || data.status === "PENDING") return Option.none();
+
       return Option.some({ providerId: data.v2_refund_id ?? String(data.id), status: data.status });
     }),
+    Effect.tapError(Effect.logDebug),
     Effect.orElseSucceed(Option.none)
   );
+
 const parseVoid = (
   body: Uint8Array,
   input: RefundSubmission
@@ -90,6 +104,7 @@ const parseVoid = (
         ? Option.some({ providerId: data.id, status: "VOIDED" as const })
         : Option.none()
     ),
+    Effect.tapError(Effect.logDebug),
     Effect.orElseSucceed(Option.none)
   );
 
@@ -106,18 +121,25 @@ export const submitCorrection = ({
       reference: refundReference(input.id),
       reason: input.reason,
     });
+
     const response = yield* http.execute(
       input.kind === "refund"
-        ? { _tag: "WompiSandboxRefund", body }
-        : { _tag: "WompiSandboxCardVoid", transactionId: input.transactionId }
+        ? OutboundHttpRequest.WompiSandboxRefund({ body })
+        : OutboundHttpRequest.WompiSandboxCardVoid({ transactionId: input.transactionId })
     );
+
     if (response.status < successMinimum || response.status >= successMaximumExclusive) {
       return Option.none();
     }
+
     return yield* input.kind === "refund"
       ? parseRefund(response.body, input)
       : parseVoid(response.body, input);
-  }).pipe(Effect.timeout("14 seconds"), Effect.orElseSucceed(Option.none));
+  }).pipe(
+    Effect.timeout("14 seconds"),
+    Effect.tapError(Effect.logDebug),
+    Effect.orElseSucceed(Option.none)
+  );
 
 export const verifyCardVoid = ({
   http,
@@ -125,12 +147,15 @@ export const verifyCardVoid = ({
 }: Readonly<{ http: OutboundHttpService; input: RefundSubmission }>): Effect.Effect<
   Option.Option<RefundEvidence>
 > =>
-  http.execute({ _tag: "WompiFindTransaction", transactionId: input.transactionId }).pipe(
-    Effect.flatMap((response) =>
-      response.status >= successMinimum && response.status < successMaximumExclusive
-        ? parseVoid(response.body, input)
-        : Effect.succeedNone
-    ),
-    Effect.timeout("14 seconds"),
-    Effect.orElseSucceed(Option.none)
-  );
+  http
+    .execute(OutboundHttpRequest.WompiFindTransaction({ transactionId: input.transactionId }))
+    .pipe(
+      Effect.flatMap((response) =>
+        response.status >= successMinimum && response.status < successMaximumExclusive
+          ? parseVoid(response.body, input)
+          : Effect.succeedNone
+      ),
+      Effect.timeout("14 seconds"),
+      Effect.tapError(Effect.logDebug),
+      Effect.orElseSucceed(Option.none)
+    );

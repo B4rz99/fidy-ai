@@ -1,3 +1,4 @@
+import { ConsentSubject } from "~/shell/consent/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import {
@@ -15,6 +16,7 @@ import type { FreshSessionSubject } from "~/shell/web-session/contract";
 import { liveSessionConditions } from "~/shell/web-session/operations";
 
 const activeLimit = 100;
+
 const PATMetadataRow = Schema.Struct({
   short_id: TokenShortId,
   recipient_label: PATRecipientLabel,
@@ -23,6 +25,7 @@ const PATMetadataRow = Schema.Struct({
   last_used_at_ms: Schema.NullOr(Schema.DateTimeUtcFromMillis),
   expires_at_ms: Schema.DateTimeUtcFromMillis,
 });
+
 const queryUnavailable = (): Unavailable =>
   Unavailable.make({
     error: {
@@ -37,27 +40,31 @@ export const patMetadataQuery = (
     (Readonly<{ userId: string }> | Readonly<{ users: OwnedStatement }>)
 ): OwnedStatement => {
   const { current, session } = input;
+
   const users =
     "users" in input ? input.users : { sql: "SELECT ? AS userId", params: [input.userId] };
+
   const protectedQuery = protectConsentStatement({
     statement: {
       sql: `SELECT short_id,recipient_label,scopes_json,created_at_ms,last_used_at_ms,expires_at_ms
         FROM pats WHERE user_id = (SELECT userId FROM (${users.sql})) AND revoked_at_ms IS NULL AND expires_at_ms > ?`,
       params: [...users.params, current],
     },
-    subject: { _tag: "Owner", column: "pats.user_id" },
+    subject: ConsentSubject.Owner({ column: "pats.user_id" }),
     requirement: "unrevoked",
   });
+
   const sessionGuard = Option.map(session, (subject) =>
     liveSessionConditions({ session: subject, current })
   );
+
   return {
     sql: `${protectedQuery.sql}
       ${Option.isSome(sessionGuard) ? `AND ${sessionGuard.value.sql}` : ""}
       ORDER BY created_at_ms DESC LIMIT ${activeLimit + 1}`,
     params: [
       ...protectedQuery.params,
-      ...(Option.isSome(sessionGuard) ? sessionGuard.value.params : []),
+      ...Option.match(sessionGuard, { onNone: () => [], onSome: (guard) => guard.params }),
     ],
   };
 };
@@ -67,6 +74,7 @@ const decodeMetadata = (
 ): Effect.Effect<ActivePATMetadata, Schema.SchemaError> =>
   Effect.gen(function* () {
     const scopes = yield* Schema.decodeEffect(Schema.fromJsonString(PATScopes))(row.scopes_json);
+
     return yield* Schema.decodeEffect(Schema.toType(ActivePATMetadata))({
       shortId: row.short_id,
       recipientLabel: row.recipient_label,
@@ -88,8 +96,10 @@ export const patMetadataResponseFromRows = (
 > =>
   Effect.gen(function* () {
     const rows = yield* Schema.decodeUnknownEffect(Schema.Array(PATMetadataRow))(raw);
+
     if (rows.length > activeLimit) return yield* queryUnavailable();
     const pats = yield* Effect.forEach(rows, decodeMetadata);
+
     return { data: { pats }, next: [] as const };
   }).pipe(Effect.mapError(queryUnavailable));
 
@@ -107,6 +117,7 @@ export const listPATsResponse = (
     const current = yield* Clock.currentTimeMillis;
     const sql = yield* SqlClient.SqlClient;
     const query = patMetadataQuery({ userId, current, session: Option.none() });
-    const rows = yield* sql.unsafe<Record<string, unknown>>(query.sql, query.params);
+    const rows = yield* sql.unsafe(query.sql, query.params);
+
     return yield* patMetadataResponseFromRows(rows);
   }).pipe(Effect.mapError(queryUnavailable));

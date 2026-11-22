@@ -14,12 +14,16 @@ export type BrowserSessionLifetime = Readonly<{
 }>;
 
 const concurrentRequests = 2;
+
 const requestPermits = new WeakMap<AbortSignal, Semaphore.Semaphore>();
+
 const permitsFor = (signal: AbortSignal): Semaphore.Semaphore => {
   const existing = requestPermits.get(signal);
+
   if (existing !== undefined) return existing;
   const permits = Semaphore.makeUnsafe(concurrentRequests);
   requestPermits.set(signal, permits);
+
   return permits;
 };
 
@@ -31,6 +35,7 @@ export const coordinateBrowserRequests = ({
   signal: AbortSignal;
 }>): Layer.Layer<HttpClient.HttpClient> => {
   const permits = permitsFor(signal);
+
   return HttpClient.layerMergedContext(
     Effect.map(HttpClient.HttpClient, (client) =>
       HttpClient.makeWith(
@@ -48,20 +53,26 @@ const closedFailure = (): HttpClientError.HttpClientError =>
       description: "browser authentication lifetime ended",
     }),
   });
+
 const lifetimeEnded = (
   signal: AbortSignal
 ): Effect.Effect<never, HttpClientError.HttpClientError> =>
   Effect.callback((resume) => {
     const ended = (): void => resume(Effect.fail(closedFailure()));
+
     if (signal.aborted) {
       ended();
+
       return;
     }
+
     signal.addEventListener("abort", ended, { once: true });
+
     return Effect.sync(() => signal.removeEventListener("abort", ended));
   });
 
 const unauthorizedStatus = 401;
+
 const acceptResponse =
   (
     lifetime: BrowserSessionLifetime
@@ -72,9 +83,11 @@ const acceptResponse =
     if (lifetime.signal.aborted) {
       return Effect.fail(closedFailure());
     }
+
     if (response.status === unauthorizedStatus && lifetime.binding !== "none") {
       lifetime.recheck();
     }
+
     return Effect.succeed(response);
   };
 
@@ -99,6 +112,7 @@ export const bindBrowserSession = ({
             if (lifetime.signal.aborted) {
               return Effect.fail(closedFailure());
             }
+
             return client
               .postprocess(request)
               .pipe(

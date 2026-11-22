@@ -1,3 +1,4 @@
+import { Predicate } from "effect";
 import { PendingRead } from "@/ui/components/pending-read";
 import { Input } from "@/ui/components/input";
 
@@ -25,37 +26,45 @@ export const OriginalMaterial = ({
 }>): JSX.Element => {
   const deadline = useOriginalDeadline(item, expiresAt);
   const expired = useReviewExpired({ ...item, expiresAt: deadline });
+
   return expired ? (
     <ExpiredOriginal item={item} />
   ) : (
     <RetainedMaterial item={{ ...item, expiresAt: deadline }} />
   );
 };
+
 const useOriginalDeadline = (item: Item, expiresAt: Item["expiresAt"]): Item["expiresAt"] => {
   const query = originalDeadlineQuery({
     ...item,
     expiresAt: earlierOriginalDeadline({ first: item.expiresAt, second: expiresAt }),
   });
+
   return useAtomValue(query);
 };
+
 const ExpiredOriginal = ({ item }: Readonly<{ item: Item }>): JSX.Element =>
   item.status === "created" ? (
     <p className="text-sm text-muted-foreground">El material original venció.</p>
   ) : (
     <ReviewResubmission source={item.source} />
   );
+
 const useMaterialQuery = (
   item: Item
 ): Atom.Atom<AsyncResult.AsyncResult<CanonicalSuccess<"ingestion.getReviewMaterial">, unknown>> => {
   const client = useRouter().options.context.apiClient;
+
   const [query] = useState(() =>
     reviewMaterialQuery({
       client,
       item,
     })
   );
+
   return query;
 };
+
 export const ReviewMaterialPreload = ({
   item,
   expiresAt,
@@ -65,12 +74,16 @@ export const ReviewMaterialPreload = ({
 }>): JSX.Element => {
   const deadline = useOriginalDeadline(item, expiresAt);
   const expired = useReviewExpired({ ...item, expiresAt: deadline });
+
   return expired ? <></> : <MaterialPreload item={{ ...item, expiresAt: deadline }} />;
 };
+
 const MaterialPreload = ({ item }: Readonly<{ item: Item }>): JSX.Element => {
   useAtomMount(useMaterialQuery(item));
+
   return <></>;
 };
+
 const RetainedMaterial = ({
   item,
 }: Readonly<{
@@ -79,13 +92,15 @@ const RetainedMaterial = ({
   const query = useMaterialQuery(item);
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
+
   if (reviewHasExpired(item)) return <ExpiredOriginal item={item} />;
-  const unavailable =
-    state._tag === "Failure" ? (
-      <p className="text-sm text-muted-foreground">No pudimos cargar el original.</p>
-    ) : (
-      <PendingRead label="Cargando original" />
-    );
+
+  const unavailable = Predicate.isTagged(state, "Failure") ? (
+    <p className="text-sm text-muted-foreground">No pudimos cargar el original.</p>
+  ) : (
+    <PendingRead label="Cargando original" />
+  );
+
   return (
     <details open data-review="original">
       <summary>
@@ -93,12 +108,12 @@ const RetainedMaterial = ({
         <HugeiconsIcon icon={ArrowDown01Icon} size={16} aria-hidden="true" />
       </summary>
       <div data-review="original-body">
-        {state._tag === "Ready" ? (
+        {Predicate.isTagged(state, "Ready") ? (
           <MaterialBody material={state.value.data} item={item} />
         ) : (
           unavailable
         )}
-        {state._tag === "Failure" ? (
+        {Predicate.isTagged(state, "Failure") ? (
           <Button
             type="button"
             variant="outline"
@@ -118,7 +133,9 @@ const RetainedMaterial = ({
     </details>
   );
 };
+
 type Material = CanonicalSuccess<"ingestion.getReviewMaterial">["data"];
+
 const MaterialBody = ({
   material,
   item,
@@ -128,6 +145,7 @@ const MaterialBody = ({
 }>): JSX.Element => {
   if (!material.available) {
     if (material.reason === "expired") return <ExpiredOriginal item={item} />;
+
     return (
       <p className="text-sm text-muted-foreground">
         El original no está disponible. Puedes completar los datos manualmente mientras el elemento
@@ -135,6 +153,7 @@ const MaterialBody = ({
       </p>
     );
   }
+
   return (
     <>
       {item.source === "email" ? (
@@ -159,9 +178,11 @@ const SearchableOriginal = ({ text }: Readonly<{ text: string }>): JSX.Element =
   const [search, setSearch] = useState("");
   const help = useId();
   const query = search.trim().toLocaleLowerCase("es-CO");
+
   const matches = text
     .split(/\r?\n/u)
     .filter((line) => line.toLocaleLowerCase("es-CO").includes(query));
+
   return (
     <div data-review="original-search">
       <Input

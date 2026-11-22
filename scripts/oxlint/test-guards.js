@@ -6,14 +6,18 @@
 /** @param {Node} node - Statically named property or imported export. */
 const staticName = (node) => {
   if (node.type === "Identifier") return node.name;
-  if (node.type === "Literal" && typeof node.value === "string") return node.value;
+
+  if (node.type === "Literal" && /^["']/u.test(node.raw ?? "")) return String(node.value);
+
   return undefined;
 };
 
 /** @param {Node} node - Member access whose property is inspected. */
 const memberName = (node) => {
   if (node.type !== "MemberExpression") return undefined;
+
   if (node.computed && node.property.type !== "Literal") return undefined;
+
   return staticName(node.property);
 };
 
@@ -26,6 +30,7 @@ const memberName = (node) => {
 const memberPath = (context, node, visited) => {
   const name = memberName(node);
   const parent = modulePath(context, node.object, visited);
+
   return name === undefined || parent.length === 0 ? [] : [...parent, name];
 };
 
@@ -35,9 +40,12 @@ const memberPath = (context, node, visited) => {
  */
 const loadedModule = (node) => {
   if (node.type === "ImportExpression") return staticName(node.source);
+
   if (node.type !== "CallExpression" || node.callee.type !== "Identifier") return undefined;
+
   if (node.callee.name !== "require" || node.arguments.length !== 1) return undefined;
   const argument = node.arguments[0];
+
   return argument === undefined ? undefined : staticName(argument);
 };
 
@@ -48,11 +56,14 @@ const loadedModule = (node) => {
 const bindingOf = (context, node) => {
   /** @type {ReturnType<RuleContext["sourceCode"]["getScope"]> | null} */
   let scope = context.sourceCode.getScope(node);
+
   while (scope !== null) {
     const binding = scope.set.get(node.name);
+
     if (binding !== undefined) return binding;
     scope = scope.upper;
   }
+
   return undefined;
 };
 
@@ -62,10 +73,12 @@ const bindingOf = (context, node) => {
  */
 const importPath = (node) => {
   const declaration = node.parent;
+
   if (declaration?.type !== "ImportDeclaration") return [];
   const source = declaration.source.value;
-  if (typeof source !== "string") return [];
+
   if (node.type === "ImportSpecifier") return [source, staticName(node.imported) ?? ""];
+
   return [source];
 };
 
@@ -81,12 +94,16 @@ const globalPaths = new Map([
  */
 const destructuredPath = (declaration, name) => {
   if (declaration.id.type !== "ObjectPattern") return [];
+
   for (const property of declaration.id.properties) {
     if (property.type !== "Property" || property.value.type !== "Identifier") continue;
+
     if (property.value.name !== name) continue;
     const key = staticName(property.key);
+
     if (key !== undefined) return [key];
   }
+
   return [];
 };
 
@@ -101,11 +118,17 @@ const modulePath = (context, node, visited = new Set()) => {
   if (visited.has(node)) return [];
   visited.add(node);
   const source = loadedModule(node);
+
   if (source !== undefined) return [source];
+
   if (node.type === "AwaitExpression") return modulePath(context, node.argument, visited);
+
   if (node.type === "ChainExpression") return modulePath(context, node.expression, visited);
+
   if (node.type === "MemberExpression") return memberPath(context, node, visited);
+
   if (node.type === "Identifier") return identifierPath(context, node, visited);
+
   return [];
 };
 
@@ -118,11 +141,16 @@ const modulePath = (context, node, visited = new Set()) => {
 const identifierPath = (context, node, visited) => {
   const binding = bindingOf(context, node);
   const definition = binding === undefined ? undefined : binding.defs[0];
+
   if (definition === undefined) return globalPaths.get(node.name) ?? [];
+
   if (definition.type === "ImportBinding") return importPath(definition.node);
   const declaration = definition.node;
+
   if (definition.type !== "Variable") return [];
+
   if (declaration.type !== "VariableDeclarator") return [];
+
   return aliasPath(context, { declaration, name: node.name }, visited);
 };
 
@@ -135,7 +163,9 @@ const identifierPath = (context, node, visited) => {
 const aliasPath = (context, { declaration, name }, visited) => {
   if (declaration.init === null) return [];
   const parent = modulePath(context, declaration.init, visited);
+
   if (parent.length === 0) return [];
+
   return [...parent, ...destructuredPath(declaration, name)];
 };
 
@@ -218,10 +248,12 @@ const noReactTestTools = {
     /** @param {Node} node - Static module reference. */
     const checkSource = (node) => {
       const source = staticName(node);
+
       if (source !== undefined && isReactTestTool(source)) {
         context.report({ node, messageId: "reactTestTool" });
       }
     };
+
     return {
       ImportDeclaration: (node) => checkSource(node.source),
       ExportNamedDeclaration(node) {
@@ -231,6 +263,7 @@ const noReactTestTools = {
       ImportExpression: (node) => checkSource(node.source),
       CallExpression(node) {
         const source = loadedModule(node);
+
         if (source !== undefined && isReactTestTool(source)) {
           context.report({ node, messageId: "reactTestTool" });
         }

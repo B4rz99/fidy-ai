@@ -2,26 +2,26 @@ import { Effect, Option, Schema } from "effect";
 import {
   ApprovedOpenAiModel,
   HostedInferenceError,
+  HostedInferenceFailureReason,
   type HostedInferenceService,
   type OpenAiConfiguration,
 } from "./contract";
 import { makeOpenAiInferenceServiceInternal } from "~/shell/hosted-inference/internal/openai";
 
-export const makeOpenAiHostedInference = (
-  configuration: OpenAiConfiguration
-): Effect.Effect<HostedInferenceService, HostedInferenceError> =>
+const unavailableProvider = (): HostedInferenceError =>
+  new HostedInferenceError({
+    reason: HostedInferenceFailureReason.ProviderUnavailable(),
+    retryable: false,
+    retryAfter: Option.none(),
+  });
+
+export const openAiHostedInference = <Requirements = never>(
+  configuration: OpenAiConfiguration<Requirements>
+): Effect.Effect<HostedInferenceService<Requirements>, HostedInferenceError> =>
   Effect.gen(function* () {
     const configuredModel = yield* Effect.fromOption(configuration.model);
     const model = yield* Schema.decodeUnknownEffect(ApprovedOpenAiModel)(configuredModel);
     const run = yield* Effect.fromOption(configuration.run);
+
     return makeOpenAiInferenceServiceInternal({ run, model });
-  }).pipe(
-    Effect.mapError(
-      () =>
-        new HostedInferenceError({
-          reason: { _tag: "ProviderUnavailable" },
-          retryable: false,
-          retryAfter: Option.none(),
-        })
-    )
-  );
+  }).pipe(Effect.mapError(unavailableProvider));

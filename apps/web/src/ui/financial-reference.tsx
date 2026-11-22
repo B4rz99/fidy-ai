@@ -9,9 +9,11 @@ const currencies = ["COP", "EUR", "JPY", "KWD", "USD", "AED"].map((value) => ({
   value,
   label: value,
 }));
+
 export const FinancialReference = (): JSX.Element => {
   const [amount, setAmount] = useState("9876543210.99");
   const [currency, setCurrency] = useState("COP");
+
   return (
     <section aria-label="Controles financieros" className="flex flex-col gap-4">
       <h2 className="text-2xl font-semibold">Controles financieros</h2>
@@ -84,6 +86,7 @@ const AmountStates = (): JSX.Element => (
 
 const LocalizedAmountReference = (): JSX.Element => {
   const [amount, setAmount] = useState("89.900,50");
+
   return (
     <div className="grid gap-2">
       <Label htmlFor="reference-localized-amount">Importe en formato colombiano</Label>

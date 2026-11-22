@@ -1,12 +1,13 @@
 import { it } from "@effect/vitest";
 import {
+  type ClassifiedFailure,
   type DurableTraceContext,
   type SpanDescriptor,
   TelemetryAttempt,
   TelemetryCount,
   TelemetryWorkRecord,
 } from "../../src/shell/observability/contract";
-import { Clock, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
+import { Array as Arr, Clock, Data, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { WorkerTelemetryEvent } from "./telemetry/contract";
 import { TestClock } from "effect/testing";
 import { expect, vi } from "vitest";
@@ -23,21 +24,29 @@ import {
   workerRelease,
 } from "./telemetry/operations";
 
+const SpanMetadata = Data.taggedEnum<SpanDescriptor["metadata"]>();
+
+const ClassifiedFailureCase = Data.taggedEnum<ClassifiedFailure>();
+
 it.effect("reports a durable attempt without replacing its rejection or exporting its cause", () =>
   Effect.gen(function* () {
     const captured: unknown[] = [];
+
     const log = vi
       .spyOn(console, "error")
       .mockImplementation((...values: ReadonlyArray<unknown>) => {
         captured.push(...values);
       });
+
     yield* Effect.addFinalizer(() => Effect.sync(() => log.mockRestore()));
     const failure = new Error("private-financial-payload");
+
     const result = observeWorkerPromise(() => Promise.reject(failure), {
       environment: { RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567" },
       telemetry: cloudflareWorkerTelemetry,
       operation: "workflow.billingCollection",
     });
+
     yield* Effect.tryPromise(() => expect(result).rejects.toBe(failure));
     const records = captured.filter(Schema.is(TelemetryWorkRecord));
     expect(records).toHaveLength(1);
@@ -56,6 +65,7 @@ it.effect("projects release smoke telemetry without proof, probe ID, or User dat
   Effect.gen(function* () {
     const records: TelemetryWorkRecord[] = [];
     const environment = { RELEASE_GIT_SHA: "a".repeat(40), SMOKE_PROOF: "proof-canary" };
+
     const result = observeWorkerPromise(() => Promise.resolve("probe-canary"), {
       environment,
       telemetry: makeWorkerTelemetry((record) => {
@@ -63,6 +73,7 @@ it.effect("projects release smoke telemetry without proof, probe ID, or User dat
       }),
       operation: "workflow.releaseSmoke",
     });
+
     expect(yield* Effect.tryPromise(() => result)).toBe("probe-canary");
     expect(records).toMatchObject([
       { operation: "workflow.releaseSmoke", outcome: "succeeded", release: "a".repeat(40) },
@@ -85,6 +96,7 @@ it.effect(
     Effect.gen(function* () {
       const records: TelemetryWorkRecord[] = [];
       const unavailable = new Response(null, { status: 503 });
+
       const response = yield* Effect.tryPromise(() =>
         observeWorkerResponse(() => Promise.resolve(unavailable), {
           environment: { RELEASE_GIT_SHA: "invalid" },
@@ -94,6 +106,7 @@ it.effect(
           operation: "worker.core.coordinator",
         })
       );
+
       expect(response).toBe(unavailable);
       expect(records).toMatchObject([
         { operation: "worker.core.coordinator", outcome: "failed", statusClass: "5xx" },
@@ -105,6 +118,7 @@ it.effect("preserves an interrupted Effect exit and projects one interrupted rec
   Effect.gen(function* () {
     const runExit = Effect.runPromiseExitWith(yield* Effect.context<never>());
     const records: TelemetryWorkRecord[] = [];
+
     const exit = yield* Effect.tryPromise(() =>
       runExit(
         observeWorkerExecution(Effect.interrupt, {
@@ -116,6 +130,7 @@ it.effect("preserves an interrupted Effect exit and projects one interrupted rec
         })
       )
     );
+
     expect(Exit.isFailure(exit)).toBe(true);
     expect(records).toMatchObject([{ operation: "worker.email.receive", outcome: "interrupted" }]);
   })
@@ -125,6 +140,7 @@ it.effect("reports model response status without exporting its prompt or respons
   Effect.gen(function* () {
     const records: TelemetryWorkRecord[] = [];
     const response = Response.json({ privateResponse: "financial-canary" });
+
     const actual = yield* Effect.tryPromise(() =>
       observeModelRun(() => Promise.resolve(response), {
         environment: { RELEASE_GIT_SHA: "invalid" },
@@ -133,6 +149,7 @@ it.effect("reports model response status without exporting its prompt or respons
         }),
       })
     );
+
     expect(actual).toBe(response);
     expect(records).toMatchObject([
       {
@@ -151,6 +168,7 @@ it.effect("reports only a provider status class, not the response body", () =>
   Effect.gen(function* () {
     const records: TelemetryWorkRecord[] = [];
     const response = Response.json({ secret: "card-canary" }, { status: 502 });
+
     const fetcher = observeProviderFetch(
       Object.assign(() => Promise.resolve(response), { preconnect: () => {} }),
       {
@@ -161,6 +179,7 @@ it.effect("reports only a provider status class, not the response body", () =>
         }),
       }
     );
+
     expect(
       yield* Effect.tryPromise(() => fetcher("https://provider.example/secret?card=card-canary"))
     ).toBe(response);
@@ -175,6 +194,7 @@ it.effect("reports provider transport failure without exporting its destination 
   Effect.gen(function* () {
     const records: TelemetryWorkRecord[] = [];
     const failure = new Error("https://secret.example/path?token=private-canary");
+
     const fetcher = observeProviderFetch(
       Object.assign(() => Promise.reject<Response>(failure), { preconnect: () => {} }),
       {
@@ -185,6 +205,7 @@ it.effect("reports provider transport failure without exporting its destination 
         }),
       }
     );
+
     yield* Effect.tryPromise(() =>
       expect(fetcher("https://secret.example/path?token=private-canary")).rejects.toBe(failure)
     );
@@ -200,16 +221,21 @@ it.effect("does not change durable Work outcomes when the exporter throws", () =
     const log = vi.spyOn(console, "log").mockImplementation(() => {
       throw new Error("export unavailable");
     });
+
     yield* Effect.addFinalizer(() => Effect.sync(() => log.mockRestore()));
+
     const errors = vi.spyOn(console, "error").mockImplementation(() => {
       throw new Error("failure export unavailable");
     });
+
     yield* Effect.addFinalizer(() => Effect.sync(() => errors.mockRestore()));
+
     const result = observeWorkerPromise(() => Promise.resolve("unchanged"), {
       environment: { RELEASE_GIT_SHA: "bad-release" },
       telemetry: cloudflareWorkerTelemetry,
       operation: "workflow.billingCollection",
     });
+
     expect(yield* Effect.tryPromise(() => result)).toBe("unchanged");
     const failure = new Error("original private failure");
     yield* Effect.tryPromise(() =>
@@ -228,10 +254,12 @@ it.effect("connects root, child and Work exports using server-generated metadata
   Effect.gen(function* () {
     const events: WorkerTelemetryEvent[] = [];
     const records: TelemetryWorkRecord[] = [];
+
     const telemetry = makeWorkerTelemetry({
       exportWork: (record) => records.push(record),
       exportEvent: (event) => events.push(event),
     });
+
     const environment = { RELEASE_GIT_SHA: "a".repeat(40), SECRET: "environment-canary" };
     yield* observeWorkerExecution(
       telemetry.span(
@@ -241,7 +269,7 @@ it.effect("connects root, child and Work exports using server-generated metadata
           workKind: "hosted_turn",
           trigger: "queue",
           spanOperation: "agent.turn",
-          metadata: { _tag: "None" },
+          metadata: SpanMetadata.None(),
         },
         Effect.void
       ),
@@ -251,12 +279,15 @@ it.effect("connects root, child and Work exports using server-generated metadata
         operation: "worker.core.queue",
       }
     );
+
     const child = events.find(
       (event) => event.event === "span" && event.data["fidy.operation"] === "agent.hostedTurn"
     );
+
     const root = events.find(
       (event) => event.event === "span" && event.data["fidy.operation"] === "worker.core.queue"
     );
+
     if (child?.event !== "span" || root?.event !== "span") throw new Error("missing spans");
     expect(child.traceId).toBe(root.traceId);
     expect(child.parentSpanId).toBe(root.spanId);
@@ -271,9 +302,11 @@ it.effect("connects root, child and Work exports using server-generated metadata
 it.effect("retains bounded breadcrumbs and model usage while excluding raw failure content", () =>
   Effect.gen(function* () {
     const captured: unknown[] = [];
+
     const log = vi.spyOn(console, "log").mockImplementation((...values: ReadonlyArray<unknown>) => {
       captured.push(...values);
     });
+
     yield* Effect.addFinalizer(() => Effect.sync(() => log.mockRestore()));
     const telemetry = cloudflareWorkerTelemetry;
     yield* telemetry.rootSpan(
@@ -283,20 +316,24 @@ it.effect("retains bounded breadcrumbs and model usage while excluding raw failu
         workKind: "model_call",
         trigger: "api",
         spanOperation: "agent.model",
-        metadata: { _tag: "Model", model: "openai" },
+        metadata: SpanMetadata.Model({ model: "openai" }),
       },
       Effect.gen(function* () {
-        for (let attempt = 1; attempt <= 40; attempt++) {
-          yield* telemetry.addBreadcrumb({
-            category: "agent",
-            action: "model_started",
-            component: "agent",
-            outcome: Option.none(),
-            error: Option.none(),
-            attempt: Option.some(TelemetryAttempt.make(attempt)),
-            durationMilliseconds: Option.none(),
-          });
-        }
+        yield* Effect.forEach(
+          Arr.range(1, 40),
+          (attempt) =>
+            telemetry.addBreadcrumb({
+              category: "agent",
+              action: "model_started",
+              component: "agent",
+              outcome: Option.none(),
+              error: Option.none(),
+              attempt: Option.some(TelemetryAttempt.make(attempt)),
+              durationMilliseconds: Option.none(),
+            }),
+          { discard: true }
+        );
+
         yield* telemetry.recordModelUsage({
           attempt: TelemetryAttempt.make(2),
           inputTokens: TelemetryCount.make(123),
@@ -307,23 +344,25 @@ it.effect("retains bounded breadcrumbs and model usage while excluding raw failu
           error: Option.some("model_response_rejected"),
           retryable: false,
         });
-        yield* telemetry.captureFailure({
-          _tag: "ExhaustedOperationalFailure",
-          component: "agent",
-          operation: "model.openAi",
-          error: "model_response_rejected",
-          provider: Option.some("openai"),
-          retryable: false,
-          cause: {
-            prompt: "prompt-canary",
-            credential: "token-canary",
-            url: "https://secret.invalid",
-          },
-        });
+        yield* telemetry.captureFailure(
+          ClassifiedFailureCase.ExhaustedOperationalFailure({
+            component: "agent",
+            operation: "model.openAi",
+            error: "model_response_rejected",
+            provider: Option.some("openai"),
+            retryable: false,
+            cause: {
+              prompt: "prompt-canary",
+              credential: "token-canary",
+              url: "https://secret.invalid",
+            },
+          })
+        );
       })
     );
     const events = captured.filter(Schema.is(WorkerTelemetryEvent));
     const span = events.find((event) => event.event === "span");
+
     if (span?.event !== "span") throw new Error("missing model span");
     expect(span.breadcrumbs).toHaveLength(16);
     expect(span.data).toMatchObject({
@@ -358,14 +397,16 @@ it.effect("contains span sink failures while cleaning up active trace state", ()
         throw new Error("event sink");
       },
     });
+
     const descriptor = {
       component: "api",
       operation: "worker.core.fetch",
       trigger: "api",
       spanOperation: "fidy.operation",
       workKind: "canonical_operation",
-      metadata: { _tag: "None" },
+      metadata: SpanMetadata.None(),
     } as const;
+
     const context = yield* telemetry.rootSpan(descriptor, telemetry.captureDurableContext);
     const result = yield* telemetry.rootSpan(descriptor, Effect.succeed("preserved"));
     expect(result).toBe("preserved");
@@ -387,6 +428,7 @@ it.effect("does not revive stale or malformed durable trace authority into priva
       sampled: true,
       capturedAtUnixMilliseconds: 0,
     };
+
     yield* TestClock.adjust("25 hours");
     expect(yield* workTraceHeaders({ traceContext: context })).toEqual({});
     const now = yield* Clock.currentTimeMillis;
@@ -413,20 +455,23 @@ it.effect("does not revive stale or malformed durable trace authority into priva
 it.effect("runs authoritative work when hostile span metadata prevents startup", () =>
   Effect.gen(function* () {
     const events: WorkerTelemetryEvent[] = [];
+
     const telemetry = makeWorkerTelemetry({
       exportWork: () => undefined,
       exportEvent: (event) => events.push(event),
     });
+
     const descriptor: SpanDescriptor = {
       component: "api",
       operation: "worker.core.fetch",
       trigger: "api",
       spanOperation: "fidy.operation",
       workKind: "canonical_operation",
-      get metadata(): Readonly<{ _tag: "None" }> {
+      get metadata(): Data.TaggedEnum.Value<SpanDescriptor["metadata"], "None"> {
         throw new Error("private-startup-sentinel");
       },
     };
+
     expect(yield* telemetry.rootSpan(descriptor, Effect.succeed("authoritative"))).toBe(
       "authoritative"
     );
@@ -437,22 +482,26 @@ it.effect("runs authoritative work when hostile span metadata prevents startup",
 it.effect("bounds simultaneous active spans and releases capacity after completion", () =>
   Effect.gen(function* () {
     const events: WorkerTelemetryEvent[] = [];
+
     const telemetry = makeWorkerTelemetry({
       exportWork: () => undefined,
       exportEvent: (event) => events.push(event),
     });
+
     const descriptor = {
       component: "api",
       operation: "worker.core.fetch",
       trigger: "api",
       spanOperation: "fidy.operation",
       workKind: "canonical_operation",
-      metadata: { _tag: "None" },
+      metadata: SpanMetadata.None(),
     } as const;
+
     const ready = yield* Deferred.make<void>();
     const release = yield* Deferred.make<void>();
     let started = 0;
     const contexts: Array<Option.Option<DurableTraceContext>> = [];
+
     const fiber = yield* Effect.all(
       Array.from({ length: 1025 }, () =>
         telemetry.rootSpan(
@@ -460,6 +509,7 @@ it.effect("bounds simultaneous active spans and releases capacity after completi
           Effect.gen(function* () {
             contexts.push(yield* telemetry.captureDurableContext);
             started++;
+
             if (started === 1025) yield* Deferred.succeed(ready, undefined);
             yield* Deferred.await(release);
           })
@@ -467,6 +517,7 @@ it.effect("bounds simultaneous active spans and releases capacity after completi
       ),
       { concurrency: "unbounded", discard: true }
     ).pipe(Effect.forkChild);
+
     yield* Deferred.await(ready);
     expect(contexts.filter(Option.isSome)).toHaveLength(1024);
     expect(contexts.filter(Option.isNone)).toHaveLength(1);
@@ -484,18 +535,21 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const events: WorkerTelemetryEvent[] = [];
+
       const telemetry = makeWorkerTelemetry({
         exportWork: () => undefined,
         exportEvent: (event) => events.push(event),
       });
+
       const descriptor = {
         component: "agent",
         operation: "agent.modelRound",
         trigger: "api",
         spanOperation: "agent.model",
         workKind: "model_round",
-        metadata: { _tag: "None" },
+        metadata: SpanMetadata.None(),
       } as const;
+
       const rejected = yield* Effect.exit(
         telemetry.span(
           descriptor,
@@ -508,6 +562,7 @@ it.effect(
             .pipe(Effect.andThen(Effect.fail("payload-canary")))
         )
       );
+
       expect(Exit.findErrorOption(rejected)).toEqual(Option.some("payload-canary"));
       expect(
         events.find((event) => event.event === "span" && event.error === "model_response_rejected")
@@ -537,15 +592,18 @@ it.effect(
 it.effect("exports bounded hosted round usage only from an approved model span", () =>
   Effect.gen(function* () {
     const events: WorkerTelemetryEvent[] = [];
+
     const telemetry = makeWorkerTelemetry({
       exportWork: () => undefined,
       exportEvent: (event) => events.push(event),
     });
+
     const usage = {
       attempt: TelemetryAttempt.make(2),
       inputTokens: TelemetryCount.make(12),
       outputTokens: TelemetryCount.make(3),
     };
+
     yield* telemetry.span(
       {
         component: "agent",
@@ -553,7 +611,7 @@ it.effect("exports bounded hosted round usage only from an approved model span",
         trigger: "api",
         spanOperation: "agent.model",
         workKind: "model_round",
-        metadata: { _tag: "None" },
+        metadata: SpanMetadata.None(),
       },
       telemetry.recordModelUsage(usage)
     );
@@ -564,16 +622,19 @@ it.effect("exports bounded hosted round usage only from an approved model span",
         trigger: "api",
         spanOperation: "fidy.operation",
         workKind: "canonical_operation",
-        metadata: { _tag: "None" },
+        metadata: SpanMetadata.None(),
       },
       telemetry.recordModelUsage(usage)
     );
+
     const model = events.find(
       (event) => event.event === "span" && event.data["fidy.operation"] === "agent.modelRound"
     );
+
     const ordinary = events.find(
       (event) => event.event === "span" && event.data["fidy.operation"] === "worker.core.fetch"
     );
+
     expect(model).toMatchObject({
       data: {
         "gen_ai.request.model": "hosted_inference",
@@ -582,6 +643,7 @@ it.effect("exports bounded hosted round usage only from an approved model span",
         "fidy.attempt": 2,
       },
     });
+
     if (ordinary?.event !== "span") throw new Error("missing ordinary span");
     expect(ordinary.data).not.toHaveProperty("gen_ai.usage.input_tokens");
   })
@@ -593,6 +655,7 @@ it.effect(
     Effect.gen(function* () {
       yield* TestClock.adjust("25 hours");
       const now = yield* Clock.currentTimeMillis;
+
       const context = {
         version: 1,
         traceId: "1".repeat(32),
@@ -600,16 +663,23 @@ it.effect(
         sampled: true,
         capturedAtUnixMilliseconds: now,
       };
+
       const work = { version: 1, operation: "durable-domain-work", identity: "owned-work" };
-      for (const traceContext of [
-        "bearer-canary",
-        { ...context, payload: "private-canary" },
-        { ...context, capturedAtUnixMilliseconds: 0 },
-        { ...context, capturedAtUnixMilliseconds: now + 1 },
-        { ...context, traceId: "0".repeat(32) },
-      ]) {
-        expect(yield* sanitizeWorkTrace({ ...work, traceContext })).toEqual(work);
-      }
+
+      yield* Effect.forEach(
+        [
+          "bearer-canary",
+          { ...context, payload: "private-canary" },
+          { ...context, capturedAtUnixMilliseconds: 0 },
+          { ...context, capturedAtUnixMilliseconds: now + 1 },
+          { ...context, traceId: "0".repeat(32) },
+        ],
+        Effect.fnUntraced(function* (traceContext) {
+          expect(yield* sanitizeWorkTrace({ ...work, traceContext })).toEqual(work);
+        }),
+        { discard: true }
+      );
+
       expect(yield* sanitizeWorkTrace({ ...work, traceContext: context })).toEqual({
         ...work,
         traceContext: context,

@@ -6,18 +6,26 @@ import SchemaProperties from "./schema-properties.astro";
 import SchemaVariants from "./schema-variants.astro";
 
 type Props = { schema: Schema.JsonObject; preview: number };
+
 const { schema, preview } = Astro.props;
+
 const properties = schemaProperties(schema);
+
 const view = schemaView(resolveSchema(schema));
+
 const variants = view.anyOf ?? view.oneOf ?? view.allOf ?? [];
+
 const variantLabel = view.allOf
   ? "Todas estas condiciones del contrato:"
   : "Una de estas variantes del contrato:";
+
 const mobilePreview = Math.min(preview, 4);
+
 const rows = properties.slice(0, preview).map((property, index) => ({
   property,
   visibility: index < mobilePreview ? ("all" as const) : ("desktop" as const),
 }));
+
 const remainder = properties.slice(mobilePreview).map((property, index) => ({
   property,
   visibility: index < preview - mobilePreview ? ("mobile" as const) : ("all" as const),

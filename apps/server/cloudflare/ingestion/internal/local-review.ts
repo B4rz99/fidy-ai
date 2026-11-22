@@ -37,6 +37,7 @@ export const isLocalReviewOperation = Schema.is(
     "ingestion.getReviewMaterial",
   ])
 );
+
 const originFilter = (
   turn: Option.Option<string>,
   user: UserId,
@@ -44,6 +45,7 @@ const originFilter = (
 ): OwnedStatement => {
   if (Option.isNone(turn)) return { sql: "", params: [] };
   const source = hostedStatementSelection({ turn: turn.value, user, current });
+
   return {
     sql:
       " AND id IN (SELECT id FROM ingestion_review_items WHERE user_id=? AND statement_submission_id IN (" +
@@ -52,6 +54,7 @@ const originFilter = (
     params: [user, ...source.params],
   };
 };
+
 const readContext = Effect.fn(function* ({
   page,
   filter,
@@ -64,6 +67,7 @@ const readContext = Effect.fn(function* ({
   offset: number;
 }) {
   const sql = yield* SqliteClient;
+
   const raw = yield* sql.unsafe(contextSql(filter), [
     ...page,
     current,
@@ -72,14 +76,17 @@ const readContext = Effect.fn(function* ({
     maximumExcerptCells,
     maximumReviewExcerptCharacters,
   ]);
+
   const rows = yield* Schema.decodeUnknownEffect(Schema.Array(ContextRow))(raw);
   const items = rows.map((row, index) => projectContext({ row, position: offset + index + 1 }));
+
   return result(
     yield* Schema.encodeEffect(Schema.toCodecJson(ReviewPageContext))(
       yield* Schema.decodeEffect(Schema.toCodecJson(ReviewPageContext))({ items })
     )
   );
 });
+
 export const workspace = Effect.fn(function* (
   query: typeof ReviewWorkspaceQuery.Type,
   user: UserId,
@@ -95,8 +102,10 @@ export const workspace = Effect.fn(function* (
   const origin = originFilter(hostedTurn, user, current);
   const relation = reviewRelation + origin.sql;
   const page = [current, user, ...origin.params, ...params, query.limit ?? reviewPageSize, offset];
+
   if (context) return yield* readContext({ page, filter, current, offset });
   const pending = Option.getOrElse(query.status, () => "pending") === "pending";
+
   const [counts] = pending
     ? yield* sql.unsafe(
         `SELECT count(*) AS pendingCount,count(*) AS total FROM (${relation}) WHERE ${filter}`,
@@ -106,20 +115,25 @@ export const workspace = Effect.fn(function* (
         `SELECT count(CASE WHEN visible_status='pending' THEN 1 END) AS pendingCount,count(CASE WHEN ${filter} THEN 1 END) AS total FROM (${relation})`,
         [...params, current, user, ...origin.params]
       );
+
   const raw = yield* sql.unsafe(
     `SELECT id,source,reason,time_zone AS timeZone,visible_status AS status,created_at_ms AS createdAt,
     expires_at_ms AS expiresAt,transaction_id AS transactionId,revision,draft_json,suggestions_json FROM (${relation}) WHERE ${filter}
     ORDER BY expires_at_ms,id LIMIT ? OFFSET ?`,
     page
   );
+
   const rows = yield* Schema.decodeUnknownEffect(Schema.Array(ReviewRow))(raw);
   const items = yield* Effect.forEach(rows, (row) => projectReviewSummary({ row, current }));
+
   const selectedDetail = yield* Effect.transposeOption(
     Option.map(Option.fromUndefinedOr(rows[0]), (row) => localDetail({ row, user, current }))
   );
+
   const totals = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ pendingCount: Schema.Int, total: Schema.Int })
   )(counts);
+
   return result(
     yield* Schema.encodeEffect(Schema.toCodecJson(ReviewWorkspace))({
       ...totals,
@@ -128,6 +142,7 @@ export const workspace = Effect.fn(function* (
     })
   );
 });
+
 export const dispatchLocalReview = Effect.fn(
   function* (unit: {
     request: Request;
@@ -139,6 +154,7 @@ export const dispatchLocalReview = Effect.fn(
     if (unit.operation.id === "ingestion.getReviewMaterial") {
       return yield* localReviewMaterial(unit);
     }
+
     if (unit.operation.id === "ingestion.listNeedsReviewItems") {
       return yield* runLocalMutation({
         ...unit,
@@ -146,11 +162,14 @@ export const dispatchLocalReview = Effect.fn(
         work: localReviewPage,
       });
     }
+
     if (unit.operation.id === "ingestion.getStatementSubmission") {
       const id = new URL(unit.request.url).pathname.split("/").at(-1) ?? "";
+
       const invalid = Option.isNone(Schema.decodeOption(StatementSubmissionId)(id))
         ? Option.some(missing())
         : Option.none();
+
       return yield* runLocalMutation(
         {
           ...unit,
@@ -160,8 +179,10 @@ export const dispatchLocalReview = Effect.fn(
         invalid
       );
     }
+
     if (unit.operation.id === "ingestion.getReviewItem") {
       const id = new URL(unit.request.url).pathname.split("/").at(-1) ?? "";
+
       return yield* runLocalMutation({
         ...unit,
         input: Effect.succeedSome(id),
@@ -169,9 +190,11 @@ export const dispatchLocalReview = Effect.fn(
           readReviewItem(user, target, { current, hostedTurn: Option.none() }),
       });
     }
+
     const query = Schema.decodeOption(Schema.toCodecStringTree(ReviewWorkspaceQuery))(
       Object.fromEntries(new URL(unit.request.url).searchParams)
     );
+
     return yield* runLocalMutation({
       ...unit,
       input: Effect.succeed(query),
@@ -183,6 +206,9 @@ export const dispatchLocalReview = Effect.fn(
         }),
     });
   },
+  Effect.tapCause(() =>
+    Effect.logWarning({ component: "ingestion", operation: "localReview", outcome: "unavailable" })
+  ),
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
 
@@ -193,6 +219,7 @@ export const readReviewItem = Effect.fn(function* (
 ) {
   const origin = originFilter(hostedTurn, user, current);
   const detail = yield* readDetail(user, target, { current, origin });
+
   return Option.isNone(detail)
     ? missing()
     : result(yield* Schema.encodeEffect(Schema.toCodecJson(ReviewDetail))(detail.value));

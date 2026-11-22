@@ -2,17 +2,16 @@ import { expect, it } from "vitest";
 import upload from "./native-fixture-upload.json" with { type: "json" };
 import { requireInterruptedUpload } from "./native-upload-recovery";
 
-const metadata = (
-  id: string,
-  ingress: boolean
-): {
+type VersionMetadata = {
   success: boolean;
   result: {
     id: string;
     annotations: Record<string, string>;
     resources: { script: object; bindings: object[] };
   };
-} => ({
+};
+
+const metadata = (id: string, ingress: boolean): VersionMetadata => ({
   success: true,
   result: {
     id,
@@ -28,11 +27,13 @@ const metadata = (
     },
   },
 });
+
 it("authenticates both immutable receipts of the interrupted upload before replacing either Worker", () => {
   const core = metadata(upload.coreVersion, false);
   const ingress = metadata(upload.ingressVersion, true);
   expect(() => requireInterruptedUpload({ core, ingress })).not.toThrow();
   expect(() => requireInterruptedUpload({ core: ingress, ingress: core })).toThrow();
+
   for (const different of [
     {
       ...ingress.result,

@@ -47,10 +47,11 @@ import { Cause, Effect, Option, Schema } from "effect";
 import { type CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import { atomicBatchOperation } from "../../src/shell/operations/contract";
 import { operationCatalog } from "../../src/shell/api";
-import { decideOperationAccess } from "../../src/shell/canonical-policy/operations";
+import { isHostedVisible } from "../../src/shell/canonical-policy/operations";
 import { getCanonicalOperationInput } from "../../src/shell/canonical-operations/operations";
 
 const successfulMutationStatus = 200;
+
 export const isLocalBatchRoute = (id: string): boolean =>
   isNativeAccountQuery(id) ||
   id.startsWith("connections.") ||
@@ -79,12 +80,15 @@ export const isLocalBatchRoute = (id: string): boolean =>
     "ingestion.skipNeedsReviewItem",
     "ingestion.resolveNeedsReviewItem",
   ].includes(id);
+
 type ReadOwner =
   | typeof readLocalMemories
   | typeof readLocalReminder
   | typeof readLocalProfile
   | typeof localKeywordRules;
+
 type ReadEffect = ReturnType<ReadOwner>;
+
 type NativeRead = (
   user: Parameters<ReadOwner>[0]
 ) => Effect.Effect<
@@ -92,12 +96,14 @@ type NativeRead = (
   Effect.Error<ReadEffect>,
   Effect.Services<ReadEffect>
 >;
+
 const localReads = new Map<string, NativeRead>([
   ["memory.recall", readLocalMemories],
   ["insights.getReminderSchedule", readLocalReminder],
   ["identity.getCurrentUser", readLocalProfile],
   ["categories.listKeywordRules", localKeywordRules],
 ]);
+
 const reserveForwardingRoute =
   (directory: UserStoreBindings["DIRECTORY"]) =>
   (user: UserId): Effect.Effect<void, CanonicalAdmissionUnavailable, SqliteClient> =>
@@ -105,6 +111,7 @@ const reserveForwardingRoute =
       Effect.asVoid,
       Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
     );
+
 type LocalBatchRoute = {
   directory: Pick<DurableObjectNamespace, "getByName">;
   operation: CatalogOperation;
@@ -112,8 +119,10 @@ type LocalBatchRoute = {
   storage: DurableObjectStorage;
   owns: (id: string) => boolean;
 };
+
 const pendingPageResponse = Effect.fn(function* (unit: LocalBatchRoute) {
   let continuation = Option.none<string>();
+
   const reply = yield* runLocalMutation({
     ...unit,
     input: Effect.succeedSome(true),
@@ -121,16 +130,20 @@ const pendingPageResponse = Effect.fn(function* (unit: LocalBatchRoute) {
       readLocalPendingInsights(unit.request, user, current).pipe(
         Effect.map((page) => {
           continuation = page.next;
+
           return page.result;
         }),
         Effect.mapError((cause) => new Cause.UnknownError(cause))
       ),
   });
+
   if (reply.ok && Option.isSome(continuation)) {
     reply.headers.set("link", "<" + continuation.value + '>; rel="next"');
   }
+
   return reply;
 });
+
 const localBatchQuery = Effect.fn(function* (unit: LocalBatchRoute) {
   if (isNativeAccountQuery(unit.operation.id)) {
     return Option.some(
@@ -141,6 +154,7 @@ const localBatchQuery = Effect.fn(function* (unit: LocalBatchRoute) {
       })
     );
   }
+
   if (unit.operation.id.startsWith("connections.") && unit.operation.policy.kind === "query") {
     return Option.some(
       yield* runLocalMutation({
@@ -150,10 +164,12 @@ const localBatchQuery = Effect.fn(function* (unit: LocalBatchRoute) {
       })
     );
   }
+
   if (unit.operation.id === "insights.getRecurringDigestReport") {
     const id = Schema.decodeUnknownOption(InsightEventId)(
       new URL(unit.request.url).pathname.split("/").at(-1)
     );
+
     return Option.some(
       yield* runLocalMutation({
         ...unit,
@@ -162,11 +178,15 @@ const localBatchQuery = Effect.fn(function* (unit: LocalBatchRoute) {
       })
     );
   }
+
   if (unit.operation.id === "insights.listPendingInsights") {
     return Option.some(yield* pendingPageResponse(unit));
   }
+
   const read = localReads.get(unit.operation.id);
+
   if (read === undefined) return Option.none<Response>();
+
   return Option.some(
     yield* runLocalMutation({
       ...unit,
@@ -176,6 +196,7 @@ const localBatchQuery = Effect.fn(function* (unit: LocalBatchRoute) {
     })
   );
 });
+
 export const dispatchLocalBatchRoute = Effect.fn(
   function* (unit: LocalBatchRoute) {
     if (unit.operation.id === atomicBatchOperation) {
@@ -187,10 +208,14 @@ export const dispatchLocalBatchRoute = Effect.fn(
         batchOwnersFor(unit)
       );
     }
+
     const query = yield* localBatchQuery(unit);
+
     if (Option.isSome(query)) return query.value;
     const prepare = localBatchOwners.get(unit.operation.id);
+
     if (prepare === undefined) return canonicalAdmissionUnavailable();
+
     return yield* runLocalMutation(
       {
         ...unit,
@@ -220,6 +245,13 @@ export const dispatchLocalBatchRoute = Effect.fn(
         : Option.none()
     );
   },
+  Effect.tapCause(() =>
+    Effect.logWarning({
+      component: "canonical-operations",
+      operation: "localOwner",
+      outcome: "unavailable",
+    })
+  ),
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
 
@@ -227,6 +259,7 @@ export const localOAuthReviewBinding: typeof localReviewBinding = (...args) =>
   localReviewBinding(...args);
 
 const defaultReviewPageSize = 50;
+
 const parameterizedReads = [
   "categories.listCategories",
   "quota.getQuota",
@@ -251,37 +284,44 @@ export const nativeCanonicalOperations = (): ReadonlyArray<CatalogOperation> =>
       localReads.has(operation.id) ||
       parameterizedReads.includes(operation.id)
   );
+
 export const localHostedCatalog = (
   authorityRoot: CanonicalAuthorityRoot
 ): ReadonlyArray<CatalogOperation> =>
-  nativeCanonicalOperations().filter(
-    (operation) =>
-      decideOperationAccess(operation.policy.access, { _tag: "HostedAgentSession", authorityRoot })
-        ._tag === "Allowed"
+  nativeCanonicalOperations().filter((operation) =>
+    isHostedVisible(operation.policy.access, authorityRoot)
   );
+
 const readParameter = Effect.fn(function* (
   operation: CatalogOperation,
   input: Schema.Json,
   context: Parameters<NonNullable<ReturnType<typeof localBatchOwners.get>>>[1]
 ) {
   const request = requestFor({ operation, input });
+
   if (Option.isNone(request)) {
     return yield* new CanonicalAdmissionUnavailable({ cause: "invalid_route" });
   }
+
   if (operation.id.startsWith("connections.")) {
     return yield* queryLocalConnections(operation.id, request.value, context.user);
   }
+
   if (["transactions.listTransactions", "transactions.searchTransactions"].includes(operation.id)) {
     return yield* readLocalTransactionPage(request.value, context.user);
   }
+
   if (operation.id === "insights.listPendingInsights") {
     return (yield* readLocalPendingInsights(request.value, context.user, context.current)).result;
   }
+
   const url = new URL(request.value.url);
+
   if (operation.id === "ingestion.listNeedsReviewItems") {
     const args = yield* Schema.decodeEffect(
       getCanonicalOperationInput("ingestion.listNeedsReviewItems")
     )(input);
+
     return yield* readLocalReviewPage(
       {
         ...context,
@@ -293,8 +333,11 @@ const readParameter = Effect.fn(function* (
       context.current
     );
   }
+
   const id = url.pathname.split("/").at(-1);
+
   if (id === undefined) return yield* new CanonicalAdmissionUnavailable({ cause: "missing_id" });
+
   return operation.id === "transactions.getTransaction"
     ? yield* readAddressedLocalTransaction(id, context.user)
     : yield* readLocalSubmission(
@@ -306,12 +349,14 @@ const readParameter = Effect.fn(function* (
         }))
       );
 });
+
 export const prepareHostedBatchOwner = Effect.fnUntraced(function* (
   input: Schema.Json,
   context: Parameters<typeof prepareHostedBatch>[1]
 ) {
   return yield* prepareHostedBatch(input, context, localBatchOwners);
 });
+
 export const prepareHostedOwner = Effect.fn(function* (
   operation: CatalogOperation,
   input: Schema.Json,
@@ -325,12 +370,15 @@ export const prepareHostedOwner = Effect.fn(function* (
           if (isNativeAccountQuery(operation.id)) {
             return yield* readNativeAccountQuery(operation.id, context.user, context.current);
           }
+
           return yield* readParameter(operation, input, context);
         }).pipe(Effect.mapError((cause) => new Cause.UnknownError(cause))),
       })
     );
   }
+
   const read = localReads.get(operation.id);
+
   if (read !== undefined) {
     return Option.some(
       prepareLocalWrite({
@@ -339,7 +387,10 @@ export const prepareHostedOwner = Effect.fn(function* (
       })
     );
   }
+
   const owner = hostedOwners.get(operation.id) ?? localBatchOwners.get(operation.id);
+
   if (owner === undefined) return Option.none();
+
   return Option.some(yield* owner(input, context));
 });

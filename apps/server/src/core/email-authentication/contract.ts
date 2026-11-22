@@ -1,6 +1,7 @@
-import { type DateTime, Schema, SchemaTransformation } from "effect";
+import { Data, type DateTime, Schema, SchemaTransformation } from "effect";
 
 const maximumEmailAddressLength = 254;
+
 const mailboxGrammar =
   /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/u;
 
@@ -26,6 +27,7 @@ export const EmailAddress = Schema.Trim.pipe(
     })
   )
 );
+
 export type EmailAddress = typeof EmailAddress.Type;
 
 export const EmailVerificationCode = Schema.String.check(
@@ -33,12 +35,14 @@ export const EmailVerificationCode = Schema.String.check(
 )
   .pipe(Schema.brand("EmailVerificationCode"))
   .annotate({ identifier: "EmailVerificationCode" });
+
 export type EmailVerificationCode = typeof EmailVerificationCode.Type;
 
 export const EmailProofPurpose = Schema.Literals([
   "credential-replacement",
   "browser-pairing-approval",
 ]);
+
 export type EmailProofPurpose = typeof EmailProofPurpose.Type;
 
 export const maximumEmailDeliveryGenerations = 5;
@@ -47,11 +51,14 @@ export const browserPairingEmailRetryAfterSeconds = 60;
 
 export type EmailReplacementRequestDecision = "Start" | "ReplaceExpired" | "UseExisting" | "Reject";
 
-export type ProofAttemptDecision =
-  | Readonly<{ _tag: "Accept" }>
-  | Readonly<{ _tag: "Wrong"; wrongAttempts: number }>
-  | Readonly<{ _tag: "Delete" }>
-  | Readonly<{ _tag: "Expired" }>;
+export type ProofAttemptDecision = Data.TaggedEnum<{
+  Accept: {};
+  Wrong: { readonly wrongAttempts: number };
+  Delete: {};
+  Expired: {};
+}>;
+
+export const ProofAttemptDecision = Data.taggedEnum<ProofAttemptDecision>();
 
 export type ProofAttemptInput = Readonly<{
   digestMatches: boolean;

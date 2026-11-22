@@ -1,5 +1,5 @@
 import { RecurringOccurrenceColumns } from "@/ui/components/recurring-occurrence-columns";
-import { BigDecimal, DateTime } from "effect";
+import { BigDecimal, DateTime, Schema } from "effect";
 import { type JSX, useState } from "react";
 import { ArrowDown01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -34,7 +34,9 @@ type ListProps = Readonly<{
   save: Save;
   disabled: boolean;
 }>;
+
 type ItemProps = Omit<ListProps, "items"> & Readonly<{ item: Occurrence }>;
+
 const dateLabel = (date: string, today: string): string =>
   date === today
     ? "Hoy"
@@ -44,6 +46,7 @@ const dateLabel = (date: string, today: string): string =>
         month: "short",
         timeZone: "UTC",
       });
+
 const DesktopItem = ({ item, open, categories, today, save, disabled }: ItemProps): JSX.Element => (
   <TableRow
     tabIndex={0}
@@ -51,17 +54,19 @@ const DesktopItem = ({ item, open, categories, today, save, disabled }: ItemProp
     interaction="clickable"
     onClick={(event) => {
       if (
-        event.target instanceof Element &&
+        Schema.is(Schema.instanceOf(Element))(event.target) &&
         event.target.closest("button, a, [role=menuitemradio]") !== null
       ) {
         return;
       }
+
       open(item);
     }}
     onKeyDown={(event) => {
       if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) {
         return;
       }
+
       event.preventDefault();
       open(item);
     }}
@@ -93,6 +98,7 @@ const DesktopItem = ({ item, open, categories, today, save, disabled }: ItemProp
     </TableCell>
   </TableRow>
 );
+
 const DesktopList = ({ items, ...props }: ListProps): JSX.Element => (
   <div className="hidden @min-5xl:block">
     <Table layout="fixed">
@@ -119,6 +125,7 @@ const DesktopList = ({ items, ...props }: ListProps): JSX.Element => (
     </Table>
   </div>
 );
+
 const MobileList = ({ items, open, today }: ListProps): JSX.Element => (
   <div className="divide-y @min-5xl:hidden">
     {items.map((item) => (
@@ -141,6 +148,7 @@ const MobileList = ({ items, open, today }: ListProps): JSX.Element => (
     ))}
   </div>
 );
+
 const GroupTotals = ({ items }: Pick<ListProps, "items">): JSX.Element => (
   <footer
     aria-label="Total de próximos"
@@ -150,6 +158,7 @@ const GroupTotals = ({ items }: Pick<ListProps, "items">): JSX.Element => (
     <div className="flex flex-wrap gap-x-8 gap-y-3">
       {kinds.map(([kind, label]) => {
         const selected = items.filter((item) => item.plan.kind === kind);
+
         return (
           <div key={kind} className="grid gap-1 text-right text-xs">
             <span className="text-muted-foreground">
@@ -157,11 +166,13 @@ const GroupTotals = ({ items }: Pick<ListProps, "items">): JSX.Element => (
             </span>
             {[...new Set(selected.map((item) => item.plan.currency))].map((currency) => {
               const sameCurrency = selected.filter((item) => item.plan.currency === currency);
+
               const amount = BigDecimal.sumAll(
                 sameCurrency.flatMap((item) =>
                   item.remaining === undefined ? [] : [item.remaining.amount]
                 )
               );
+
               return (
                 <span key={currency} className="font-medium tabular-nums">
                   {money({ currency, amount })}
@@ -178,12 +189,14 @@ const GroupTotals = ({ items }: Pick<ListProps, "items">): JSX.Element => (
     </div>
   </footer>
 );
+
 const OccurrenceGroup = ({
   label,
   ...props
 }: ListProps & Readonly<{ label: string }>): JSX.Element => {
   const [expanded, setExpanded] = useState(true);
   const page = useOccurrencePage(props.items);
+
   return (
     <section data-recurring-slot="occurrence-group" className="@container min-w-0">
       <h2>
@@ -209,6 +222,7 @@ const OccurrenceGroup = ({
     </section>
   );
 };
+
 export const OccurrenceList = ({ items, ...props }: ListProps): JSX.Element => (
   <div className="grid gap-4">
     {(
@@ -222,6 +236,7 @@ export const OccurrenceList = ({ items, ...props }: ListProps): JSX.Element => (
       const selected = items.filter(
         (item) => item.status === status || (status === "unconfirmed" && item.status === "partial")
       );
+
       return selected.length === 0 ? null : (
         <OccurrenceGroup
           key={`${status}:${selected.map((item) => `${item.planId}:${item.date}`).join(",")}`}

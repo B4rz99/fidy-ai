@@ -14,6 +14,7 @@ export class TransactionAggregatesUnavailable extends Data.TaggedError(
 export class RecurringFactsUnavailable extends Data.TaggedError("RecurringFactsUnavailable") {}
 
 export type PlanningTransactionRange = Readonly<{ from: string; through: string }>;
+
 export type PlanningTransactionFacts = Readonly<{
   transactions: ReadonlyArray<Transaction>;
   complete: boolean;

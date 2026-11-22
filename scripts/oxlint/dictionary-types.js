@@ -17,6 +17,7 @@ const BUILT_INS = new Set([
   "PropertyKey",
   "NonNullable",
 ]);
+
 const TRANSPARENT_WRAPPERS = new Set(["Readonly", "Partial", "Required", "NonNullable"]);
 
 /** @param {Node} statement - Top-level statement to unwrap. */
@@ -46,9 +47,13 @@ export const declarationName = (declaration) =>
 const indexNamedDeclaration = (declaration, environment) => {
   if (declaration === null) return;
   const name = declarationName(declaration);
+
   if (name === undefined) return;
+
   if (BUILT_INS.has(name)) environment.shadowedBuiltIns.add(name);
+
   if (declaration.type === "TSTypeAliasDeclaration") indexAlias(name, declaration, environment);
+
   if (declaration.type === "TSInterfaceDeclaration") {
     const declarations = environment.interfaces.get(name) ?? [];
     declarations.push(declaration);
@@ -63,8 +68,10 @@ const indexNamedDeclaration = (declaration, environment) => {
 const indexDeclaration = (declaration, environment) => {
   if (declaration?.type !== "ImportDeclaration") {
     indexNamedDeclaration(declaration, environment);
+
     return;
   }
+
   for (const specifier of declaration.specifiers) {
     if (BUILT_INS.has(specifier.local.name)) environment.shadowedBuiltIns.add(specifier.local.name);
   }
@@ -80,7 +87,9 @@ export const createTypeEnvironment = (program) => {
     interfaces: new Map(),
     shadowedBuiltIns: new Set(),
   };
+
   for (const statement of program.body) indexDeclaration(declaredStatement(statement), environment);
+
   return environment;
 };
 
@@ -97,12 +106,14 @@ const isBuiltIn = (name, environment) =>
 /** @param {Node} type - Candidate type syntax to unwrap. */
 const unwrap = (type) => {
   let current = type;
+
   while (
     current.type === "TSParenthesizedType" ||
     (current.type === "TSTypeOperator" && current.operator === "readonly")
   ) {
     current = current.typeAnnotation;
   }
+
   return current;
 };
 
@@ -118,7 +129,9 @@ const isEmptyLiteral = (type) => type.members.length === 0 || type.members.every
 /** @param {Array<import("./ast-types.js").TSInterfaceDeclaration>} declarations - Merged local declarations. */
 const isEmptyInterface = (declarations) => {
   const declaration = declarations[0];
+
   if (declarations.length !== 1 || declaration === undefined) return false;
+
   return (
     declaration.extends.length === 0 &&
     (declaration.body.body.length === 0 || declaration.body.body.every(isEmptyMember))
@@ -131,6 +144,7 @@ const isEmptyInterface = (declarations) => {
  */
 const isUnappliedReferenceTo = (type, name) => {
   const unwrapped = unwrap(type);
+
   return (
     unwrapped.type === "TSTypeReference" &&
     referenceName(unwrapped) === name &&
@@ -146,11 +160,15 @@ const isUnappliedReferenceTo = (type, name) => {
  */
 const resolveSubstitution = (type, substitutions, resolving = new Set()) => {
   const unwrapped = unwrap(type);
+
   if (unwrapped.type !== "TSTypeReference") return type;
   const name = referenceName(unwrapped);
+
   if (name === null || resolving.has(name)) return type;
   const substitution = substitutions.get(name);
+
   if (substitution === undefined) return type;
+
   return resolveSubstitution(substitution, substitutions, new Set([...resolving, name]));
 };
 
@@ -163,11 +181,14 @@ const aliasSubstitutions = (alias, type, base) => {
   const next = new Map(base);
   const parameters = alias.typeParameters?.params ?? [];
   const arguments_ = type.typeArguments?.params ?? [];
+
   for (const [index, parameter] of parameters.entries()) {
     const argument = arguments_[index] ?? parameter.default;
+
     if (argument == null) return null;
     next.set(parameter.name.name, resolveSubstitution(argument, next));
   }
+
   return next;
 };
 
@@ -178,9 +199,12 @@ const aliasSubstitutions = (alias, type, base) => {
  */
 const aliasVisit = (type, name, resolution) => {
   const alias = resolution.environment.aliases.get(name);
+
   if (alias === undefined || resolution.resolvingAliases.has(name)) return null;
   const substitutions = aliasSubstitutions(alias, type, resolution.substitutions);
+
   if (substitutions === null) return null;
+
   return {
     type: alias.typeAnnotation,
     resolution: {
@@ -208,8 +232,10 @@ const unsafeSubstitution = (name, substitution, resolution) =>
  */
 const unsafeDeclaredValue = (type, name, resolution) => {
   const declarations = resolution.environment.interfaces.get(name);
+
   if (declarations !== undefined) return isEmptyInterface(declarations) ? "empty-object" : null;
   const visit = aliasVisit(type, name, resolution);
+
   return visit === null ? null : unsafeDirectValue(visit.type, visit.resolution);
 };
 
@@ -220,13 +246,19 @@ const unsafeDeclaredValue = (type, name, resolution) => {
  */
 const unsafeReference = (type, resolution) => {
   const name = referenceName(type);
+
   if (name === null) return null;
+
   if (TRANSPARENT_WRAPPERS.has(name) && isBuiltIn(name, resolution.environment)) {
     const wrapped = type.typeArguments?.params[0];
+
     return wrapped === undefined ? null : unsafeDirectValue(wrapped, resolution);
   }
+
   const substitution = resolution.substitutions.get(name);
+
   if (substitution !== undefined) return unsafeSubstitution(name, substitution, resolution);
+
   return unsafeDeclaredValue(type, name, resolution);
 };
 
@@ -241,9 +273,12 @@ const unsafeCompositeValue = (type, resolution) => {
       ? "union"
       : null;
   }
+
   if (type.type !== "TSIntersectionType") return null;
   const values = type.types.map((member) => unsafeDirectValue(member, resolution));
+
   if (values.includes("any")) return "any";
+
   return values.length > 0 && values.every((value) => value !== null) ? (values[0] ?? null) : null;
 };
 
@@ -254,11 +289,17 @@ const unsafeCompositeValue = (type, resolution) => {
  */
 const unsafeDirectValue = (type, resolution) => {
   const unwrapped = unwrap(type);
+
   if (unwrapped.type === "TSUnknownKeyword") return "unknown";
+
   if (unwrapped.type === "TSAnyKeyword") return "any";
+
   if (unwrapped.type === "TSObjectKeyword") return "object";
+
   if (unwrapped.type === "TSTypeLiteral" && isEmptyLiteral(unwrapped)) return "empty-object";
+
   if (unwrapped.type === "TSTypeReference") return unsafeReference(unwrapped, resolution);
+
   return unsafeCompositeValue(unwrapped, resolution);
 };
 
@@ -269,6 +310,7 @@ const unsafeDirectValue = (type, resolution) => {
  */
 const recordDictionaryValue = (type, resolution) => {
   const value = type.typeArguments?.params[1];
+
   return value === undefined ? [] : [{ type: value, substitutions: resolution.substitutions }];
 };
 
@@ -280,10 +322,13 @@ const recordDictionaryValue = (type, resolution) => {
  */
 const builtInDictionaryValues = (type, name, resolution) => {
   if (name === "Record") return recordDictionaryValue(type, resolution);
+
   if (TRANSPARENT_WRAPPERS.has(name) || name === "Pick" || name === "Omit") {
     const first = type.typeArguments?.params[0];
+
     return first === undefined ? [] : dictionaryValues(first, resolution);
   }
+
   return [];
 };
 
@@ -294,17 +339,22 @@ const builtInDictionaryValues = (type, name, resolution) => {
  */
 const dictionaryReferenceValues = (type, resolution) => {
   const name = referenceName(type);
+
   if (name === null) return [];
   const substitution = resolution.substitutions.get(name);
+
   if (substitution !== undefined) {
     return isUnappliedReferenceTo(substitution, name)
       ? []
       : dictionaryValues(substitution, resolution);
   }
+
   if (isBuiltIn(name, resolution.environment)) {
     return builtInDictionaryValues(type, name, resolution);
   }
+
   const visit = aliasVisit(type, name, resolution);
+
   return visit === null ? [] : dictionaryValues(visit.type, visit.resolution);
 };
 
@@ -315,6 +365,7 @@ const dictionaryReferenceValues = (type, resolution) => {
  */
 const dictionaryValues = (type, resolution) => {
   const unwrapped = unwrap(type);
+
   if (unwrapped.type === "TSTypeLiteral") {
     return unwrapped.members.flatMap((member) =>
       member.type === "TSIndexSignature"
@@ -322,11 +373,13 @@ const dictionaryValues = (type, resolution) => {
         : []
     );
   }
+
   if (unwrapped.type === "TSMappedType") {
     return unwrapped.typeAnnotation === null
       ? []
       : [{ type: unwrapped.typeAnnotation, substitutions: resolution.substitutions }];
   }
+
   return unwrapped.type === "TSTypeReference"
     ? dictionaryReferenceValues(unwrapped, resolution)
     : [];
@@ -338,13 +391,16 @@ const dictionaryValues = (type, resolution) => {
  */
 export const classifyUnsafeDictionary = (type, environment) => {
   const resolution = { environment, substitutions: new Map(), resolvingAliases: new Set() };
+
   for (const value of dictionaryValues(type, resolution)) {
     const unsafeValue = unsafeDirectValue(value.type, {
       ...resolution,
       substitutions: value.substitutions,
     });
+
     if (unsafeValue !== null) return unsafeValue;
   }
+
   return null;
 };
 

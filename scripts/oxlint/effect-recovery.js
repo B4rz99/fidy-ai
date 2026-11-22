@@ -5,7 +5,9 @@
 /** @param {Node} node - Static member or imported name. */
 const staticName = (node) => {
   if (node.type === "Identifier") return node.name;
-  if (node.type === "Literal" && typeof node.value === "string") return node.value;
+
+  if (node.type === "Literal" && /^["']/u.test(node.raw ?? "")) return String(node.value);
+
   return undefined;
 };
 
@@ -17,8 +19,11 @@ const staticName = (node) => {
 const namedImportPath = (specifier, source) => {
   if (specifier.importKind === "type") return [];
   const name = staticName(specifier.imported);
+
   if (source === "effect" && name === "Effect") return ["Effect"];
+
   if (source === "effect/Effect" && name !== undefined) return ["Effect", name];
+
   return [];
 };
 
@@ -28,9 +33,12 @@ const namedImportPath = (specifier, source) => {
  */
 const importPath = (specifier) => {
   const declaration = specifier.parent;
+
   if (declaration?.type !== "ImportDeclaration" || declaration.importKind === "type") return [];
   const source = declaration.source.value;
+
   if (specifier.type === "ImportSpecifier") return namedImportPath(specifier, source);
+
   return specifier.type === "ImportNamespaceSpecifier" && source === "effect/Effect"
     ? ["Effect"]
     : [];
@@ -44,14 +52,19 @@ const importPath = (specifier) => {
 const importedPath = (context, node) => {
   /** @type {ReturnType<RuleContext["sourceCode"]["getScope"]> | null} */
   let scope = context.sourceCode.getScope(node);
+
   while (scope !== null) {
     const binding = scope.set.get(node.name);
+
     if (binding !== undefined) {
       const definition = binding.defs[0];
+
       return definition?.type === "ImportBinding" ? importPath(definition.node) : [];
     }
+
     scope = scope.upper;
   }
+
   return [];
 };
 
@@ -62,8 +75,11 @@ const importedPath = (context, node) => {
  */
 const isEffectExport = (context, node, name) => {
   if (node.type === "Identifier") return importedPath(context, node).join("/") === `Effect/${name}`;
+
   if (node.type !== "MemberExpression" || node.object.type !== "Identifier") return false;
+
   if (node.computed && node.property.type !== "Literal") return false;
+
   return (
     staticName(node.property) === name && importedPath(context, node.object).join("/") === "Effect"
   );
@@ -91,9 +107,12 @@ const noCatchSucceedNone = {
     return {
       CallExpression(node) {
         if (node.optional || ![1, 2].includes(node.arguments.length)) return;
+
         if (!isEffectExport(context, node.callee, "catch")) return;
         const callback = node.arguments.at(-1);
+
         if (!isEmptyFallback(callback)) return;
+
         if (!isEffectExport(context, callback.body, "succeedNone")) return;
         context.report({ node, messageId: "catchSucceedNone" });
       },
@@ -105,4 +124,5 @@ const plugin = {
   meta: { name: "effect-recovery" },
   rules: { "no-catch-succeed-none": noCatchSucceedNone },
 };
+
 export default plugin;

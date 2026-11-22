@@ -32,10 +32,13 @@ const viewCase = Effect.fn(function* (request: Request, storage: DurableObjectSt
   const continuation = Schema.decodeUnknownOption(ErasureContinuation, {
     onExcessProperty: "error",
   })(yield* Effect.tryPromise(() => request.json()));
+
   const sql = yield* SqliteClient;
+
   return yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
+
       if (
         Option.isNone(continuation) ||
         !validContinuation({
@@ -46,47 +49,69 @@ const viewCase = Effect.fn(function* (request: Request, storage: DurableObjectSt
       ) {
         return new Response(null, { status: 409 });
       }
+
       const { reference, userId } = continuation.value;
+
       const [record] =
         yield* sql`SELECT state,last_erased_at_ms,connection_blocked,directory_clean,pricing_clean,identity_released FROM erasure_cases WHERE reference=${reference} AND user_id=${userId}`;
+
       if (record === undefined) return new Response(null, { status: 409 });
       const phase = yield* Schema.decodeUnknownEffect(ErasureReceipt.fields.state)(record.state);
+
       if (request.url === "https://coordinator.internal/erasure-continue") {
         yield* sql`UPDATE erasure_cases SET next_check_ms=${now} WHERE reference=${reference} AND user_id=${userId}`;
         yield* preserveStoreAlarm(storage, now);
+
         return new Response(null, { status: 202 });
       }
+
       return yield* caseReceipt(reference, phase, record);
     })
   );
 });
 
-const completedClasses = (
-  record: Readonly<Record<string, unknown>>
-): ReadonlyArray<ErasureClass> => {
+const ReceiptCase = Schema.Struct({
+  last_erased_at_ms: Schema.Unknown,
+  connection_blocked: Schema.Unknown,
+  directory_clean: Schema.Unknown,
+  pricing_clean: Schema.Unknown,
+  identity_released: Schema.Unknown,
+});
+
+const completedClasses = (record: typeof ReceiptCase.Type): ReadonlyArray<ErasureClass> => {
   if (record.last_erased_at_ms === null) return [];
+
   if (record.directory_clean !== 1) return localClasses;
+
   return ErasureClass.literals.filter((entry) => {
     if (entry === "identity" || entry === "credentials") return record.identity_released === 1;
+
     if (entry === "billing") return record.pricing_clean === 1;
+
     return true;
   });
 };
+
 const caseReceipt = Effect.fn(function* (
   reference: string,
   phase: typeof ErasureReceipt.Type.state,
-  record: Readonly<Record<string, unknown>>
+  raw: unknown
 ) {
   const sql = yield* SqliteClient;
+  const record = yield* Schema.decodeUnknownEffect(ReceiptCase)(raw);
   const owners = ErasureCustodian.literals;
+
   const custody =
     yield* sql`SELECT c.custodian,coalesce(e.status,'Pending') AS status,e.reason FROM erasure_case_custodians c LEFT JOIN erasure_case_evidence e ON e.id=c.event_id AND e.reference=c.reference AND e.custodian=c.custodian AND e.status=c.status WHERE c.reference=${reference}`;
+
   const dispositions = yield* Schema.decodeUnknownEffect(ErasureOperatorReceipt.fields.custodians)(
     owners.map((custodian) => {
       const row = custody.find((entry) => entry.custodian === custodian);
+
       return row?.status === "Unresolved" ? row : { custodian, status: row?.status ?? "Pending" };
     })
   );
+
   const receipt = yield* Schema.encodeEffect(ErasureOperatorReceipt)({
     reference,
     state: phase,
@@ -104,6 +129,7 @@ const caseReceipt = Effect.fn(function* (
         : (yield* Schema.decodeUnknownEffect(Schema.Int)(record.last_erased_at_ms)) +
           recoveryWindowMs,
   });
+
   return Response.json(receipt, { headers: { "cache-control": "no-store" } });
 });
 

@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { selectChecks, selectNativeChecks } from "./ci-changes";
 
 const root = process.cwd();
+
 const fixtures: Array<string> = [];
+
 afterEach(() => {
   for (const fixture of fixtures.splice(0)) Bun.spawnSync(["rm", "-rf", fixture]);
 });
@@ -34,6 +36,7 @@ describe("PR check selection", () => {
     ]) {
       expect(selectNativeChecks([path]), path).toBe(false);
     }
+
     for (const path of [
       "apps/cli/src/main.ts",
       "apps/server/src/shell/api.ts",
@@ -52,6 +55,7 @@ describe("PR check selection", () => {
     ]) {
       expect(selectNativeChecks([path]), path).toBe(true);
     }
+
     expect(selectNativeChecks([])).toBe(false);
     expect(
       selectNativeChecks([
@@ -113,6 +117,7 @@ describe("PR check selection", () => {
     ]) {
       expect(selectedJobs([path]), path).toEqual(allJobs);
     }
+
     expect(selectedJobs(["apps/server/tools/fixtures/message.md"])).toContain("unit");
   });
 
@@ -127,6 +132,7 @@ describe("PR check selection", () => {
     expect(temporary.exitCode).toBe(0);
     const cwd = new TextDecoder().decode(temporary.stdout).trim();
     fixtures.push(cwd);
+
     const writeFixture = (path: string, content: string): void => {
       const result = Bun.spawnSync([
         "sh",
@@ -136,8 +142,10 @@ describe("PR check selection", () => {
         content,
         `${cwd}/${path}`,
       ]);
+
       expect(result.exitCode).toBe(0);
     };
+
     const git = (...args: ReadonlyArray<string>): string => {
       const result = Bun.spawnSync(["git", ...args], {
         cwd,
@@ -149,9 +157,12 @@ describe("PR check selection", () => {
           GIT_COMMITTER_EMAIL: "ci@example.test",
         },
       });
+
       expect(result.exitCode, new TextDecoder().decode(result.stderr)).toBe(0);
+
       return new TextDecoder().decode(result.stdout).trim();
     };
+
     git("init", "--initial-branch=trunk");
     writeFixture("apps/server/original.ts", "export const fixture = true;\n");
     git("add", ".");
@@ -159,6 +170,7 @@ describe("PR check selection", () => {
     git("checkout", "-b", "topic");
     writeFixture("docs/moved.md", "export const fixture = true;\n");
     expect(Bun.spawnSync(["rm", `${cwd}/apps/server/original.ts`]).exitCode).toBe(0);
+
     const documents = Bun.spawnSync([
       "bash",
       "-c",
@@ -166,6 +178,7 @@ describe("PR check selection", () => {
       "fixture",
       cwd,
     ]);
+
     expect(documents.exitCode).toBe(0);
     git("add", ".");
     git("commit", "-m", "move server fixture to docs");
@@ -176,17 +189,21 @@ describe("PR check selection", () => {
     git("commit", "-m", "unrelated base change");
     const base = git("rev-parse", "HEAD");
     const output = `${cwd}/outputs`;
+
     const result = Bun.spawnSync(["bun", `${root}/scripts/ci-changes.ts`], {
       cwd,
       env: { ...Bun.env, PR_BASE_SHA: base, PR_HEAD_SHA: head, GITHUB_OUTPUT: output },
     });
+
     expect(result.exitCode, new TextDecoder().decode(result.stderr)).toBe(0);
 
     const invalid = Bun.spawnSync(["bun", `${root}/scripts/ci-changes.ts`], {
       cwd,
       env: { ...Bun.env, PR_BASE_SHA: "0".repeat(40), PR_HEAD_SHA: head, GITHUB_OUTPUT: output },
     });
+
     expect(invalid.exitCode).not.toBe(0);
+
     return Bun.file(output)
       .text()
       .then((plan) => {
@@ -224,6 +241,7 @@ describe("Required Checks", () => {
     for (const result of ["failure", "cancelled", "skipped"]) {
       expect(gate("true", result)).not.toBe(0);
     }
+
     expect(gate("false", "success")).not.toBe(0);
     expect(gate("false", "failure")).not.toBe(0);
     expect(gate("false", "skipped", { detector: "failure", staticResult: "success" })).not.toBe(0);

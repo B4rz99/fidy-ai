@@ -40,10 +40,12 @@ describe("release compatibility for native retained stores", () => {
           forward: true,
           rollback: true,
         });
+
         const appended = {
           ...stable,
           histories: { ...stable.histories, user: [...stable.histories.user, "3".repeat(64)] },
         };
+
         expect(storageOverlap({ stable, candidate: appended })).toEqual({
           forward: true,
           rollback: false,
@@ -52,10 +54,12 @@ describe("release compatibility for native retained stores", () => {
           forward: false,
           rollback: false,
         });
+
         const rewritten = {
           ...stable,
           histories: { ...stable.histories, pricing: ["0".repeat(64)] },
         };
+
         expect(storageOverlap({ stable, candidate: rewritten }).forward).toBe(false);
         const incompatible = { ...stable, protocol: { write: "next", readers: ["next"] } };
         expect(storageOverlap({ stable, candidate: incompatible }).forward).toBe(false);
@@ -68,10 +72,12 @@ it.effect("recognizes only the reviewed comment-only protocol pair", () =>
     const storage = yield* buildStorageRelease();
     const predecessor = "87d29c622bb96d493a602d18741fa4b8532871914bc956c0560d909e4377c4f5";
     const reformatted = "176dcf18c895cce04e5abe6dde4cc541c46bdd189b4ecfc85fec8621c672b3e3";
+
     const describeProtocol = (write: string): typeof storage => ({
       ...storage,
       protocol: { write, readers: [write] },
     });
+
     const stable = describeProtocol(predecessor);
     const candidate = describeProtocol(reformatted);
     expect(storageOverlap({ stable, candidate })).toEqual({ forward: true, rollback: true });
@@ -81,15 +87,19 @@ it.effect("recognizes only the reviewed comment-only protocol pair", () =>
     });
     const foreign = describeProtocol(reformatted.slice(0, -1) + "4");
     expect(storageOverlap({ stable, candidate: foreign }).forward).toBe(false);
+
     const newWriter = {
       ...foreign,
       protocol: { ...foreign.protocol, readers: [reformatted] },
     };
+
     expect(storageOverlap({ stable, candidate: newWriter }).forward).toBe(false);
+
     const rewritten = {
       ...candidate,
       histories: { ...candidate.histories, pricing: ["e".repeat(64)] },
     };
+
     expect(storageOverlap({ stable, candidate: rewritten }).forward).toBe(false);
   })
 );
@@ -97,34 +107,40 @@ it.effect("recognizes only the reviewed comment-only protocol pair", () =>
 it.effect("checks exact immutable namespace IDs, access and Worker pair descriptors", () =>
   Effect.gen(function* () {
     const description = yield* buildStorageRelease();
+
     const descriptor = {
       type: "plain_text",
       text: yield* Schema.encodeEffect(storageReleaseCodec)(description),
     };
+
     const ingress = { [storageReleaseBinding]: descriptor };
+
     const bindings = Object.fromEntries(
       Object.entries(namespaceClasses).map(([name, class_name]) => [
         name,
         { type: "durable_object_namespace", namespace_id: name, class_name },
       ])
     );
+
     const core = { ...ingress, ...bindings };
     const actual = verifiedStoragePair({ ingress, core });
     expect(compatibleStoragePairs({ serving: actual, candidate: actual })).toEqual({
       forward: true,
       rollback: true,
     });
+
     const replaced = verifiedStoragePair({
       ingress,
       core: { ...core, USER_STORE: { ...bindings.USER_STORE, namespace_id: "replacement" } },
     });
+
     expect(compatibleStoragePairs({ serving: actual, candidate: replaced }).forward).toBe(false);
     expect(() => verifiedStoragePair({ ingress, core: { ...core, DB: { type: "d1" } } })).toThrow();
     expect(() =>
-      verifiedStoragePair({ ingress: { ...ingress, PRICING: bindings.PRICING }, core })
+      verifiedStoragePair({ ingress: { ...ingress, PRICING: bindings.PRICING ?? null }, core })
     ).toThrow();
     expect(() =>
-      verifiedStoragePair({ ingress, core: { ...core, ERASURE: bindings.MAINTENANCE } })
+      verifiedStoragePair({ ingress, core: { ...core, ERASURE: bindings.MAINTENANCE ?? null } })
     ).toThrow();
     expect(() => verifiedStoragePair({ ingress: {}, core })).toThrow();
   })
@@ -156,13 +172,16 @@ it("refuses to bootstrap an existing target or a plan that can replace or delete
     })
   ).toThrow();
   const revision = "1".repeat(40);
+
   const resources = [...nativeResourceInventory(revision)].map(([logicalId, resourceType]) => ({
     logicalId,
     resourceType,
     action: "create",
   }));
+
   const plan = (rows: typeof resources, first: boolean): void =>
     requireNativeResourcePlan({ plan: { resources: rows, actions: [] }, revision, first });
+
   expect(resources.length).toBeGreaterThan(40);
   expect(() => plan(resources, true)).not.toThrow();
   expect(() =>
@@ -171,6 +190,7 @@ it("refuses to bootstrap an existing target or a plan that can replace or delete
       true
     )
   ).toThrow();
+
   for (const action of ["adopted", "update", "noop", "replace", "delete"]) {
     expect(() =>
       plan(
@@ -179,6 +199,7 @@ it("refuses to bootstrap an existing target or a plan that can replace or delete
       )
     ).toThrow();
   }
+
   expect(() =>
     plan(
       resources.map((row) => ({ ...row, action: "noop" })),
@@ -198,11 +219,13 @@ it("binds each planned Worker to the closed installation before any provider app
       props: { ...base, crons: ["* * * * *"] },
     })
   ).not.toThrow();
+
   const ingress = {
     ...base,
     name: installationNames.Ingress,
     domain: { name: "storage-acceptance.fidyapp.com", aliases: [] },
   };
+
   expect(() =>
     requireInstallationWorker({
       hosts: "acceptance",
@@ -211,6 +234,7 @@ it("binds each planned Worker to the closed installation before any provider app
       props: ingress,
     })
   ).not.toThrow();
+
   for (const drift of [
     { name: "incumbent" },
     { domain: "api.fidyapp.com" },
@@ -229,6 +253,7 @@ it("binds each planned Worker to the closed installation before any provider app
       })
     ).toThrow();
   }
+
   expect(() =>
     requireInstallationWorker({
       hosts: "acceptance",
@@ -242,6 +267,7 @@ it("binds each planned Worker to the closed installation before any provider app
 it("rejects open admission and producer bindings before applying either Worker", () => {
   const closed = { name: "RECOVERY_ISOLATION", type: "plain_text", text: "isolated" };
   const core = { name: "CORE", type: "service" };
+
   const complete = [...nativeBindingInventory({ fingerprint: "", role: "Ingress" })].map(
     ([name, type]) => ({
       name,
@@ -253,6 +279,7 @@ it("rejects open admission and producer bindings before applying either Worker",
         ]).get(name) ?? "",
     })
   );
+
   expect(() =>
     requireClosedBindings({ fingerprint: "", worker: "Ingress", bindings: complete })
   ).not.toThrow();
@@ -269,11 +296,13 @@ it("rejects open admission and producer bindings before applying either Worker",
   expect(() =>
     requireClosedBindings({ fingerprint: "", worker: "Core", bindings: complete })
   ).toThrow();
+
   for (const worker of ["Ingress", "Core"] as const) {
     expect(() => requireClosedBindings({ fingerprint: "", worker, bindings: [] })).toThrow();
     expect(() =>
       requireClosedBindings({ fingerprint: "", worker, bindings: [{ ...closed, text: "" }] })
     ).toThrow();
+
     for (const type of ["queue", "workflow", "send_email", "d1"]) {
       expect(() =>
         requireClosedBindings({

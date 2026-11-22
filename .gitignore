@@ -1,6 +1,7 @@
 node_modules/
 
 dist/
+!tools/oxlint/oxlint-plugin-jev/dist/
 build/
 out/
 apps/web/preview.tar

@@ -1,6 +1,7 @@
+import { browserRuntime } from "@/transport/browser-runtime";
 import { type Duration, Effect, Exit, Option, Scope } from "effect";
 import { type ReactNode, type RefCallback, useState } from "react";
-import { type SensitiveClipboard, makeSensitiveClipboard } from "./sensitive-clipboard";
+import { type SensitiveClipboard, createSensitiveClipboard } from "./sensitive-clipboard";
 
 type ClipboardOwner = Readonly<{
   scope: Scope.Closeable;
@@ -14,6 +15,7 @@ type MountedSensitiveClipboard = Readonly<{
 
 const makeMountedClipboard = (lifetime: Duration.Input): MountedSensitiveClipboard => {
   let owner = Option.none<ClipboardOwner>();
+
   const command: SensitiveClipboard = {
     reveal: (onExpired): void => {
       if (Option.isSome(owner)) owner.value.command.reveal(onExpired);
@@ -23,20 +25,26 @@ const makeMountedClipboard = (lifetime: Duration.Input): MountedSensitiveClipboa
         ? owner.value.command.copy(value, onCopied)
         : { release: () => undefined },
   };
+
   const lifecycleRef: RefCallback<HTMLDivElement> = (node) => {
     if (node === null) return;
     const scope = Scope.makeUnsafe();
-    const mountedCommand = Effect.runSync(
-      makeSensitiveClipboard(Option.fromUndefinedOr(globalThis.navigator.clipboard), lifetime).pipe(
-        Scope.provide(scope)
-      )
+
+    const mountedCommand = browserRuntime.runSync(
+      createSensitiveClipboard(
+        Option.fromUndefinedOr(globalThis.navigator.clipboard),
+        lifetime
+      ).pipe(Scope.provide(scope))
     );
+
     owner = Option.some({ scope, command: mountedCommand });
+
     return (): void => {
       owner = Option.none();
       Effect.runCallback(Scope.close(scope, Exit.void), { onExit: () => undefined });
     };
   };
+
   return { lifecycleRef, command };
 };
 
@@ -52,6 +60,7 @@ export const SensitiveClipboardBoundary = ({
   lifetime,
 }: SensitiveClipboardBoundaryProps): React.JSX.Element => {
   const [{ lifecycleRef, command }] = useState(() => makeMountedClipboard(lifetime));
+
   return (
     <div className={Option.getOrUndefined(className)} ref={lifecycleRef}>
       {children(command)}

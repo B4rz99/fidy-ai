@@ -14,7 +14,7 @@ import {
   readSchedule,
 } from "./internal/local-insights";
 
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { InsightUnavailable, type PauseNoticeService } from "./contract";
 import { weeklyReportDeliveryQuery as weeklyReportDeliveryQueryOwned } from "./internal/weekly-generation";
 
@@ -23,14 +23,18 @@ export const weeklyReportDeliveryQuery: typeof weeklyReportDeliveryQueryOwned = 
 
 export const prepareLocalInsight: typeof prepareTransition = (...input) =>
   prepareTransition(...input);
+
 export const prepareLocalReminder: typeof prepareSchedule = (...input) => prepareSchedule(...input);
+
 export const readLocalReminder: typeof readSchedule = (user) => readSchedule(user);
 
 export const claimLocalReminderPurpose: typeof claimPurpose = (...args) => claimPurpose(...args);
+
 export const reconcileLocalReminder: typeof reconcileReceipt = (...args) =>
   reconcileReceipt(...args);
 
 export const claimLocalDisclosure: typeof claimDisclosure = (...args) => claimDisclosure(...args);
+
 export const isRetainedDisclosure: typeof retainedDisclosure = (...args) =>
   retainedDisclosure(...args);
 
@@ -41,11 +45,17 @@ export const readLocalDigestReport: typeof readLocalReport = (input) => readLoca
 
 export const nativePauseNotice: PauseNoticeService = {
   bind: (...args: Parameters<typeof bindPauseNotice>) =>
-    bindPauseNotice(...args).pipe(Effect.mapError(() => new InsightUnavailable())),
+    bindPauseNotice(...args).pipe(
+      Effect.mapError((cause) => new InsightUnavailable({ cause: Option.some(cause) }))
+    ),
   include: (...args: Parameters<typeof includePauseNotice>) =>
-    includePauseNotice(...args).pipe(Effect.mapError(() => new InsightUnavailable())),
+    includePauseNotice(...args).pipe(
+      Effect.mapError((cause) => new InsightUnavailable({ cause: Option.some(cause) }))
+    ),
   acknowledge: (...args: Parameters<typeof acknowledgePauseNotice>) =>
-    acknowledgePauseNotice(...args).pipe(Effect.mapError(() => new InsightUnavailable())),
+    acknowledgePauseNotice(...args).pipe(
+      Effect.mapError((cause) => new InsightUnavailable({ cause: Option.some(cause) }))
+    ),
 };
 
 export const localProactivityObservations: typeof nativePendingWork = (flags) =>

@@ -1,6 +1,17 @@
+import { Data } from "effect";
+
 const minimumRegionPixels = 32;
+
 const maximumMinimumShare = 0.49;
+
 const resizeWeightPrecision = 1000;
+
+export type DashboardResizePreview = Data.TaggedEnum<{
+  Available: { readonly weight: number; readonly adjacentWeight: number };
+  Unavailable: {};
+}>;
+
+export const DashboardResizePreview = Data.taggedEnum<DashboardResizePreview>();
 
 export const dashboardResizePreview = ({
   coordinate,
@@ -18,20 +29,23 @@ export const dashboardResizePreview = ({
   adjacentWeight: number;
   minimumWeight: number;
   maximumWeight: number;
-}>):
-  | Readonly<{ _tag: "Available"; weight: number; adjacentWeight: number }>
-  | Readonly<{ _tag: "Unavailable" }> => {
+}>): DashboardResizePreview => {
   const extent = end - start;
-  if (extent <= 0) return { _tag: "Unavailable" };
+
+  if (extent <= 0) return DashboardResizePreview.Unavailable();
   const minimumShare = Math.min(maximumMinimumShare, minimumRegionPixels / extent);
+
   const boundaryShare = Math.min(
     1 - minimumShare,
     Math.max(minimumShare, (coordinate - start) / extent)
   );
+
   const pairWeight = weight + adjacentWeight;
+
   const clamp = (value: number): number =>
     Math.round(Math.min(maximumWeight, Math.max(minimumWeight, value)) * resizeWeightPrecision) /
     resizeWeightPrecision;
+
   const nextWeight = clamp(
     Math.min(
       maximumWeight,
@@ -39,5 +53,9 @@ export const dashboardResizePreview = ({
       Math.max(minimumWeight, pairWeight - maximumWeight, pairWeight * boundaryShare)
     )
   );
-  return { _tag: "Available", weight: nextWeight, adjacentWeight: clamp(pairWeight - nextWeight) };
+
+  return DashboardResizePreview.Available({
+    weight: nextWeight,
+    adjacentWeight: clamp(pairWeight - nextWeight),
+  });
 };

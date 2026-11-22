@@ -46,12 +46,15 @@ const operations = Schema.Literals([
   "recurringPlans.applyRecurringEdit",
   "recurringPlans.getRecurringWorkspace",
 ]);
+
 export const isLocalRecurringPlan = Schema.is(operations);
+
 const success = (data: Schema.Json): LocalMutationResult => ({
   status: 200,
   outcome: "success",
   body: { data, next: [] },
 });
+
 const invalid: LocalMutationResult = {
   status: 400,
   outcome: "validation_failed",
@@ -64,7 +67,9 @@ const invalid: LocalMutationResult = {
     next: [],
   },
 };
+
 const categories = listLaunchCategories().map((entry) => entry.id);
+
 const validReferences = Effect.fn(function* (
   user: UserId,
   command: RecurringCommand,
@@ -72,21 +77,26 @@ const validReferences = Effect.fn(function* (
 ) {
   if (!validPlanCategories({ document, categories })) return false;
   const { edit } = command;
+
   if ((edit.kind === "create" || edit.kind === "suggestion") && edit.seriesId !== undefined) {
     return yield* ownsLocalRecurringSeries(user, edit.seriesId);
   }
+
   if (edit.kind === "fulfill" && edit.fulfillment.transactionId !== undefined) {
     const [transaction] = yield* readLocalPlanningReferences(user, [
       edit.fulfillment.transactionId,
     ]);
+
     return validLinkedFulfillment({
       document,
       mark: edit.fulfillment,
       transaction: Option.fromUndefinedOr(transaction),
     });
   }
+
   return true;
 });
+
 export const prepareLocalRecurringEdit = Effect.fn(function* (
   command: typeof ApplyRecurringCanonicalInput.Type.payload,
   user: UserId,
@@ -95,6 +105,7 @@ export const prepareLocalRecurringEdit = Effect.fn(function* (
   const now = DateTime.makeUnsafe(current);
   const base = yield* readLocalDocument(user);
   const edit = command.edit;
+
   if (
     edit.kind === "reverse" &&
     !base.fulfillments.some((mark) => mark.id === edit.fulfillmentId) &&
@@ -102,6 +113,7 @@ export const prepareLocalRecurringEdit = Effect.fn(function* (
   ) {
     return invalid;
   }
+
   const retained = yield* retainCompletions({
     document: base,
     command,
@@ -120,8 +132,11 @@ export const prepareLocalRecurringEdit = Effect.fn(function* (
         )
       ),
   });
+
   const next = yield* applyRecurringEdit({ document: retained, command }).pipe(Effect.option);
+
   if (Option.isNone(next) || !(yield* validReferences(user, command, next.value))) return invalid;
+
   return prepareLocalWrite({
     targets: ["recurring-document"],
     review: Effect.succeed({
@@ -131,6 +146,7 @@ export const prepareLocalRecurringEdit = Effect.fn(function* (
     }),
     commit: Effect.gen(function* () {
       yield* writeLocalDocument(user, base, next.value);
+
       return success(
         yield* Schema.encodeEffect(Schema.toCodecJson(RecurringDocument))(
           displayDocument({ document: next.value, compact: command.view === "compact", now })
@@ -139,6 +155,7 @@ export const prepareLocalRecurringEdit = Effect.fn(function* (
     }),
   });
 });
+
 export const editLocalRecurringPlan = Effect.fnUntraced(function* (
   input: typeof ApplyRecurringCanonicalInput.Type.payload,
   user: UserId,
@@ -148,6 +165,7 @@ export const editLocalRecurringPlan = Effect.fnUntraced(function* (
     Effect.flatMap(commitLocalWrite)
   );
 });
+
 export const workspace = Effect.fn(function* (
   query: typeof RecurringWorkspaceQuery.Type,
   user: UserId,
@@ -160,6 +178,7 @@ export const workspace = Effect.fn(function* (
   const document = projection.schedule;
   const [context] = yield* sql`SELECT locale,time_zone AS timeZone FROM users WHERE id=${user}`;
   const snapshot = yield* Schema.decodeUnknownEffect(UserPreferences)(context);
+
   const ranges =
     document.plans.length === 0
       ? []
@@ -167,19 +186,24 @@ export const workspace = Effect.fn(function* (
           [query.previousMonth ?? previousMonth(query.month), query.month],
           (month) => readLocalPlanningRange(user, matchingRange(month)).pipe(Effect.asSome)
         );
+
   const selected = yield* readLocalPlanningReferences(user, linkedTransactionIds(document));
+
   const result = yield* workspaceFromReadProjection({
     projection,
     query,
     now,
     observed: { ranges, selected, snapshot },
   });
+
   return success(yield* Schema.encodeEffect(Schema.toCodecJson(RecurringWorkspace))(result));
 });
+
 const bodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 16384,
   deadlineMilliseconds: 2000,
 });
+
 export const dispatchLocalRecurringPlans = Effect.fn(
   function* (unit: {
     request: Request;
@@ -193,12 +217,16 @@ export const dispatchLocalRecurringPlans = Effect.fn(
         policy: bodyPolicy,
         schema: Schema.toCodecJson(ApplyRecurringCanonicalInput.fields.payload),
       });
+
       return yield* runLocalMutation({ ...unit, input, work: editLocalRecurringPlan });
     }
+
     const query = Schema.decodeUnknownOption(RecurringWorkspaceQuery)(
       Object.fromEntries(new URL(unit.request.url).searchParams)
     );
+
     return yield* runLocalMutation({ ...unit, input: Effect.succeed(query), work: workspace });
   },
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );

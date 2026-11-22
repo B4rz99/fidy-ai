@@ -2,7 +2,9 @@ import type { CanonicalSuccess, EnrollmentMethod } from "@/transport/client";
 import { formatMoneyWithCompactCode } from "@/transport/money";
 
 export type SubscriptionOffers = CanonicalSuccess<"subscription.listSubscriptionOffers">["data"];
+
 export type SubscriptionOffer = SubscriptionOffers[number];
+
 export type PriceId = SubscriptionOffer["id"];
 
 const periodPresentation: Readonly<
@@ -29,6 +31,7 @@ export const presentSubscriptionOffer = (
   offer: SubscriptionOffer
 ): SubscriptionOfferPresentation => {
   const period = periodPresentation[offer.billingPeriod];
+
   return {
     id: offer.id,
     selectionLabel: period.selectionLabel,

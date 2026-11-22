@@ -7,9 +7,11 @@ import { native, nativePurgePlatform } from "../user-store.test-fixture";
 
 const setup = Effect.fn(function* () {
   const db = yield* makeNativeTransactionJourney(undefined, nativePurgePlatform);
+
   const users = yield* native(() => db.runtime.getDurableObjectNamespace("USER_STORE", "core")),
     bucket = yield* native(() => db.runtime.getR2Bucket("STATEMENT_STAGING_BUCKET", "core")),
     now = yield* Clock.currentTimeMillis;
+
   const alarm = Effect.fn(function* (at: number) {
     return yield* native(() =>
       users.getByName(alice.user).fetch("https://fixture.invalid/user-alarm", {
@@ -18,6 +20,7 @@ const setup = Effect.fn(function* () {
       })
     );
   });
+
   const retain = Effect.fn(function* (
     who: typeof alice,
     state: "queued" | "processing",
@@ -26,6 +29,7 @@ const setup = Effect.fn(function* () {
     const user = who.user,
       key = "users/" + user + "/staging/statement/v1/" + user,
       local = db.owner(user);
+
     yield* native(() => bucket.put(key, "original"));
     yield* native(() =>
       local.exec(
@@ -70,15 +74,20 @@ const setup = Effect.fn(function* () {
       )
     );
     yield* native(() => local.exec("INSERT INTO statement_backfill VALUES(?,?,NULL)", user, user));
+
     return key;
   });
+
   return { db, bucket, now, alarm, retain };
 });
+
 const retention = Effect.fn(function* (status: "queued" | "processing") {
   const { db, bucket, now, alarm, retain } = yield* setup(),
     expires = now + 10000;
+
   const key = yield* retain(alice, status, expires),
     foreign = yield* retain(bob, status, expires);
+
   yield* native(() =>
     db.exec("ALTER TABLE forwarded_email_receipts RENAME TO fixture_unavailable_email")
   );
@@ -103,9 +112,11 @@ const retention = Effect.fn(function* (status: "queued" | "processing") {
   );
   expect((yield* alarm(expires + 2)).status).toBe(204);
 });
+
 const dispatch = Effect.fn(function* (interrupted: boolean) {
   const { db, now, alarm, retain } = yield* setup(),
     expires = now + 86400000;
+
   yield* retain(alice, "queued", expires);
   yield* native(() =>
     db.exec("ALTER TABLE ingestion_review_items RENAME TO fixture_unavailable_review")
@@ -125,13 +136,16 @@ const dispatch = Effect.fn(function* (interrupted: boolean) {
     db.exec("ALTER TABLE fixture_unavailable_review RENAME TO ingestion_review_items")
   );
 });
+
 const expiredTurn = Effect.gen(function* () {
   const { db, now, alarm } = yield* setup(),
     old = now - 31 * 86400000;
+
   const add = Effect.fn(function* (who: typeof alice, suffix: string, time: number) {
     const local = db.owner(who.user),
       session = "session-" + suffix,
       turn = "turn-" + suffix;
+
     yield* native(() =>
       local.exec(
         "INSERT INTO hosted_agent_sessions(id,user_id,basis_json,start_ms,active_ms,compacted_text,compacted_through) VALUES(?,?,'{}',?,?,'private summary',1)",
@@ -161,12 +175,15 @@ const expiredTurn = Effect.gen(function* () {
       )
     );
   });
+
   yield* add(alice, "old", old);
   yield* add(alice, "current", now - 86400000);
   yield* add(bob, "foreign", old);
   expect((yield* alarm(now)).status).toBe(204);
+
   const snapshot =
     "SELECT t.id,t.state,t.request_text,t.answer,s.compacted_text,(SELECT count(*) FROM hosted_transcript WHERE turn_id=t.id) AS entries FROM hosted_turns t JOIN hosted_agent_sessions s ON s.id=t.session_id ORDER BY t.id";
+
   const current = {
     state: "failed",
     request_text: "private question",
@@ -174,6 +191,7 @@ const expiredTurn = Effect.gen(function* () {
     compacted_text: "private summary",
     entries: 1,
   };
+
   expect(yield* native(() => db.exec(snapshot))).toEqual([
     { id: "turn-current", ...current },
     {
@@ -189,6 +207,7 @@ const expiredTurn = Effect.gen(function* () {
     { id: "turn-foreign", ...current },
   ]);
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "erases expired personal Turn content while preserving terminal metadata, current content and the other User",

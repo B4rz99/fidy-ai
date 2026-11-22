@@ -2,14 +2,20 @@ import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { Deferred, Effect, Option, Schema } from "effect";
 
 type Environment = { CONTROL: DurableObjectNamespace; INGRESS: Fetcher };
+
 const browserBearerLength = 43;
+
 const completion = (content: string): Response =>
   Response.json({
     choices: [{ message: { role: "assistant", content }, finish_reason: "stop" }],
     usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
   });
-const fixtureTool = (mode: string): { name: string; arguments: string } => {
+
+type FixtureTool = Readonly<{ name: string; arguments: string }>;
+
+const fixtureTool = (mode: string): FixtureTool => {
   const id = "22460000-0000-4000-8000-000000000020";
+
   if (mode === "/batch") {
     return {
       name: "operations__executeAtomicBatch",
@@ -36,9 +42,11 @@ const fixtureTool = (mode: string): { name: string; arguments: string } => {
       }),
     };
   }
+
   if (mode === "/forget") {
     return { name: "memory__forget", arguments: JSON.stringify({ params: { id } }) };
   }
+
   return { name: "memory__recall", arguments: "{}" };
 };
 
@@ -50,6 +58,7 @@ const textModes = [
   "/invalid-after-query",
   "/unavailable-after-query",
 ];
+
 export class HostedProviderControl extends DurableObject<Environment> {
   private readonly browserClient = new AbortController();
   private readonly released = Deferred.makeUnsafe<void>();
@@ -59,7 +68,9 @@ export class HostedProviderControl extends DurableObject<Environment> {
   private readonly resumeCompaction = Deferred.makeUnsafe<void>();
   private readonly structured = Effect.fn({ self: this }, function* () {
     this.compactionCalls += 1;
+
     if (this.compactionMode === "held") yield* Deferred.await(this.resumeCompaction);
+
     return completion(
       this.compactionMode === "invalid"
         ? '{"other":"Resumen"}'
@@ -69,9 +80,11 @@ export class HostedProviderControl extends DurableObject<Environment> {
   private readonly configureCompaction = Effect.fn({ self: this }, function* (request: Request) {
     if (request.method === "POST") {
       const action = yield* Effect.tryPromise(() => request.text());
+
       if (action === "release") yield* Deferred.succeed(this.resumeCompaction, undefined);
       else this.compactionMode = action;
     }
+
     return Response.json({ calls: this.compactionCalls });
   });
   private rounds = 0;
@@ -90,15 +103,19 @@ export class HostedProviderControl extends DurableObject<Environment> {
         ),
       })
     )(yield* Effect.tryPromise(() => request.json()));
+
     if (input.response_format !== undefined) {
       return yield* this.structured();
     }
+
     this.available = input.tools?.map((tool) => tool.function.name) ?? [];
     this.rounds += 1;
+
     if (this.rounds !== 1) return this.laterRound();
     this.waiting = true;
     yield* Deferred.await(this.released);
     this.waiting = false;
+
     if (this.mode === "/malformed") {
       return Response.json({
         choices: [
@@ -106,6 +123,7 @@ export class HostedProviderControl extends DurableObject<Environment> {
         ],
       });
     }
+
     const message = {
       role: "assistant",
       content: null,
@@ -124,6 +142,7 @@ export class HostedProviderControl extends DurableObject<Environment> {
               },
             ],
     };
+
     return Response.json({
       choices: [{ message, finish_reason: "tool_calls" }],
       usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
@@ -136,6 +155,7 @@ export class HostedProviderControl extends DurableObject<Environment> {
         { status: 429 }
       );
     }
+
     if (
       this.mode === "/malformed" ||
       this.mode === "/invalid-after-query" ||
@@ -147,18 +167,22 @@ export class HostedProviderControl extends DurableObject<Environment> {
         ],
       });
     }
+
     return completion("Listo.");
   }
   private browserRequest(request: Request): Option.Option<Promise<Response>> {
     if (request.url === "https://fixture.invalid/disconnect-browser") {
       this.browserClient.abort();
+
       return Option.some(Promise.resolve(new Response(null, { status: 204 })));
     }
+
     if (
       request.url === "https://fixture.invalid/browser-admission" ||
       request.url === "https://fixture.invalid/browser-progress"
     ) {
       const path = request.url.endsWith("admission") ? "" : "/progress";
+
       return Option.some(
         request
           .text()
@@ -178,6 +202,7 @@ export class HostedProviderControl extends DurableObject<Environment> {
           .catch(() => new Response(null, { status: 499 }))
       );
     }
+
     return Option.none();
   }
   private readonly templateSend = Effect.fn({ self: this }, function* (request: Request) {
@@ -187,34 +212,44 @@ export class HostedProviderControl extends DurableObject<Environment> {
         template: Schema.optionalKey(Schema.Struct({ name: Schema.String })),
       })
     )(yield* Effect.tryPromise(() => request.json()));
+
     if (body.template !== undefined) this.templates.push(body.template.name);
     this.sends += 1;
     this.correlation = body.biz_opaque_callback_data;
+
     return new Response(null, { status: 503 });
   });
   override fetch(request: Request): Promise<Response> {
     if (request.url === "https://fixture.invalid/templates") {
       return Promise.resolve(Response.json(this.templates));
     }
+
     if (request.url === "https://fixture.invalid/compaction") {
       return Effect.runPromise(this.configureCompaction(request));
     }
+
     const browser = this.browserRequest(request);
+
     if (Option.isSome(browser)) return browser.value;
+
     if (new URL(request.url).pathname === "/tools") {
       if (request.method !== "POST") return Promise.resolve(Response.json(this.available));
+
       return Effect.runPromise(
         Effect.gen({ self: this }, function* () {
           this.requested = yield* Schema.decodeUnknownEffect(
             Schema.Array(Schema.Struct({ name: Schema.String, arguments: Schema.String }))
           )(yield* Effect.tryPromise(() => request.json()));
+
           return new Response(null, { status: 204 });
         })
       );
     }
+
     return Effect.runPromise(
       Effect.gen({ self: this }, function* () {
         const path = new URL(request.url).pathname;
+
         if (path === "/connect") {
           this.requested = [
             { name: "connections__listInstitutions", arguments: "{}" },
@@ -223,36 +258,48 @@ export class HostedProviderControl extends DurableObject<Environment> {
               arguments: '{"payload":{"institutionId":"bancolombia"}}',
             },
           ];
+
           return new Response(null, { status: 204 });
         }
+
         if (textModes.includes(path)) {
           this.mode = path;
+
           return new Response(null, { status: 204 });
         }
+
         if (path === "/sends") {
           return Response.json({ sends: this.sends, correlation: this.correlation });
         }
+
         if (new URL(request.url).hostname === "api.kapso.ai") {
           return yield* this.templateSend(request);
         }
+
         if (path === "/waiting") {
           return Response.json({ waiting: this.waiting, rounds: this.rounds });
         }
+
         if (path === "/release") {
           yield* Deferred.succeed(this.released, undefined);
+
           return new Response(null, { status: 204 });
         }
+
         if (request.url !== "https://api.openai.com/v1/chat/completions") {
           return new Response(null, { status: 404 });
         }
+
         return yield* this.inference(request);
       })
     );
   }
 }
+
 export class HostedProviderFixture extends WorkerEntrypoint<Environment> {
   override fetch(request: Request): Promise<Response> {
     return this.env.CONTROL.getByName("provider").fetch(request);
   }
 }
+
 export default HostedProviderFixture;

@@ -1,4 +1,4 @@
-import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Clock, Effect, Exit, Match, Option, Predicate, Schema } from "effect";
 import {
   DeclaredOutcome,
   type ProjectedTraceData,
@@ -8,6 +8,7 @@ import {
   TelemetryHttpStatus,
   TelemetryModelUsage,
   type TelemetryRelease,
+  type TelemetryService,
   type TelemetrySpan,
   TelemetrySpanId,
   TelemetryStrictDecoding,
@@ -15,7 +16,7 @@ import {
   type TelemetryWorkRecord,
   boundedTelemetryDuration,
 } from "../../../src/shell/observability/contract";
-import { projectHttpStatusClass } from "../../../src/shell/observability/operations";
+import { Telemetry, projectHttpStatusClass } from "../../../src/shell/observability/operations";
 import { WorkerTelemetryEvent } from "./contract";
 
 type ActiveSpan = {
@@ -30,10 +31,15 @@ type ActiveSpan = {
 };
 
 const maximumBreadcrumbs = 16;
+
 const maximumActiveSpans = 1024;
+
 const hexRadix = 16;
+
 const spanIdBytes = 8;
+
 const traceIdBytes = 16;
+
 const randomHex = (bytes: number): string =>
   Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (byte) =>
     byte.toString(hexRadix).padStart(2, "0")
@@ -42,7 +48,10 @@ const randomHex = (bytes: number): string =>
 const spanStatus = (state: ActiveSpan): Option.Option<TelemetryHttpStatus> =>
   Option.orElse(state.status, () => {
     const value = state.descriptor.metadata;
-    return value._tag === "Http" || value._tag === "Provider" ? value.status : Option.none();
+
+    return Predicate.isTagged(value, "Http") || Predicate.isTagged(value, "Provider")
+      ? value.status
+      : Option.none();
   });
 
 const modelRoundMetadata = (
@@ -56,6 +65,7 @@ const modelRoundMetadata = (
 const metadata = (state: ActiveSpan): Partial<ProjectedTraceData> => {
   const value = state.descriptor.metadata;
   const status = spanStatus(state);
+
   const http = Option.match(status, {
     onNone: () => ({}),
     onSome: (code) => ({
@@ -63,6 +73,7 @@ const metadata = (state: ActiveSpan): Partial<ProjectedTraceData> => {
       "http.response.status_class": projectHttpStatusClass(code),
     }),
   });
+
   const usage = Option.match(state.usage, {
     onNone: () => ({}),
     onSome: (record) => ({
@@ -71,39 +82,44 @@ const metadata = (state: ActiveSpan): Partial<ProjectedTraceData> => {
       "gen_ai.usage.output_tokens": record.outputTokens,
     }),
   });
-  switch (value._tag) {
-    case "None":
-      return modelRoundMetadata(state, usage);
-    case "Http":
-      return { ...http, "http.request.method": value.method, "http.route": value.route };
-    case "Database":
-      return {
+
+  return Match.value(value).pipe(
+    Match.tagsExhaustive({
+      None: () => modelRoundMetadata(state, usage),
+      Http: (value) => ({
+        ...http,
+        "http.request.method": value.method,
+        "http.route": value.route,
+      }),
+      Database: (value) => ({
         "db.system.name": value.system,
         "fidy.repository_operation": value.repositoryOperation,
-      };
-    case "Queue":
-      return {
+      }),
+      Queue: (value) => ({
         "fidy.attempt": value.attempt,
         "fidy.input_count": value.inputCount,
         ...Option.match(value.delayMilliseconds, {
           onNone: () => ({}),
           onSome: (delay) => ({ "fidy.delay_milliseconds": delay }),
         }),
-      };
-    case "Provider":
-      return { ...http, "fidy.provider": value.provider, "fidy.attempt": value.attempt };
-    case "Model":
-      return {
+      }),
+      Provider: (value) => ({
+        ...http,
+        "fidy.provider": value.provider,
+        "fidy.attempt": value.attempt,
+      }),
+      Model: (value) => ({
         "gen_ai.request.model": value.model,
         ...usage,
-      };
-    case "Schedule":
-      return { "fidy.attempt": value.attempt };
-  }
+      }),
+      Schedule: (value) => ({ "fidy.attempt": value.attempt }),
+    })
+  );
 };
 
 const isPureInterruption = (cause: Cause.Cause<unknown>): boolean =>
   Cause.hasInterrupts(cause) && !Cause.hasDies(cause) && !Cause.hasFails(cause);
+
 const declaredFailure = (state: ActiveSpan): Option.Option<DeclaredOutcome> =>
   Option.filter(
     state.outcome,
@@ -115,14 +131,18 @@ const terminalOutcome = (state: ActiveSpan, exit: Exit.Exit<unknown, unknown>): 
     if (isPureInterruption(exit.cause)) {
       return { outcome: "interrupted", error: Option.none(), retryable: false };
     }
+
     const declared = declaredFailure(state);
+
     if (!Cause.hasDies(exit.cause) && Option.isSome(declared)) return declared.value;
+
     return {
       outcome: "failed",
       error: Option.some(Cause.hasDies(exit.cause) ? "unexpected_defect" : "operational_failure"),
       retryable: false,
     };
   }
+
   return Option.getOrElse(state.outcome, () => ({
     outcome: "succeeded",
     error: Option.none(),
@@ -131,6 +151,7 @@ const terminalOutcome = (state: ActiveSpan, exit: Exit.Exit<unknown, unknown>): 
 };
 
 type ActiveSpans = Map<typeof TelemetrySpanId.Type, ActiveSpan>;
+
 type EventSink = (event: WorkerTelemetryEvent) => void;
 
 const startSpan =
@@ -138,15 +159,19 @@ const startSpan =
   (descriptor, parent) =>
     Effect.gen(function* () {
       if (active.size >= maximumActiveSpans) return Option.none();
+
       const decoded = yield* Schema.decodeEffect(
         SpanDescriptor,
         TelemetryStrictDecoding
       )(descriptor).pipe(Effect.orDie);
+
       const spanId = TelemetrySpanId.make(randomHex(spanIdBytes));
+
       const traceId = Option.match(parent, {
         onNone: () => TelemetryTraceId.make(randomHex(traceIdBytes)),
         onSome: (value) => value.traceId,
       });
+
       active.set(spanId, {
         descriptor: decoded,
         release:
@@ -162,6 +187,7 @@ const startSpan =
         usage: Option.none(),
         breadcrumbs: [],
       });
+
       return Option.some({
         traceId,
         spanId,
@@ -176,6 +202,7 @@ const finishSpan =
     Effect.gen(function* () {
       const state = active.get(span.spanId);
       active.delete(span.spanId);
+
       if (state === undefined || !span.sampled) return;
       const finishedAt = yield* Clock.currentTimeMillis;
       const outcome = terminalOutcome(state, exit);
@@ -218,17 +245,20 @@ const captureFailure =
         operation: failure.operation,
         error: failure.error,
         classification: failure._tag,
-        retryable: failure._tag === "ExhaustedOperationalFailure" && failure.retryable,
+        retryable: Predicate.isTagged(failure, "ExhaustedOperationalFailure") && failure.retryable,
         ...Option.match(span, {
           onNone: () => ({}),
           onSome: (value) => ({ traceId: value.traceId, spanId: value.spanId }),
         }),
-        ...(failure._tag === "ExhaustedOperationalFailure"
-          ? Option.match(failure.provider, {
+        ...Match.value(failure).pipe(
+          Match.tag("ExhaustedOperationalFailure", (exhausted) =>
+            Option.match(exhausted.provider, {
               onNone: () => ({}),
               onSome: (provider) => ({ provider }),
             })
-          : {}),
+          ),
+          Match.orElse(() => ({}))
+        ),
       })
     );
 
@@ -241,8 +271,10 @@ const spanUpdates = (
   const update = (span: TelemetrySpan, change: (state: ActiveSpan) => void): Effect.Effect<void> =>
     Effect.sync(() => {
       const state = active.get(span.spanId);
+
       if (state !== undefined) change(state);
     });
+
   return {
     recordOutcome: (span, value) =>
       update(span, (state) => {
@@ -253,8 +285,8 @@ const spanUpdates = (
     recordResponseStatus: (span, status) =>
       update(span, (state) => {
         if (
-          state.descriptor.metadata._tag === "Http" ||
-          state.descriptor.metadata._tag === "Provider"
+          Predicate.isTagged(state.descriptor.metadata, "Http") ||
+          Predicate.isTagged(state.descriptor.metadata, "Provider")
         ) {
           state.status = Option.some(TelemetryHttpStatus.make(status));
         }
@@ -262,7 +294,7 @@ const spanUpdates = (
     recordModelUsage: (span, value) =>
       update(span, (state) => {
         if (
-          state.descriptor.metadata._tag === "Model" ||
+          Predicate.isTagged(state.descriptor.metadata, "Model") ||
           state.descriptor.workKind === "model_round"
         ) {
           state.usage = Option.some(
@@ -273,6 +305,7 @@ const spanUpdates = (
     addBreadcrumb: (span, value) =>
       update(span, (state) => {
         const breadcrumb = Schema.decodeSync(TelemetryBreadcrumb, TelemetryStrictDecoding)(value);
+
         if (state.breadcrumbs.length === maximumBreadcrumbs) state.breadcrumbs.shift();
         state.breadcrumbs.push(breadcrumb);
       }),
@@ -283,8 +316,10 @@ export const makeWorkerTelemetryAdapter = (
   sink: Readonly<{ exportWork: (record: TelemetryWorkRecord) => void; exportEvent: EventSink }>
 ): TelemetryAdapter => {
   const active: ActiveSpans = new Map();
+
   const emit: EventSink = (event) =>
     sink.exportEvent(Schema.decodeSync(WorkerTelemetryEvent, TelemetryStrictDecoding)(event));
+
   return {
     startSpan: startSpan(active),
     finishSpan: finishSpan(active, emit),
@@ -293,3 +328,7 @@ export const makeWorkerTelemetryAdapter = (
     exportWork: sink.exportWork,
   };
 };
+
+export const workerTelemetryService = (
+  sink: Readonly<{ exportWork: (record: TelemetryWorkRecord) => void; exportEvent: EventSink }>
+): TelemetryService => Telemetry.fromAdapter(makeWorkerTelemetryAdapter(sink));

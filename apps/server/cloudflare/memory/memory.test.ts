@@ -9,14 +9,20 @@ import { native as fromTestPromise, nativeBrowserPlatform } from "../user-store.
 
 const users = [alice.user, bob.user] as const,
   sessions = [alice.session, bob.session] as const;
+
 const clock = (): number => Effect.runSync(Clock.currentTimeMillis);
+
 const tick = Effect.sleep("5 millis");
+
 const compareText = (left: string, right: string): number => left.localeCompare(right);
+
 const compareCount = (left: number, right: number): number => left - right;
 
 const cookie = (index: number): string =>
   "__Host-fidy_session=" + (index === 0 ? alice.bearer : bob.bearer);
+
 type Db = Effect.Success<typeof nativeTransactionJourney>;
+
 type Send = Readonly<{ path: string; method: "GET" | "POST" | "PUT" | "DELETE" }> &
   Partial<
     Readonly<{
@@ -31,19 +37,26 @@ type Send = Readonly<{ path: string; method: "GET" | "POST" | "PUT" | "DELETE" }
 
 const forwardedHeaders = (input: Send): Headers => {
   const headers = new Headers({ origin: input.origin ?? "https://app.fidyapp.com" });
+
   if (input.body !== undefined) headers.set("content-type", input.contentType ?? "text/plain");
+
   if (input.payload !== undefined) headers.set("content-type", "application/json");
+
   if (input.session !== undefined) {
     headers.set("cookie", input.session);
     headers.set("Fidy-Session-Binding", sessions[input.session === cookie(0) ? 0 : 1]);
   }
+
   if (input.bearer !== undefined) headers.set("authorization", `Bearer ${input.bearer}`);
+
   return headers;
 };
+
 const forwardedBody = (input: Send): Option.Option<string> =>
   Option.orElse(Option.fromUndefinedOr(input.body), () =>
     Option.map(Option.fromUndefinedOr(input.payload), (payload) => JSON.stringify(payload))
   );
+
 const send = (db: Db, input: Send): Promise<Response> =>
   db.send(
     new Request("https://api.fidyapp.com" + input.path, {
@@ -52,17 +65,23 @@ const send = (db: Db, input: Send): Promise<Response> =>
       body: Option.getOrUndefined(forwardedBody(input)),
     })
   );
+
 const Cell = Schema.toCodecJson(Memory);
+
 const Single = Schema.Struct({ data: Cell, next: Schema.Array(Schema.Unknown) });
+
 const Listed = Schema.Struct({ data: Schema.Array(Cell), next: Schema.Array(Schema.Unknown) });
+
 const Forgotten = Schema.Struct({
   data: Schema.toCodecJson(MemoryId),
   next: Schema.Array(Schema.Unknown),
 });
+
 const Failure = Schema.Struct({
   error: Schema.Struct({ code: ErrorCode, message: Schema.String }),
   next: Schema.Array(Schema.Unknown),
 });
+
 const serialized = (value: unknown): string =>
   Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(value);
 
@@ -70,17 +89,23 @@ const retainedAggregateBytes = (memories: ReadonlyArray<Memory>): number =>
   new TextEncoder().encode(
     memories.map(({ id, text }) => `{"id":"${id}","text":"${text}"}`).join("\n")
   ).length;
+
 const decode = <A>(schema: Schema.Codec<A, unknown>, response: Response): Effect.Effect<A> =>
   Effect.gen(function* () {
     const body = yield* fromTestPromise(() => response.json());
+
     return yield* Schema.decodeUnknownEffect(schema)(body).pipe(Effect.orDie);
   });
+
 const remembered = (db: Db, text: string, session: string): Promise<Response> =>
   send(db, { path: "/memories", method: "POST", session, payload: { text } });
+
 const recalled = (db: Db, session: string): Promise<Response> =>
   send(db, { path: "/memories", method: "GET", session });
+
 const memoryTextRows = (db: Db, user: string): ReturnType<Db["exec"]> =>
   db.owner(user).exec("SELECT text FROM memories WHERE user_id=? ORDER BY created_at_ms,id", user);
+
 const auditRows = (db: Db, user: string): ReturnType<Db["exec"]> =>
   db
     .owner(user)
@@ -88,18 +113,22 @@ const auditRows = (db: Db, user: string): ReturnType<Db["exec"]> =>
       "SELECT operation,coalesce(refusal_reason,outcome) AS outcome FROM audit_entries WHERE user_id=? AND record_type='session_call' AND operation GLOB 'memory.*' ORDER BY occurred_at_ms,rowid",
       user
     );
+
 it("normalizes formatting, retains current prose, and recalls it in stable creation order", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
+
       const created = yield* fromTestPromise(() =>
         remembered(db, "  primera\r\nmemoria  ", cookie(0))
       );
+
       expect(created.status).toBe(201);
       const first = yield* decode(Single, created);
       expect(first.data.text).toBe("primera\nmemoria");
       expect(first.next).toEqual([]);
       yield* tick;
+
       const second = yield* decode(
         Single,
         yield* fromTestPromise(() => remembered(db, "segunda memoria", cookie(0)))
@@ -133,11 +162,14 @@ it("replaces stale prose in place and physically removes a forgotten Memory", ()
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
+
       const first = yield* decode(
         Single,
         yield* fromTestPromise(() => remembered(db, "texto anterior", cookie(0)))
       );
+
       yield* tick;
+
       const second = yield* decode(
         Single,
         yield* fromTestPromise(() => remembered(db, "memoria posterior", cookie(0)))
@@ -154,6 +186,7 @@ it("replaces stale prose in place and physically removes a forgotten Memory", ()
           })
         )
       );
+
       expect(revised.data.id).toBe(first.data.id);
       expect(revised.data.text).toBe("texto reemplazado");
       expect(revised.data.createdAt).toStrictEqual(first.data.createdAt);
@@ -169,14 +202,17 @@ it("replaces stale prose in place and physically removes a forgotten Memory", ()
           send(db, { path: `/memories/${first.data.id}`, method: "DELETE", session: cookie(0) })
         )
       );
+
       expect(forgotten.data).toBe(first.data.id);
       expect(yield* fromTestPromise(() => memoryTextRows(db, users[0]))).toEqual([
         { text: "memoria posterior" },
       ]);
+
       const remaining = yield* decode(
         Listed,
         yield* fromTestPromise(() => recalled(db, cookie(0)))
       );
+
       expect(remaining.data.map(({ text }) => text)).toEqual(["memoria posterior"]);
 
       expect(
@@ -213,6 +249,7 @@ it("refuses malformed, empty, and oversized prose without changing Memory state"
       const targetText = "estado intacto";
       yield* decode(Single, yield* fromTestPromise(() => remembered(db, targetText, cookie(0))));
       const malformedId = "not-a-memory-id";
+
       const refusals = yield* Effect.forEach(
         [
           (): Promise<Response> => remembered(db, "   \r\n ", cookie(0)),
@@ -243,6 +280,7 @@ it("refuses malformed, empty, and oversized prose without changing Memory state"
         (run) => fromTestPromise(run),
         { concurrency: 2 }
       );
+
       expect(refusals.map(({ status }) => status)).toEqual([400, 400, 400, 400, 400, 400]);
       const list = yield* decode(Listed, yield* fromTestPromise(() => recalled(db, cookie(0))));
       expect(list.data.map(({ text }) => text)).toEqual([targetText]);
@@ -252,6 +290,7 @@ it("refuses malformed, empty, and oversized prose without changing Memory state"
       const audits = yield* fromTestPromise(() => auditRows(db, users[0]));
       expect(audits.filter((row) => row.outcome === "validation_failed")).toHaveLength(6);
       expect(audits.filter((row) => row.outcome === "success")).toHaveLength(2);
+
       const malformed = yield* decode(
         Failure,
         yield* fromTestPromise(() =>
@@ -263,6 +302,7 @@ it("refuses malformed, empty, and oversized prose without changing Memory state"
           })
         )
       );
+
       expect(malformed.error.code).toBe("validation_failed");
       expect(serialized(malformed)).not.toContain(targetText);
       expect(malformed.next).toEqual([]);
@@ -273,17 +313,26 @@ it("rejects aggregate capacity overflow without dropping Memories or echoing pro
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
-      for (let index = 0; index < 7; index += 1) {
-        yield* Effect.sleep("125 millis");
-        const response = yield* fromTestPromise(() =>
-          remembered(db, `${index}${"x".repeat(1_999)}`, cookie(0))
-        );
-        expect(response.status).toBe(201);
-      }
+
+      yield* Effect.forEach(
+        Array.from({ length: 7 }, (_, index) => index),
+        Effect.fnUntraced(function* (index) {
+          yield* Effect.sleep("125 millis");
+
+          const response = yield* fromTestPromise(() =>
+            remembered(db, `${index}${"x".repeat(1_999)}`, cookie(0))
+          );
+
+          expect(response.status).toBe(201);
+        }),
+        { discard: true }
+      );
+
       const small = yield* decode(
         Single,
         yield* fromTestPromise(() => remembered(db, "pequeña", cookie(0)))
       );
+
       const canary = `private-capacity-canary-${"y".repeat(1_976)}`;
       const overflowResponse = yield* fromTestPromise(() => remembered(db, canary, cookie(0)));
       const overflow = yield* decode(Failure, overflowResponse);
@@ -293,6 +342,7 @@ it("rejects aggregate capacity overflow without dropping Memories or echoing pro
       expect(overflow.next).toEqual([]);
 
       const revisionCanary = `private-revision-canary-${"z".repeat(1_976)}`;
+
       const revised = yield* fromTestPromise(() =>
         send(db, {
           path: `/memories/${small.data.id}`,
@@ -301,6 +351,7 @@ it("rejects aggregate capacity overflow without dropping Memories or echoing pro
           payload: { text: revisionCanary },
         })
       );
+
       expect(revised.status).toBe(409);
       expect(serialized(yield* decode(Failure, revised))).not.toContain("private-revision-canary");
 
@@ -323,12 +374,19 @@ it("bounds concurrent remember calls so one User's aggregate is never oversubscr
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
-      for (let index = 0; index < 6; index += 1) {
-        expect(
-          (yield* fromTestPromise(() => remembered(db, `${index}${"x".repeat(1_999)}`, cookie(0))))
-            .status
-        ).toBe(201);
-      }
+
+      yield* Effect.forEach(
+        Array.from({ length: 6 }, (_, index) => index),
+        Effect.fnUntraced(function* (index) {
+          expect(
+            (yield* fromTestPromise(() =>
+              remembered(db, `${index}${"x".repeat(1_999)}`, cookie(0))
+            )).status
+          ).toBe(201);
+        }),
+        { discard: true }
+      );
+
       const outcomes = yield* Effect.forEach(
         ["a", "b"],
         (prefix) =>
@@ -342,6 +400,7 @@ it("bounds concurrent remember calls so one User's aggregate is never oversubscr
           ),
         { concurrency: "unbounded" }
       );
+
       expect(outcomes.map(({ status }) => status).toSorted(compareCount)).toEqual([201, 409]);
       const list = yield* decode(Listed, yield* fromTestPromise(() => recalled(db, cookie(0))));
       expect(list.data).toHaveLength(7);
@@ -359,10 +418,12 @@ it("enforces the private data API's two-User Memory boundary without partial wri
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
+
       const owned = yield* decode(
         Single,
         yield* fromTestPromise(() => remembered(db, "memoria privada", cookie(0)))
       );
+
       expect(
         (yield* decode(Listed, yield* fromTestPromise(() => recalled(db, cookie(1))))).data
       ).toEqual([]);
@@ -464,8 +525,10 @@ it("keeps Memory prose out of emitted telemetry and failed validation responses"
     Effect.gen(function* () {
       const logs: string[] = [],
         runtime = yield* (yield* nativeBrowserPlatform)(undefined, logs);
+
       yield* seed(runtime, alice);
       const canary = "private-memory-" + newId();
+
       const call = (text: string): ReturnType<typeof runtime.dispatchFetch> =>
         runtime.dispatchFetch("https://api.fidyapp.com/memories", {
           method: "POST",
@@ -477,6 +540,7 @@ it("keeps Memory prose out of emitted telemetry and failed validation responses"
           },
           body: JSON.stringify({ text }),
         });
+
       expect((yield* fromTestPromise(() => call(canary))).status).toBe(201);
       const denied = yield* fromTestPromise(() => call(canary.repeat(100)));
       expect(denied.status).toBe(400);
@@ -485,6 +549,7 @@ it("keeps Memory prose out of emitted telemetry and failed validation responses"
       expect(logs.join("\n")).not.toContain(canary);
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
+
 it("rechecks the bound WebSession deadline for Memory recall", () =>
   Effect.runPromise(
     Effect.gen(function* () {

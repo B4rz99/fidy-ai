@@ -1,5 +1,5 @@
 import { type JSX, type MouseEvent, useState } from "react";
-import { Option } from "effect";
+import { Option, Schema } from "effect";
 import { Cancel01Icon, PauseCircleIcon, Tick02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { SelectionScopeDialog } from "@/ui/components/selection-scope-dialog";
@@ -23,11 +23,13 @@ const categories = [
   { value: "home", label: "Vivienda" },
   { value: "services", label: "Servicios" },
 ];
+
 const currencies = [
   { value: "COP", label: "COP · Peso colombiano" },
   { value: "USD", label: "USD · Dólar estadounidense" },
   { value: "EUR", label: "EUR · Euro" },
 ];
+
 const statuses = [
   { label: "Activo", variant: "success", icon: Tick02Icon },
   { label: "Pausado", variant: "warning", icon: PauseCircleIcon },
@@ -37,6 +39,7 @@ const statuses = [
 const ChoiceExamples = (): JSX.Element => {
   const [category, setCategory] = useState("home");
   const [currency, setCurrency] = useState("COP");
+
   return (
     <Card>
       <CardHeader>
@@ -82,6 +85,7 @@ const ChoiceExamples = (): JSX.Element => {
 
 const CalendarExample = (): JSX.Element => {
   const [date, setDate] = useState("2026-10-15");
+
   return (
     <Card>
       <CardHeader>
@@ -114,8 +118,10 @@ const CalendarExample = (): JSX.Element => {
   );
 };
 
+const isElement = Schema.is(Schema.instanceOf(Element));
+
 const isRowClick = (event: MouseEvent<HTMLTableRowElement>): boolean =>
-  event.target instanceof Element &&
+  isElement(event.target) &&
   event.currentTarget.contains(event.target) &&
   event.target.closest("button, a, [role=menuitemradio]") === null;
 
@@ -123,6 +129,7 @@ const RowExample = (): JSX.Element => {
   const [category, setCategory] = useState("home");
   const [message, setMessage] = useState("Selecciona la fila para editar el ejemplo.");
   const edit = (): void => setMessage("Edición abierta: Arriendo de ejemplo.");
+
   return (
     <Card>
       <CardHeader>
@@ -151,6 +158,7 @@ const RowExample = (): JSX.Element => {
                 if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key)) {
                   return;
                 }
+
                 event.preventDefault();
                 edit();
               }}
@@ -198,6 +206,7 @@ const StatusExamples = (): JSX.Element => (
 
 const FocusExamples = (): JSX.Element => {
   const [message, setMessage] = useState("Prueba con el ratón y luego con Tab, Enter y Escape.");
+
   return (
     <Card>
       <CardHeader>
@@ -235,6 +244,7 @@ const SelectionExample = (): JSX.Element => {
   const [ids, setIds] = useState(["first", "second"]);
   const [filtered, setFiltered] = useState(true);
   const [changingScope, setChangingScope] = useState(false);
+
   const items = [
     {
       id: "first",
@@ -249,6 +259,7 @@ const SelectionExample = (): JSX.Element => {
       hidden: false,
     },
   ].filter((item) => ids.includes(item.id));
+
   return (
     <section aria-label="Selección entre filtros" className="grid gap-4 border-t pt-6">
       <h3 className="text-xl font-semibold">Selección entre filtros</h3>

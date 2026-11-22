@@ -13,11 +13,15 @@ export const workerManifest = Effect.fn(function* (module: string) {
       external: ["cloudflare:workers", "node:*"],
     })
   );
+
   const output = result.outputs[0];
+
   if (!result.success || output === undefined) {
     return yield* Effect.die(new Error("Native Worker build failed"));
   }
+
   const contents = yield* native(() => output.text());
+
   return { mainModule: "index.mjs", modules: { "index.mjs": { type: "esm" as const, contents } } };
 });
 
@@ -66,6 +70,7 @@ const browserOutbound = {
     },
   },
 };
+
 const billingTrigger = {
   triggers: [
     {
@@ -145,6 +150,7 @@ const loginEmailTrigger = {
     },
   ],
 };
+
 const browserBindings = {
   BROWSER_PAIRING_EMAIL_QUEUE: { type: "queue", name: "login-email" },
   BROWSER_PAIRING_EMAIL_WORKFLOW: {
@@ -187,6 +193,7 @@ const browserBindings = {
     value: "https://api.fidyapp.com/providers/microsoft/callback",
   },
 } as const;
+
 export const nativeOwnerBindings = {
   USER_STORE: { type: "durable-object", worker: "core", exportName: "UserStore" },
   PRICING: { type: "durable-object", worker: "core", exportName: "Pricing" },
@@ -194,6 +201,7 @@ export const nativeOwnerBindings = {
   MAINTENANCE: { type: "durable-object", worker: "core", exportName: "Maintenance" },
   DIRECTORY: { type: "durable-object", worker: "core", exportName: "Directory" },
 } as const;
+
 export const nativeOwners = {
   UserStore: { type: "durable-object", storage: "sqlite" },
   Pricing: { type: "durable-object", storage: "sqlite" },
@@ -219,14 +227,18 @@ const oidcWorkers = Effect.fnUntraced(function* (enabled: boolean) {
 });
 
 const origin = { type: "text", value: browserOrigins.production } as const;
+
 const apiFlags = ["nodejs_compat", "enable_request_signal", "request_signal_passthrough"];
+
+type WorkerDefinition = Readonly<{ config: MiniflareWorkerConfig }>;
+
 const ingressWorker = ({
   ingress,
   deployment,
 }: {
   ingress: Effect.Success<ReturnType<typeof workerManifest>>;
   deployment: Readonly<Record<string, string>>;
-}): Readonly<{ config: MiniflareWorkerConfig }> => ({
+}): WorkerDefinition => ({
   config: {
     type: "worker" as const,
     name: "ingress",
@@ -243,6 +255,7 @@ const ingressWorker = ({
     },
   },
 });
+
 const manifests = Effect.fnUntraced(function* (module: string) {
   return yield* Effect.all([workerManifest("./public-worker.ts"), workerManifest(module)], {
     concurrency: 2,
@@ -265,15 +278,22 @@ type NativeFixture =
   | "browser"
   | "login"
   | "oauth";
+
 const minuteMs = 60000;
+
 const attemptLifetimeMs = 600000;
-const empty: {
+
+type ConnectionProfile = {
   bindings: NonNullable<MiniflareWorkerConfig["env"]>;
   owners: NonNullable<MiniflareWorkerConfig["exports"]>;
   configuration: Pick<MiniflareWorkerConfig, "triggers">;
-} = { bindings: {}, owners: {}, configuration: {} };
+};
+
+const empty: ConnectionProfile = { bindings: {}, owners: {}, configuration: {} };
+
 export const nativeConnectionProfile = Effect.gen(function* () {
   const now = yield* Clock.currentTimeMillis;
+
   return yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
     contract: "bancolombia-sandbox-consent-2026-10-27",
     userId: "10000000-0000-4000-8000-000000000051",
@@ -290,8 +310,10 @@ export const nativeConnectionProfile = Effect.gen(function* () {
     },
   }).pipe(Effect.orDie);
 });
+
 const connectionPlatformOptions = Effect.fnUntraced(function* (enabled: boolean) {
   if (!enabled) return empty;
+
   return {
     bindings: {
       CONNECTION_FIXTURE: {
@@ -349,21 +371,45 @@ const fixtureModules: Partial<Record<NativeFixture, string>> = {
   login: "./login-email-worker.test-fixture.ts",
   connection: "./connection-worker.test-fixture.ts",
 };
-const fixtureWorkers = (
-  mode: NativeFixture
-): Readonly<{
+
+const billingFeature = {
+  outbound: providerOnlyOutbound,
+  trigger: billingTrigger,
+  bindings: billingBindings,
+};
+
+const oidcFeature = {
+  outbound: browserOutbound,
+  trigger: loginEmailTrigger,
+  bindings: browserBindings,
+};
+
+const disabledFeature = { outbound: {}, trigger: {}, bindings: {} };
+
+type FixtureWorkers = Readonly<{
+  billing: typeof billingFeature | typeof disabledFeature;
+  oidc: typeof oidcFeature | typeof disabledFeature;
   withBilling: boolean;
   withOidc: boolean;
   coreModule: string;
   ingressOptions: Pick<ConstructorParameters<typeof Miniflare>[0], "upstream">;
-}> => ({
-  withBilling: ["billing", "erasure", "custody"].includes(mode),
-  withOidc: ["browser", "login", "custody"].includes(mode),
-  coreModule: fixtureModules[mode] ?? "./core-worker.ts",
-  ingressOptions: ["oauth", "connection"].includes(mode)
-    ? { upstream: "https://api.fidyapp.com" }
-    : {},
-});
+}>;
+
+const fixtureWorkers = (mode: NativeFixture): FixtureWorkers => {
+  const withBilling = ["billing", "erasure", "custody"].includes(mode);
+  const withOidc = ["browser", "login", "custody"].includes(mode);
+
+  return {
+    withBilling,
+    withOidc,
+    billing: withBilling ? billingFeature : disabledFeature,
+    oidc: withOidc ? oidcFeature : disabledFeature,
+    coreModule: fixtureModules[mode] ?? "./core-worker.ts",
+    ingressOptions: ["oauth", "connection"].includes(mode)
+      ? { upstream: "https://api.fidyapp.com" }
+      : {},
+  };
+};
 
 const hostedFixture = Effect.fnUntraced(function* (mode: NativeFixture) {
   return ["hosted", "health"].includes(mode)
@@ -395,6 +441,7 @@ const hostedFixture = Effect.fnUntraced(function* (mode: NativeFixture) {
       ]
     : [];
 });
+
 const hostedOpenAi = {
   dev: {
     outboundService: {
@@ -446,8 +493,10 @@ const hostedOpenAi = {
     },
   ],
 };
+
 const fixtureProviders = Effect.fnUntraced(function* (mode: NativeFixture) {
   const { withBilling, withOidc } = fixtureWorkers(mode);
+
   return (yield* Effect.all([
     billingProvider(withBilling),
     privateEmailWorker(withBilling),
@@ -455,6 +504,7 @@ const fixtureProviders = Effect.fnUntraced(function* (mode: NativeFixture) {
     hostedFixture(mode),
   ])).flat();
 });
+
 const hostedOptions = (
   mode: NativeFixture
 ): {
@@ -469,15 +519,20 @@ const hostedOptions = (
         triggers: { triggers: hostedOpenAi.triggers },
       }
     : { outbound: {}, env: {}, triggers: {} };
+
 const textBindings = (
   deployment: Readonly<Record<string, string>>
 ): Record<string, { type: "text"; value: string }> =>
   Object.fromEntries(
     Object.entries(deployment).map(([key, value]) => [key, { type: "text" as const, value }])
   );
-const captureLogs = (
-  logs: Array<string>
-): { handleStructuredLogs: (log: { message: string }) => void } => ({
+
+type LogCapture = { handleStructuredLogs: (log: { message: string }) => void };
+
+const captureLogs = (enabled: boolean, logs: Array<string>): Partial<LogCapture> =>
+  enabled ? capturedLogs(logs) : {};
+
+const capturedLogs = (logs: Array<string>): LogCapture => ({
   handleStructuredLogs: (log) => {
     logs.push(log.message);
   },
@@ -510,8 +565,10 @@ const privateEmailWorker = Effect.fnUntraced(function* (withBilling: boolean) {
         },
       ]
     : [];
+
   return emailFixture;
 });
+
 const fixtureFeatures = Effect.fnUntraced(function* (mode: NativeFixture) {
   return {
     capture: fixtureWorkers(mode).withOidc || mode === "health",
@@ -531,13 +588,15 @@ const fixtureFeatures = Effect.fnUntraced(function* (mode: NativeFixture) {
     connection: yield* connectionPlatformOptions(mode === "connection"),
   };
 });
+
 const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
-  const { withBilling, withOidc, coreModule, ingressOptions } = fixtureWorkers(mode);
+  const { billing, oidc, coreModule, ingressOptions } = fixtureWorkers(mode);
   const fs = yield* FileSystem.FileSystem;
   const directory = yield* fs.makeTempDirectoryScoped({ prefix: "fidy-user-store-" });
   const [ingress, core] = yield* manifests(coreModule);
 
   const { providers, hostedPlatform, connection, capture } = yield* fixtureFeatures(mode);
+
   const create = (
     ceiling: string,
     logs: Array<string>,
@@ -545,22 +604,22 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
   ): Miniflare =>
     new Miniflare({
       ...ingressOptions,
-      ...(capture ? captureLogs(logs) : {}),
+      ...captureLogs(capture, logs),
       unsafeInspectDurableObjects: true,
       resourcePersistencePath: directory,
       workers: [
         ingressWorker({ ingress, deployment }),
         {
           ...hostedPlatform.outbound,
-          ...(withBilling ? providerOnlyOutbound : {}),
-          ...(withOidc ? browserOutbound : {}),
+          ...billing.outbound,
+          ...oidc.outbound,
           config: {
             type: "worker",
             name: "core",
             ...hostedPlatform.triggers,
             ...connection.configuration,
-            ...(withBilling ? billingTrigger : {}),
-            ...(withOidc ? loginEmailTrigger : {}),
+            ...billing.trigger,
+            ...oidc.trigger,
             compatibilityDate: "2026-09-08",
             compatibilityFlags: apiFlags,
             manifest: core,
@@ -569,10 +628,10 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
               ...hostedPlatform.env,
               BROWSER_ORIGIN: origin,
               ...connection.bindings,
-              ...(withOidc ? browserBindings : {}),
+              ...oidc.bindings,
               CF_VERSION_METADATA: { type: "version-metadata" },
               SQLITE_STORE_CAPACITY_BYTES: { type: "text", value: ceiling },
-              ...(withBilling ? billingBindings : {}),
+              ...billing.bindings,
               ...textBindings(deployment),
               ...nativeOwnerBindings,
             },
@@ -581,6 +640,7 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
         ...providers,
       ],
     });
+
   return (
     ceiling = "1000000000",
     logs: Array<string> = [],
@@ -593,19 +653,31 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
 });
 
 export const nativeCustodyPlatform = createUserPlatform("custody");
+
 export const nativePurgePlatform = createUserPlatform("erasure");
+
 export const nativeLoginPlatform = createUserPlatform("login");
+
 export const nativeBrowserPlatform = createUserPlatform("browser");
+
 export const nativeConnectionPlatform = createUserPlatform("connection");
+
 export const nativeCapacityPlatform = createUserPlatform("capacity");
+
 export const nativeLostReadPlatform = createUserPlatform("lost-read");
+
 export const nativeTransactionReadPlatform = createUserPlatform("addressed-read");
+
 export const nativeClockPlatform = createUserPlatform("clock");
+
 export const nativeUserPlatform = createUserPlatform("user");
+
 export const nativeBillingPlatform = createUserPlatform("billing");
 
 export const nativeOAuthPlatform = createUserPlatform("oauth");
 
 export const nativeFleetPlatform = createUserPlatform("fleet");
+
 export const nativeHealthPlatform = createUserPlatform("health");
+
 export const nativeHostedPlatform = createUserPlatform("hosted");

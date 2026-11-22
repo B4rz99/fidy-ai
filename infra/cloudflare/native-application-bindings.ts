@@ -21,13 +21,16 @@ const origins = {
     api: "https://" + productionTopology.ingress.hostname,
   },
 };
+
 const pairedOrigin = (
   closed: boolean,
   hosts: keyof typeof origins
 ): (typeof origins)[keyof typeof origins] => (closed ? origins.acceptance : origins[hosts]);
+
 export const nativeReleaseContext = Effect.fn(function* (development: boolean, stage: string) {
   const config = (name: string): Config.Config<string> =>
     Config.String(name).pipe(Config.withDefault(""));
+
   const release = yield* Effect.fromResult(
     resolveDeploymentConfiguration({
       development,
@@ -37,27 +40,35 @@ export const nativeReleaseContext = Effect.fn(function* (development: boolean, s
       releaseAttemptId: yield* config("RELEASE_ATTEMPT_ID"),
     })
   ).pipe(Effect.orDie);
+
   const admission = development
     ? "local"
     : yield* Config.Literals(["closed", "open"], "NATIVE_STORAGE_ADMISSION");
+
   const hosts = development
     ? "local"
     : yield* Config.Literals(["acceptance", "staged"], "NATIVE_STORAGE_HOSTS").pipe(
         Config.withDefault("acceptance")
       );
+
   if (admission === "open" && hosts !== "staged") {
     return yield* Effect.die(Error("Native opening requires the reviewed staged hosts"));
   }
+
   const proof = yield* development
     ? Config.Redacted("SMOKE_PROOF").pipe(Config.withDefault(Redacted.make("")))
     : Config.Redacted("SMOKE_PROOF");
+
   const storage = yield* buildStorageRelease().pipe(
     Effect.flatMap(Schema.encodeEffect(storageReleaseCodec)),
     Effect.orDie
   );
+
   const closed = admission === "closed",
     origin = pairedOrigin(closed, hosts);
+
   const artifacts = yield* fixtureArtifacts(release.gitRevision);
+
   const fixtureSecret = (
     name: string,
     prefix = "",
@@ -69,6 +80,7 @@ export const nativeReleaseContext = Effect.fn(function* (development: boolean, s
           .update(generation + "/" + name)
           .digest("hex")
     );
+
   const shared = {
     RECOVERY_ISOLATION: closed ? "isolated" : "",
     NATIVE_STORAGE_ADMISSION: development ? "open" : admission,
@@ -79,17 +91,21 @@ export const nativeReleaseContext = Effect.fn(function* (development: boolean, s
     CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
     SMOKE_PROOF: proof,
   };
+
   return { release, development, closed, hosts, origin, shared, fixtureSecret, ...artifacts };
 });
+
 export type NativeRelease = Effect.Success<ReturnType<typeof nativeReleaseContext>>;
 
 const liveProviders = Effect.fn(function* (development: boolean) {
   const plain = (name: string, local = ""): Config.Config<string> =>
     development ? Config.String(name).pipe(Config.withDefault(local)) : Config.String(name);
+
   const secret = (name: string): Config.Config<Redacted.Redacted<string>> =>
     development
       ? Config.Redacted(name).pipe(Config.withDefault(Redacted.make("")))
       : Config.Redacted(name);
+
   return yield* Effect.all({
     OPENAI_API_KEY: secret("OPENAI_API_KEY"),
     KAPSO_API_KEY: secret("KAPSO_API_KEY"),
@@ -132,6 +148,7 @@ const liveProviders = Effect.fn(function* (development: boolean) {
     ),
   });
 });
+
 const fixtureProviders = (
   secret: NativeRelease["fixtureSecret"]
 ): Effect.Success<ReturnType<typeof liveProviders>> => ({
@@ -158,6 +175,7 @@ const fixtureProviders = (
   BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: Redacted.make(""),
   BANCOLOMBIA_SANDBOX_GRANT_KEY: Redacted.make(""),
 });
+
 export const providerBindings = Effect.fn(function* (release: NativeRelease) {
   const selected = release.closed
     ? fixtureProviders((name, prefix) =>
@@ -168,6 +186,7 @@ export const providerBindings = Effect.fn(function* (release: NativeRelease) {
         )
       )
     : yield* liveProviders(release.development);
+
   return {
     ...selected,
     HOSTED_AI_MODEL: yield* Config.schema(ApprovedOpenAiModel, "HOSTED_AI_MODEL"),
@@ -175,9 +194,12 @@ export const providerBindings = Effect.fn(function* (release: NativeRelease) {
     MICROSOFT_REDIRECT_URI: release.origin.api + "/providers/microsoft/callback",
   };
 });
+
 const admissionKeyBytes = 32;
+
 export const ingressBindings = Effect.fn(function* (release: NativeRelease) {
   let key = release.fixtureSecret("anonymous-admission");
+
   if (!release.closed) {
     key = yield* release.development
       ? Config.Redacted("PAT_ADMISSION_KEY").pipe(
@@ -187,6 +209,7 @@ export const ingressBindings = Effect.fn(function* (release: NativeRelease) {
         )
       : Config.Redacted("PAT_ADMISSION_KEY");
   }
+
   return {
     PAT_ADMISSION_KEY: key,
     LOCAL_CANONICAL_READ_BEARER: resolveLocalCanonicalReadBearer(release.development),
@@ -196,6 +219,7 @@ export const ingressBindings = Effect.fn(function* (release: NativeRelease) {
 export const operatingBindings = Effect.gen(function* () {
   const bound = (name: string, defaultValue = ""): Config.Config<string> =>
     Config.String(name).pipe(Config.withDefault(defaultValue));
+
   return yield* Effect.all({
     ASYNC_HEALTH_ENABLED: Effect.succeed("enabled" as const),
     SQLITE_STORE_CAPACITY_BYTES: bound("SQLITE_STORE_CAPACITY_BYTES", "1000000000"),
@@ -223,9 +247,11 @@ const accessRoles = {
   },
   BetaProAccess: { name: "Fidy native beta Pro operator", path: "/internal/beta-pro" },
 } as const;
+
 const recoveryPin = map(Cloudflare.Access.getIdentityProvider({ type: "onetimepin" }), (provider) =>
   Schema.decodeUnknownSync(Schema.String.check(Schema.isUUID()))(provider?.identityProviderId)
 );
+
 const supportApplication = Effect.fn(function* (
   logicalId: keyof typeof accessRoles,
   member: Option.Option<string>,
@@ -236,13 +262,16 @@ const supportApplication = Effect.fn(function* (
 ) {
   const { name, path } = accessRoles[logicalId];
   const { release, group } = context;
+
   const hosts =
     release.hosts === "staged"
       ? [nativeIngressHost, productionTopology.ingress.hostname]
       : [nativeIngressHost];
+
   const include = Option.isNone(member)
     ? [{ group: group.groupId }]
     : [{ email: { email: member.value } }];
+
   return yield* Cloudflare.Access.Application(logicalId, {
     type: "self_hosted",
     name,
@@ -259,10 +288,15 @@ export const bindPlannedText = Effect.fn(function* (
   worker: Cloudflare.Worker,
   values: Readonly<Record<string, string | Output<string>>>
 ) {
-  for (const [name, text] of Object.entries(values)) {
-    yield* worker.bind`${name}`({ bindings: [{ name, type: "plain_text", text }] });
-  }
+  yield* Effect.forEach(
+    Object.entries(values),
+    Effect.fnUntraced(function* ([name, text]) {
+      yield* worker.bind`${name}`({ bindings: [{ name, type: "plain_text", text }] });
+    }),
+    { discard: true }
+  );
 });
+
 export const privateAccessBindings = Effect.fn(function* (release: NativeRelease) {
   if (release.development) {
     return {
@@ -275,27 +309,34 @@ export const privateAccessBindings = Effect.fn(function* (release: NativeRelease
       SAMPLE_REVIEWER_EMAIL: "",
     };
   }
+
   const issuer = yield* Config.String("CLOUDFLARE_ACCESS_ISSUER");
   const operator = yield* Config.schema(EmailAddress, "RECOVERY_OPERATOR_EMAIL");
   const reviewer = yield* Config.Literal("obarboza@fidyapp.com", "SAMPLE_REVIEWER_EMAIL");
+
   const group = yield* Cloudflare.Access.Group("RecoveryOperators", {
     name: "Fidy native recovery operators",
     include: [{ email: { email: operator } }],
   });
+
   const betaOperator = yield* Config.Literal("obarboza@fidyapp.com", "BETA_PRO_OPERATOR_EMAIL");
   const context = { release, group };
   const recovery = yield* supportApplication("SupportRecoveryAccess", Option.none(), context);
+
   const erasure = yield* supportApplication(
     "TitularErasureAccess",
     Option.some("obarboza@fidyapp.com"),
     context
   );
+
   const sample = yield* supportApplication(
     "IngestSampleReviewAccess",
     Option.some(reviewer),
     context
   );
+
   const beta = yield* supportApplication("BetaProAccess", Option.some(betaOperator), context);
+
   return {
     BETA_PRO_OPERATOR_EMAIL: betaOperator,
     BETA_PRO_AUDIENCE: beta.aud,

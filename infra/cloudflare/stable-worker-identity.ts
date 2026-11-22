@@ -20,6 +20,7 @@ export const verifyStableWorkerIdentity = Effect.fn(function* (
     },
     origin
   );
+
   yield* checkSmokeExchange(observed, {
     public: expected.public,
     core: expected.core,

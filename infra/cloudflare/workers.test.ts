@@ -17,7 +17,7 @@ import {
   TelemetryWorkRecord,
 } from "@fidy/server/telemetry-contract";
 import { Clock, DateTime, Effect, Result, Schema } from "effect";
-import { describe, expect } from "vitest";
+import { assert, describe, expect } from "vitest";
 import coreWorker, {
   makeCoreWorker as composeWorker,
 } from "../../apps/server/cloudflare/core-worker";
@@ -43,8 +43,11 @@ import {
 } from "../../apps/server/cloudflare/runtime/contract";
 
 const withMethods = SyntheticBindings.withMethods;
+
 const gitRevision = "0123456789abcdef0123456789abcdef01234567";
+
 const contractDigest = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+
 const smokeBody = (coreVersion: string): string =>
   JSON.stringify({
     protocolVersion: 1,
@@ -64,11 +67,13 @@ const failPrivateOperation = (): never => {
 
 const makeCoreWorker = (telemetry: TelemetryService): typeof coreWorker =>
   composeWorker({ telemetry, institutions: registeredConnectionInstitutionIds });
+
 const unavailableUserStore = {
   getByName: (): Pick<Fetcher, "fetch"> => ({
     fetch: (): Promise<Response> => Promise.reject(new Error("unused")),
   }),
 };
+
 const unusedAiBinding = {
   run: (): Promise<never> => Promise.reject(new Error("Unused OpenAI binding")),
 };
@@ -135,10 +140,13 @@ const publishSmokeThroughCore = Effect.fnUntraced(function* () {
   let started: unknown;
   let acked = false;
   const owners = yield* (yield* nativeUserPlatform)();
+
   const bindings = yield* Effect.tryPromise(() =>
     owners.getBindings<Required<SharedBindings>>("core")
   );
+
   const marker = new Map<string, string>();
+
   const environment: Parameters<typeof coreWorker.fetch>[1] = {
     ...coreEnvironment,
     USER_STORE: bindings.USER_STORE,
@@ -153,12 +161,14 @@ const publishSmokeThroughCore = Effect.fnUntraced(function* () {
     SMOKE_QUEUE: withMethods(unavailableQueue, {
       send: (value: unknown): Promise<void> => {
         work = value;
+
         return Promise.resolve();
       },
     }),
     SMOKE_BUCKET: withMethods(unavailableBucket, {
       put: (key: string, value: string): Promise<void> => {
         marker.set(key, value);
+
         return Promise.resolve();
       },
       get: (key: string): Promise<object> =>
@@ -167,6 +177,7 @@ const publishSmokeThroughCore = Effect.fnUntraced(function* () {
     SMOKE_WORKFLOW: withMethods(unavailableWorkflow, {
       create: (value: unknown): Promise<object> => {
         started = value;
+
         return Promise.resolve({});
       },
     }),
@@ -178,6 +189,7 @@ const publishSmokeThroughCore = Effect.fnUntraced(function* () {
     WOMPI_INTEGRITY_SECRET: "configured",
     WOMPI_EVENT_SECRET: "configured",
   };
+
   const response = yield* Effect.tryPromise(() =>
     coreWorker.fetch(
       new Request("https://core.internal/internal/release-smoke", {
@@ -191,6 +203,7 @@ const publishSmokeThroughCore = Effect.fnUntraced(function* () {
       environment
     )
   );
+
   expect(response.status).toBe(202);
   expect(work).toMatchObject({
     protocolVersion: 2,
@@ -200,6 +213,7 @@ const publishSmokeThroughCore = Effect.fnUntraced(function* () {
     contractDigest,
   });
   const fixtureMessage = queueBatch({}).messages.at(0);
+
   if (fixtureMessage === undefined) throw new Error("Missing Queue fixture message");
   yield* Effect.tryPromise(() =>
     receiveSmoke({
@@ -231,6 +245,7 @@ describe("Core smoke adapter", () => {
   it.effect("routes the reserved endpoint and dedicated Queue without touching User work", () =>
     Effect.gen(function* () {
       const proof = "a".repeat(64);
+
       const environment: Parameters<typeof coreWorker.fetch>[1] = {
         ...coreEnvironment,
         SMOKE_LIMITER: smokeEnvironment().SMOKE_LIMITER,
@@ -241,6 +256,7 @@ describe("Core smoke adapter", () => {
         SMOKE_BUCKET: withMethods(unavailableBucket, { put: failPrivateOperation }),
         SMOKE_WORKFLOW: withMethods(unavailableWorkflow, { create: failPrivateOperation }),
       };
+
       const response = yield* Effect.tryPromise(() =>
         coreWorker.fetch(
           new Request("https://core.internal/internal/release-smoke", {
@@ -251,10 +267,12 @@ describe("Core smoke adapter", () => {
           environment
         )
       );
+
       expect(response.status).toBe(503);
 
       let acked = false;
       const fixtureMessage = queueBatch({}).messages.at(0);
+
       if (fixtureMessage === undefined) throw new Error("Missing Queue fixture message");
       yield* Effect.tryPromise(() =>
         receiveSmoke({
@@ -288,8 +306,7 @@ describe("Core smoke adapter", () => {
   it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) =>
     test.effect(
       "publishes an admitted probe through Core fetch and hands it to the private smoke executor",
-      publishSmokeThroughCore,
-      { timeout: 30_000 }
+      publishSmokeThroughCore
     )
   );
 });
@@ -306,6 +323,7 @@ describe("Deployment configuration", () => {
           stage: "production",
         })
       );
+
     const first = configuration("42379674321-1");
     const retry = configuration("42379674321-2");
     const next = configuration("42379674322-1");
@@ -331,14 +349,13 @@ describe("Deployment configuration", () => {
       stage: "dev-test",
     });
 
-    expect(Result.isSuccess(configuration)).toBe(true);
-    if (Result.isSuccess(configuration)) {
-      expect(configuration.success).toEqual({
-        contractDigest: "0000000000000000000000000000000000000000000000000000000000000000",
-        gitRevision: "0000000000000000000000000000000000000000",
-        versionTag: "development",
-      });
-    }
+    assert(Result.isSuccess(configuration));
+
+    expect(configuration.success).toEqual({
+      contractDigest: "0000000000000000000000000000000000000000000000000000000000000000",
+      gitRevision: "0000000000000000000000000000000000000000",
+      versionTag: "development",
+    });
   });
 
   it.each([
@@ -387,14 +404,13 @@ describe("Deployment configuration", () => {
       stage: "production",
     });
 
-    expect(Result.isSuccess(configuration)).toBe(true);
-    if (Result.isSuccess(configuration)) {
-      expect(configuration.success).toEqual({
-        contractDigest,
-        gitRevision,
-        versionTag: "release-42379674321-1",
-      });
-    }
+    assert(Result.isSuccess(configuration));
+
+    expect(configuration.success).toEqual({
+      contractDigest,
+      gitRevision,
+      versionTag: "release-42379674321-1",
+    });
   });
 });
 
@@ -497,6 +513,7 @@ describe("Production topology contract", () => {
 
     expect(rateLimits).toHaveLength(1);
     const expression = rateLimits[0]?.expression ?? "";
+
     for (const path of [
       browserSessionBindingPath,
       ...Object.values(providerPaths),
@@ -518,6 +535,7 @@ describe("Production topology contract", () => {
     ]) {
       expect(expression).toContain(`"${path}"`);
     }
+
     for (const prefix of [
       "/web/subscription/payment-enrollments/",
       "/web/subscription/billing-attempts/",
@@ -525,6 +543,7 @@ describe("Production topology contract", () => {
     ]) {
       expect(expression).toContain(`starts_with(http.request.uri.path, "${prefix}")`);
     }
+
     expect(rateLimits[0]).toMatchObject({
       action: "block",
       ratelimit: {
@@ -538,9 +557,11 @@ describe("Production topology contract", () => {
 
   it("includes every reserved provider callback in the shared edge budget", () => {
     const expression = edgeSecurityPolicy.rulesets.rateLimits.rules[0]?.expression ?? "";
+
     for (const callback of Object.values(edgeSecurityPolicy.reservedIngress.httpCallbacks)) {
       expect(expression).toContain(`"${callback.path}"`);
     }
+
     expect(expression).toContain('starts_with(http.request.uri.path, "/budgets/")');
     expect(expression).not.toContain("http.host");
   });
@@ -560,6 +581,7 @@ describe("Cloudflare Worker topology", () => {
         RECOVERY_ISOLATION: "isolated",
         SMOKE_PROOF: "a".repeat(64),
       };
+
       const response = yield* Effect.tryPromise(() =>
         coreWorker.fetch(
           new Request("https://core.internal/web/providers/disclosure", {
@@ -568,11 +590,14 @@ describe("Cloudflare Worker topology", () => {
           isolated
         )
       );
+
       expect(response.status).toBe(503);
       expect(response.headers.get("x-fidy-recovery-isolation")).toBe("isolated");
+
       const health = yield* Effect.tryPromise(() =>
         coreWorker.fetch(new Request("https://core.internal/health"), isolated)
       );
+
       expect(health.status).toBe(200);
     })
   );
@@ -581,6 +606,7 @@ describe("Cloudflare Worker topology", () => {
       const response = yield* Effect.tryPromise(() =>
         coreWorker.fetch(new Request("https://core.internal/health"), coreEnvironment)
       );
+
       const body = yield* Effect.tryPromise(() => response.json());
 
       expect(response.status).toBe(200);
@@ -603,6 +629,7 @@ describe("Cloudflare Worker topology", () => {
           RELEASE_GIT_SHA: "wrong",
         })
       );
+
       const body = response.clone();
       const json = yield* Effect.tryPromise(() => response.json());
       const text = yield* Effect.tryPromise(() => body.text());
@@ -616,6 +643,7 @@ describe("Cloudflare Worker topology", () => {
   it.effect("reaches health through the Core service binding", () =>
     Effect.gen(function* () {
       const requests: Array<Request> = [];
+
       const response = yield* Effect.tryPromise(() =>
         publicWorker.fetch(
           new Request("https://api.fidyapp.com/health"),
@@ -624,12 +652,14 @@ describe("Cloudflare Worker topology", () => {
               fetch: (request) => {
                 const coreRequest = new Request(request);
                 requests.push(coreRequest);
+
                 return Promise.resolve(coreWorker.fetch(coreRequest, coreEnvironment));
               },
             },
           })
         )
       );
+
       const body = yield* Effect.tryPromise(() => response.json());
 
       expect(requests).toHaveLength(1);
@@ -651,6 +681,7 @@ describe("Cloudflare Worker topology", () => {
       const telemetry = collectingTelemetry(records);
       const observedCore = makeCoreWorker(telemetry);
       const observedPublic = makePublicWorker(telemetry);
+
       const response = yield* Effect.tryPromise(() =>
         observedPublic.fetch(
           new Request("https://api.fidyapp.com/health"),
@@ -668,32 +699,39 @@ describe("Cloudflare Worker topology", () => {
         "worker.core.fetch",
         "worker.public.fetch",
       ]);
+
       const receipt = yield* Schema.decodeUnknownEffect(TelemetryTraceId)(
         response.headers.get(telemetryTraceHeader)
       );
+
       expect(new Set(records.map((record) => record.spanId)).size).toBe(2);
-      for (const record of records) {
-        yield* Schema.decodeEffect(TelemetryWorkRecord, { onExcessProperty: "error" })(record);
-        expect(record.traceId).toBe(receipt);
-        expect(record).toMatchObject({
-          release: gitRevision,
-          provider: "cloudflare-workers",
-          statusClass: "2xx",
-          outcome: "succeeded",
-          attempt: 1,
-        });
-        expect(Object.keys(record).sort()).toEqual([
-          "attempt",
-          "latencyMilliseconds",
-          "operation",
-          "outcome",
-          "provider",
-          "release",
-          "spanId",
-          "statusClass",
-          "traceId",
-        ]);
-      }
+
+      yield* Effect.forEach(
+        records,
+        Effect.fnUntraced(function* (record) {
+          yield* Schema.decodeEffect(TelemetryWorkRecord, { onExcessProperty: "error" })(record);
+          expect(record.traceId).toBe(receipt);
+          expect(record).toMatchObject({
+            release: gitRevision,
+            provider: "cloudflare-workers",
+            statusClass: "2xx",
+            outcome: "succeeded",
+            attempt: 1,
+          });
+          expect(Object.keys(record).sort()).toEqual([
+            "attempt",
+            "latencyMilliseconds",
+            "operation",
+            "outcome",
+            "provider",
+            "release",
+            "spanId",
+            "statusClass",
+            "traceId",
+          ]);
+        }),
+        { discard: true }
+      );
     })
   );
 
@@ -716,9 +754,11 @@ describe("Cloudflare Worker topology", () => {
           outcome: "failed",
           attempt: 1,
         });
+
         const exported = yield* Schema.encodeEffect(
           Schema.fromJsonString(Schema.Array(Schema.Unknown))
         )(records);
+
         expect(exported).not.toContain(payload);
       })
   );
@@ -730,6 +770,7 @@ describe("Cloudflare Worker topology", () => {
           throw new Error("export unavailable");
         })
       );
+
       const batch = queueBatch("no-provider-binding");
 
       yield* Effect.tryPromise(() =>
@@ -743,6 +784,7 @@ it.live("routes the private canary Queue to a real Workflow handoff, not to appl
   Effect.gen(function* () {
     let created = false;
     const done = (): Promise<void> => Promise.resolve();
+
     const canaryInstance: WorkflowInstance = {
       id: "canary",
       status: () => Promise.resolve({ status: "complete" }),
@@ -758,9 +800,11 @@ it.live("routes the private canary Queue to a real Workflow handoff, not to appl
           [Symbol.dispose]: () => {},
         }),
     };
+
     const workflow: Workflow = {
       create: () => {
         created = true;
+
         return Promise.resolve(canaryInstance);
       },
       get: () => Promise.resolve(canaryInstance),
@@ -768,11 +812,14 @@ it.live("routes the private canary Queue to a real Workflow handoff, not to appl
         Promise.reject(new Error("Canary handoff must create one Workflow")),
       deleteBatch: () => Promise.resolve({ deleted: [], errors: [] }),
     };
+
     const now = yield* Clock.currentTimeMillis;
+
     const batch = {
       ...queueBatch({ version: 1, sentAtMs: Math.floor(now / 300_000) * 300_000 }),
       queue: "OperationalCanaryQueue",
     };
+
     yield* Effect.tryPromise(() =>
       makeCoreWorker(collectingTelemetry([])).queue(batch, {
         ...coreEnvironment,
@@ -795,20 +842,23 @@ describe("Cloudflare Worker topology (scheduled)", () => {
           .scheduled(scheduledController, coreEnvironment)
           .then(Result.succeed<void>, Result.fail<unknown>)
       );
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(String(result.failure)).toContain("ScheduledWorkFailed");
-        expect(String(result.failure)).not.toContain(privateFailureDetail);
-      }
+
+      assert(Result.isFailure(result));
+
+      expect(String(result.failure)).toContain("ScheduledWorkFailed");
+      expect(String(result.failure)).not.toContain(privateFailureDetail);
+
       expect(records).toHaveLength(1);
       expect(records[0]).toMatchObject({
         operation: "worker.core.scheduled",
         outcome: "failed",
         release: gitRevision,
       });
+
       const exported = yield* Schema.encodeEffect(
         Schema.fromJsonString(Schema.Array(Schema.Unknown))
       )(records);
+
       expect(exported).not.toContain(privateFailureDetail);
     })
   );
@@ -819,6 +869,7 @@ describe("Cloudflare Worker topology (continued)", () => {
     Effect.gen(function* () {
       const records: Array<TelemetryWorkRecord> = [];
       const observedPublic = makePublicWorker(collectingTelemetry(records));
+
       const response = yield* Effect.tryPromise(() =>
         observedPublic.fetch(
           new Request("https://api.fidyapp.com/not-published"),
@@ -868,6 +919,7 @@ describe("Cloudflare Worker topology (continued)", () => {
   it.effect("rejects an unapproved browser origin before invoking Core", () =>
     Effect.gen(function* () {
       let delegated = false;
+
       const response = yield* Effect.tryPromise(() =>
         publicWorker.fetch(
           new Request("https://api.fidyapp.com/categories", {
@@ -877,6 +929,7 @@ describe("Cloudflare Worker topology (continued)", () => {
             CORE: {
               fetch: () => {
                 delegated = true;
+
                 return Promise.resolve(Response.json({}));
               },
             },
@@ -893,6 +946,7 @@ describe("Cloudflare Worker topology (continued)", () => {
   it.effect("fails closed when the configured browser origin is outside the topology", () =>
     Effect.gen(function* () {
       let delegated = false;
+
       const response = yield* Effect.tryPromise(() =>
         publicWorker.fetch(
           new Request("https://api.fidyapp.com/health"),
@@ -901,6 +955,7 @@ describe("Cloudflare Worker topology (continued)", () => {
             CORE: {
               fetch: () => {
                 delegated = true;
+
                 return Promise.resolve(Response.json({}));
               },
             },
@@ -966,6 +1021,7 @@ describe("Cloudflare Worker topology (continued)", () => {
           })
         )
       );
+
       const body = yield* Effect.tryPromise(() => response.json());
 
       expect(response.status).toBe(401);
@@ -981,19 +1037,24 @@ describe("Cloudflare Worker topology (continued)", () => {
       const records: Array<TelemetryWorkRecord> = [];
       const telemetry = collectingTelemetry(records);
       const directoryRequests: string[] = [];
+
       const directoryStub: Pick<Fetcher, "fetch"> = {
         fetch: (input): Promise<Response> => {
           directoryRequests.push(new Request(input).url);
+
           return failPrivateOperation();
         },
       };
+
       const nativeEnvironment = {
         ...coreEnvironment,
         DIRECTORY: { getByName: (): typeof directoryStub => directoryStub },
         USER_STORE: unavailableUserStore,
       };
+
       const observedCore = makeCoreWorker(telemetry);
       const observedPublic = makePublicWorker(telemetry);
+
       const response = yield* Effect.tryPromise(() =>
         observedPublic.fetch(
           new Request("https://api.fidyapp.com/categories", {
@@ -1009,6 +1070,7 @@ describe("Cloudflare Worker topology (continued)", () => {
           })
         )
       );
+
       const text = yield* Effect.tryPromise(() => response.text());
 
       expect(directoryRequests).toHaveLength(1);
@@ -1034,6 +1096,7 @@ describe("Cloudflare Worker topology (continued)", () => {
   it.effect("rejects other public routes before invoking Core", () =>
     Effect.gen(function* () {
       let delegated = false;
+
       const response = yield* Effect.tryPromise(() =>
         publicWorker.fetch(
           new Request("https://api.fidyapp.com/internal"),
@@ -1041,6 +1104,7 @@ describe("Cloudflare Worker topology (continued)", () => {
             CORE: {
               fetch: () => {
                 delegated = true;
+
                 return Promise.resolve(Response.json({}));
               },
             },

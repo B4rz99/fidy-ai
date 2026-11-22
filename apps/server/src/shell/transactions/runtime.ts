@@ -17,7 +17,9 @@ const implemented = [
 
 const routes = implemented.map((id) => {
   const operation = operationCatalog.byId.get(id);
+
   if (operation === undefined) throw new Error(`Missing canonical operation ${id}`);
+
   return operation;
 });
 
@@ -36,6 +38,6 @@ export const ownsTransactionPath = (path: string): boolean =>
   routes.some((operation) => matchesRouteTemplate({ template: operation.route, path }));
 
 export const transactionMethods = (path: string): ReadonlyArray<string> =>
-  routes
-    .filter(({ method }) => Option.isSome(transactionRoute({ path, method })))
-    .map(({ method }) => method);
+  routes.flatMap(({ method }) =>
+    Option.toArray(Option.as(transactionRoute({ path, method }), method))
+  );

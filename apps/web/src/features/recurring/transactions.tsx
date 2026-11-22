@@ -3,7 +3,7 @@ import { PendingRead } from "@/ui/components/pending-read";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Option, Schema } from "effect";
+import { Option, Predicate, Schema } from "effect";
 import { type JSX, type ReactNode, useState } from "react";
 import { type CanonicalSuccess, TransactionQueryValues } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
@@ -24,6 +24,7 @@ import {
 import { money } from "./model";
 
 type Transaction = CanonicalSuccess<"transactions.listTransactions">["data"][number];
+
 type BrowserView = Readonly<{
   filters: ReactNode;
   results: ReactNode;
@@ -31,6 +32,7 @@ type BrowserView = Readonly<{
   blocked: boolean;
   clear: () => void;
 }>;
+
 type BrowserProps = Readonly<{
   disabled: boolean;
   timeZone: string;
@@ -38,6 +40,7 @@ type BrowserProps = Readonly<{
   children: (view: BrowserView) => ReactNode;
   navigation: Option.Option<TransactionBrowserControl>;
 }>;
+
 const continuation = (
   page: CanonicalSuccess<"transactions.listTransactions">
 ): Option.Option<string> => {
@@ -46,30 +49,33 @@ const continuation = (
       entry.tool === "transactions.listTransactions" ||
       entry.tool === "transactions.searchTransactions"
   );
+
   if (suggestion === undefined || !("args" in suggestion) || Option.isNone(suggestion.args)) {
     return Option.none();
   }
+
   return Schema.decodeUnknownOption(
     Schema.Struct({ query: Schema.Struct({ cursor: TransactionQueryValues.fields.cursor }) })
   )(suggestion.args.value).pipe(Option.map((value) => value.query.cursor));
 };
+
 export const TransactionBrowser = (props: BrowserProps): JSX.Element => {
   const [local, setLocal] = useState<TransactionBrowserState>(() => ({
     draft: props.initial,
     applied: props.initial,
     cursors: [],
   }));
+
   const control = Option.getOrElse(props.navigation, () => ({
     state: local,
     change: setLocal,
     select: (selectedId: Transaction["id"]): void => setLocal({ ...local, selectedId }),
     clear: (): void => setLocal({ ...local, selectedId: undefined }),
   }));
+
   const current = control.state;
   const change = control.change;
-  const query = Option.getOrThrow(
-    transactionSearch({ draft: current.applied, timeZone: props.timeZone })
-  );
+
   const filters = (
     <TransactionSearchForm
       draft={current.draft}
@@ -80,29 +86,34 @@ export const TransactionBrowser = (props: BrowserProps): JSX.Element => {
       }
     />
   );
-  return (
-    <TransactionPage
-      key={JSON.stringify(query)}
-      {...props}
-      query={query}
-      cursor={Option.fromUndefinedOr(current.cursors.at(-1))}
-      filters={filters}
-      selectedId={Option.fromUndefinedOr(current.selectedId)}
-      choose={control.select}
-      clear={control.clear}
-      next={(cursor) =>
-        change({ ...current, cursors: [...current.cursors, cursor], selectedId: undefined })
-      }
-      previous={
-        current.cursors.length === 0
-          ? Option.none()
-          : Option.some(() =>
-              change({ ...current, cursors: current.cursors.slice(0, -1), selectedId: undefined })
-            )
-      }
-    />
-  );
+
+  return Option.match(transactionSearch({ draft: current.applied, timeZone: props.timeZone }), {
+    onNone: () => filters,
+    onSome: (query) => (
+      <TransactionPage
+        key={JSON.stringify(query)}
+        {...props}
+        query={query}
+        cursor={Option.fromUndefinedOr(current.cursors.at(-1))}
+        filters={filters}
+        selectedId={Option.fromUndefinedOr(current.selectedId)}
+        choose={control.select}
+        clear={control.clear}
+        next={(cursor) =>
+          change({ ...current, cursors: [...current.cursors, cursor], selectedId: undefined })
+        }
+        previous={
+          current.cursors.length === 0
+            ? Option.none()
+            : Option.some(() =>
+                change({ ...current, cursors: current.cursors.slice(0, -1), selectedId: undefined })
+              )
+        }
+      />
+    ),
+  });
 };
+
 type PageProps = BrowserProps &
   Readonly<{
     selectedId: Option.Option<Transaction["id"]>;
@@ -114,17 +125,22 @@ type PageProps = BrowserProps &
     next: (cursor: string) => void;
     previous: Option.Option<() => void>;
   }>;
+
 const TransactionPage = (props: PageProps): JSX.Element => (
   <TransactionRequest key={Option.getOrElse(props.cursor, () => "first")} {...props} />
 );
+
 const TransactionRequest = (props: PageProps): JSX.Element => {
   const client = useRouter().options.context.apiClient;
+
   const [resource] = useState(() => {
     const { text, filters } = props.query;
+
     const query = {
       ...filters,
-      ...(Option.isNone(props.cursor) ? {} : { cursor: props.cursor.value }),
+      ...Option.match(props.cursor, { onNone: () => ({}), onSome: (cursor) => ({ cursor }) }),
     };
+
     return (
       Option.isNone(text)
         ? client.query("transactions", "listTransactions", { query, ...workspaceQueryRetention })
@@ -134,19 +150,22 @@ const TransactionRequest = (props: PageProps): JSX.Element => {
           })
     ).pipe(revalidateWorkspaceQuery);
   });
+
   const state = useAtomValue(resource).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(resource);
+
   const blocked =
     props.disabled ||
-    state._tag !== "Ready" ||
+    !Predicate.isTagged(state, "Ready") ||
     state.waiting ||
     Option.isSome(state.refreshFailure);
-  const selected =
-    state._tag === "Ready"
-      ? Option.flatMap(props.selectedId, (id) =>
-          Option.fromUndefinedOr(state.value.data.find((transaction) => transaction.id === id))
-        )
-      : Option.none();
+
+  const selected = Predicate.isTagged(state, "Ready")
+    ? Option.flatMap(props.selectedId, (id) =>
+        Option.fromUndefinedOr(state.value.data.find((transaction) => transaction.id === id))
+      )
+    : Option.none();
+
   const results = (
     <SearchResults
       {...props}
@@ -157,6 +176,7 @@ const TransactionRequest = (props: PageProps): JSX.Element => {
       choose={(transaction) => props.choose(transaction.id)}
     />
   );
+
   return (
     <>
       {props.children({
@@ -169,6 +189,7 @@ const TransactionRequest = (props: PageProps): JSX.Element => {
     </>
   );
 };
+
 type ResultsProps = Omit<PageProps, "choose"> &
   Readonly<{
     state: ReturnType<
@@ -179,9 +200,11 @@ type ResultsProps = Omit<PageProps, "choose"> &
     selected: Option.Option<Transaction["id"]>;
     choose: (transaction: Transaction) => void;
   }>;
+
 const SearchResults = (props: ResultsProps): JSX.Element => {
   const { state, refresh } = props;
-  if (state._tag === "Failure") {
+
+  if (Predicate.isTagged(state, "Failure")) {
     return (
       <div className="grid gap-3 py-6">
         <p>No pudimos cargar las transacciones. Tus filtros se conservaron.</p>
@@ -191,7 +214,9 @@ const SearchResults = (props: ResultsProps): JSX.Element => {
       </div>
     );
   }
-  if (state._tag !== "Ready") return <PendingRead label="Cargando transacciones" />;
+
+  if (!Predicate.isTagged(state, "Ready")) return <PendingRead label="Cargando transacciones" />;
+
   return (
     <section
       aria-label="Resultados de transacciones"
@@ -230,6 +255,7 @@ const SearchResults = (props: ResultsProps): JSX.Element => {
     </section>
   );
 };
+
 const PageNavigation = ({
   page,
   blocked,
@@ -238,6 +264,7 @@ const PageNavigation = ({
 }: Pick<ResultsProps, "blocked" | "next" | "previous"> &
   Readonly<{ page: CanonicalSuccess<"transactions.listTransactions"> }>): JSX.Element => {
   const more = continuation(page);
+
   return (
     <div className="flex flex-wrap items-center gap-3 py-4">
       {Option.isSome(previous) ? (
@@ -265,6 +292,7 @@ const PageNavigation = ({
     </div>
   );
 };
+
 export const TransactionPicker = ({
   choose,
   disabled,

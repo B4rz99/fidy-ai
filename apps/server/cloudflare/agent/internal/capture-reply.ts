@@ -20,8 +20,10 @@ export const transactionReceipt = ({
 }>): Option.Option<TranscriptText> => {
   if (operation !== "transactions.createTransaction") return Option.none();
   const result = Schema.decodeUnknownOption(captured)(output);
+
   if (Option.isNone(result)) return Option.none();
   const transaction = result.value.data;
+
   return Option.map(localDateText({ date: transaction.occurredAt, timeZone }), (date) =>
     TranscriptText.make(
       `Registré ${transaction.direction === "inflow" ? "un ingreso" : "un gasto"} de ${moneyText(transaction.money)} en ${Option.getOrElse(categoryText(transaction.categoryId), () => "la categoría elegida")}, del ${date}.`
@@ -31,6 +33,7 @@ export const transactionReceipt = ({
 
 const captureVerb =
   /(?:^|[.!]\s+)(?:(?:por favor|fidy)[,:]?\s+)?(?:gast[eé]|pagu[eé]|compr[eé]|recib[ií]|cobr[eé]|registra|registrar|anota|anotar|guarda|guardar)(?=\s|$)/iu;
+
 const compactCapture = /^(?:COP\s*|\$\s*)?\d[\d.,]*(?:\s*(?:mil|k|COP))?\s+\p{L}/iu;
 
 export const captureWithoutCommit = ({

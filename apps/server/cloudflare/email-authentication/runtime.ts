@@ -2,7 +2,7 @@ import { checkLoginMailbox, startLoginEmail } from "./internal/login-admission";
 import { verifyLoginEmail } from "./internal/login-completion";
 import { deliverPendingReplacement as deliverLocal } from "./internal/native-mail-delivery";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
 import {
   NativeLoginEmailWork,
   loginCheckUrl,
@@ -27,8 +27,11 @@ import { isBrowserPairingEmailWork as recognizesPairing } from "./internal/brows
 import { isEmailReplacementWork as recognizesReplacement } from "./internal/replacement-workflow";
 
 export const isBrowserPairingEmailWork = (value: unknown): boolean => recognizesPairing(value);
+
 export const offerLoginEmail: typeof offerLogin = (...args) => offerLogin(...args);
+
 export const repairLoginAlarm: typeof repairLogin = (...args) => repairLogin(...args);
+
 export const localLoginEmailRequest = Effect.fn(function* ({
   request,
   environment,
@@ -53,7 +56,10 @@ export const localLoginEmailRequest = Effect.fn(function* ({
       return new Response(null, { status: 404 });
   }
 });
+
 export const startLoginWorkflow: typeof startWorkflow = (...args) => startWorkflow(...args);
+
+const deliveryRuntime = ManagedRuntime.make(Layer.empty);
 
 export class BrowserPairingEmailWorkflowV1 extends WorkflowEntrypoint<
   { USER_STORE: DurableObjectNamespace },
@@ -61,11 +67,13 @@ export class BrowserPairingEmailWorkflowV1 extends WorkflowEntrypoint<
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
     const work = Schema.decodeUnknownOption(NativeLoginEmailWork)(event.payload);
+
     if (Option.isNone(work)) return Promise.resolve();
+
     return observeWorkerPromise(
       () =>
         step.do("send-browser-pairing-email-v2", { retries: { limit: 0, delay: "1 second" } }, () =>
-          Effect.runPromise(runLoginDelivery(this.env.USER_STORE, work.value))
+          deliveryRuntime.runPromise(runLoginDelivery(this.env.USER_STORE, work.value))
         ),
       {
         environment: workerRelease(this.env),
@@ -78,4 +86,5 @@ export class BrowserPairingEmailWorkflowV1 extends WorkflowEntrypoint<
 }
 
 export const isEmailReplacementWork = (value: unknown): boolean => recognizesReplacement(value);
+
 export const deliverPendingReplacement: typeof deliverLocal = (...args) => deliverLocal(...args);

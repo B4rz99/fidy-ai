@@ -25,10 +25,12 @@ export const AgentContent = ({
   setText: (text: string) => void;
 }>): JSX.Element => {
   const { display } = conversation;
+
   const onSubmit = (event: SubmitEvent<HTMLFormElement>): void => {
     event.preventDefault();
     conversation.submit(text);
   };
+
   return (
     <>
       <Conversation className="min-h-0" aria-label="Conversación con Fidy">
@@ -67,6 +69,7 @@ export const AgentContent = ({
     </>
   );
 };
+
 const AgentReply = ({
   reply,
   active,

@@ -19,12 +19,14 @@ import {
 const routerRegistrationFile = fileURLToPath(
   new URL("../../apps/web/src/app/routes.ts", import.meta.url)
 );
+
 const routeFactories = new Map([[routerRegistrationFile, "createWebRouter"]]);
 
 /** @param {TSInterfaceDeclaration} node - Interface to inspect. */
 const isRouterRegistration = (node) => {
   const block = node.parent;
   const module = block.type === "TSModuleBlock" ? block.parent : undefined;
+
   return (
     node.id.name === "Register" &&
     module?.type === "TSModuleDeclaration" &&
@@ -47,6 +49,7 @@ const noOrdinaryInterface = {
   },
   create(context) {
     let registrations = 0;
+
     return {
       TSInterfaceDeclaration(node) {
         if (
@@ -55,8 +58,10 @@ const noOrdinaryInterface = {
           isRouterRegistration(node)
         ) {
           registrations += 1;
+
           return;
         }
+
         context.report({ node, messageId: "ordinaryInterface" });
       },
     };
@@ -77,9 +82,11 @@ const requireRouteReturnType = {
   create(context) {
     const factoryName = routeFactories.get(context.filename);
     let factorySeen = false;
+
     /** @param {import("./ast-types.js").VariableDeclarator} owner - Named function binding. */
     const isExportedFactory = (owner) => {
       const declaration = owner.parent;
+
       return (
         owner.id.type === "Identifier" &&
         owner.id.name === factoryName &&
@@ -88,19 +95,25 @@ const requireRouteReturnType = {
         declaration.parent.parent.type === "Program"
       );
     };
+
     /**
      * @param {import("./ast-types.js").ArrowFunctionExpression | import("./ast-types.js").FunctionExpression} node - Function expression to inspect.
      */
     const checkInitializer = (node) => {
       if (node.returnType !== null) return;
       const owner = node.parent;
+
       if (owner.type !== "VariableDeclarator") return;
+
       if (!factorySeen && isExportedFactory(owner)) {
         factorySeen = true;
+
         return;
       }
+
       context.report({ node, messageId: "routeReturnType" });
     };
+
     return {
       ArrowFunctionExpression: checkInitializer,
       FunctionExpression: checkInitializer,
@@ -129,11 +142,13 @@ const noSqlTypeParameter = {
       TaggedTemplateExpression(node) {
         if (!node.typeArguments) return;
         const tag = node.tag;
+
         const isSql =
           (tag.type === "Identifier" && tag.name === "sql") ||
           (tag.type === "MemberExpression" &&
             tag.property.type === "Identifier" &&
             tag.property.name === "sql");
+
         if (isSql) {
           context.report({ node, messageId: "noSqlTypeParam" });
         }
@@ -157,9 +172,11 @@ const noDisableValidation = {
     return {
       Property(node) {
         const key = node.key;
+
         const isDisableValidationKey =
           (key.type === "Identifier" && key.name === "disableValidation") ||
           (key.type === "Literal" && key.value === "disableValidation");
+
         if (isDisableValidationKey && node.value.type === "Literal" && node.value.value === true) {
           context.report({ node, messageId: "noDisableValidation" });
         }
@@ -195,17 +212,22 @@ const noEffectPromise = {
   },
   create(context) {
     const effectNamespaces = new Set(["Effect"]);
+
     return {
       MemberExpression(node) {
         if (node.object.type !== "Identifier" || !effectNamespaces.has(node.object.name)) return;
+
         if (staticMemberName(node) !== "promise") return;
         context.report({ node, messageId: "noEffectPromise" });
       },
       ImportDeclaration(node) {
         const source = node.source.value;
+
         if (source !== "effect" && source !== "effect/Effect") return;
+
         for (const specifier of node.specifiers) {
           if (bindsEffectNamespace(source, specifier)) effectNamespaces.add(specifier.local.name);
+
           if (!importsName(specifier, "promise")) continue;
           context.report({ node: specifier, messageId: "noEffectPromise" });
         }
@@ -235,6 +257,7 @@ const noTypeCast = {
       ImportDeclaration(node) {
         for (const specifier of node.specifiers) {
           if (specifier.type !== "ImportSpecifier") continue;
+
           if (specifier.imported.type === "Identifier" && specifier.imported.name === "cast") {
             context.report({ node: specifier, messageId: "noTypeCast" });
           }
@@ -247,9 +270,11 @@ const noTypeCast = {
 /** @param {MemberExpression} node - Member access to inspect. */
 const staticMemberName = (node) => {
   if (!node.computed && node.property.type === "Identifier") return node.property.name;
-  if (node.property.type === "Literal" && typeof node.property.value === "string") {
-    return node.property.value;
+
+  if (node.property.type === "Literal" && /^["']/u.test(node.property.raw ?? "")) {
+    return String(node.property.value);
   }
+
   return undefined;
 };
 
@@ -269,16 +294,19 @@ const noEscapeHatch = {
       MemberExpression(node) {
         if (node.object.type !== "Identifier" || node.object.name !== "Effect") return;
         const name = staticMemberName(node);
+
         if (name === undefined || !ESCAPE_HATCHES.has(name)) return;
         context.report({ node, messageId: "noEscapeHatch", data: { name } });
       },
       ImportDeclaration(node) {
         const source = node.source.value;
-        if (typeof source !== "string") return;
+
         if (source !== "effect" && !source.startsWith("effect/")) return;
+
         for (const specifier of node.specifiers) {
           if (specifier.type !== "ImportSpecifier") continue;
           const imported = specifier.imported;
+
           if (imported.type !== "Identifier" || !ESCAPE_HATCHES.has(imported.name)) continue;
           context.report({
             node: specifier,
@@ -308,6 +336,7 @@ const noReactUseEffect = {
     return {
       ImportDeclaration(node) {
         if (node.source.value !== "react") return;
+
         for (const specifier of node.specifiers) {
           if (
             specifier.type === "ImportSpecifier" &&
@@ -315,6 +344,7 @@ const noReactUseEffect = {
           ) {
             context.report({ node: specifier, messageId: "noReactUseEffect" });
           }
+
           if (
             specifier.type === "ImportDefaultSpecifier" ||
             specifier.type === "ImportNamespaceSpecifier"
@@ -325,6 +355,7 @@ const noReactUseEffect = {
       },
       MemberExpression(node) {
         if (node.object.type !== "Identifier" || !reactNamespaces.has(node.object.name)) return;
+
         if (staticMemberName(node) !== "useEffect") return;
         context.report({ node, messageId: "noReactUseEffect" });
       },
@@ -375,21 +406,27 @@ const SCALAR_SCHEMA_CONSTRUCTORS = new Set([
  */
 const schemaConstructorName = (expression, schemaNamespaces) => {
   let current = expression;
+
   while (current !== undefined) {
     if (current.type === "ChainExpression") {
       current = current.expression;
       continue;
     }
+
     if (current.type === "CallExpression") {
       current = current.callee;
       continue;
     }
+
     if (current.type !== "MemberExpression") return undefined;
+
     if (current.object.type === "Identifier" && schemaNamespaces.has(current.object.name)) {
       return staticMemberName(current);
     }
+
     current = current.object;
   }
+
   return undefined;
 };
 
@@ -411,11 +448,13 @@ const schemaNamespaceLocals = (node) => {
       .filter((specifier) => importsName(specifier, "Schema"))
       .map((specifier) => specifier.local.name);
   }
+
   if (node.source.value === "effect/Schema") {
     return node.specifiers
       .filter((specifier) => specifier.type === "ImportNamespaceSpecifier")
       .map((specifier) => specifier.local.name);
   }
+
   return [];
 };
 
@@ -445,6 +484,7 @@ const scalarBrandOnly = {
     /** @param {import("./ast-types.js").CallExpression} node - Potential brand call. */
     const isBrandCall = (node) => {
       if (node.callee.type === "Identifier") return directBrandBindings.has(node.callee.name);
+
       return (
         node.callee.type === "MemberExpression" &&
         node.callee.object.type === "Identifier" &&
@@ -456,20 +496,25 @@ const scalarBrandOnly = {
     return {
       ImportDeclaration(node) {
         for (const local of schemaNamespaceLocals(node)) schemaNamespaces.add(local);
+
         for (const local of brandBindingLocals(node)) directBrandBindings.add(local);
       },
       CallExpression(node) {
         if (!isBrandCall(node)) return;
         const pipeCall = node.parent;
+
         if (
           pipeCall.type !== "CallExpression" ||
           pipeCall.callee.type !== "MemberExpression" ||
           staticMemberName(pipeCall.callee) !== "pipe"
         ) {
           context.report({ node, messageId: "scalarBrandOnly" });
+
           return;
         }
+
         const constructor = schemaConstructorName(pipeCall.callee.object, schemaNamespaces);
+
         if (constructor === undefined || !SCALAR_SCHEMA_CONSTRUCTORS.has(constructor)) {
           context.report({ node, messageId: "scalarBrandOnly" });
         }
@@ -499,7 +544,9 @@ const CRYPTO_SOURCES = new Set(["crypto", "node:crypto"]);
 const cryptoModuleLocals = (statement) => {
   if (statement.type !== "ImportDeclaration") return [];
   const source = statement.source.value;
-  if (typeof source !== "string" || !CRYPTO_SOURCES.has(source)) return [];
+
+  if (!CRYPTO_SOURCES.has(source)) return [];
+
   return statement.specifiers.filter(isWholeModuleImport).map((specifier) => specifier.local.name);
 };
 
@@ -513,6 +560,7 @@ const cryptoBindings = (program) =>
  */
 const isCryptoObject = (object, names) => {
   if (object.type === "Identifier") return names.has(object.name);
+
   return object.type === "MemberExpression" && staticMemberName(object) === "crypto";
 };
 
@@ -536,29 +584,37 @@ const noAmbientNondeterminism = {
      */
     const reportRandom = (node, name) =>
       context.report({ node, messageId: "random", data: { name } });
+
     const cryptoNames = new Set(["crypto"]);
+
     return {
       Program(program) {
         for (const name of cryptoBindings(program)) cryptoNames.add(name);
       },
       NewExpression(node) {
         if (node.callee.type !== "Identifier" || node.callee.name !== "Date") return;
+
         if (node.arguments.length > 0) return;
         context.report({ node, messageId: "clock" });
       },
       ImportDeclaration(node) {
         const source = node.source.value;
-        if (typeof source !== "string" || !CRYPTO_SOURCES.has(source)) return;
+
+        if (!CRYPTO_SOURCES.has(source)) return;
+
         for (const specifier of node.specifiers) {
           if (specifier.type !== "ImportSpecifier") continue;
           const imported = specifier.imported;
+
           if (imported.type !== "Identifier" || !ENTROPY_EXPORTS.has(imported.name)) continue;
           reportRandom(specifier, imported.name);
         }
       },
       MemberExpression(node) {
         const name = staticMemberName(node);
+
         if (name === undefined || !ENTROPY_EXPORTS.has(name)) return;
+
         if (!isCryptoObject(node.object, cryptoNames)) return;
         reportRandom(node, name);
       },
@@ -572,12 +628,15 @@ const noAmbientNondeterminism = {
  */
 const parameterAnnotation = (parameter) => {
   if (parameter.type === "TSParameterProperty") return parameterAnnotation(parameter.parameter);
+
   if (parameter.type === "RestElement") {
     return parameter.typeAnnotation ?? parameterAnnotation(parameter.argument);
   }
+
   if (parameter.type === "AssignmentPattern") {
     return parameter.typeAnnotation ?? parameter.left.typeAnnotation;
   }
+
   return parameter.typeAnnotation;
 };
 
@@ -597,11 +656,13 @@ const noUnknownParameters = {
     const checkParameters = (params) => {
       for (const parameter of params) {
         const annotation = parameterAnnotation(parameter);
+
         if (annotation?.typeAnnotation.type === "TSUnknownKeyword") {
           context.report({ node: annotation.typeAnnotation, messageId: "unknownParameter" });
         }
       }
     };
+
     return {
       ArrowFunctionExpression: (node) => checkParameters(node.params),
       FunctionDeclaration: (node) => checkParameters(node.params),
@@ -626,20 +687,24 @@ const isTypeNode = (node) => node.type.startsWith("TS") && node.type !== "TSType
  */
 const hasUnsafeDictionaryAncestor = (node, environment) => {
   let current = node.parent;
+
   while (current !== null && current.type !== "Program") {
     if (isTypeNode(current) && classifyUnsafeDictionary(current, environment) !== null) return true;
     current = current.parent;
   }
+
   return false;
 };
 
 /** @param {Node} node - Reference whose ancestors are inspected. */
 const isInsideTypeAlias = (node) => {
   let current = node.parent;
+
   while (current !== null && current.type !== "Program") {
     if (current.type === "TSTypeAliasDeclaration") return true;
     current = current.parent;
   }
+
   return false;
 };
 
@@ -668,15 +733,19 @@ const noUnsafeDictionaryType = {
   create(context) {
     /** @type {TypeEnvironment | undefined} */
     let environment;
+
     /** @param {Node} node - Type annotation to classify. */
     const reportType = (node) => {
       if (environment === undefined || isPlainAliasConsumer(node, environment)) return;
+
       if (hasUnsafeDictionaryAncestor(node, environment)) return;
       const value = classifyUnsafeDictionary(node, environment);
+
       if (value !== null) {
         context.report({ node, messageId: "unsafeDictionary", data: { value } });
       }
     };
+
     return {
       Program(node) {
         environment = createTypeEnvironment(node);
@@ -686,11 +755,14 @@ const noUnsafeDictionaryType = {
       TSMappedType: reportType,
       TSIndexSignature(node) {
         if (environment === undefined) return;
+
         if (node.parent.type === "TSTypeLiteral") return;
+
         const value = classifyUnsafeDictionaryValue(
           node.typeAnnotation.typeAnnotation,
           environment
         );
+
         if (value !== null) {
           context.report({ node, messageId: "unsafeDictionary", data: { value } });
         }
@@ -718,8 +790,10 @@ const noNullableType = {
       /** @param {Node} node - Nullable type keyword. */
       const reportKeyword = (node) =>
         context.report({ node, messageId: "keyword", data: { name } });
+
       return reportKeyword;
     };
+
     return {
       TSUndefinedKeyword: keyword("undefined"),
       TSNullKeyword: keyword("null"),

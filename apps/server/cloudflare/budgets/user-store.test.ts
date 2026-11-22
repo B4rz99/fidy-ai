@@ -21,6 +21,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const journey = yield* nativeTransactionJourney;
+
         const call = (
           subject: typeof alice,
           path: string,
@@ -36,23 +37,28 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
                   "Fidy-Session-Binding": subject.session,
                   "content-type": "application/json",
                 },
-                ...(args[1] === undefined ? {} : { body: JSON.stringify(args[1]) }),
+                body: args[1] === undefined ? null : JSON.stringify(args[1]),
               })
             )
           );
+
         const cap = { amount: "9007199254740993.15", currency: "USD" };
         const payload = { categoryId: category, cap, month: "2023-11", groupName: "Family" };
         const created = yield* call(alice, "/budgets", "POST", payload);
         expect(created.status).toBe(201);
+
         const { data } = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.toCodecJson(Budget) })
         )(yield* native(() => created.json()));
+
         expect((yield* call(bob, "/budgets/" + data.id, "PUT", payload)).status).toBe(404);
+
         const month = yield* call(
           alice,
           "/budget-status?timeZone=America%2FBogota&month=2023-11",
           "GET"
         );
+
         expect(month.status).toBe(200);
         expect(yield* native(() => month.json())).toMatchObject({
           data: {
@@ -76,37 +82,45 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           scopes: ["read", "write"],
           current: yield* Clock.currentTimeMillis,
         });
+
         const call = (
           path: string,
           method: string,
           ...args: [key?: string, payload?: unknown]
         ): Effect.Effect<Response> =>
-          native(() =>
-            db.send(
+          native(() => {
+            const headers = new Headers({
+              authorization: "Bearer " + token,
+              "content-type": "application/json",
+            });
+
+            if (args[0] !== undefined) headers.set("Fidy-Retry-Key", args[0]);
+
+            return db.send(
               new Request("https://api.fidyapp.com" + path, {
                 method,
-                headers: {
-                  authorization: "Bearer " + token,
-                  "content-type": "application/json",
-                  ...(args[0] === undefined ? {} : { "Fidy-Retry-Key": args[0] }),
-                },
-                ...(args[1] === undefined ? {} : { body: JSON.stringify(args[1]) }),
+                headers,
+                body: args[1] === undefined ? null : JSON.stringify(args[1]),
               })
-            )
-          );
+            );
+          });
+
         const original = {
           categoryId: category,
           cap: { amount: "91.75", currency: "COP" },
           month: "2023-11",
         };
+
         const create = (): Effect.Effect<Response> =>
           call("/budgets", "POST", "lost-create", original);
+
         const counts = (): Effect.Effect<ReadonlyArray<unknown>> =>
           native(() =>
             db.exec(
               "SELECT (SELECT count(*) FROM budgets) AS budgets,(SELECT count(*) FROM audit_entries WHERE record_type='credential_call') AS calls,(SELECT count(*) FROM commercial_allowance_consumptions) AS charges,(SELECT count(*) FROM canonical_request_receipts) AS receipts,(SELECT count(*) FROM budget_month_plan_records) AS plans"
             )
           );
+
         yield* native(() =>
           db.exec(
             "CREATE TRIGGER interrupt_budget_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' BEGIN SELECT RAISE(IGNORE); END"
@@ -121,9 +135,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect([first.status, retry.status]).toEqual([201, 201]);
         const originalText = yield* native(() => first.text());
         expect(yield* native(() => retry.text())).toBe(originalText);
+
         const response = yield* Schema.decodeEffect(
           Schema.fromJsonString(Schema.Struct({ data: Schema.toCodecJson(Budget) }))
         )(originalText);
+
         const path = "/budgets/" + response.data.id;
         expect(yield* counts()).toEqual([
           { budgets: 1, calls: 2, charges: 1, receipts: 1, plans: 2 },
@@ -160,6 +176,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const db = yield* nativeTransactionJourney;
+
         const request = (
           path: string,
           method: string,
@@ -175,51 +192,63 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
                   "Fidy-Session-Binding": alice.session,
                   "content-type": "application/json",
                 },
-                ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+                body: payload === undefined ? null : JSON.stringify(payload),
               })
             )
           );
+
         const categoryId = category;
         const cap = { amount: "9007199254740994.11", currency: "USD" };
         expect((yield* request("/budgets", "POST", { categoryId, cap })).status).toBe(201);
+
         const original = {
           money: { amount: "9007199254740993.11", currency: "USD" },
           occurredAt: "2023-11-15T17:00:00Z",
           categoryId,
           direction: "outflow",
         };
+
         const create = Effect.fn(function* () {
           const response = yield* request("/transactions", "POST", original);
           expect(response.status).toBe(201);
+
           return (yield* Schema.decodeUnknownEffect(
             Schema.Struct({ data: Schema.Struct({ id: Schema.String }) })
           )(yield* readJson(response))).data.id;
         });
+
         const first = yield* create();
         const second = yield* create();
+
         const observe = Effect.fn(function* (amount: string) {
           const response = yield* request(
             "/budget-status?month=2023-11&timeZone=America%2FBogota",
             "GET"
           );
+
           expect(response.status).toBe(200);
           expect(yield* readJson(response)).toMatchObject({
             data: { statuses: [{ spent: { amount, currency: "USD" } }] },
           });
         });
+
         const pending =
           "SELECT kind,source,offer_id,next_ms FROM category_opportunities ORDER BY kind";
+
         const threshold =
           "SELECT budget_id,threshold,event_id FROM budget_threshold_crossings ORDER BY budget_id,threshold";
+
         yield* native(() =>
           db.exec(
             "UPDATE category_opportunities SET next_ms=9000000000000 WHERE kind='budget-threshold'"
           )
         );
+
         const snapshot = Effect.all([
           native(() => db.exec(pending)),
           native(() => db.exec(threshold)),
         ]);
+
         const before = yield* snapshot;
         expect(before[0]).toMatchObject([
           { kind: "budget-threshold", offer_id: null, next_ms: 9000000000000 },
@@ -278,11 +307,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const db = yield* nativeTransactionJourney;
+
         const calls = ["USD", "XAF"].map((currency, index) => ({
           callId: index === 0 ? alice.session : bob.session,
           operation: "budgets.createBudget",
           input: { payload: { categoryId: category, cap: { amount: "1", currency } } },
         }));
+
         const submit = (): Effect.Effect<Response> =>
           native(() =>
             db.send(
@@ -300,6 +331,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               })
             )
           );
+
         const accepted = yield* submit();
         expect(accepted.status).toBe(200);
         expect(yield* readJson(accepted)).toMatchObject({
@@ -350,6 +382,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             JSON.stringify(currencies)
           )
         );
+
         const create = (currency: string): Effect.Effect<Response> =>
           native(() =>
             db.send(
@@ -365,26 +398,33 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               })
             )
           );
+
         const attempts = yield* Effect.all([create("USD"), create("XAF")], { concurrency: 2 });
         expect(
           attempts.map((response) => response.status).sort((left, right) => left - right)
         ).toEqual([201, 400]);
         const list = yield* native(() => db.browser(0, "/budgets"));
         expect(list.status).toBe(200);
+
         const caps = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.Array(Schema.toCodecJson(Budget)) })
         )(yield* readJson(list));
+
         expect(caps.data).toHaveLength(128);
         expect(caps.data.map((budget) => budget.cap.currency)).toEqual(
           caps.data.map((budget) => budget.cap.currency).toSorted()
         );
+
         const workspace = yield* native(() =>
           db.browser(0, "/budget-status?timeZone=America%2FBogota")
         );
+
         expect(workspace.status).toBe(200);
+
         const report = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.Struct({ statuses: Schema.Array(Schema.Unknown) }) })
         )(yield* readJson(workspace));
+
         expect(report.data.statuses).toHaveLength(128);
       })
   );

@@ -10,7 +10,9 @@ export const activeProUserCondition = (
 ): OwnedStatement => {
   Schema.decodeSync(Schema.Finite)(input.nowEpochMs);
   const subject = Schema.decodeOption(UserId)(input.userId);
+
   if (Option.isNone(subject)) return { sql: "0", params: [] };
+
   return activeProForUserSelection({
     users: { sql: "SELECT ? AS userId", params: [subject.value] },
     nowEpochMs: input.nowEpochMs,
@@ -25,6 +27,7 @@ export const activeProForUserSelection = (
   const trial = activeTrialPeriodForUserSelection({ ...input, users });
   const paid = activePaidSubscriptionForUserSelection({ ...input, users });
   const grant = activeProGrantSelection(users);
+
   return {
     sql: `(WITH access_input(userId) AS MATERIALIZED (${input.users.sql}),
       access_candidates AS MATERIALIZED (SELECT DISTINCT userId FROM access_input),

@@ -1,11 +1,30 @@
 import publicWorker from "../public-worker";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Clock, Effect, Schema } from "effect";
+import { Array as Arr, Clock, Effect, Schema } from "effect";
+import type { Miniflare, Response } from "miniflare";
 import { expect } from "vitest";
 import { native, nativeBrowserPlatform } from "../user-store.test-fixture";
 import { browser } from "../browser-bootstrap.test-fixture";
 import { webSignupDisclosure } from "../../src/shell/consent/operations";
+
+const drain = (response: Pick<Response, "arrayBuffer">): Effect.Effect<ArrayBuffer> =>
+  native(() => response.arrayBuffer());
+
+const pollStatus =
+  (
+    runtime: Miniflare,
+    context: ReturnType<typeof browser>,
+    payload: string
+  ): ((index: number) => Effect.Effect<Response>) =>
+  (index) =>
+    native(() =>
+      runtime.dispatchFetch(context.api + "/web/providers/google/status", {
+        method: "POST",
+        headers: { ...context.headers, "CF-Connecting-IP": "192.0.2." + index },
+        body: payload,
+      })
+    ).pipe(Effect.tap(drain));
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
@@ -15,16 +34,20 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const runtime = yield* (yield* nativeBrowserPlatform)();
         const context = browser(runtime);
         const proof = yield* context.pair;
+
         const directory = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
         );
+
         const deadline = (yield* Clock.currentTimeMillis) + 60000;
+
         const send = (): ReturnType<typeof context.post> =>
           native(() =>
             runtime.dispatchFetch(context.api + "/web/providers/disclosure", {
               headers: { ...context.headers, "x-provider-source": "f".repeat(64) },
             })
           );
+
         const first = yield* send();
         expect(first.status).toBe(200);
         yield* native(() => first.arrayBuffer());
@@ -44,11 +67,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             deadline
           )
         );
+
         const expensive = yield* context.post("/web/providers/google/start", {
           ...proof,
           intent: "signup",
           consentRevision: webSignupDisclosure().revision,
         });
+
         expect(expensive.status).toBe(429);
         yield* native(() => expensive.arrayBuffer());
         expect(
@@ -63,9 +88,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const runtime = yield* (yield* nativeBrowserPlatform)();
         const context = browser(runtime);
         yield* context.pair;
+
         const directory = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
         );
+
         yield* native(() => directory.exec("DELETE FROM bootstrap_admissions"));
         const deadline = (yield* Clock.currentTimeMillis) + 60000;
         yield* native(() =>
@@ -79,19 +106,23 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             "INSERT INTO bootstrap_admissions(scope,expires_at_ms) VALUES('expired',0)"
           )
         );
+
         const send = (source: string): ReturnType<typeof context.post> =>
           native(() =>
             runtime.dispatchFetch(context.api + "/web/providers/disclosure", {
               headers: { ...context.headers, "CF-Connecting-IP": source },
             })
           );
+
         const results = yield* Effect.all([send("192.0.2.3"), send("192.0.2.4")], {
           concurrency: 2,
         });
+
         expect(
           results.map((response) => response.status).sort((left, right) => left - right)
         ).toEqual([200, 429]);
-        for (const response of results) yield* native(() => response.arrayBuffer());
+
+        yield* Effect.forEach(results, drain, { discard: true });
         expect(
           yield* native(() =>
             directory.exec("SELECT count(*) AS n FROM bootstrap_admissions WHERE scope='expired'")
@@ -113,20 +144,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const context = browser(runtime);
         const proof = yield* context.pair;
         const payload = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(proof);
-        for (let index = 0; index < 6; index++) {
-          const response = yield* native(() =>
-            runtime.dispatchFetch(context.api + "/web/providers/google/status", {
-              method: "POST",
-              headers: { ...context.headers, "CF-Connecting-IP": "192.0.2." + index },
-              body: payload,
-            })
-          );
-          expect(response.status).toBe(index === 5 ? 429 : 400);
-          yield* native(() => response.arrayBuffer());
-        }
+
+        const polls = yield* Effect.forEach(Arr.range(0, 5), pollStatus(runtime, context, payload));
+
+        expect(polls.map(({ status }) => status)).toEqual([400, 400, 400, 400, 400, 429]);
+
         const headers = new Headers(context.headers);
         headers.set("CF-Connecting-IP", "");
         headers.set("x-provider-source", "f".repeat(64));
+
         const missing = yield* native(() =>
           publicWorker.fetch(
             new Request(context.api + "/web/providers/google/status", {
@@ -143,6 +169,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             }
           )
         );
+
         expect(missing.status).toBe(503);
         yield* native(() => missing.arrayBuffer());
       })

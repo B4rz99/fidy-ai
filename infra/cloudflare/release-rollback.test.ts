@@ -4,11 +4,17 @@ import { type Deployment, type StagedRelease } from "./release-controller";
 import { type RollbackPort, releaseRollback } from "./release-rollback";
 
 const stablePublic = "11111111-1111-4111-8111-111111111111";
+
 const stableCore = "22222222-2222-4222-8222-222222222222";
+
 const candidatePublic = "33333333-3333-4333-8333-333333333333";
+
 const candidateCore = "44444444-4444-4444-8444-444444444444";
+
 const publicName = "fidy-ingress";
+
 const coreName = "fidy-core";
+
 const release: StagedRelease = {
   snapshot: {
     revision: "a".repeat(40),
@@ -30,10 +36,12 @@ const release: StagedRelease = {
   publicDeploymentId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
   coreDeploymentId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
 };
+
 const promoted = {
   publicDeploymentId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
   coreDeploymentId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
 };
+
 type Fixture = Readonly<{
   port: RollbackPort;
   writes: string[];
@@ -44,6 +52,7 @@ type Fixture = Readonly<{
   stalePublicAfterWrite(): void;
   undecodablePublicReceipt(): void;
 }>;
+
 const fixture = (): Fixture => {
   const deployments = new Map<string, Deployment>([
     [
@@ -55,6 +64,7 @@ const fixture = (): Fixture => {
       { id: promoted.coreDeploymentId, versions: [{ id: candidateCore, percentage: 100 }] },
     ],
   ]);
+
   const writes: string[] = [];
   const previous = new Map<string, Option.Option<Deployment>>();
   let blocked = Option.none<string>();
@@ -63,6 +73,7 @@ const fixture = (): Fixture => {
   let delayPublic = false;
   let invalidPublicReceipt = false;
   let reportedPublic = Option.none<Deployment>();
+
   const port: RollbackPort = {
     trunk: (): Effect.Effect<string, Error> => Effect.succeed(release.snapshot.revision),
     current: (name: string): Effect.Effect<Deployment, Error> =>
@@ -70,46 +81,60 @@ const fixture = (): Fixture => {
         if (name === publicName && Option.isSome(reportedPublic)) {
           const last = reportedPublic.value;
           reportedPublic = Option.none();
+
           return last;
         }
+
         const observed = deployments.get(name);
+
         if (observed === undefined) return yield* Effect.fail(Error("missing Worker"));
+
         return structuredClone(observed);
       }),
     recentDeployments: (name): Effect.Effect<readonly Deployment[], Error> =>
       Effect.gen(function* () {
         const current = yield* port.current(name);
         const prior = Option.flatten(Option.fromUndefinedOr(previous.get(name)));
+
         return [current, ...Option.toArray(prior)];
       }),
     deploy: (name: string, versions: Deployment["versions"]): Effect.Effect<Deployment, Error> =>
       Effect.gen(function* () {
         writes.push(name);
+
         if (Option.contains(blocked, name)) return yield* Effect.fail(Error("provider rejected"));
+
         const next = {
           id: `${String(writes.length).padStart(8, "0")}-9999-4999-8999-999999999999`,
           versions: [...versions],
         };
+
         const observed = Option.fromUndefinedOr(deployments.get(name));
         previous.set(name, observed);
+
         if (name === publicName && delayPublic) {
           reportedPublic = observed;
         }
+
         deployments.set(name, next);
+
         if (name === publicName && raceCore) {
           deployments.set(coreName, {
             id: "99999999-9999-4999-8999-999999999999",
             versions: [{ id: candidateCore, percentage: 100 }],
           });
         }
+
         if (name === publicName && invalidPublicReceipt) {
           yield* Schema.decodeUnknownEffect(Schema.Literal("expected"))("unexpected");
         }
+
         return next;
       }),
     deployable: (_name: string, _version: string): Effect.Effect<boolean, Error> =>
       Effect.sync(() => available),
   };
+
   return {
     port,
     writes,
@@ -152,16 +177,19 @@ describe("post-promotion code rollback", () => {
     Effect.runPromise(
       Effect.gen(function* () {
         const setup = fixture();
+
         const port: RollbackPort = {
           ...setup.port,
           restoreStable: Effect.fn(function* ({ target, companion }) {
             expect(target.previous).toEqual(yield* setup.port.current(target.name));
             expect(companion.previous).toEqual(yield* setup.port.current(companion.name));
+
             return yield* setup.port.deploy(target.name, [
               { id: target.stableVersionId, percentage: 100 },
             ]);
           }),
         };
+
         yield* releaseRollback.restore(port, { release, promoted, compatible: true });
         expect(setup.writes).toEqual([publicName, coreName]);
       })
@@ -187,11 +215,13 @@ describe("post-promotion code rollback", () => {
 
         const incomplete = fixture();
         incomplete.undecodablePublicReceipt();
+
         const port: RollbackPort = {
           ...incomplete.port,
           recentDeployments: (name) =>
             incomplete.port.recentDeployments(name).pipe(Effect.map((rows) => rows.slice(0, 1))),
         };
+
         expect(
           yield* releaseRollback
             .restore(port, { release, promoted, compatible: true })
@@ -205,13 +235,17 @@ describe("post-promotion code rollback", () => {
     Effect.runPromise(
       Effect.gen(function* () {
         const setup = fixture();
+
         const incompatible = yield* Effect.exit(
           releaseRollback.restore(setup.port, { release, promoted, compatible: false })
         );
+
         setup.unavailable();
+
         const unavailable = yield* Effect.exit(
           releaseRollback.restore(setup.port, { release, promoted, compatible: true })
         );
+
         expect(incompatible._tag).toBe("Failure");
         expect(unavailable._tag).toBe("Failure");
         expect(setup.writes).toEqual([]);
@@ -226,9 +260,11 @@ describe("post-promotion code rollback", () => {
           id: "99999999-9999-4999-8999-999999999999",
           versions: [{ id: candidatePublic, percentage: 100 }],
         });
+
         const outcome = yield* Effect.exit(
           releaseRollback.restore(setup.port, { release, promoted, compatible: true })
         );
+
         expect(outcome._tag).toBe("Failure");
         expect(setup.writes).toEqual([]);
       })
@@ -239,9 +275,11 @@ describe("post-promotion code rollback", () => {
       Effect.gen(function* () {
         const setup = fixture();
         setup.raceCoreAfterPublic();
+
         const outcome = yield* Effect.exit(
           releaseRollback.restore(setup.port, { release, promoted, compatible: true })
         );
+
         expect(outcome._tag).toBe("Failure");
         expect(setup.writes).toEqual([publicName]);
       })
@@ -252,9 +290,11 @@ describe("post-promotion code rollback", () => {
       Effect.gen(function* () {
         const setup = fixture();
         setup.block(coreName);
+
         const outcome = yield* Effect.exit(
           releaseRollback.restore(setup.port, { release, promoted, compatible: true })
         );
+
         expect(outcome._tag).toBe("Failure");
         expect((yield* setup.port.current(publicName)).versions).toEqual([
           { id: stablePublic, percentage: 100 },

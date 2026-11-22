@@ -8,6 +8,7 @@ export const institutionsForUser = (userId: string): Effect.Effect<ReadonlyArray
     const registered = yield* ConnectionInstitutions;
     const admission = yield* ConnectionSandboxAdmission;
     const now = yield* Clock.currentTimeMillis;
+
     return Option.isSome(admission) &&
       admission.value.userId === userId &&
       admission.value.startsAt <= now &&

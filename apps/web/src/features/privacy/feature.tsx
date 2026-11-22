@@ -10,7 +10,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { ErasureRequest } from "./erasure-request";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
-import { DateTime, Effect, Option } from "effect";
+import { Data, DateTime, Effect, Option, Predicate } from "effect";
 import { Atom, Reactivity } from "effect/reactivity";
 import { type JSX, type ReactNode, useState } from "react";
 import type { ProcessingConsentStatus, WebAuthClient } from "@/transport/client";
@@ -27,16 +27,17 @@ import { ConsentRenewal } from "./renewal";
 
 const consentKey = "processing-consent";
 
-const makeWithdrawal = (client: WebAuthClient): Atom.AtomResultFn<void, boolean, never> =>
+class WithdrawalUnconfirmed extends Data.TaggedError("WithdrawalUnconfirmed") {}
+
+const makeWithdrawal = (client: WebAuthClient): Atom.AtomResultFn<void, void, unknown> =>
   client.runtime.fn<void>()(() =>
     client.pipe(
       Effect.flatMap((api) => api.processingConsent.withdraw({ payload: { confirm: true } })),
       Effect.flatMap((receipt) =>
         receipt.status === "Revoked"
-          ? Reactivity.invalidate([consentKey]).pipe(Effect.as(true))
-          : Effect.succeed(false)
-      ),
-      Effect.catchCause(() => Effect.succeed(false))
+          ? Reactivity.invalidate([consentKey])
+          : Effect.fail(new WithdrawalUnconfirmed())
+      )
     )
   );
 
@@ -102,10 +103,11 @@ const ConsentContent = ({
   children: JSX.Element;
   client: WebAuthClient;
 }>): JSX.Element => {
-  if (status._tag === "Initial") {
+  if (Predicate.isTagged(status, "Initial")) {
     return <PendingRead label="Consultando autorización" />;
   }
-  if (status._tag === "Failure" || Option.isSome(status.refreshFailure)) {
+
+  if (Predicate.isTagged(status, "Failure") || Option.isSome(status.refreshFailure)) {
     return (
       <Alert variant="destructive" role="alert">
         <AlertTitle>No pudimos verificar tu autorización</AlertTitle>
@@ -113,6 +115,7 @@ const ConsentContent = ({
       </Alert>
     );
   }
+
   if (status.value.status === "Revoked") {
     return (
       <>
@@ -121,9 +124,11 @@ const ConsentContent = ({
       </>
     );
   }
+
   if (status.value.status === "Missing") {
     return <p>No hay una autorización registrada para retirar.</p>;
   }
+
   return children;
 };
 
@@ -133,7 +138,7 @@ const PrivacyExplanation = ({
   <>
     <div className="settings-section-heading">
       <h2 className="settings-section-title">Autorización de tratamiento</h2>
-      {status._tag === "Ready" &&
+      {Predicate.isTagged(status, "Ready") &&
       Option.isNone(status.refreshFailure) &&
       status.value.status === "Granted" ? (
         <output aria-label="Tu autorización está vigente.">
@@ -149,6 +154,7 @@ const PrivacyExplanation = ({
     </div>
   </>
 );
+
 const RightsContact = (): JSX.Element => (
   <section className="settings-section">
     <div className="settings-section-icon settings-contact-icon">
@@ -232,12 +238,14 @@ const SavedTransactionsLink = (): JSX.Element => (
 
 export const PrivacyFeature = (): JSX.Element => {
   const client = useRouter().options.context.webAuthClient;
+
   const [query] = useState(() =>
     client.query("processingConsent", "status", {
       reactivityKeys: [consentKey],
       timeToLive: "0 seconds",
     })
   );
+
   const statusResult = useAtomValue(query);
   const status = presentCanonicalQuery(statusResult);
   const refresh = useAtomRefresh(query);
@@ -245,8 +253,9 @@ export const PrivacyFeature = (): JSX.Element => {
   const result = useAtomValue(command);
   const withdraw = useAtomSet(command);
   const [confirmed, setConfirmed] = useState(false);
-  const attempted = result._tag !== "Initial";
-  const busy = result.waiting || (status._tag === "Ready" && status.waiting);
+  const attempted = !Predicate.isTagged(result, "Initial");
+  const busy = result.waiting || (Predicate.isTagged(status, "Ready") && status.waiting);
+
   return (
     <PrivacyWorkspace
       busy={busy}
@@ -266,13 +275,13 @@ export const PrivacyFeature = (): JSX.Element => {
             withdraw={() => withdraw()}
           />
         </ConsentContent>
-        {result._tag === "Success" && !result.value ? (
+        {Predicate.isTagged(result, "Failure") ? (
           <Alert variant="destructive" role="alert">
             <AlertTitle>No pudimos confirmar el resultado</AlertTitle>
             <AlertDescription>Consulta el estado antes de volver a intentarlo.</AlertDescription>
           </Alert>
         ) : null}
-        {status._tag === "Failure" ? (
+        {Predicate.isTagged(status, "Failure") ? (
           <div>
             <Button
               contentLayout="wrap"

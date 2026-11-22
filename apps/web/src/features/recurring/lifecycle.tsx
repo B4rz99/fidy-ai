@@ -19,6 +19,7 @@ const ResumeTracking = ({
   const open = plan.pauses.find((pause) => pause.through === undefined);
   const since = open !== undefined && open.from <= stoppedOn ? open.from : stoppedOn;
   const scheduled = status !== "stopped";
+
   return (
     <>
       <span className="text-xs text-muted-foreground">
@@ -54,6 +55,7 @@ export const PlanLifecycle = ({
 }>): JSX.Element => {
   const pause = plan.pauses.find((entry) => entry.through === undefined);
   const stoppedOn = plan.stoppedOn;
+
   return (
     <RecurringPlanStatus
       status={status}
@@ -101,5 +103,6 @@ const lifecycleLabel = ({
   if (disabled && status !== planStatus(plan)) {
     return status === "paused" ? "Reanudar plan" : "Pausar plan";
   }
+
   return plan.pauses.some((pause) => pause.through === undefined) ? "Reanudar plan" : "Pausar plan";
 };

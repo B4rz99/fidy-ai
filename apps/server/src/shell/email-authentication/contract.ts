@@ -19,6 +19,7 @@ import {
 import { OperationResponse } from "~/shell/public-http/contract";
 
 export const emailReplacementPath = "/email/replacement";
+
 export const emailReplacementCompletionPath = "/web/email/replacement/verify";
 
 export const RequestEmailReplacementPayload = Schema.Struct({
@@ -33,10 +34,12 @@ const emailReplacementInvalidError = {
   code: "verification_invalid",
   message: "El código no es válido. Revisa el correo o solicita uno nuevo.",
 } as const;
+
 const emailReplacementFreshError = {
   code: "fresh_pairing_required",
   message: "Vincula el navegador de nuevo antes de cambiar tu correo.",
 } as const;
+
 const emailReplacementUnavailableError = {
   code: "replacement_unavailable",
   message: "No pudimos confirmar el cambio de correo. Comprueba tu correo al iniciar sesión.",
@@ -46,6 +49,7 @@ export const CompleteEmailReplacementPayload = Schema.Struct({
   candidateEmail: EmailAddress,
   combinedCode: EmailVerificationCode,
 });
+
 export type CompleteEmailReplacementPayload = typeof CompleteEmailReplacementPayload.Type;
 
 export const CompletedEmailReplacement = Schema.Struct({
@@ -110,12 +114,14 @@ export class EmailReplacementUnavailableApi extends Schema.Error<
 export const emailReplacementInvalidBody = { error: emailReplacementInvalidError } as const;
 
 export const emailReplacementFreshBody = { error: emailReplacementFreshError } as const;
+
 export const emailReplacementUnavailableBody = { error: emailReplacementUnavailableError } as const;
 
 const browserPairingEmailAuthenticationInvalidError = {
   code: "authentication_invalid",
   message: "El código no es válido. Inicia de nuevo o solicita otro correo.",
 } as const;
+
 const BrowserPairingEmailAuthenticationInvalidFields = {
   error: Schema.Struct({
     code: Schema.Literal(browserPairingEmailAuthenticationInvalidError.code),
@@ -132,6 +138,7 @@ export const StartBrowserPairingEmailAuthenticationPayload = Schema.Struct({
   privateVerifier: BrowserLoginPrivateVerifier,
   email: EmailAddress,
 });
+
 export type StartBrowserPairingEmailAuthenticationPayload =
   typeof StartBrowserPairingEmailAuthenticationPayload.Type;
 
@@ -140,6 +147,7 @@ export const CompleteBrowserPairingEmailAuthenticationPayload = Schema.Struct({
   privateVerifier: BrowserLoginPrivateVerifier,
   combinedCode: EmailVerificationCode,
 });
+
 export type CompleteBrowserPairingEmailAuthenticationPayload =
   typeof CompleteBrowserPairingEmailAuthenticationPayload.Type;
 

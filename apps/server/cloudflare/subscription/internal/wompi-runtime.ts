@@ -2,25 +2,29 @@ import { Digest } from "effect/crypto";
 import { DaviplataOtpPolicy } from "../../../src/core/subscription/contract";
 import { type WompiBindings } from "../contract";
 
-import { makeWompiOutboundHttp } from "../../../src/shell/outbound-http/operations";
-import { Effect, Option, Redacted, Schema } from "effect";
-import { type HttpClient } from "effect/http";
+import {
+  OutboundHttp,
+  type OutboundHttpService,
+} from "../../../src/shell/outbound-http/operations";
+import { type Effect, ManagedRuntime, Option, Redacted, Schema } from "effect";
+import type { HttpClient } from "effect/http";
 
-export const workerDigest = Effect.runSync(
-  Digest.Digest.pipe(Effect.provide(Digest.layerWebCrypto))
-);
+const digestRuntime = ManagedRuntime.make(Digest.layerWebCrypto);
+
+export const workerDigest = digestRuntime.runSync(Digest.Digest);
 
 export type WompiTransportFactory = (
   environment: WompiBindings
-) => Effect.Effect<ReturnType<typeof makeWompiOutboundHttp>>;
+) => Effect.Effect<OutboundHttpService>;
 
-export const makeWompiTransport = ({
+export const wompiTransport = ({
   environment,
   httpClient,
-}: Readonly<{ environment: WompiBindings; httpClient: HttpClient.HttpClient }>): ReturnType<
-  typeof makeWompiOutboundHttp
-> =>
-  makeWompiOutboundHttp({
+}: Readonly<{
+  environment: WompiBindings;
+  httpClient: HttpClient.HttpClient;
+}>): OutboundHttpService =>
+  OutboundHttp.wompi({
     environment: environment.WOMPI_ENVIRONMENT,
     publicKey: environment.WOMPI_PUBLIC_KEY,
     privateKey: Redacted.make(environment.WOMPI_PRIVATE_KEY),

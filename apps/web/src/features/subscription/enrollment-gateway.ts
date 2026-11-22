@@ -1,4 +1,4 @@
-import { Clock, Data, DateTime, Effect, Option, Redacted, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Option, Predicate, Redacted, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import {
   BillingEmail,
@@ -19,10 +19,12 @@ import {
   type DaviplataFields,
   startDaviplataWithWompi,
 } from "@/transport/wompi-daviplata";
-import { type DaviplataChallenge, makeDaviplataChallenge } from "./daviplata-challenge";
+import { type DaviplataChallenge, openDaviplataChallenge } from "./daviplata-challenge";
 import { paymentSubmissionIsTerminal } from "./payment-status";
+import { reportBrowserDefect } from "@/transport/browser-defects";
 
 export type Enrollment = PaymentEnrollmentType;
+
 export type PaymentSubmission = PaymentSubmissionType;
 
 export class DaviplataSetupFailed extends Data.TaggedError("DaviplataSetupFailed")<{
@@ -34,15 +36,25 @@ class EnrollmentSubmissionFailed extends Data.TaggedError("EnrollmentSubmissionF
 export type PreparedEnrollment = Extract<Enrollment, { status: "prepared" }>;
 
 const uuidByteCount = 16;
+
 const uuidVersionByteIndex = 6;
+
 const uuidVariantByteIndex = 8;
+
 const uuidVersionMask = 0x0f;
+
 const uuidVersionBits = 0x40;
+
 const uuidVariantMask = 0x3f;
+
 const uuidVariantBits = 0x80;
+
 const firstUuidSectionEnd = 8;
+
 const secondUuidSectionEnd = 12;
+
 const thirdUuidSectionEnd = 16;
+
 const fourthUuidSectionEnd = 20;
 
 const makePaymentRequestId = (): ReturnType<typeof PaymentRequestId.make> => {
@@ -52,6 +64,7 @@ const makePaymentRequestId = (): ReturnType<typeof PaymentRequestId.make> => {
   bytes[uuidVariantByteIndex] =
     ((bytes[uuidVariantByteIndex] ?? 0) & uuidVariantMask) | uuidVariantBits;
   const hex = Hex.encode(bytes);
+
   return PaymentRequestId.make(
     `${hex.slice(0, firstUuidSectionEnd)}-${hex.slice(firstUuidSectionEnd, secondUuidSectionEnd)}-${hex.slice(secondUuidSectionEnd, thirdUuidSectionEnd)}-${hex.slice(thirdUuidSectionEnd, fourthUuidSectionEnd)}-${hex.slice(fourthUuidSectionEnd)}`
   );
@@ -66,6 +79,7 @@ export type NequiFields = Readonly<{
   onAwaiting: () => void;
   signal: AbortSignal;
 }>;
+
 export type PaymentFields =
   | (CardFields & Readonly<{ signal: Option.Option<AbortSignal> }>)
   | NequiFields;
@@ -73,9 +87,12 @@ export type PaymentFields =
 export const clearNequiPhone = (fields?: PaymentFields): void => {
   if (fields === undefined || !("method" in fields)) return;
   Redacted.wipeUnsafe(fields.phoneNumber);
+
   try {
     fields.clearPhone();
-  } catch {}
+  } catch {
+    reportBrowserDefect("client_defect");
+  }
 };
 
 type SubmissionOptions = Readonly<{
@@ -131,11 +148,16 @@ const executionOptions = (signal?: AbortSignal): Partial<Readonly<{ signal: Abor
   signal === undefined ? {} : { signal };
 
 type PaymentRequestStore = Map<string, ReturnType<typeof PaymentRequestId.make>>;
+
 const paymentRequestStoragePrefix = "fidy.payment-request.";
+
 const billingEmailStoragePrefix = "fidy.billing-email.";
+
 type EnrollmentIdentity = Readonly<{ enrollmentId: PreparedEnrollment["enrollmentId"] }>;
+
 const paymentRequestStorageKey = (enrollment: EnrollmentIdentity): string =>
   `${paymentRequestStoragePrefix}${enrollment.enrollmentId}`;
+
 const billingEmailStorageKey = (enrollment: EnrollmentIdentity): string =>
   `${billingEmailStoragePrefix}${enrollment.enrollmentId}`;
 
@@ -144,17 +166,23 @@ const paymentRequestFor = (
   enrollment: EnrollmentIdentity
 ): ReturnType<typeof PaymentRequestId.make> => {
   const existing = paymentRequests.get(enrollment.enrollmentId);
+
   if (existing !== undefined) return existing;
+
   const persisted = Schema.decodeUnknownOption(PaymentRequestId)(
     globalThis.sessionStorage.getItem(paymentRequestStorageKey(enrollment))
   );
+
   if (Option.isSome(persisted)) {
     paymentRequests.set(enrollment.enrollmentId, persisted.value);
+
     return persisted.value;
   }
+
   const created = makePaymentRequestId();
   paymentRequests.set(enrollment.enrollmentId, created);
   globalThis.sessionStorage.setItem(paymentRequestStorageKey(enrollment), created);
+
   return created;
 };
 
@@ -169,6 +197,7 @@ const completed = (
       globalThis.sessionStorage.removeItem(paymentRequestStorageKey(enrollment));
       globalThis.sessionStorage.removeItem(billingEmailStorageKey(enrollment));
     }
+
     return submission;
   });
 
@@ -176,6 +205,7 @@ type SubmissionFacts = Pick<
   SubmitPaymentEnrollmentPayload,
   "enrollmentId" | "paymentRequestId" | "billingEmail" | "decisions"
 >;
+
 const submissionFacts = (
   paymentRequests: PaymentRequestStore,
   enrollment: EnrollmentIdentity,
@@ -190,6 +220,7 @@ const submissionFacts = (
     authorizedRecurringCharges: true,
   }),
 });
+
 type NewSourceInput = Readonly<{
   client: SubscriptionEnrollmentClient;
   enrollment: PreparedEnrollment;
@@ -210,15 +241,22 @@ const submitNequiSource = ({
     onNone: () => fields.signal,
     onSome: (signal) => AbortSignal.any([fields.signal, signal]),
   });
+
   let phoneCleared = false;
+
   const clearPhone = (): void => {
     Redacted.wipeUnsafe(fields.phoneNumber);
+
     if (phoneCleared) return;
     phoneCleared = true;
+
     try {
       fields.clearPhone();
-    } catch {}
+    } catch {
+      reportBrowserDefect("client_defect");
+    }
   };
+
   return client
     .execute(
       (transport) =>
@@ -253,18 +291,23 @@ const submitNequiSource = ({
 
 const submitNewSource = (input: NewSourceInput): Promise<PaymentSubmission> => {
   const { client, enrollment, facts, fields, signal } = input;
+
   if (enrollment.method === "nequi") {
     return "method" in fields
       ? submitNequiSource({ ...input, fields })
-      : Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+      : Promise.reject(new EnrollmentSubmissionFailed());
   }
+
   if (enrollment.method !== "card" || "method" in fields) {
     clearNequiPhone(fields);
-    return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+
+    return Promise.reject(new EnrollmentSubmissionFailed());
   }
+
   const publicKey = enrollment.wompiPublicKey;
   const expiresAt = enrollment.expiresAt.epochMilliseconds;
   const enrollmentId = enrollment.enrollmentId;
+
   return client.execute(
     (transport) =>
       tokenizeCardWithWompi(publicKey, fields, globalThis.fetch.bind(globalThis)).pipe(
@@ -278,6 +321,7 @@ const submitNewSource = (input: NewSourceInput): Promise<PaymentSubmission> => {
             ) {
               return yield* new EnrollmentSubmissionFailed();
             }
+
             return yield* transport.subscriptionEnrollment.submit({
               payload: {
                 paymentSourceMode: "create",
@@ -308,6 +352,7 @@ const reserveCard = (
   if (enrollment.method !== "card" || enrollment.paymentSourceMode !== "create") {
     return true;
   }
+
   if (
     authorizedCards.has(enrollment.enrollmentId) ||
     DateTime.nowUnsafe().epochMilliseconds >= enrollment.expiresAt.epochMilliseconds ||
@@ -316,7 +361,9 @@ const reserveCard = (
   ) {
     return false;
   }
+
   authorizedCards.add(enrollment.enrollmentId);
+
   return true;
 };
 
@@ -325,17 +372,23 @@ const makeSubmit = (
   paymentRequests: PaymentRequestStore
 ): EnrollmentGateway["submit"] => {
   const authorizedCards = new Set<string>();
+
   return (enrollment, billingEmail, options = { fields: Option.none(), signal: Option.none() }) => {
     const { fields, signal } = options;
+
     try {
       if (!reserveCard(authorizedCards, enrollment, fields)) {
         clearNequiPhone(Option.getOrUndefined(fields));
-        return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+
+        return Promise.reject(new EnrollmentSubmissionFailed());
       }
+
       globalThis.sessionStorage.setItem(billingEmailStorageKey(enrollment), billingEmail);
       const common = submissionFacts(paymentRequests, enrollment, billingEmail);
+
       if (enrollment.paymentSourceMode === "reuse") {
         clearNequiPhone(Option.getOrUndefined(fields));
+
         return completed(
           paymentRequests,
           enrollment,
@@ -348,9 +401,11 @@ const makeSubmit = (
           )
         );
       }
+
       if (Option.isNone(fields)) {
-        return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+        return Promise.reject(new EnrollmentSubmissionFailed());
       }
+
       return completed(
         paymentRequests,
         enrollment,
@@ -376,6 +431,7 @@ const makeContinue =
   ): EnrollmentGateway["continue"] =>
   (enrollmentId, billingEmail, signal) => {
     const enrollment = { enrollmentId };
+
     return completed(
       paymentRequests,
       enrollment,
@@ -403,7 +459,7 @@ const daviplataSetupFailure = (
   error: EnrollmentSubmissionFailed | DaviplataAuthorizationFailed
 ): DaviplataSetupFailed =>
   new DaviplataSetupFailed({
-    status: error instanceof EnrollmentSubmissionFailed ? "refused" : error.status,
+    status: Predicate.isTagged(error, "EnrollmentSubmissionFailed") ? "refused" : error.status,
   });
 
 const submitDaviplata =
@@ -411,7 +467,7 @@ const submitDaviplata =
     client: SubscriptionEnrollmentClient,
     paymentRequests: PaymentRequestStore,
     context: Readonly<{ enrollment: PreparedEnrollment; facts: SubmissionFacts }>
-  ): Parameters<typeof makeDaviplataChallenge>[0]["submitApproved"] =>
+  ): Parameters<typeof openDaviplataChallenge>[0]["submitApproved"] =>
   (daviplataToken, signal) =>
     completed(
       paymentRequests,
@@ -438,7 +494,9 @@ const admitDaviplata = (started: Set<string>, enrollment: PreparedEnrollment): b
   ) {
     return false;
   }
+
   started.add(enrollment.enrollmentId);
+
   return true;
 };
 
@@ -447,8 +505,10 @@ const makeStartDaviplata = (
   paymentRequests: PaymentRequestStore
 ): EnrollmentGateway["startDaviplata"] => {
   const started = new Set<string>();
+
   return (enrollment, billingEmail, fields) => {
     const admitted = admitDaviplata(started, enrollment);
+
     return client
       .execute(
         () =>
@@ -456,8 +516,10 @@ const makeStartDaviplata = (
             if (!admitted || enrollment.method !== "daviplata") {
               return yield* new EnrollmentSubmissionFailed();
             }
+
             const facts = submissionFacts(paymentRequests, enrollment, billingEmail);
             const signal = AbortSignal.any([fields.signal, client.signal]);
+
             const provider = yield* startDaviplataWithWompi({
               publicKey: enrollment.wompiPublicKey,
               policy: enrollment.daviplataOtpPolicy,
@@ -466,8 +528,10 @@ const makeStartDaviplata = (
               signal,
               expiresAt: enrollment.expiresAt.epochMilliseconds,
             });
+
             globalThis.sessionStorage.setItem(billingEmailStorageKey(enrollment), billingEmail);
-            return makeDaviplataChallenge({
+
+            return openDaviplataChallenge({
               provider,
               client,
               submitApproved: submitDaviplata(client, paymentRequests, { enrollment, facts }),
@@ -476,7 +540,10 @@ const makeStartDaviplata = (
         { signal: fields.signal }
       )
       .then((result) => {
-        if (result instanceof DaviplataSetupFailed) throw result;
+        if (Predicate.isTagged(result, "DaviplataSetupFailed")) {
+          throw result;
+        }
+
         return result;
       })
       .finally(() => {
@@ -495,16 +562,20 @@ const makePrepare =
           payload: {
             priceId,
             method,
-            ...(options?.replaceFailedSource === true ? { replaceFailedSource: true } : {}),
+            ...Option.match(
+              Option.liftPredicate(true, () => options?.replaceFailedSource === true),
+              { onNone: () => ({}), onSome: (replaceFailedSource) => ({ replaceFailedSource }) }
+            ),
           },
         }),
       executionOptions(options?.signal)
     );
 
-export const makeEnrollmentGateway = (
+export const createEnrollmentGateway = (
   clientService: SubscriptionEnrollmentClient
 ): EnrollmentGateway => {
   const paymentRequests: PaymentRequestStore = new Map();
+
   return {
     availability: (signal) =>
       clientService.execute(
@@ -515,16 +586,21 @@ export const makeEnrollmentGateway = (
     continue: makeContinue(clientService, paymentRequests),
     resume: (enrollmentId, signal) => {
       const enrollment = { enrollmentId };
+
       const paymentRequest = Schema.decodeUnknownOption(PaymentRequestId)(
         globalThis.sessionStorage.getItem(paymentRequestStorageKey(enrollment))
       );
+
       const email = Schema.decodeUnknownOption(BillingEmail)(
         globalThis.sessionStorage.getItem(billingEmailStorageKey(enrollment))
       );
+
       if (Option.isNone(paymentRequest) || Option.isNone(email)) {
         return Promise.resolve(Option.none());
       }
+
       paymentRequests.set(enrollmentId, paymentRequest.value);
+
       return makeContinue(clientService, paymentRequests)(enrollmentId, email.value, signal).then(
         (submission) => Option.some({ submission, billingEmail: email.value })
       );

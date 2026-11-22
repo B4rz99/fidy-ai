@@ -23,28 +23,35 @@ const turnBody = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 16384,
   deadlineMilliseconds: 2000,
 });
+
 const progressBody = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 512,
   deadlineMilliseconds: 2000,
 });
+
 type Command =
   | { text: TranscriptText }
   | { turnId: TranscriptTurnId }
   | { turnId: TranscriptTurnId; receipt: string };
+
 export const browserHostedPaths = [
   "/web/hosted-turns",
   "/web/hosted-turns/progress",
   "/web/hosted-turns/delivery",
 ];
+
 const commandFor = (request: Request, path: string): Effect.Effect<Option.Option<Command>> => {
   if (path === browserHostedPaths[0]) {
     return boundedJsonBody({ request, policy: turnBody, schema: HostedTurnRequest });
   }
+
   if (path === browserHostedPaths[1]) {
     return boundedJsonBody({ request, policy: progressBody, schema: HostedTurnProgressRequest });
   }
+
   return boundedJsonBody({ request, policy: progressBody, schema: HostedTurnReceipt });
 };
+
 export const browserHosted = Effect.fn(
   function* (
     request: Request,
@@ -53,15 +60,19 @@ export const browserHosted = Effect.fn(
   ) {
     const resolve = yield* turnProof(request, owns);
     const command = yield* commandFor(request, new URL(request.url).pathname);
+
     return yield* Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
       const actor = yield* resolve(now);
+
       if (Option.isNone(actor)) {
         return channelReply(channelStatus.unauthenticated)({ status: "unauthenticated" });
       }
+
       if (Option.isNone(command)) {
         return channelReply(channelStatus.invalid)({ status: "validation_failed" });
       }
+
       if ("text" in command.value) {
         return yield* validateAdmission(
           env,
@@ -72,11 +83,15 @@ export const browserHosted = Effect.fn(
           )
         );
       }
+
       return yield* observeTurn(actor.value, command.value, now);
     }).pipe(
       withStoreCapacity(Option.isSome(command) && "text" in command.value ? "growth" : "required")
     );
   },
   Effect.catchTag("HostedInferenceError", (err) => Effect.succeed(preflightRefusal(err))),
+  Effect.tapCause(() =>
+    Effect.logWarning({ component: "agent", operation: "browserHosted", outcome: "unavailable" })
+  ),
   Effect.catchCause(() => Effect.succeed(unavailable()))
 );

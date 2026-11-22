@@ -38,6 +38,7 @@ type ErasureEnvironment = AcceptanceWindowBindings &
     PRICING: DurableObjectNamespace;
     MAINTENANCE: DurableObjectNamespace;
   };
+
 export class Erasure extends DurableObject<ErasureEnvironment> {
   private readonly runtime;
   constructor(state: DurableObjectState, env: ErasureEnvironment) {
@@ -47,6 +48,7 @@ export class Erasure extends DurableObject<ErasureEnvironment> {
       owner: erasureStoreHistory.owner,
       ceilingBytes: env.SQLITE_STORE_CAPACITY_BYTES,
     });
+
     if (state.id.equals(env.ERASURE.idFromName(erasureRegistryName))) {
       state.waitUntil(
         state.blockConcurrencyWhile(() =>
@@ -56,20 +58,32 @@ export class Erasure extends DurableObject<ErasureEnvironment> {
     }
   }
   override alarm(): Promise<void> {
-    return Effect.runPromise(backgroundWorkAllowed(this.env)).then((allowed) =>
-      allowed ? this.recoverAlarm() : undefined
-    );
+    return this.runtime
+      .runPromise(backgroundWorkAllowed(this.env))
+      .then((allowed) => (allowed ? this.recoverAlarm() : undefined));
   }
   private recoverAlarm(): Promise<void> {
     return this.runtime.runPromise(advanceErasureCases(this.ctx.storage, this.env));
   }
   private command(request: Request): Promise<Response> {
-    const unavailable = Effect.catchCause(() =>
-      Effect.succeed(new Response(null, { status: 503 }))
-    );
+    const unavailable = <E, R>(
+      command: Effect.Effect<Response, E, R>
+    ): Effect.Effect<Response, never, R> =>
+      command.pipe(
+        Effect.tapCause(() =>
+          Effect.logWarning({
+            component: "erasure-store",
+            operation: "command",
+            outcome: "unavailable",
+          })
+        ),
+        Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+      );
+
     if ([confirmDrainUrl, confirmPurgeUrl].includes(request.url)) {
       return this.runtime.runPromise(confirmPurge(request).pipe(unavailable));
     }
+
     switch (request.url) {
       case confirmCleanupUrl:
         return this.runtime.runPromise(confirmCleanup(request).pipe(unavailable));
@@ -91,6 +105,7 @@ export class Erasure extends DurableObject<ErasureEnvironment> {
     if (!this.ctx.id.equals(this.env.ERASURE.idFromName(erasureRegistryName))) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
+
     if (ownerCheckRequest(request)) {
       return this.runtime.runPromise(
         repairCaseAlarm(this.ctx.storage).pipe(
@@ -103,10 +118,13 @@ export class Erasure extends DurableObject<ErasureEnvironment> {
         )
       );
     }
+
     if (request.method === "POST") return this.command(request);
+
     if (request.method !== "GET" || request.url !== storeReadinessUrl) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
+
     return this.runtime.runPromise(
       storeReadiness({ history: erasureStoreHistory, release: this.env.CF_VERSION_METADATA.id })
     );

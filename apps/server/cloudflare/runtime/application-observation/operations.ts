@@ -1,11 +1,12 @@
 import { dual } from "effect/Function";
-import { Cause, Effect, Exit, Option } from "effect";
+import { Cause, Data, Effect, Exit, Option, Predicate, Schema } from "effect";
 import {
   HostedInferenceError,
   type HostedInferenceFailureReason,
   type HostedInvalidOutputDescription,
 } from "../../../src/shell/hosted-inference/contract";
 import type {
+  ClassifiedFailure,
   DeclaredOutcome,
   SpanDescriptor,
   TelemetryCode,
@@ -14,13 +15,20 @@ import type {
 } from "../../../src/shell/observability/contract";
 import { Telemetry } from "../../../src/shell/observability/operations";
 
+const ClassifiedFailureCase = Data.taggedEnum<ClassifiedFailure>();
+
+const SpanMetadata = Data.taggedEnum<SpanDescriptor["metadata"]>();
+
 type HostedObservation = Readonly<{
   trigger: "api" | "queue" | "kapso_webhook";
   parent: Option.Option<unknown>;
   release: TelemetryRelease;
 }>;
 
-type ApplicationSpan = Omit<Extract<SpanDescriptor, { metadata: { _tag: "None" } }>, "workKind"> & {
+type ApplicationSpan = Omit<
+  Extract<SpanDescriptor, { metadata: Data.TaggedEnum.Value<SpanDescriptor["metadata"], "None"> }>,
+  "workKind"
+> & {
   readonly workKind: "canonical_operation" | "hosted_turn" | "model_round";
 };
 
@@ -47,21 +55,25 @@ const invalidOutputFailureCodes: Partial<
 };
 
 const modelFailureCode = (reason: HostedInferenceFailureReason): TelemetryCode<"error"> =>
-  reason._tag === "InvalidOutput"
+  Predicate.isTagged(reason, "InvalidOutput")
     ? (invalidOutputFailureCodes[reason.description] ?? modelFailureCodes.InvalidOutput)
     : modelFailureCodes[reason._tag];
 
 const classifiedModelFailure = (cause: Cause.Cause<unknown>): DeclaredOutcome => {
   const error = Cause.findErrorOption(cause);
+
   if (Option.exists(error, Cause.isTimeoutError)) {
     return { outcome: "failed", error: Option.some("timeout"), retryable: false };
   }
-  if (Option.isNone(error) || !(error.value instanceof HostedInferenceError)) {
+
+  if (Option.isNone(error) || !Schema.is(Schema.instanceOf(HostedInferenceError))(error.value)) {
     return { outcome: "failed", error: Option.some("operational_failure"), retryable: false };
   }
+
   const failure = error.value;
   const code = modelFailureCode(failure.reason);
-  return failure.reason._tag === "InvalidOutput" ||
+
+  return Predicate.isTagged(failure.reason, "InvalidOutput") ||
     code === "model_response_rejected" ||
     code === "authentication_failed"
     ? { outcome: "rejected", error: Option.some(code), retryable: false }
@@ -77,6 +89,7 @@ const finishApplication = (
   exit: Exit.Exit<unknown, unknown>
 ): Effect.Effect<void> => {
   if (Exit.isSuccess(exit)) return Effect.void;
+
   if (isPureInterruption(exit.cause)) {
     return telemetry.recordOutcome({
       outcome: "interrupted",
@@ -84,25 +97,27 @@ const finishApplication = (
       retryable: false,
     });
   }
+
   const outcome: DeclaredOutcome =
     descriptor.workKind === "model_round"
       ? classifiedModelFailure(exit.cause)
       : { outcome: "failed", error: Option.some("operational_failure"), retryable: false };
+
   const classified = telemetry.recordOutcome(outcome);
+
   if (outcome.outcome === "rejected") return classified;
+
   return classified.pipe(
     Effect.andThen(
       telemetry.captureFailure(
         Cause.hasDies(exit.cause)
-          ? {
-              _tag: "Defect",
+          ? ClassifiedFailureCase.Defect({
               component: descriptor.component,
               operation: descriptor.operation,
               error: "unexpected_defect",
               cause: exit.cause,
-            }
-          : {
-              _tag: "ExhaustedOperationalFailure",
+            })
+          : ClassifiedFailureCase.ExhaustedOperationalFailure({
               component: descriptor.component,
               operation: descriptor.operation,
               error: Option.getOrElse(outcome.error, () => "operational_failure" as const),
@@ -110,7 +125,7 @@ const finishApplication = (
                 descriptor.workKind === "model_round" ? Option.some("openai") : Option.none(),
               retryable: outcome.retryable,
               cause: exit.cause,
-            }
+            })
       )
     )
   );
@@ -125,6 +140,7 @@ const observeApplicationOperationWork = <A, E, R>(
     if (Option.isNone(service)) return work;
     const telemetry = service.value;
     const observed = Effect.onExit(work, (exit) => finishApplication(telemetry, descriptor, exit));
+
     return Option.match(parent, {
       onNone: () => telemetry.span(descriptor, observed),
       onSome: (context) => telemetry.continueSpan(context, descriptor, observed),
@@ -132,14 +148,18 @@ const observeApplicationOperationWork = <A, E, R>(
   });
 
 const firstClientErrorStatus = 400;
+
 const firstServerErrorStatus = 500;
+
 const responseOutcome = (response: Response): DeclaredOutcome => {
   if (response.status >= firstServerErrorStatus) {
     return { outcome: "failed", error: Option.some("operational_failure"), retryable: false };
   }
+
   if (response.status >= firstClientErrorStatus) {
     return { outcome: "rejected", error: Option.none(), retryable: false };
   }
+
   return { outcome: "succeeded", error: Option.none(), retryable: false };
 };
 
@@ -171,7 +191,7 @@ const observeCanonicalResponseWork = <E, R>(
     trigger: "api",
     spanOperation: "fidy.operation",
     workKind: "canonical_operation",
-    metadata: { _tag: "None" },
+    metadata: SpanMetadata.None(),
   });
 
 const observeHostedResponseWork = <E, R>(
@@ -187,7 +207,7 @@ const observeHostedResponseWork = <E, R>(
       trigger: observation.trigger,
       spanOperation: "agent.turn",
       workKind: "hosted_turn",
-      metadata: { _tag: "None" },
+      metadata: SpanMetadata.None(),
     },
     observation.parent
   );

@@ -11,6 +11,7 @@ export const result = (data: Schema.Json): LocalMutationResult => ({
   outcome: "success",
   body: { data, next: [] },
 });
+
 export const localDetail = Effect.fnUntraced(function* ({
   row,
   user,
@@ -31,23 +32,28 @@ export const localDetail = Effect.fnUntraced(function* ({
       ),
   });
 });
+
 export const missing = (): LocalMutationResult => ({
   status: 404,
   outcome: "not_found",
   body: { error: { code: "not_found", message: "Elemento no disponible." }, next: [] },
 });
+
 export const readDetail = Effect.fn(function* (
   user: UserId,
   id: string,
   { current, origin }: { current: number; origin: OwnedStatement }
 ) {
   const sql = yield* SqliteClient;
+
   const [raw] = yield* sql.unsafe(
     `SELECT ${reviewProjection} FROM ingestion_review_sources WHERE user_id=? AND id=?` +
       origin.sql,
     [current, user, id, ...origin.params]
   );
+
   if (raw === undefined) return Option.none();
+
   return Option.some(
     yield* localDetail({ row: yield* Schema.decodeUnknownEffect(ReviewRow)(raw), user, current })
   );

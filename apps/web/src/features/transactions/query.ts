@@ -1,32 +1,40 @@
-import { type Context, Data, type DateTime, Effect, Option, Schema, pipe } from "effect";
+import { Data, type DateTime, Effect, Option, Schema, pipe } from "effect";
 import { HttpClientError } from "effect/http";
-import { forwardFreshQuery, makeFreshQuery } from "@/transport/fresh-query";
+import { forwardFreshQuery, freshQuery } from "@/transport/fresh-query";
 import { AsyncResult, Atom } from "effect/reactivity";
 import type { CanonicalSuccess, FidyClient, InitialTransactionPage } from "@/transport/client";
 import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
 
-type Client = Context.Service.Shape<FidyClient>;
+type Client = FidyClient["Service"];
+
 type Failure = Effect.Error<ReturnType<Client["transactions"]["listTransactions"]>>;
+
 type Result = AsyncResult.AsyncResult<CanonicalSuccess<"transactions.listTransactions">, Failure>;
+
 type PeriodBounds = Readonly<{
   from: DateTime.Utc;
   to: DateTime.Utc;
 }>;
+
 class Period extends Data.Class<
   PeriodBounds &
     Readonly<{
       client: FidyClient;
     }>
 > {}
+
 type InitialPage = Atom.Writable<Option.Option<Result>, Option.Option<Result>>;
+
 const initialPages = Atom.family((_period: Period): InitialPage =>
   Atom.make<Option.Option<Result>>(Option.none()).pipe(
     Atom.setIdleTTL(workspaceQueryRetention.timeToLive)
   )
 );
+
 const makeSource = (period: Period): Atom.Atom<Result> => {
   const initial = initialPages(period);
-  const remote = makeFreshQuery({
+
+  const remote = freshQuery({
     runtime: period.client.runtime,
     load: period.client
       .use((client) =>
@@ -42,6 +50,7 @@ const makeSource = (period: Period): Atom.Atom<Result> => {
       ),
     decorate: Atom.setIdleTTL(workspaceQueryRetention.timeToLive),
   });
+
   const source = Atom.readable(
     (get) => Option.getOrElse(get(initial), () => get(remote)),
     (refresh) => {
@@ -49,16 +58,20 @@ const makeSource = (period: Period): Atom.Atom<Result> => {
       refresh(initial);
     }
   ).pipe(Atom.setIdleTTL(workspaceQueryRetention.timeToLive));
+
   return forwardFreshQuery({
     query: source,
     sources: [remote],
     before: (registry) => registry.set(initial, Option.none()),
   });
 };
+
 const sources = Atom.family(makeSource);
+
 const views = Atom.family((source: Atom.Atom<Result>) =>
   forwardFreshQuery({ query: source.pipe(revalidateWorkspaceQuery), sources: [source] })
 );
+
 export const transactionFirstPage = ({
   client,
   period,
@@ -67,6 +80,7 @@ export const transactionFirstPage = ({
   period: PeriodBounds;
 }>): Atom.Atom<Result> =>
   pipe(new Period({ client, from: period.from, to: period.to }), sources, views);
+
 export const transactionPageInitialValue = ({
   client,
   page,

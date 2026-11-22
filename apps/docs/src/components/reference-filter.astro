@@ -1,5 +1,6 @@
 ---
 type Props = { label: string; placeholder: string };
+
 const { label, placeholder } = Astro.props;
 ---
 
@@ -33,10 +34,12 @@ const { label, placeholder } = Astro.props;
 <script>
   const searchable = (value: string): string =>
     value.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
+
   document.querySelectorAll<HTMLInputElement>("[data-reference-filter]").forEach((input) => {
     const catalog = input.closest("[data-reference-catalog]");
     const items = catalog?.querySelectorAll<HTMLElement>("[data-reference-item]");
     const status = catalog?.querySelector("[data-reference-filter-status]");
+
     if (!catalog || !items || !status) return;
     input.addEventListener("input", () => {
       const query = searchable(input.value.trim());
@@ -44,9 +47,11 @@ const { label, placeholder } = Astro.props;
       items.forEach((item) => {
         const matches = searchable(item.dataset.referenceItem ?? "").includes(query);
         item.hidden = !matches;
+
         if (matches) count += 1;
-        if (item instanceof HTMLDetailsElement) {
-          item.open = matches && (query.length > 0 || count === 1);
+
+        if (item.matches("details")) {
+          item.toggleAttribute("open", matches && (query.length > 0 || count === 1));
         }
       });
       catalog.querySelectorAll<HTMLElement>("[data-reference-group]").forEach((group) => {

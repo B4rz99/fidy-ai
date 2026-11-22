@@ -8,18 +8,23 @@ import {
 } from "../../src/shell/pro-grants/contract";
 
 export const betaUserUrl = "https://user.invalid/beta-pro";
+
 export const betaRegistryUrl = "https://maintenance.invalid/beta-pro-page";
+
 export const betaPageSize = 16;
+
 export const BetaRegistryPage = Schema.Struct({
   users: Schema.Array(UserId).check(Schema.isMaxLength(betaPageSize)),
   next: Schema.NullOr(ProCursor),
 });
+
 export const BetaAuthority = Schema.Struct({
   issuer: Schema.String,
   subject: Schema.String,
   email: ProOperator,
   deadline: Schema.Int,
 });
+
 export const BetaUserCommand = Schema.Struct({
   authority: BetaAuthority,
   command: Schema.Union([

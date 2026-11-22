@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/ui/components/card";
 const DraftExample = (): JSX.Element => {
   const [text, setText] = useState("");
   const [sent, setSent] = useState("");
+
   return (
     <Card>
       <CardHeader>
@@ -41,6 +42,7 @@ const FloatingExample = (): JSX.Element => {
   const [text, setText] = useState("");
   const [discarded, setDiscarded] = useState(false);
   const { mounted } = useTheme();
+
   return (
     <ChatWindow open={open} onOpenChange={setOpen} prepare={() => undefined}>
       <div ref={mounted} className="contents">

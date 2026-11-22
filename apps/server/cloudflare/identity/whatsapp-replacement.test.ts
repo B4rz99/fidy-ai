@@ -8,6 +8,7 @@ import { alice, bob, seed } from "../financial-user-store.test-fixture";
 
 const prior = "CO.573001234567",
   next = "CO.573009876543";
+
 const scenario = Effect.gen(function* () {
   const runtime = yield* (yield* nativeBrowserPlatform)();
   const owner = yield* seed(runtime, alice, false);
@@ -34,6 +35,7 @@ const scenario = Effect.gen(function* () {
       "other"
     )
   );
+
   const payload = new TextEncoder().encode(
     yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
       object: "whatsapp_business_account",
@@ -63,8 +65,10 @@ const scenario = Effect.gen(function* () {
       ],
     })
   );
+
   const post = (secret = "test-kapso-secret"): ReturnType<typeof signedWebhook> =>
     signedWebhook(runtime, payload, secret);
+
   expect((yield* post("invalid-webhook-secret")).status).toBe(401);
   expect((yield* post()).status).toBe(409);
   expect(yield* owner.exec("SELECT whatsapp_bsuid FROM users")).toEqual([
@@ -118,6 +122,7 @@ const scenario = Effect.gen(function* () {
     )
   ).toEqual([{ bsuid: next }]);
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "applies one authenticated BSUID transition after reserving its globally unique replacement",

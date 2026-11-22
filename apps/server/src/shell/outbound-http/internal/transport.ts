@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit, Option, Schema, Stream } from "effect";
+import { Cause, Effect, Exit, Match, Option, Predicate, Schema, Stream } from "effect";
 import {
   Headers,
   HttpClient,
@@ -10,6 +10,7 @@ import {
 
 import {
   type DeclaredOutcome,
+  ProviderSpanMetadata,
   TelemetryAttempt,
   type TelemetryCode,
   TelemetryHttpStatus,
@@ -21,7 +22,7 @@ import {
   projectExternalHttpRequest,
   projectExternalHttpResponse,
 } from "~/shell/observability/operations";
-import { collectBoundedBytes } from "./bounded-bytes";
+import { BoundedBytesExceeded, collectBoundedBytes } from "./bounded-bytes";
 import { OutboundHttpFailure, type OutboundHttpResponse } from "~/shell/outbound-http/contract";
 
 type OutboundHttpProvider = Exclude<TelemetryCode<"provider">, "cloudflare-workers">;
@@ -73,29 +74,47 @@ const retainedHeaders = (headers: Headers.Headers, names: ReadonlyArray<string>)
     Object.fromEntries(names.flatMap((name) => (name in headers ? [[name, headers[name]]] : [])))
   );
 
+const responseFailure = (
+  response: HttpClientResponse.HttpClientResponse,
+  retainedHeaderNames: ReadonlyArray<string>
+): OutboundHttpFailure =>
+  new OutboundHttpFailure({
+    reason: "transport-failed",
+    responseStatus: Option.some(response.status),
+    responseHeaders: retainedHeaders(response.headers, retainedHeaderNames),
+  });
+
+const requestFailure = (): OutboundHttpFailure =>
+  new OutboundHttpFailure({
+    reason: "transport-failed",
+    responseStatus: Option.none(),
+    responseHeaders: Headers.empty,
+  });
+
 const transportFailure = (
   error: HttpClientError.HttpClientError,
   retainedHeaderNames: ReadonlyArray<string>
-): OutboundHttpFailure => {
-  switch (error.reason._tag) {
-    case "StatusCodeError":
-    case "DecodeError":
-    case "EmptyBodyError":
-      return new OutboundHttpFailure({
-        reason: "transport-failed",
-        responseStatus: Option.some(error.reason.response.status),
-        responseHeaders: retainedHeaders(error.reason.response.headers, retainedHeaderNames),
-      });
-    case "TransportError":
-    case "EncodeError":
-    case "InvalidUrlError":
-      return new OutboundHttpFailure({
-        reason: "transport-failed",
-        responseStatus: Option.none(),
-        responseHeaders: Headers.empty,
-      });
-  }
-};
+): OutboundHttpFailure =>
+  Match.value(error.reason).pipe(
+    Match.tagsExhaustive({
+      StatusCodeError: (reason) => responseFailure(reason.response, retainedHeaderNames),
+      DecodeError: (reason) => responseFailure(reason.response, retainedHeaderNames),
+      EmptyBodyError: (reason) => responseFailure(reason.response, retainedHeaderNames),
+      TransportError: requestFailure,
+      EncodeError: requestFailure,
+      InvalidUrlError: requestFailure,
+    })
+  );
+
+const responseBodyFailure = (
+  status: number,
+  responseHeaders: Headers.Headers
+): OutboundHttpFailure =>
+  new OutboundHttpFailure({
+    reason: "response-body-failed",
+    responseStatus: Option.some(status),
+    responseHeaders,
+  });
 
 const collectResponse = (
   response: HttpClientResponse.HttpClientResponse,
@@ -104,42 +123,36 @@ const collectResponse = (
 ): Effect.Effect<OutboundHttpResponse, OutboundHttpFailure> => {
   const responseHeaders = retainedHeaders(response.headers, retainedHeaderNames);
   const declaredLength = Number(response.headers["content-length"] ?? 0);
+
   const read =
     declaredLength > maximumBytes
-      ? Effect.scoped(Stream.toPull(response.stream).pipe(Effect.as(Option.none<Uint8Array>())))
+      ? Effect.scoped(
+          Stream.toPull(response.stream).pipe(
+            Effect.andThen(Effect.fail(new BoundedBytesExceeded({ maximumBytes })))
+          )
+        )
       : collectBoundedBytes(response.stream, maximumBytes);
+
   return read.pipe(
-    Effect.catchIf(
-      (error: HttpClientError.HttpClientError) => error.reason._tag === "EmptyBodyError",
-      () => Effect.succeedSome<Uint8Array>(new Uint8Array(0))
+    Effect.catchReason("HttpClientError", "EmptyBodyError", () =>
+      Effect.succeed(new Uint8Array(0))
     ),
-    Effect.mapError(
-      () =>
-        new OutboundHttpFailure({
-          reason: "response-body-failed",
-          responseStatus: Option.some(response.status),
-          responseHeaders,
-        })
+    Effect.mapError((error) =>
+      Predicate.isTagged(error, "BoundedBytesExceeded")
+        ? new OutboundHttpFailure({
+            reason: "response-too-large",
+            responseStatus: Option.some(response.status),
+            responseHeaders,
+          })
+        : responseBodyFailure(response.status, responseHeaders)
     ),
-    Effect.flatMap(
-      Option.match({
-        onNone: () =>
-          Effect.fail(
-            new OutboundHttpFailure({
-              reason: "response-too-large",
-              responseStatus: Option.some(response.status),
-              responseHeaders,
-            })
-          ),
-        onSome: (body) =>
-          Effect.succeed({ status: response.status, headers: responseHeaders, body }),
-      })
-    )
+    Effect.map((body) => ({ status: response.status, headers: responseHeaders, body }))
   );
 };
 
 const transportOutcome = <A, E>(exit: Exit.Exit<A, E>): "response" | "interrupted" | "failure" => {
   if (Exit.isSuccess(exit)) return "response";
+
   return Cause.hasInterrupts(exit.cause) ? "interrupted" : "failure";
 };
 
@@ -147,13 +160,16 @@ const annotateOutcome = <A, E>(exit: Exit.Exit<A, E>): Effect.Effect<void> =>
   exit.pipe(transportOutcome, projectExternalHttpOutcome, Effect.annotateCurrentSpan);
 
 type TransportExit = Exit.Exit<OutboundHttpResponse, OutboundHttpFailure>;
+
 const serverFailureStatus = 500;
+
 const rejectedStatus = 400;
 
 const responseStatus = (exit: TransportExit): Option.Option<TelemetryHttpStatus> => {
   const status = Exit.isSuccess(exit)
     ? Option.some(exit.value.status)
     : Option.flatMap(Cause.findErrorOption(exit.cause), (failure) => failure.responseStatus);
+
   return Option.flatMap(status, Schema.decodeUnknownOption(TelemetryHttpStatus));
 };
 
@@ -166,7 +182,9 @@ const providerOutcome = (exit: TransportExit): DeclaredOutcome => {
     ) {
       return { outcome: "interrupted", error: Option.none(), retryable: false };
     }
+
     const failure = Cause.findErrorOption(exit.cause);
+
     const error = Cause.hasDies(exit.cause)
       ? "unexpected_defect"
       : Option.match(failure, {
@@ -183,14 +201,18 @@ const providerOutcome = (exit: TransportExit): DeclaredOutcome => {
             }
           },
         });
+
     return { outcome: "failed", error: Option.some(error), retryable: false };
   }
+
   if (exit.value.status >= serverFailureStatus) {
     return { outcome: "failed", error: Option.some("provider_unavailable"), retryable: false };
   }
+
   if (exit.value.status >= rejectedStatus) {
     return { outcome: "rejected", error: Option.none(), retryable: false };
   }
+
   return { outcome: "succeeded", error: Option.none(), retryable: false };
 };
 
@@ -200,6 +222,7 @@ const recordProviderExit = (
 ): Effect.Effect<void> =>
   Effect.gen(function* () {
     const status = responseStatus(exit);
+
     if (Option.isSome(status)) yield* telemetry.recordResponseStatus(status.value);
     yield* telemetry.recordOutcome(providerOutcome(exit));
   });
@@ -219,12 +242,11 @@ const observeProviderAttempt = (
             trigger: "api",
             spanOperation: "http.client",
             workKind: "provider_call",
-            metadata: {
-              _tag: "Provider",
+            metadata: ProviderSpanMetadata.make({
               provider,
               attempt: TelemetryAttempt.make(1),
               status: Option.none(),
-            },
+            }),
           },
           Effect.onExit(work, (exit) => recordProviderExit(telemetry, exit))
         ),
@@ -232,6 +254,7 @@ const observeProviderAttempt = (
   );
 
 const suppressHeaders = (): boolean => false;
+
 const suppressAutomaticSpan = (): boolean => true;
 
 type ProviderTransport = Readonly<{
@@ -241,13 +264,15 @@ type ProviderTransport = Readonly<{
   ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
 }>;
 
-export const makeProviderTransport =
+export const providerTransport =
   (provider: OutboundHttpProvider) =>
   (client: HttpClient.HttpClient): ProviderTransport => {
     const policy = outboundHttpPolicies[provider];
+
     const protectedClient = HttpClient.transform(client, (requestEffect) =>
       Effect.gen(function* () {
         const inheritedRedactions = yield* Headers.CurrentRedactedNames;
+
         return yield* requestEffect.pipe(
           Effect.provideService(Headers.CurrentRedactedNames, [
             ...inheritedRedactions,

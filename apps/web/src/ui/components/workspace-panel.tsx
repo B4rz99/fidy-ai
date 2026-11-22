@@ -6,10 +6,13 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { WorkspaceDesktop } from "./workspace-responsive";
 
 const desktopQuery = "(min-width: 1280px)";
+
 const isDesktop = (): boolean => window.matchMedia(desktopQuery).matches;
+
 const subscribe = (onChange: () => void): (() => void) => {
   const media = window.matchMedia(desktopQuery);
   media.addEventListener("change", onChange);
+
   return () => media.removeEventListener("change", onChange);
 };
 
@@ -33,6 +36,7 @@ export const WorkspacePanel = ({
   const viewportDesktop = useSyncExternalStore(subscribe, isDesktop);
   const containerDesktop = useContext(WorkspaceDesktop);
   const desktop = Option.getOrElse(containerDesktop, () => viewportDesktop);
+
   if (desktop) {
     return (
       <DesktopPanel title={title} viewport={Option.isNone(containerDesktop)}>
@@ -40,6 +44,7 @@ export const WorkspacePanel = ({
       </DesktopPanel>
     );
   }
+
   if (!open) {
     return (
       <aside aria-label={title} className="min-w-0 border-t bg-card p-5">
@@ -47,6 +52,7 @@ export const WorkspacePanel = ({
       </aside>
     );
   }
+
   return (
     <Sheet
       open={open}

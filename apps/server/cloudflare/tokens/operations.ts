@@ -29,6 +29,7 @@ export const patBrowserRoute = (path: string): boolean => browserRoute(path);
 export const patMethods = (path: string): ReadonlyArray<string> => methods(path);
 
 export const patRouteProof: typeof routeProof = (request) => routeProof(request);
+
 export const localPATCredential: typeof localCredential = (input) => localCredential(input);
 
 export const nativePATPairing: typeof nativePairing = (...args) => nativePairing(...args);
@@ -37,17 +38,22 @@ export const handlePATDirectoryCommand: typeof directoryPATCommand = (request) =
   directoryPATCommand(request);
 
 export const dispatchLocalPATGrant: typeof dispatchGrant = (input) => dispatchGrant(input);
+
 export const isLocalPATGrant: typeof isNativeGrant = (id) => isNativeGrant(id);
+
 export const stageLocalPATGrant: typeof stageGrant = (input) => stageGrant(input);
 
 export const claimLocalPAT: typeof localClaim = (...args) => localClaim(...args);
 
 export const isLocalPATManagement: typeof isPATManagement = (id) => isPATManagement(id);
+
 export const dispatchLocalPATManagement: typeof dispatchManagement = (unit) =>
   dispatchManagement(unit);
 
 export const repairLocalPATExpiry: typeof repairPATExpiry = (...args) => repairPATExpiry(...args);
+
 export const recoverLocalPATExpiry: typeof sweepPATExpiry = (...args) => sweepPATExpiry(...args);
 
 export const readLocalPATMetadata: typeof readMetadata = (input) => readMetadata(input);
+
 export const readLocalPATActivity: typeof readActivity = (input) => readActivity(input);

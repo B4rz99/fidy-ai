@@ -13,29 +13,38 @@ const scenario = Effect.gen(function* () {
   const { verified, post, api } = browser(runtime);
   const signup = yield* verified("native-support-owner");
   const created = yield* post("/web/providers/google/complete", signup.proof);
+
   const { backupRecoveryCode } = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ backupRecoveryCode: BackupRecoveryCode })
   )(yield* native(() => created.json()));
+
   const login = yield* post("/web/pairings/redeem", signup.proof);
   const cookie = login.headers.get("set-cookie")?.split(";")[0] ?? "";
+
   const bindingResponse = yield* native(() =>
     runtime.dispatchFetch(api + "/web/session/binding", {
       headers: { origin: "https://app.fidyapp.com", cookie, connection: "close" },
     })
   );
+
   const { binding } = yield* Schema.decodeUnknownEffect(Schema.Struct({ binding: Schema.String }))(
     yield* native(() => bindingResponse.json())
   );
+
   const directory = yield* native(() =>
     runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
   );
+
   const [subject] = yield* Schema.decodeUnknownEffect(
     Schema.Array(Schema.Struct({ user_id: Schema.String }))
   )(yield* native(() => directory.exec("SELECT user_id FROM recovery_routes")));
+
   if (subject === undefined) return yield* Effect.die("Expected established User");
+
   const owner = yield* native(() =>
     runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: subject.user_id })
   );
+
   const now = yield* Clock.currentTimeMillis;
   yield* native(() =>
     owner.exec(
@@ -51,6 +60,7 @@ const scenario = Effect.gen(function* () {
       now
     )
   );
+
   const headers = {
     "content-type": "application/json",
     "Fidy-Session-Binding": binding,
@@ -58,8 +68,10 @@ const scenario = Effect.gen(function* () {
     origin: "https://app.fidyapp.com",
     connection: "close",
   };
+
   const denied = yield* native(() => runtime.dispatchFetch(api + "/user", { headers }));
   expect(denied.status).toBe(401);
+
   const rotated = yield* native(() =>
     runtime.dispatchFetch(api + "/recovery/backup-code/rotate", {
       headers,
@@ -67,19 +79,25 @@ const scenario = Effect.gen(function* () {
       body: "{}",
     })
   );
+
   const { data } = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ data: Schema.Struct({ backupRecoveryCode: BackupRecoveryCode }) })
   )(yield* native(() => rotated.json()));
+
   const pairing = yield* post("/web/pairings", {});
+
   const recovery = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ ...ProviderBrowserProof.fields, publicCode: Schema.String })
   )(yield* native(() => pairing.json()));
+
   const { FIXTURE_PROVIDER: signer } = yield* native(() =>
     runtime.getBindings<{ FIXTURE_PROVIDER: Fetcher }>("core")
   );
+
   const jwt = yield* native(() =>
     signer.fetch("https://fixture.invalid/support-assertion").then((res) => res.text())
   );
+
   const approve = (
     assertion: string,
     code: BackupRecoveryCode = data.backupRecoveryCode
@@ -95,6 +113,7 @@ const scenario = Effect.gen(function* () {
         body: JSON.stringify({ pairingCode: recovery.publicCode, backupRecoveryCode: code }),
       })
     );
+
   expect((yield* approve("invalid")).status).toBe(401);
   expect((yield* approve(jwt, backupRecoveryCode)).status).toBe(400);
   expect(
@@ -122,24 +141,31 @@ const scenario = Effect.gen(function* () {
       privateVerifier: signup.proof.privateVerifier,
     })).headers.get("set-cookie")
   ).toBeNull();
+
   const session = yield* post("/web/pairings/redeem", {
     pairingId: recovery.pairingId,
     privateVerifier: recovery.privateVerifier,
   });
+
   expect(session.status).toBe(200);
   expect(session.headers.get("set-cookie")).toContain("__Host-fidy_session=");
 });
+
 const supportWindows = Effect.gen(function* () {
   const runtime = yield* (yield* nativeBrowserPlatform)();
+
   const directory = (yield* native(() =>
     runtime.getDurableObjectNamespace("DIRECTORY", "core")
   )).getByName(directoryName);
+
   const storage = yield* native(() =>
     runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: directoryName })
   );
+
   const now = yield* Clock.currentTimeMillis,
     minute = 60_000,
     hour = 60 * minute;
+
   const admit = (subject: string): Effect.Effect<number> =>
     native(() =>
       directory.fetch(supportAdmissionUrl, {
@@ -152,6 +178,18 @@ const supportWindows = Effect.gen(function* () {
         }),
       })
     ).pipe(Effect.map((reply) => reply.status));
+
+  const admitted = (subject: string): Effect.Effect<ReadonlyArray<number>> =>
+    Effect.forEach(
+      Array.from({ length: 5 }, () => subject),
+      admit
+    );
+
+  const admitBurst = Effect.fnUntraced(function* (subject: string) {
+    expect(yield* admitted(subject)).toEqual(Array.from({ length: 5 }, () => 204));
+    expect(yield* admit(subject)).toBe(429);
+  });
+
   const age = (interval: number): Effect.Effect<unknown> =>
     native(() =>
       storage.exec(
@@ -159,18 +197,30 @@ const supportWindows = Effect.gen(function* () {
         interval
       )
     );
-  for (let window = 0; window < 4; window++) {
-    for (const operator of ["one", "two", "three", "four"]) {
-      for (let request = 0; request < 5; request++) expect(yield* admit(operator)).toBe(204);
-      expect(yield* admit(operator)).toBe(429);
-    }
-    expect(yield* admit("extra")).toBe(429);
-    yield* age(minute + 1);
-  }
+
+  yield* Effect.forEach(
+    Array.from({ length: 4 }, (_, window) => window),
+    () =>
+      Effect.gen(function* () {
+        yield* Effect.forEach(["one", "two", "three", "four"], admitBurst, { discard: true });
+
+        expect(yield* admit("extra")).toBe(429);
+        yield* age(minute + 1);
+      }),
+    { discard: true }
+  );
+
   expect(yield* admit("one")).toBe(429);
-  for (const operator of ["five", "six", "seven", "eight"]) {
-    for (let request = 0; request < 5; request++) expect(yield* admit(operator)).toBe(204);
-  }
+
+  yield* Effect.forEach(
+    ["five", "six", "seven", "eight"],
+    (operator) =>
+      admitted(operator).pipe(
+        Effect.map((statuses) => expect(statuses).toEqual(Array.from({ length: 5 }, () => 204)))
+      ),
+    { discard: true }
+  );
+
   yield* age(minute + 1);
   expect(yield* admit("extra")).toBe(429);
   expect(
@@ -186,6 +236,7 @@ const supportWindows = Effect.gen(function* () {
     )
   ).toEqual([{ admitted: 1 }]);
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "enforces operator and global minute and hour windows at the Directory before reserving support work",

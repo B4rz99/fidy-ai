@@ -10,15 +10,18 @@ import { makePublicWorker } from "./public-worker";
 it.effect("replaces public trace claims with a server receipt and private continuation", () =>
   Effect.gen(function* () {
     const events: WorkerTelemetryEvent[] = [];
+
     const worker = makePublicWorker(
       makeWorkerTelemetry({
         exportWork: () => undefined,
         exportEvent: (event) => events.push(event),
       })
     );
+
     const callerTrace = "a".repeat(32);
     const privateClaim = `00-${callerTrace}-${"b".repeat(16)}-01`;
     let forwardedTrace = "";
+
     const response = yield* Effect.tryPromise(() =>
       worker.fetch(
         new Request("https://api.fidyapp.com/categories?private=financial-canary", {
@@ -44,6 +47,7 @@ it.effect("replaces public trace claims with a server receipt and private contin
               expect(request.headers.has("traceparent")).toBe(false);
               expect(request.headers.has("baggage")).toBe(false);
               expect(request.headers.has(telemetryTraceHeader)).toBe(false);
+
               return Promise.resolve(
                 new Response(null, {
                   status: 503,
@@ -55,9 +59,11 @@ it.effect("replaces public trace claims with a server receipt and private contin
         }
       )
     );
+
     const receipt = yield* Schema.decodeUnknownEffect(TelemetryTraceId)(
       response.headers.get(telemetryTraceHeader)
     );
+
     expect(receipt).not.toBe(callerTrace);
     expect(forwardedTrace).toMatch(new RegExp(`^00-${receipt}-[0-9a-f]{16}-01$`, "u"));
     expect(response.headers.get("access-control-expose-headers")).toContain(telemetryTraceHeader);
@@ -65,9 +71,11 @@ it.effect("replaces public trace claims with a server receipt and private contin
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.status).toBe(503);
     expect(events.some((event) => event.event === "span" && event.traceId === receipt)).toBe(true);
+
     const exported = yield* Schema.encodeEffect(
       Schema.fromJsonString(Schema.Array(WorkerTelemetryEvent))
     )(events);
+
     for (const sentinel of [
       "financial-canary",
       "private-cookie-canary",
@@ -82,6 +90,7 @@ it.effect("returns a fresh diagnostic receipt for an ingress refusal without rea
   Effect.gen(function* () {
     const worker = makePublicWorker(makeWorkerTelemetry(() => undefined));
     let forwarded = false;
+
     const response = yield* Effect.tryPromise(() =>
       worker.fetch(new Request("https://api.fidyapp.com/unknown"), {
         BROWSER_ORIGIN: "https://app.fidyapp.com",
@@ -91,11 +100,13 @@ it.effect("returns a fresh diagnostic receipt for an ingress refusal without rea
         CORE: {
           fetch: () => {
             forwarded = true;
+
             return Promise.resolve(new Response());
           },
         },
       })
     );
+
     expect(response.status).toBe(404);
     expect(forwarded).toBe(false);
     expect(Schema.is(TelemetryTraceId)(response.headers.get(telemetryTraceHeader))).toBe(true);

@@ -11,30 +11,39 @@ const writeFixture = (path: string, contents: string): Effect.Effect<number, Fix
   });
 
 const fixtures: string[] = [];
+
 afterEach(() => {
   for (const fixture of fixtures.splice(0)) Bun.spawnSync(["rm", "-rf", fixture]);
 });
 
 const fixture = Effect.fnUntraced(function* () {
   const temporary = Bun.spawnSync(["mktemp", "-d"]);
+
   if (temporary.exitCode !== 0) return yield* new FixtureUnavailable();
   const root = new TextDecoder().decode(temporary.stdout).trim();
   fixtures.push(root);
+
   const git = (...args: string[]): string => {
     const result = Bun.spawnSync(["git", ...args], { cwd: root });
+
     if (result.exitCode !== 0) throw new Error(new TextDecoder().decode(result.stderr));
+
     return new TextDecoder().decode(result.stdout).trim();
   };
+
   git("init", "-b", "trunk");
   git("config", "user.name", "Hook fixture");
   git("config", "user.email", "fixture@example.invalid");
   git("config", "commit.gpgsign", "false");
+
   const commit = Effect.fnUntraced(function* (file: string, contents: string) {
     yield* writeFixture(`${root}/${file}`, contents);
     git("add", file);
     git("commit", "-m", "fixture");
+
     return git("rev-parse", "HEAD");
   });
+
   const base = yield* commit("base.txt", "base\n");
   const bin = `${root}/bin`;
   yield* writeFixture(
@@ -54,6 +63,7 @@ exit 2
   );
   yield* writeFixture(`${bin}/trufflehog`, "#!/usr/bin/env bash\nexit 0\n");
   Bun.spawnSync(["chmod", "+x", `${bin}/gitleaks`, `${bin}/trufflehog`]);
+
   const scan = (input?: string): Bun.SyncSubprocess =>
     Bun.spawnSync(
       [process.execPath, new URL("./check-pushed-secrets.ts", import.meta.url).pathname],
@@ -65,6 +75,7 @@ exit 2
         ),
       }
     );
+
   return { git, commit, scan };
 });
 

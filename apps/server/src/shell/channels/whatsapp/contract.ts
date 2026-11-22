@@ -35,6 +35,7 @@ export const InsightTemplateConfiguration = Schema.Struct({
   approval: Schema.Literal("approved"),
   body: Schema.Literal("Tu resumen semanal: {{1}} Consulta tus movimientos en Fidy."),
 });
+
 export type InsightTemplateConfiguration = typeof InsightTemplateConfiguration.Type;
 
 export const proactivityTemplateBody = "Fidy te avisa: {{1}} Más en Fidy.";
@@ -45,7 +46,9 @@ export const ProactivityTemplateConfiguration = Schema.Struct({
   approval: Schema.Literal("approved"),
   body: Schema.Literal(proactivityTemplateBody),
 });
+
 const maximumProactivityLength = 1024;
+
 const maximumProactivityParameterLength =
   maximumProactivityLength - proactivityTemplateBody.replace("{{1}}", "").length;
 
@@ -64,7 +67,9 @@ export const PreparedProactivityTemplate = Schema.Struct({
     (value) => value.text === proactivityTemplateBody.replace("{{1}}", () => value.parameter)
   )
 );
+
 export type PreparedProactivityTemplate = typeof PreparedProactivityTemplate.Type;
+
 export type ProactivityTemplateSender = Readonly<{
   prepare: (
     text: unknown
@@ -85,12 +90,14 @@ export const WeeklyQuestionTemplateConfiguration = Schema.Struct({
   approval: Schema.Literal("approved"),
   body: Schema.Literal(proactivityTemplateBody),
 });
+
 export const WeeklyQuestionOffer = Schema.Struct({
   id: ConsentRecordId,
   disclosure: DisclosureSnapshot,
   acceptChoice: Schema.String,
   declineChoice: Schema.String,
 });
+
 export type WeeklyQuestionSender = Readonly<{
   prepare: (
     offer: typeof WeeklyQuestionOffer.Type
@@ -109,6 +116,7 @@ export type WeeklyQuestionSender = Readonly<{
 }>;
 
 const maximumTemplateLength = 1024;
+
 const SummaryPart = TranscriptText.check(
   Schema.isMaxLength(maximumTemplateLength),
   Schema.isPattern(/^[^\r\n\t]+$/u)
@@ -121,6 +129,7 @@ export const InsightTemplateSummary = Schema.Struct({
 }).check(
   Schema.makeFilter((summary) => {
     const keys = summary.currencies;
+
     return (
       (keys.every(
         (key, index) =>
@@ -132,11 +141,13 @@ export const InsightTemplateSummary = Schema.Struct({
     );
   })
 );
+
 export type InsightTemplateSummary = typeof InsightTemplateSummary.Type;
 
-export class InsightTemplateUnavailable extends Data.TaggedError(
-  "InsightTemplateUnavailable"
-)<{}> {}
+export class InsightTemplateUnavailable extends Data.TaggedError("InsightTemplateUnavailable")<{
+  readonly cause: unknown;
+}> {}
+
 export type InsightTemplateSender = Readonly<{
   prepare: (
     summary: unknown
@@ -159,6 +170,7 @@ export { WhatsAppBusinessPhoneNumberId, WhatsAppProviderMessageId };
 export const WhatsAppInboundJobId = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("WhatsAppInboundJobId")
 );
+
 export type WhatsAppInboundJobId = typeof WhatsAppInboundJobId.Type;
 
 export const WhatsAppDeliveryKey = Schema.String.check(
@@ -166,6 +178,7 @@ export const WhatsAppDeliveryKey = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(maximumProviderIdentifierLength)
 ).pipe(Schema.brand("WhatsAppDeliveryKey"));
+
 export type WhatsAppDeliveryKey = typeof WhatsAppDeliveryKey.Type;
 
 export const WhatsAppMessageEvidence = Schema.Struct({
@@ -173,12 +186,14 @@ export const WhatsAppMessageEvidence = Schema.Struct({
   channel: Schema.Literal("whatsapp"),
   providerMessageId: WhatsAppProviderMessageId,
 }).annotate({ identifier: "WhatsAppMessageEvidence" });
+
 export type WhatsAppMessageEvidence = typeof WhatsAppMessageEvidence.Type;
 
 export const WhatsAppMediaId = Schema.NonEmptyString.check(
   Schema.isTrimmed(),
   Schema.isMaxLength(maximumProviderIdentifierLength)
 ).pipe(Schema.brand("WhatsAppMediaId"));
+
 export type WhatsAppMediaId = typeof WhatsAppMediaId.Type;
 
 export const WhatsAppCaller = Schema.Struct({
@@ -187,6 +202,7 @@ export const WhatsAppCaller = Schema.Struct({
   username: Schema.Option(WhatsAppUsername),
   phoneNumber: Schema.Option(E164PhoneNumber),
 }).annotate({ identifier: "WhatsAppCaller" });
+
 export type WhatsAppCaller = typeof WhatsAppCaller.Type;
 
 export const WhatsAppDocumentFileName = Schema.NonEmptyString.check(
@@ -198,26 +214,34 @@ export const WhatsAppDocument = Schema.TaggedStruct("Document", {
   fileName: Schema.Option(WhatsAppDocumentFileName),
   caption: Schema.Option(TranscriptText),
 });
+
 export type WhatsAppDocument = typeof WhatsAppDocument.Type;
+
+export const WhatsAppText = Schema.TaggedStruct("Text", { text: TranscriptText });
+
+export const WhatsAppVoiceTranscript = Schema.TaggedStruct("VoiceTranscript", {
+  text: TranscriptText,
+  mediaId: WhatsAppMediaId,
+});
+
+export const WhatsAppUnusableVoiceTranscript = Schema.TaggedStruct("UnusableVoiceTranscript", {});
+
+export const WhatsAppImage = Schema.TaggedStruct("Image", {
+  mediaId: WhatsAppMediaId,
+  caption: Schema.Option(TranscriptText),
+});
 
 export type WhatsAppInboundContent =
   | WhatsAppDocument
-  | Readonly<{ readonly _tag: "Text"; readonly text: TranscriptText }>
-  | Readonly<{
-      readonly _tag: "VoiceTranscript";
-      readonly text: TranscriptText;
-      readonly mediaId: WhatsAppMediaId;
-    }>
-  | Readonly<{ readonly _tag: "UnusableVoiceTranscript" }>
-  | Readonly<{
-      readonly _tag: "Image";
-      readonly mediaId: WhatsAppMediaId;
-      readonly caption: Option.Option<TranscriptText>;
-    }>;
+  | typeof WhatsAppText.Type
+  | typeof WhatsAppVoiceTranscript.Type
+  | typeof WhatsAppUnusableVoiceTranscript.Type
+  | typeof WhatsAppImage.Type;
 
 export const HostedDeliveryCorrelationToken = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("HostedDeliveryCorrelationToken")
 );
+
 export type HostedDeliveryCorrelationToken = typeof HostedDeliveryCorrelationToken.Type;
 
 export type WhatsAppInboundEvent = Readonly<{
@@ -291,6 +315,7 @@ export const maxWhatsAppFutureTimestampMinutes = 5;
 export const maxWhatsAppDeliveryEvents = 100;
 
 export class InvalidWhatsAppSignature extends Data.TaggedError("InvalidWhatsAppSignature")<{}> {}
+
 export class WhatsAppPayloadTooLarge extends Data.TaggedError("WhatsAppPayloadTooLarge")<{}> {}
 
 export class InvalidWhatsAppPayload extends Data.TaggedError("InvalidWhatsAppPayload")<{}> {
@@ -301,7 +326,9 @@ export class InvalidWhatsAppPayload extends Data.TaggedError("InvalidWhatsAppPay
 
 export class WhatsAppBatchTooLarge extends Data.TaggedError("WhatsAppBatchTooLarge")<{}> {}
 
-export class WhatsAppStatusUnavailable extends Data.TaggedError("WhatsAppStatusUnavailable")<{}> {}
+export class WhatsAppStatusUnavailable extends Data.TaggedError("WhatsAppStatusUnavailable")<{
+  readonly cause: unknown;
+}> {}
 
 export type WhatsAppDeliveryLookup = Readonly<{
   businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
@@ -320,6 +347,7 @@ export const DisclosureDeliveryFailureReason = Schema.Literals([
   "timeout",
   "invalid_response",
 ]);
+
 export type DisclosureDeliveryFailureReason = typeof DisclosureDeliveryFailureReason.Type;
 
 type WhatsAppDisclosureLifecycleEvidenceBase = Readonly<{

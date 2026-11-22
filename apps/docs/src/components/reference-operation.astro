@@ -1,17 +1,25 @@
 ---
-import { Option } from "effect";
+import { Option, Schema } from "effect";
 import { operationFor, schemaTarget } from "../lib/reference";
+import { ReferencePageId } from "../lib/reference-contract";
 import SchemaTable from "./schema-table.astro";
 import ReferenceJson from "./reference-json.astro";
 import "../styles/reference.css";
 
 type Props = { id: string };
-const operation = operationFor(Astro.props.id);
+
+const operation = operationFor(Schema.decodeUnknownSync(ReferencePageId)(Astro.props.id));
+
 const { declaration, method, path, raw } = operation;
+
 const scope = declaration["x-fidy-access"].scope;
+
 const parameters = declaration.parameters;
+
 const requiredParameters = parameters.filter((parameter) => parameter.required);
+
 const parameterNote = `${parameters.length} parámetro${parameters.length === 1 ? "" : "s"} HTTP${requiredParameters.length ? ` · ${requiredParameters.map((parameter) => `${parameter.name} (${parameter.in}, obligatorio)`).join(", ")}` : " · opcionales"}`;
+
 const requestContent = Object.entries(declaration.requestBody?.content ?? {}).map(
   ([mediaType, content]) => ({ mediaType, content, target: schemaTarget(content.schema) })
 );

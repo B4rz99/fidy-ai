@@ -1,13 +1,22 @@
 import { Effect, Option } from "effect";
 import { FetchHttpClient, type HttpClient, HttpClientRequest } from "effect/http";
-import { type CliReleaseHttpService, OutboundHttpFailure } from "~/shell/outbound-http/contract";
-import { makeProviderTransport } from "./transport";
+import {
+  type CliReleaseHttpService,
+  OutboundHttpFailure,
+  type OutboundHttpResponse,
+} from "~/shell/outbound-http/contract";
+import { providerTransport } from "./transport";
 
 const manifestUrl = "https://github.com/B4rz99/fidy-ai/releases/latest/download/latest.txt";
+
 const maximumRequests = 3;
+
 const maximumResponseBytes = 4_096;
+
 const redirectStatus = 300;
+
 const clientErrorStatus = 400;
+
 const assetHosts = new Set([
   "release-assets.githubusercontent.com",
   "objects.githubusercontent.com",
@@ -27,6 +36,7 @@ const allowedRedirect = (url: URL): boolean => {
   ) {
     return false;
   }
+
   if (url.hostname === "github.com") {
     return (
       url.search.length === 0 &&
@@ -35,39 +45,51 @@ const allowedRedirect = (url: URL): boolean => {
       )
     );
   }
+
   return (
     assetHosts.has(url.hostname) && url.pathname.startsWith("/github-production-release-asset/")
   );
 };
 
-export const cliReleaseHttp = (client: HttpClient.HttpClient): CliReleaseHttpService => {
-  const http = makeProviderTransport("github")(client);
-  return {
-    readLatest: () =>
-      Effect.gen(function* () {
-        let destination = manifestUrl;
-        for (let attempt = 0; attempt < maximumRequests; attempt += 1) {
-          const response = yield* http
-            .execute(HttpClientRequest.get(destination), maximumResponseBytes)
-            .pipe(
-              Effect.provideService(FetchHttpClient.RequestInit, {
-                credentials: "omit",
-                redirect: "manual",
-              })
-            );
-          if (response.status < redirectStatus || response.status >= clientErrorStatus) {
-            return { ...response, headers: {} };
-          }
-          const redirect = response.headers["location"];
-          if (redirect === undefined || redirect.length === 0) return yield* unavailable();
-          const url = yield* Effect.try({
-            try: () => new URL(redirect, destination),
-            catch: unavailable,
-          });
-          if (!allowedRedirect(url)) return yield* unavailable();
-          destination = url.href;
+const followRelease = (
+  http: ReturnType<ReturnType<typeof providerTransport>>,
+  destination: string,
+  remainingRequests: number
+): Effect.Effect<OutboundHttpResponse, OutboundHttpFailure> =>
+  remainingRequests === 0
+    ? Effect.fail(unavailable())
+    : Effect.gen(function* () {
+        const response = yield* http
+          .execute(HttpClientRequest.get(destination), maximumResponseBytes)
+          .pipe(
+            Effect.provideService(FetchHttpClient.RequestInit, {
+              credentials: "omit",
+              redirect: "manual",
+            })
+          );
+
+        if (response.status < redirectStatus || response.status >= clientErrorStatus) {
+          return { ...response, headers: {} };
         }
-        return yield* unavailable();
-      }),
+
+        const redirect = response.headers["location"];
+
+        if (redirect === undefined || redirect.length === 0) return yield* unavailable();
+
+        const url = yield* Effect.try({
+          try: () => new URL(redirect, destination),
+          catch: unavailable,
+        });
+
+        if (!allowedRedirect(url)) return yield* unavailable();
+
+        return yield* followRelease(http, url.href, remainingRequests - 1);
+      });
+
+export const cliReleaseHttp = (client: HttpClient.HttpClient): CliReleaseHttpService => {
+  const http = providerTransport("github")(client);
+
+  return {
+    readLatest: followRelease(http, manifestUrl, maximumRequests),
   };
 };

@@ -3,7 +3,9 @@ import {
   Clock,
   DateTime,
   Deferred,
+  Duration,
   Effect,
+  Exit,
   Fiber,
   type FileSystem,
   Schema,
@@ -18,13 +20,27 @@ import { DisclosureSnapshot } from "../../src/shell/consent/contract";
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 import type { WorkerTelemetryEvent } from "../runtime/telemetry/contract";
 import type { CoreQueueEnvironment } from "./contract";
-import { makeCoreQueue } from "./runtime";
+import { coreQueue } from "./runtime";
+import { LocalBillingCollection, LocalRefundWork } from "../subscription/contract";
+import { UserId } from "../../src/core/identity/contract";
+import { BillingAttemptId, RefundAttemptId } from "../../src/core/subscription/contract";
+
+const makeCoreQueue =
+  (
+    telemetry: Parameters<typeof coreQueue>[0]
+  ): ((...args: Parameters<ReturnType<typeof coreQueue>>) => Promise<void>) =>
+  (...args) =>
+    Effect.runPromise(coreQueue(telemetry)(...args));
 
 const queue = makeCoreQueue(makeWorkerTelemetry(() => undefined));
+
 const userId = alice.user;
+
 const identity = (index: number): string =>
   `20000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
+
 const unused = (): Promise<never> => Promise.reject(new Error("Unexpected platform operation"));
+
 const instance = (id: string): WorkflowInstance => ({
   id,
   pause: unused,
@@ -36,20 +52,39 @@ const instance = (id: string): WorkflowInstance => ({
   subscribe: unused,
   status: () => Promise.resolve({ status: "running" }),
 });
+
 type Owner = "statement" | "billing" | "pairing";
-const body = (owner: Owner, index: number): Readonly<Record<string, unknown>> => {
+
+const refundWork = LocalRefundWork.make({
+  userId: Schema.decodeSync(UserId)(userId),
+  refundAttemptId: Schema.decodeSync(RefundAttemptId)(identity(2)),
+  verification: 0,
+});
+
+type QueueBody =
+  | Readonly<{ version: 1; userId: string; submissionId: string }>
+  | typeof LocalBillingCollection.Type
+  | Readonly<{ version: 2; kind: "browser-pairing-email"; userId: string; id: string }>;
+
+const body = (owner: Owner, index: number): QueueBody => {
   const id = identity(index);
+
   switch (owner) {
     case "statement":
       return { version: 1, userId, submissionId: id };
     case "billing":
-      return { _tag: "CollectUserBillingAttempt", userId, attemptId: id };
+      return LocalBillingCollection.make({
+        userId: Schema.decodeSync(UserId)(userId),
+        attemptId: Schema.decodeSync(BillingAttemptId)(id),
+      });
     case "pairing":
       return { version: 2, kind: "browser-pairing-email", userId, id };
   }
 };
+
 const run = <A, E>(work: Effect.Effect<A, E, Scope.Scope | FileSystem.FileSystem>): Promise<A> =>
   Effect.runPromise(work.pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)));
+
 const seed = Effect.fn(function* () {
   const runtime = yield* (yield* nativeUserPlatform)();
   const owner = yield* seedUser(runtime, alice, false);
@@ -60,33 +95,42 @@ const seed = Effect.fn(function* () {
     owner.now,
     yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(currentDisclosureFor())
   );
-  for (let index = 0; index < 10; index++) {
-    const id = identity(index);
-    yield* owner.exec(
-      "INSERT INTO statement_staging_objects(id,user_id,object_key,byte_length,sha256,status,created_at_ms,expires_at_ms,published_submission_id,source_format) VALUES(?,?,?,1,?,'published',?,?,?,'csv')",
-      id,
-      userId,
-      "users/" + userId + "/" + id,
-      "f".repeat(64),
-      owner.now,
-      owner.now + 600000,
-      id
-    );
-    yield* owner.exec(
-      "INSERT INTO statement_submissions(id,user_id,idempotency_key,staging_id,submitted_at_ms,retention_expires_at_ms,source_format,parser_revision,service_market,locale,time_zone) VALUES (?,?,?,?,?,?,'csv','v1','CO','es-CO','America/Bogota')",
-      id,
-      userId,
-      id,
-      id,
-      owner.now,
-      owner.now + 600000
-    );
-  }
+
+  yield* Effect.forEach(
+    Array.from({ length: 10 }, (_, index) => index),
+    (index) =>
+      Effect.gen(function* () {
+        const id = identity(index);
+        yield* owner.exec(
+          "INSERT INTO statement_staging_objects(id,user_id,object_key,byte_length,sha256,status,created_at_ms,expires_at_ms,published_submission_id,source_format) VALUES(?,?,?,1,?,'published',?,?,?,'csv')",
+          id,
+          userId,
+          "users/" + userId + "/" + id,
+          "f".repeat(64),
+          owner.now,
+          owner.now + 600000,
+          id
+        );
+        yield* owner.exec(
+          "INSERT INTO statement_submissions(id,user_id,idempotency_key,staging_id,submitted_at_ms,retention_expires_at_ms,source_format,parser_revision,service_market,locale,time_zone) VALUES (?,?,?,?,?,?,'csv','v1','CO','es-CO','America/Bogota')",
+          id,
+          userId,
+          id,
+          id,
+          owner.now,
+          owner.now + 600000
+        );
+      }),
+    { discard: true }
+  );
+
   const namespace = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
+
   const users: NonNullable<CoreQueueEnvironment["USER_STORE"]> = {
     getByName: (name) => ({
       fetch: (input, init) => {
         const request = new Request(input, init);
+
         return request
           .text()
           .then((body) =>
@@ -96,14 +140,17 @@ const seed = Effect.fn(function* () {
       },
     }),
   };
+
   return { owner, users };
 });
+
 const environment = (workflow: Workflow, coordinatorCalls: () => void): CoreQueueEnvironment => ({
   RELEASE_GIT_SHA: "test",
   USER_STORE: {
     getByName: () => ({
       fetch: () => {
         coordinatorCalls();
+
         return unused();
       },
     }),
@@ -113,6 +160,7 @@ const environment = (workflow: Workflow, coordinatorCalls: () => void): CoreQueu
   BILLING_REFUND_WORKFLOW: workflow,
   BROWSER_PAIRING_EMAIL_WORKFLOW: workflow,
 });
+
 const batch = (
   messages: ReadonlyArray<Readonly<{ index: number; body: unknown }>>,
   acknowledged: Set<number>,
@@ -156,52 +204,67 @@ it.each(
         let failedCreates = 0;
         let failedLookups = 0;
         let coordinatorCalls = 0;
+
         const workflowId = (index: number): string =>
           owner === "billing" ? "collect-" + userId + "-" + identity(index) : identity(index);
+
         const workflow: Workflow = {
           create: ({ id } = {}) => {
             if (id === workflowId(poison)) {
               failedCreates += 1;
+
               return unused();
             }
+
             if (id === undefined) return unused();
             created.push(id);
+
             return Promise.resolve(instance(id));
           },
           get: () => {
             failedLookups += 1;
+
             return unused();
           },
           createBatch: unused,
           deleteBatch: unused,
         };
-        const env = {
-          ...environment(workflow, () => {
-            coordinatorCalls += 1;
-          }),
-          ...(owner === "statement" ? { USER_STORE: users } : {}),
-        };
+
+        const shared = environment(workflow, () => {
+          coordinatorCalls += 1;
+        });
+
+        const env = owner === "statement" ? { ...shared, USER_STORE: users } : shared;
+
         const acknowledged = new Set<number>();
+
         const messages = Array.from({ length: 10 }, (_, index) => ({
           index,
           body: body(owner, index),
         }));
+
         let deliveryReads = 0;
-        for (let attempt = 1; attempt <= 4; attempt += 1) {
-          const pending = messages.filter((message) => !acknowledged.has(message.index));
-          deliveryReads += pending.length;
-          yield* Effect.tryPromise(() =>
-            expect(
-              queue(batch(pending, acknowledged, attempt), env).then(
-                () => "resolved",
-                () => "rejected"
-              )
-            ).resolves.toBe("rejected")
-          );
-        }
+
+        yield* Effect.forEach(
+          [1, 2, 3, 4],
+          Effect.fnUntraced(function* (attempt) {
+            const pending = messages.filter((message) => !acknowledged.has(message.index));
+
+            deliveryReads += pending.length;
+
+            const outcome = yield* Effect.exit(
+              Effect.tryPromise(() => queue(batch(pending, acknowledged, attempt), env))
+            );
+
+            expect(Exit.isFailure(outcome)).toBe(true);
+          }),
+          { discard: true }
+        );
+
         const healthy = messages
           .filter((message) => message.index !== poison)
           .map((message) => message.index);
+
         expect([...acknowledged].toSorted((left, right) => left - right)).toEqual(healthy);
         expect(created.toSorted()).toEqual(healthy.map(workflowId).toSorted());
         expect(deliveryReads).toBe(13);
@@ -217,25 +280,30 @@ it("keeps malformed shared billing work retryable without blocking valid collect
     Effect.gen(function* () {
       const created: string[] = [];
       let coordinatorCalls = 0;
+
       const workflow: Workflow = {
         create: ({ id } = {}) => {
           if (id === undefined) return unused();
           created.push(id);
+
           return Promise.resolve(instance(id));
         },
         get: unused,
         createBatch: unused,
         deleteBatch: unused,
       };
+
       const acknowledged = new Set<number>();
+
       const messages = [
         { index: 0, body: { version: 999, attemptId: identity(0) } },
         { index: 1, body: body("billing", 1) },
         {
           index: 2,
-          body: { _tag: "RunUserRefund", userId, refundAttemptId: identity(2), verification: 0 },
+          body: refundWork,
         },
       ];
+
       yield* Effect.tryPromise(() =>
         expect(
           queue(
@@ -270,20 +338,24 @@ it("retains statement ownership and expiry guards while acknowledging confirmed 
       let creates = 0;
       let lookups = 0;
       let coordinatorCalls = 0;
+
       const workflow: Workflow = {
         create: ({ id } = {}) => {
           expect(id).toBe(identity(9));
           creates += 1;
+
           return unused();
         },
         get: (id) => {
           expect(id).toBe(identity(9));
           lookups += 1;
+
           return Promise.resolve(instance(id));
         },
         createBatch: unused,
         deleteBatch: unused,
       };
+
       const messages = [
         { index: 0, body: { version: 1, userId: identity(0), submissionId: identity(0) } },
         { index: 1, body: body("statement", 1) },
@@ -291,6 +363,7 @@ it("retains statement ownership and expiry guards while acknowledging confirmed 
         { index: 9, body: body("statement", 9) },
         { index: 10, body: body("statement", 9) },
       ];
+
       const acknowledged = new Set<number>();
       yield* Effect.tryPromise(() =>
         queue(batch(messages, acknowledged, 1), {
@@ -321,18 +394,22 @@ it("contains a defective acknowledgement and an ordinary handoff failure in one 
       const records: TelemetryWorkRecord[] = [];
       const observedQueue = makeCoreQueue(makeWorkerTelemetry((record) => records.push(record)));
       const privateFailure = "private-acknowledgement-failure-sentinel";
+
       const workflow: Workflow = {
         create: ({ id } = {}) => (id === identity(2) ? Promise.resolve(instance(id)) : unused()),
         get: unused,
         createBatch: unused,
         deleteBatch: unused,
       };
+
       const acknowledged = new Set<number>();
+
       const envelope = batch(
         [0, 1, 2].map((index) => ({ index, body: body("statement", index) })),
         acknowledged,
         1
       );
+
       const defective = {
         ...envelope,
         messages: envelope.messages.map((message, index) =>
@@ -346,6 +423,7 @@ it("contains a defective acknowledgement and an ordinary handoff failure in one 
             : message
         ),
       };
+
       yield* Effect.tryPromise(() =>
         expect(
           observedQueue(defective, {
@@ -361,9 +439,11 @@ it("contains a defective acknowledgement and an ordinary handoff failure in one 
       expect(records.map(({ operation, outcome }) => ({ operation, outcome }))).toEqual([
         { operation: "worker.core.queue", outcome: "failed" },
       ]);
+
       const exported = yield* Schema.encodeEffect(
         Schema.fromJsonString(Schema.Array(TelemetryWorkRecord))
       )(records);
+
       expect(exported).not.toContain(privateFailure);
     })
   ));
@@ -377,16 +457,19 @@ it("fails every parallel handoff closed when its User owner binding is absent", 
   run(
     Effect.gen(function* () {
       let creates = 0;
+
       const workflow: Workflow = {
         create: ({ id } = {}) => {
           if (id === undefined) return unused();
           creates += 1;
+
           return Promise.resolve(instance(id));
         },
         get: unused,
         createBatch: unused,
         deleteBatch: unused,
       };
+
       const acknowledged = new Set<number>();
       yield* Effect.tryPromise(() =>
         expect(
@@ -416,12 +499,14 @@ it.each(independentHandoffs)(
         const run = Effect.runPromiseWith(yield* Effect.context<never>());
         const now = yield* Clock.currentTimeMillis;
         const events: WorkerTelemetryEvent[] = [];
+
         const observedQueue = makeCoreQueue(
           makeWorkerTelemetry({
             exportWork: () => undefined,
             exportEvent: (event) => events.push(event),
           })
         );
+
         const parents = Array.from({ length: 10 }, (_, index) => ({
           version: 1 as const,
           traceId: String(index + 1).padStart(32, "0"),
@@ -429,18 +514,23 @@ it.each(independentHandoffs)(
           sampled: true,
           capturedAtUnixMilliseconds: now,
         }));
+
         let active = 0;
         let maximum = 0;
         let creates = 0;
+
         const workflow: Workflow = {
           create: ({ id } = {}) => {
             if (id === undefined) return unused();
             creates += 1;
             active += 1;
             maximum = Math.max(maximum, active);
+
             if (active === limit) Deferred.doneUnsafe(ready, Effect.void);
+
             return run(Deferred.await(release)).then(() => {
               active -= 1;
+
               return instance(id);
             });
           },
@@ -448,7 +538,9 @@ it.each(independentHandoffs)(
           createBatch: unused,
           deleteBatch: unused,
         };
+
         const acknowledged = new Set<number>();
+
         const pending = observedQueue(
           batch(
             parents.map((traceContext, index) => ({
@@ -460,8 +552,9 @@ it.each(independentHandoffs)(
           ),
           { ...environment(workflow, () => undefined), USER_STORE: users }
         );
+
         yield* Deferred.await(ready).pipe(
-          Effect.timeout(5_000),
+          Effect.timeout(Duration.seconds(5)),
           Effect.tap(() => Effect.sync(() => expect(creates).toBe(limit))),
           Effect.ensuring(Deferred.succeed(release, undefined)),
           Effect.onError(() => Effect.tryPromise(() => pending).pipe(Effect.ignoreCause))
@@ -470,6 +563,7 @@ it.each(independentHandoffs)(
         expect(creates).toBe(10);
         expect(maximum).toBe(limit);
         expect(acknowledged.size).toBe(10);
+
         const attempts = events.flatMap((event) =>
           event.event === "span" && event.data["fidy.work_kind"] === "queue_attempt"
             ? [
@@ -481,6 +575,7 @@ it.each(independentHandoffs)(
               ]
             : []
         );
+
         expect(
           attempts.toSorted((left, right) => left.traceId.localeCompare(right.traceId))
         ).toEqual(
@@ -491,8 +586,7 @@ it.each(independentHandoffs)(
           }))
         );
       })
-    ),
-  15_000
+    )
 );
 
 it("retains input-order failure selection when independent handoffs fail in reverse order", () =>
@@ -503,21 +597,26 @@ it("retains input-order failure selection when independent handoffs fail in reve
       const run = Effect.runPromiseWith(yield* Effect.context<never>());
       const first = new Error("first-private-provider-failure");
       const second = new Error("second-private-provider-failure");
+
       const workflow: Workflow = {
         create: ({ id } = {}) => {
           if (id === undefined) return unused();
+
           if (id === identity(0)) {
             return run(Deferred.await(release)).then(() => Promise.reject(first));
           }
+
           return id === identity(1) ? Promise.reject(second) : Promise.resolve(instance(id));
         },
         get: (id) => {
           if (id === identity(1)) Deferred.doneUnsafe(release, Effect.void);
+
           return Promise.reject(id === identity(0) ? first : second);
         },
         createBatch: unused,
         deleteBatch: unused,
       };
+
       const acknowledged = new Set<number>();
       yield* Effect.tryPromise(() =>
         expect(
@@ -548,19 +647,24 @@ it.each(independentHandoffs)(
         const context = yield* Effect.context<never>();
         const run = Effect.runPromiseWith(context);
         let creates = 0;
+
         const workflow: Workflow = {
           create: ({ id } = {}) => {
             if (id === undefined) return unused();
             creates += 1;
+
             if (creates === limit) Deferred.doneUnsafe(started, Effect.void);
+
             return run(Deferred.await(release)).then(() => instance(id));
           },
           get: unused,
           createBatch: unused,
           deleteBatch: unused,
         };
+
         const records: TelemetryWorkRecord[] = [];
         const telemetry = makeWorkerTelemetry((record) => records.push(record));
+
         const interruptedQueue = makeCoreQueue({
           ...telemetry,
           observeWork: (observation, work) =>
@@ -568,20 +672,25 @@ it.each(independentHandoffs)(
               const fiber = yield* telemetry.observeWork(observation, work).pipe(Effect.forkChild);
               yield* Deferred.await(started);
               yield* Fiber.interrupt(fiber);
+
               return yield* Fiber.join(fiber);
             }),
         });
+
         const acknowledged = new Set<number>();
+
         const messages = Array.from({ length: 10 }, (_, index) => ({
           index,
           body: body(owner, index),
         }));
+
         const outcome = yield* Effect.tryPromise(() =>
           interruptedQueue(batch(messages, acknowledged, 1), {
             ...environment(workflow, () => undefined),
             USER_STORE: users,
           })
         ).pipe(Effect.exit, Effect.ensuring(Deferred.succeed(release, undefined)));
+
         expect(outcome._tag).toBe("Failure");
         expect(creates).toBe(limit);
         expect(acknowledged.size).toBe(0);

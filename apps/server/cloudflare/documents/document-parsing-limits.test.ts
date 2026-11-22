@@ -10,7 +10,9 @@ const buildParser = (): Promise<string> =>
     target: "browser",
   }).then((built) => {
     const output = built.outputs[0];
+
     if (!built.success || output === undefined) throw new Error("Parser bundle failed");
+
     return output.text();
   });
 
@@ -31,32 +33,62 @@ const parserRuntime = (module: string): Miniflare =>
     ],
   });
 
+const rejectedAmplification = Effect.fn(function* (runtime: Miniflare, delimiter: string) {
+  const response = yield* Effect.tryPromise(() =>
+    runtime.dispatchFetch("https://parser.internal/statement", {
+      method: "POST",
+      body: delimiter.repeat(statementParserLimits.maximumDecodedBytes),
+    })
+  );
+
+  expect(response.status).toBe(413);
+  expect(yield* Effect.tryPromise(() => response.json())).toEqual({
+    outcome: "rejected",
+    reason: "resource-limit",
+  });
+});
+
+const xlsxOutcome = Effect.fn(function* (
+  runtime: Miniflare,
+  [fixture, status]: readonly [string, number]
+) {
+  const source = yield* Effect.tryPromise(() =>
+    Bun.file(
+      new URL(`../../src/shell/ingestion/internal/fixtures/${fixture}.xlsx`, import.meta.url)
+    ).bytes()
+  );
+
+  const response = yield* Effect.tryPromise(() =>
+    runtime.dispatchFetch("https://parser.internal/statement", { method: "POST", body: source })
+  );
+
+  expect(response.status).toBe(status);
+});
+
 it.live("rejects empty-field amplification in workerd and continues serving valid statements", () =>
   Effect.gen(function* () {
     const module = yield* Effect.tryPromise(buildParser);
+
     const runtime = yield* Effect.acquireRelease(
       Effect.sync(() => parserRuntime(module)),
       (instance) => Effect.tryPromise(() => instance.dispose()).pipe(Effect.orDie)
     );
-    for (const delimiter of [",", ";", "\t"]) {
-      const response = yield* Effect.tryPromise(() =>
-        runtime.dispatchFetch("https://parser.internal/statement", {
-          method: "POST",
-          body: delimiter.repeat(statementParserLimits.maximumDecodedBytes),
-        })
-      );
-      expect(response.status).toBe(413);
-      expect(yield* Effect.tryPromise(() => response.json())).toEqual({
-        outcome: "rejected",
-        reason: "resource-limit",
-      });
-    }
+
+    yield* Effect.forEach(
+      [",", ";", "\t"],
+      (delimiter) => rejectedAmplification(runtime, delimiter),
+      {
+        discard: true,
+      }
+    );
+
     const response = yield* Effect.tryPromise(() =>
       runtime.dispatchFetch("https://parser.internal/statement", {
         method: "POST",
         body: 'Date,Description\n2026-01-01,"a,b\nwith ""quotes"""',
       })
     );
+
     expect(response.status).toBe(200);
     expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
       outcome: "parsed",
@@ -71,27 +103,20 @@ it.live(
   () =>
     Effect.gen(function* () {
       const module = yield* Effect.tryPromise(buildParser);
+
       const runtime = yield* Effect.acquireRelease(
         Effect.sync(() => parserRuntime(module)),
         (instance) => Effect.tryPromise(() => instance.dispose()).pipe(Effect.orDie)
       );
-      for (const [fixture, status] of [
-        ["shared-string-total-limit", 413],
-        ["shared-string-small", 200],
-        ["shared-string-row-limit", 200],
-      ] as const) {
-        const source = yield* Effect.tryPromise(() =>
-          Bun.file(
-            new URL(`../../src/shell/ingestion/internal/fixtures/${fixture}.xlsx`, import.meta.url)
-          ).bytes()
-        );
-        const response = yield* Effect.tryPromise(() =>
-          runtime.dispatchFetch("https://parser.internal/statement", {
-            method: "POST",
-            body: source,
-          })
-        );
-        expect(response.status).toBe(status);
-      }
+
+      yield* Effect.forEach(
+        [
+          ["shared-string-total-limit", 413],
+          ["shared-string-small", 200],
+          ["shared-string-row-limit", 200],
+        ] as const,
+        (sample) => xlsxOutcome(runtime, sample),
+        { discard: true }
+      );
     })
 );

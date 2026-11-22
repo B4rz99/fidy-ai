@@ -5,20 +5,24 @@ import { UtcTimestamp } from "~/core/_shared/time";
 export const CategoryId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("CategoryId"))
   .annotate({ identifier: "CategoryId" });
+
 export type CategoryId = typeof CategoryId.Type;
 
 const maximumCategoryTextLength = 80;
+
 const normalizeCategoryKeyword = Schema.decodeSync(NormalizedSearchText);
 
 export const KeywordRuleId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("KeywordRuleId"))
   .annotate({ identifier: "KeywordRuleId" });
+
 export type KeywordRuleId = typeof KeywordRuleId.Type;
 
 export const CategoryLabel = Schema.NonEmptyString.check(Schema.isTrimmed())
   .check(Schema.isMaxLength(maximumCategoryTextLength))
   .pipe(Schema.brand("CategoryLabel"))
   .annotate({ identifier: "CategoryLabel" });
+
 export type CategoryLabel = typeof CategoryLabel.Type;
 
 export const CategoryKeyword = Schema.NonEmptyString.check(Schema.isTrimmed())
@@ -26,6 +30,7 @@ export const CategoryKeyword = Schema.NonEmptyString.check(Schema.isTrimmed())
   .check(
     Schema.makeFilter((keyword) => {
       const normalized = normalizeCategoryKeyword(keyword);
+
       return normalized.length > 0 &&
         normalized.length <= maximumCategoryTextLength &&
         normalized === normalized.trim()
@@ -35,12 +40,14 @@ export const CategoryKeyword = Schema.NonEmptyString.check(Schema.isTrimmed())
   )
   .pipe(Schema.brand("CategoryKeyword"))
   .annotate({ identifier: "CategoryKeyword" });
+
 export type CategoryKeyword = typeof CategoryKeyword.Type;
 
 export const Category = Schema.Struct({
   id: CategoryId,
   label: CategoryLabel,
 }).annotate({ identifier: "Category" });
+
 export type Category = typeof Category.Type;
 
 export const KeywordRule = Schema.Struct({
@@ -50,16 +57,19 @@ export const KeywordRule = Schema.Struct({
   createdAt: UtcTimestamp,
   updatedAt: UtcTimestamp,
 }).annotate({ identifier: "KeywordRule" });
+
 export type KeywordRule = typeof KeywordRule.Type;
 
 export const CreateKeywordRuleInput = KeywordRule.mapFields(
   Struct.omit(["id", "createdAt", "updatedAt"])
 ).annotate({ identifier: "CreateKeywordRuleInput" });
+
 export type CreateKeywordRuleInput = typeof CreateKeywordRuleInput.Type;
 
 export const UpdateKeywordRuleInput = CreateKeywordRuleInput.annotate({
   identifier: "UpdateKeywordRuleInput",
 });
+
 export type UpdateKeywordRuleInput = typeof UpdateKeywordRuleInput.Type;
 
 export class CategoryNotFound extends Data.TaggedError("CategoryNotFound")<{
@@ -106,7 +116,9 @@ export const categoryIds = {
 export const maximumKeywordRulesPerUser = 100;
 
 const maximumCategoriesPerRevision = 100;
+
 const CategoryTaxonomyRevisionId = Schema.String.check(Schema.isPattern(/^co-[1-9][0-9]{0,8}$/u));
+
 export const CategoryTaxonomyRevision = Schema.Struct({
   id: CategoryTaxonomyRevisionId,
   categories: Schema.Array(Category).check(
@@ -116,6 +128,7 @@ export const CategoryTaxonomyRevision = Schema.Struct({
 }).check(
   Schema.makeFilter(({ categories }) => {
     const ids = new Set(categories.map(({ id }) => id));
+
     return (
       (ids.size === categories.length &&
         ids.has(categoryIds.ingresos) &&
@@ -124,6 +137,7 @@ export const CategoryTaxonomyRevision = Schema.Struct({
     );
   })
 );
+
 export type CategoryTaxonomyRevision = typeof CategoryTaxonomyRevision.Type;
 
 export const CategoryTaxonomyRelease = Schema.Struct({
@@ -132,16 +146,19 @@ export const CategoryTaxonomyRelease = Schema.Struct({
 }).check(
   Schema.makeFilter(({ write, revisions }) => {
     const ids = new Set(revisions.map(({ id }) => id));
+
     return (
       (ids.size === revisions.length && ids.has(write)) ||
       "Expected one definition per revision, including the writing revision"
     );
   })
 );
+
 export type CategoryTaxonomyRelease = typeof CategoryTaxonomyRelease.Type;
 
 export const CategoryReference = Schema.Struct({
   revision: CategoryTaxonomyRevisionId,
   categoryId: CategoryId,
 });
+
 export type CategoryReference = typeof CategoryReference.Type;

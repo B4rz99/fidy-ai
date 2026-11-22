@@ -1,4 +1,4 @@
-version: "2"
+min_version: "2.2.2"
 
 pre-commit:
   commands:
@@ -6,9 +6,8 @@ pre-commit:
       glob: "*.{js,jsx,ts,tsx}"
       exclude:
         - ".repos/**"
-      run: bunx oxlint --fix {staged_files}
+      run: node tools/oxlint/anti-slop/modes/lint.ts commit bunx oxlint --fix
       stage_fixed: true
-      skip_output: errors
     format:
       glob: "*.{js,jsx,ts,tsx,json}"
       exclude:
@@ -16,7 +15,6 @@ pre-commit:
         - "apps/server/contracts/**"
       run: bunx oxfmt --write {staged_files}
       stage_fixed: true
-      skip_output: errors
 
 commit-msg:
   commands:
@@ -26,10 +24,12 @@ commit-msg:
 
 pre-push:
   commands:
+    anti-slop-lint:
+      run: ANTI_SLOP_BASE=origin/trunk node tools/oxlint/anti-slop/modes/lint.ts push bun run lint
+    integrity:
+      run: ANTI_SLOP_BASE=origin/trunk bun run integrity
     pushed-commit-messages:
       files: git ls-files
       run: bun scripts/check-pushed-commit-messages.ts
-      skip_output: false
     pushed-secrets:
       run: bun scripts/check-pushed-secrets.ts
-      skip_output: false

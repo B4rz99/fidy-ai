@@ -20,7 +20,7 @@ const checkBatchEffects = Effect.fnUntraced(function* (
   owner: Effect.Success<ReturnType<typeof seed>>,
   turnId: string
 ) {
-  if (mode === "batch-stale") {
+  yield* Effect.gen(function* () {
     expect(
       yield* owner.exec(
         "SELECT count(*) AS n FROM hosted_batch_child_audit WHERE turn_id=? AND outcome='success'",
@@ -30,8 +30,9 @@ const checkBatchEffects = Effect.fnUntraced(function* (
     expect(
       yield* owner.exec("SELECT count(*) AS n FROM user_documents WHERE kind='dashboard'")
     ).toEqual([{ n: 0 }]);
-  }
-  if (mode === "batch") {
+  }).pipe(Effect.when(Effect.succeed(mode === "batch-stale")));
+
+  yield* Effect.gen(function* () {
     expect(
       yield* owner.exec("SELECT count(*) AS n FROM user_documents WHERE kind='dashboard'")
     ).toEqual([{ n: 1 }]);
@@ -45,7 +46,7 @@ const checkBatchEffects = Effect.fnUntraced(function* (
       { operation: "dashboard.initializeDashboard", outcome: "success" },
       { operation: "ingestion.enableEmailForwarding", outcome: "success" },
     ]);
-  }
+  }).pipe(Effect.when(Effect.succeed(mode === "batch")));
 });
 
 const financialQueries = [
@@ -58,6 +59,7 @@ const financialQueries = [
   ["recurring__listRecurringSeries", { query: {} }],
   ["recurringPlans__getRecurringWorkspace", { query: { month: "2026-10", view: "compact" } }],
 ] as const;
+
 const accountQueries = [
   ["subscription__getSubscriptionStatus", {}],
   ["subscription__getUpgradeUrl", {}],
@@ -69,12 +71,16 @@ const accountQueries = [
   ["pats__listPATs", {}],
   ["pats__getPATActivity", { params: { shortId: "abcdefgh" } }],
 ] as const;
+
 const queryCases = (mode: string): typeof financialQueries | typeof accountQueries =>
   mode === "planning" ? financialQueries : accountQueries;
+
 type HostedRuntime = Parameters<typeof seed>[0];
+
 type HostedProvider = ReturnType<
   Awaited<ReturnType<HostedRuntime["getDurableObjectNamespace"]>>["getByName"]
 >;
+
 const prepareQueries = Effect.fnUntraced(function* (
   mode: string,
   {
@@ -88,7 +94,9 @@ const prepareQueries = Effect.fnUntraced(function* (
   }
 ) {
   if (!["planning", "account"].includes(mode)) return;
+
   if (mode === "planning") yield* preparePublishedSeries(owner);
+
   const initialized = yield* native(() =>
     runtime.dispatchFetch("https://api.fidyapp.com/dashboard/initialize", {
       method: "POST",
@@ -99,6 +107,7 @@ const prepareQueries = Effect.fnUntraced(function* (
       },
     })
   );
+
   expect(initialized.status).toBe(200);
   yield* native(() => initialized.arrayBuffer());
   yield* native(() =>
@@ -110,10 +119,12 @@ const prepareQueries = Effect.fnUntraced(function* (
     })
   );
 });
+
 const preparePublishedSeries = Effect.fnUntraced(function* (
   owner: Effect.Success<ReturnType<typeof seed>>
 ) {
   const stamp = "2025-01-15T12:00:00.000Z";
+
   const series = {
     counterparty: "Recorded",
     money: { amount: "10", currency: "COP" },
@@ -123,6 +134,7 @@ const preparePublishedSeries = Effect.fnUntraced(function* (
     confirmedAt: stamp,
     announcement: { kind: "suppressed", reason: "backfill" },
   };
+
   yield* owner.exec(
     `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<33), rows AS(SELECT printf('40000000-0000-4000-8000-%012d',i) AS id,printf('Merchant %03d',i) AS label FROM n) INSERT INTO recurring_series(user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid) SELECT ?,id,'COP',label,json_set(?,'$.id',id,'$.counterparty',label),'{}','{}',1 FROM rows`,
     alice.user,
@@ -137,6 +149,7 @@ const preparePublishedSeries = Effect.fnUntraced(function* (
     alice.user
   );
 });
+
 const comparePublishedSeries = Effect.fnUntraced(function* (
   owner: Effect.Success<ReturnType<typeof seed>>,
   runtime: HostedRuntime
@@ -150,7 +163,9 @@ const comparePublishedSeries = Effect.fnUntraced(function* (
       },
     })
   );
+
   expect(page.status).toBe(200);
+
   const publicData = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       data: Schema.Struct({
@@ -160,7 +175,9 @@ const comparePublishedSeries = Effect.fnUntraced(function* (
       }),
     })
   )(yield* native(() => page.json()));
+
   expect(publicData.data.series).toHaveLength(32);
+
   const [record] = yield* Schema.decodeUnknownEffect(
     Schema.Array(Schema.Struct({ page: Schema.fromJsonString(Schema.Unknown) }))
   )(
@@ -168,8 +185,10 @@ const comparePublishedSeries = Effect.fnUntraced(function* (
       "SELECT json_extract(entry_json,'$.outcome.output.data') AS page FROM hosted_transcript WHERE json_extract(entry_json,'$.operation')='recurring.listRecurringSeries' AND json_extract(entry_json,'$._tag')='CanonicalToolResultEntry'"
     )
   );
+
   expect(record?.page).toEqual(publicData.data);
 });
+
 const verifyQueryTools = Effect.fnUntraced(function* (
   mode: string,
   proposal: typeof HostedTurnProposal.Type,
@@ -183,15 +202,17 @@ const verifyQueryTools = Effect.fnUntraced(function* (
     runtime: HostedRuntime;
   }
 ) {
-  if (["planning", "account"].includes(mode)) {
+  yield* Effect.gen(function* () {
     if (mode === "planning") yield* comparePublishedSeries(owner, runtime);
     const listing = yield* native(() => provider.fetch("https://fixture.invalid/tools"));
     expect(yield* native(() => listing.json())).toEqual(
       expect.arrayContaining(queryCases(mode).map(([name]) => name))
     );
+
     const results = yield* owner.exec(
       "SELECT operation,outcome FROM hosted_tool_calls ORDER BY operation"
     );
+
     expect(results).toEqual(
       queryCases(mode)
         .map(([name]) => ({
@@ -207,7 +228,8 @@ const verifyQueryTools = Effect.fnUntraced(function* (
         }))
         .sort((left, right) => left.operation.localeCompare(right.operation, "en-US"))
     );
-    if (mode === "account") {
+
+    yield* Effect.gen(function* () {
       expect(
         yield* owner.exec(
           "SELECT json_extract(entry_json,'$.outcome.output.data.url') AS url FROM hosted_transcript WHERE json_extract(entry_json,'$.operation')='subscription.getUpgradeUrl' AND json_extract(entry_json,'$._tag')='CanonicalToolResultEntry'"
@@ -222,10 +244,12 @@ const verifyQueryTools = Effect.fnUntraced(function* (
         { operation: "pats.getPATActivity", outcome: "rejected" },
         { operation: "pats.listPATs", outcome: "accepted" },
       ]);
-    }
-    return true;
-  }
-  if (mode === "connection") {
+    }).pipe(Effect.when(Effect.succeed(mode === "account")));
+  }).pipe(Effect.when(Effect.succeed(["planning", "account"].includes(mode))));
+
+  if (["planning", "account"].includes(mode)) return true;
+
+  yield* Effect.gen(function* () {
     expect(proposal.text).toMatch(/https:\/\/app\.fidyapp\.com\/connections\/continue\?attempt=/u);
     expect(yield* owner.exec("SELECT public_reference FROM connection_attempts")).toEqual([
       { public_reference: proposal.text.split("attempt=")[1] },
@@ -237,10 +261,13 @@ const verifyQueryTools = Effect.fnUntraced(function* (
     ).toEqual([{ availability: "available" }]);
     const state = yield* native(() => provider.fetch("https://fixture.invalid/waiting"));
     expect(yield* native(() => state.json())).toMatchObject({ rounds: 1 });
-    return true;
-  }
+  }).pipe(Effect.when(Effect.succeed(mode === "connection")));
+
+  if (mode === "connection") return true;
+
   return false;
 });
+
 const nativeTurnJourney = Effect.fnUntraced(function* (
   mode:
     | "account"
@@ -254,18 +281,22 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
     | "batch-stale"
 ) {
   const create = yield* nativeHostedPlatform;
+
   const runtime = yield* create(undefined, [], {
     BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: yield* nativeConnectionProfile,
   });
+
   const owner = yield* seed(runtime, alice);
   yield* owner.exec(
     "UPDATE users SET trial_started_at_ms=created_at_ms,trial_ends_at_ms=created_at_ms+604800000 WHERE id=?",
     alice.user
   );
   yield* seed(runtime, bob);
+
   const disclosure = yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(
     currentDisclosureFor()
   );
+
   yield* owner.exec(
     "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms,disclosure_json) VALUES(?,?,'processing_grant',?,?)",
     bob.user,
@@ -273,6 +304,7 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
     owner.now,
     disclosure
   );
+
   const post = (subject: typeof alice, path: string, body: unknown): Effect.Effect<Response> =>
     Effect.gen(function* () {
       const reply = yield* native(() =>
@@ -287,12 +319,16 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
           body: JSON.stringify(body),
         })
       );
+
       return new Response(yield* native(() => reply.text()), { status: reply.status });
     });
+
   const controls = yield* native(() =>
     runtime.getDurableObjectNamespace("CONTROL", "hosted-provider")
   );
+
   const provider = controls.getByName("provider");
+
   const providerPath = {
     account: "waiting",
     planning: "waiting",
@@ -304,6 +340,7 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
     withdraw: "waiting",
     ordinary: "waiting",
   }[mode];
+
   yield* native(() => provider.fetch("https://fixture.invalid/" + providerPath));
   yield* prepareQueries(mode, { runtime, owner, provider });
   const id = "22460000-0000-4000-8000-000000000020";
@@ -317,20 +354,26 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
       owner.now
     );
   }
+
   if (mode === "ordinary") {
     yield* owner.exec("ALTER TABLE reminder_schedules RENAME TO unavailable_reminder_schedules");
   }
+
   const admitted = yield* post(alice, "", { text: "¿Qué recuerdas?" });
   expect(admitted.status).toBe(202);
+
   const identity = yield* Schema.decodeUnknownEffect(HostedTurnProcessing)(
     yield* native(() => admitted.json())
   );
+
   yield* Effect.retry(
     Effect.gen(function* () {
       const state = yield* native(() => provider.fetch("https://fixture.invalid/waiting"));
+
       const value = yield* Schema.decodeUnknownEffect(Schema.Struct({ waiting: Schema.Boolean }))(
         yield* native(() => state.json())
       );
+
       if (!value.waiting) return yield* Effect.fail("provider_not_waiting");
     }),
     { times: 40, schedule: Schedule.spaced("50 millis") }
@@ -338,6 +381,7 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
   expect((yield* history(runtime, alice)).status).toBe(200);
   expect((yield* post(alice, "", { text: "Otra consulta" })).status).toBe(409);
   expect((yield* post(bob, "/progress", { turnId: identity.turnId })).status).toBe(401);
+
   if (mode === "withdraw") {
     yield* owner.exec(
       "INSERT INTO consent_history(id,user_id,record_type,grant_record_id,session_id,occurred_at_ms) VALUES(?,?,'processing_withdrawal',?,?,?)",
@@ -348,78 +392,94 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
       owner.now
     );
   }
+
   yield* native(() => provider.fetch("https://fixture.invalid/release"));
+
   const proposal = yield* Effect.retry(
     Effect.gen(function* () {
       const reply = yield* post(alice, "/progress", { turnId: identity.turnId });
+
       return yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
         yield* native(() => reply.json())
       );
     }),
     { times: 50, schedule: Schedule.spaced("50 millis") }
   );
-  if (["ordinary", "withdraw"].includes(mode)) expect(proposal.text).toBe("Listo.");
+
+  yield* Effect.sync(() => expect(proposal.text).toBe("Listo.")).pipe(
+    Effect.when(Effect.succeed(["ordinary", "withdraw"].includes(mode)))
+  );
   const redelivery = yield* post(alice, "/progress", { turnId: identity.turnId });
   expect(yield* native(() => redelivery.json())).toMatchObject({
     receipt: proposal.receipt,
     text: proposal.text,
   });
+
   const delivered = yield* post(alice, "/delivery", {
     turnId: identity.turnId,
     receipt: proposal.receipt,
   });
+
   expect(delivered.status).toBe(200);
+
   if (yield* verifyQueryTools(mode, proposal, { owner, provider, runtime })) return;
-  if (mode === "withdraw") {
+
+  yield* Effect.gen(function* () {
     expect(yield* owner.exec("SELECT outcome FROM hosted_tool_calls")).toEqual([
       { outcome: "CanonicalOperationFailed" },
     ]);
     expect((yield* post(alice, "", { text: "Otro turno" })).status).toBe(403);
-    return;
-  }
-  if (["confirm", "stale", "batch", "batch-stale"].includes(mode)) {
-    const assertReviewed = Effect.fnUntraced(function* () {
-      expect(proposal.text).toContain("Preparo almuerzos");
-      expect(proposal.confirmation?.command).toMatch(/^CONFIRMAR [a-f0-9]{64}$/u);
-      expect(yield* owner.exec("SELECT count(*) AS n FROM memories")).toEqual([{ n: 1 }]);
-      if (["stale", "batch-stale"].includes(mode)) {
-        yield* owner.exec("UPDATE memories SET text='Estado nuevo' WHERE id=?", id);
-      }
-      if (mode.startsWith("batch")) {
-        expect(proposal.text).toContain("Activar tu dirección de correo");
-        expect(
-          yield* owner.exec("SELECT count(*) AS n FROM user_documents WHERE kind='dashboard'")
-        ).toEqual([{ n: 0 }]);
-      }
-      const confirmed = yield* post(alice, "", { text: proposal.confirmation?.command });
-      const accepted = yield* Schema.decodeUnknownEffect(HostedTurnProcessing)(
-        yield* native(() => confirmed.json())
-      );
-      yield* Effect.retry(
-        Effect.gen(function* () {
-          const res = yield* post(alice, "/progress", { turnId: accepted.turnId });
-          return yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
-            yield* native(() => res.json())
-          );
-        }),
-        { times: 50, schedule: Schedule.spaced("50 millis") }
-      );
-      expect(yield* owner.exec("SELECT count(*) AS n FROM memories")).toEqual([
-        { n: ["stale", "batch-stale"].includes(mode) ? 1 : 0 },
-      ]);
-      yield* checkBatchEffects(mode, owner, accepted.turnId);
+  }).pipe(Effect.when(Effect.succeed(mode === "withdraw")));
+
+  if (mode === "withdraw") return;
+
+  const assertReviewed = Effect.fnUntraced(function* () {
+    expect(proposal.text).toContain("Preparo almuerzos");
+    expect(proposal.confirmation?.command).toMatch(/^CONFIRMAR [a-f0-9]{64}$/u);
+    expect(yield* owner.exec("SELECT count(*) AS n FROM memories")).toEqual([{ n: 1 }]);
+
+    if (["stale", "batch-stale"].includes(mode)) {
+      yield* owner.exec("UPDATE memories SET text='Estado nuevo' WHERE id=?", id);
+    }
+
+    yield* Effect.gen(function* () {
+      expect(proposal.text).toContain("Activar tu dirección de correo");
       expect(
-        yield* owner.exec("SELECT outcome FROM hosted_tool_calls WHERE turn_id=?", accepted.turnId)
-      ).toEqual([
-        {
-          outcome: ["stale", "batch-stale"].includes(mode)
-            ? "CanonicalOperationFailed"
-            : "Succeeded",
-        },
-      ]);
-    });
-    return yield* assertReviewed();
-  }
+        yield* owner.exec("SELECT count(*) AS n FROM user_documents WHERE kind='dashboard'")
+      ).toEqual([{ n: 0 }]);
+    }).pipe(Effect.when(Effect.succeed(mode.startsWith("batch"))));
+
+    const confirmed = yield* post(alice, "", { text: proposal.confirmation?.command });
+
+    const accepted = yield* Schema.decodeUnknownEffect(HostedTurnProcessing)(
+      yield* native(() => confirmed.json())
+    );
+
+    yield* Effect.retry(
+      Effect.gen(function* () {
+        const res = yield* post(alice, "/progress", { turnId: accepted.turnId });
+
+        return yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
+          yield* native(() => res.json())
+        );
+      }),
+      { times: 50, schedule: Schedule.spaced("50 millis") }
+    );
+    expect(yield* owner.exec("SELECT count(*) AS n FROM memories")).toEqual([
+      { n: ["stale", "batch-stale"].includes(mode) ? 1 : 0 },
+    ]);
+    yield* checkBatchEffects(mode, owner, accepted.turnId);
+    expect(
+      yield* owner.exec("SELECT outcome FROM hosted_tool_calls WHERE turn_id=?", accepted.turnId)
+    ).toEqual([
+      {
+        outcome: ["stale", "batch-stale"].includes(mode) ? "CanonicalOperationFailed" : "Succeeded",
+      },
+    ]);
+  });
+
+  if (["confirm", "stale", "batch", "batch-stale"].includes(mode)) return yield* assertReviewed();
+
   yield* owner.exec("ALTER TABLE unavailable_reminder_schedules RENAME TO reminder_schedules");
   expect(
     yield* owner.exec(
@@ -439,12 +499,15 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
     "UPDATE hosted_agent_sessions SET basis_json=json_set(basis_json,'$.policyRevision','earlier-policy')"
   );
   const again = yield* post(alice, "", { text: "Continuar" });
+
   const later = yield* Schema.decodeUnknownEffect(HostedTurnProcessing)(
     yield* native(() => again.json())
   );
+
   yield* Effect.retry(
     Effect.gen(function* () {
       const reply = yield* post(alice, "/progress", { turnId: later.turnId });
+
       return yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
         yield* native(() => reply.json())
       );
@@ -523,11 +586,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("requires an admitted processing Consent basis before opening a hosted Turn", () =>
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;
+
       const response = yield* nativeBrowserWrite(db)(alice, {
         method: "POST",
         path: "/web/hosted-turns",
         body: { text: "Mi presupuesto" },
       });
+
       expect(response.status).toBe(403);
     })
   );

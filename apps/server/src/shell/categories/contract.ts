@@ -30,6 +30,7 @@ export const ListCategoriesResponse = OperationResponse(Schema.Array(Category));
 export const ListKeywordRulesResponse = OperationResponse(Schema.Array(KeywordRule));
 
 export const KeywordRuleResponse = OperationResponse(KeywordRule);
+
 export const RemovedKeywordRuleResponse = OperationResponse(KeywordRuleId);
 
 const retainedKeywordRuleParams = (): Schema.Struct<{ readonly id: typeof KeywordRuleId }> =>
@@ -41,12 +42,14 @@ const read = operationPolicy({
   agentConfirmation: "not-required",
   kind: "query",
 });
+
 const additiveWrite = operationPolicy({
   access: userOwnedAgentScoped("write"),
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "mutation",
 });
+
 const destructiveWrite = operationPolicy({
   access: userOwnedAgentScoped("write"),
   requiredTier: "free",

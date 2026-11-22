@@ -3,6 +3,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 
 type Props = Readonly<{ title: string; children: ReactNode }>;
+
 const DisclosureHeading = ({ title }: Pick<Props, "title">): JSX.Element => (
   <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md text-sm font-medium focus-visible:bg-muted focus-visible:underline [&::-webkit-details-marker]:hidden">
     <HugeiconsIcon
@@ -22,6 +23,7 @@ export const Disclosure = ({ title, children }: Props): JSX.Element => (
 
 export const DeferredDisclosure = ({ title, children }: Props): JSX.Element => {
   const [visited, setVisited] = useState(false);
+
   return (
     <details
       className="group/disclosure"

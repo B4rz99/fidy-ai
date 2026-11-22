@@ -1,5 +1,6 @@
+import { browserRuntime } from "@/transport/browser-runtime";
 import { browserSecureRandom } from "@/browser/crypto";
-import { type Context, Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import type { Atom } from "effect/reactivity";
 import { HostedTurnQuotaExceeded, HostedTurnRequest } from "@/transport/hosted-turn-client";
 import type {
@@ -9,18 +10,25 @@ import type {
 } from "@/transport/hosted-turn-client";
 
 type Proposal = typeof HostedTurnProposal.Type;
+
 type Processing = typeof HostedTurnProcessing.Type;
+
 type Turn =
   | Readonly<{ tag: "idle" | "waiting" | "error" | "quota" }>
   | Readonly<{ tag: "proposal"; value: Proposal }>
   | Readonly<{ tag: "polling" | "processing" | "uncertain"; value: Processing }>
   | Readonly<{ tag: "confirming" | "completed" | "unconfirmed"; value: Proposal }>;
+
 type Entry = Readonly<{ id: string; from: "user" | "assistant"; text: string }>;
+
 export type Conversation = Readonly<{ turn: Turn; history: ReadonlyArray<Entry> }>;
+
 export type SetConversation = (
   update: Conversation | ((previous: Conversation) => Conversation)
 ) => void;
+
 const visibleHistoryLimit = 40;
+
 export const initialConversation: Conversation = { turn: { tag: "idle" }, history: [] };
 
 const status: Readonly<Record<Turn["tag"], string>> = {
@@ -38,19 +46,24 @@ const status: Readonly<Record<Turn["tag"], string>> = {
   completed: "",
   unconfirmed: "No pudimos guardar la respuesta. Reintenta la conexión para continuar.",
 };
+
 const proposedTurn = (value: Proposal | Processing): Turn =>
   "status" in value ? { tag: "processing", value } : { tag: "proposal", value };
+
 const canSubmit = (turn: Turn): boolean =>
   ["idle", "error", "quota", "completed"].includes(turn.tag);
+
 const setTurn = (setConversation: SetConversation, turn: Turn): void =>
   setConversation((previous) => ({ ...previous, turn }));
 
 type Submission = Readonly<{ payload: typeof HostedTurnRequest.Type; entryId: string }>;
+
 type Commands = Readonly<{
   propose: Atom.AtomResultFn<Submission, void, never>;
   progress: Atom.AtomResultFn<Processing, void, never>;
   receipt: Atom.AtomResultFn<Proposal, void, never>;
 }>;
+
 const rejectSubmission = (
   setConversation: SetConversation,
   entryId: string,
@@ -63,32 +76,67 @@ const rejectSubmission = (
     }))
   );
 
-type Channel = Context.Service.Shape<HostedTurnClient>;
+type Channel = HostedTurnClient["Service"];
+
 const progressChecks = 12;
+
 const retainUncertain = (setConversation: SetConversation, reply: Proposal | Processing): void => {
   if ("status" in reply) setTurn(setConversation, { tag: "uncertain", value: reply });
 };
+
 export type ConversationLifetime = Readonly<{
   setConversation: SetConversation;
   clearDraft: () => void;
   active: () => boolean;
 }>;
+
+type TurnProgress = ReturnType<Channel["hostedTurn"]["progress"]>;
+
+const pollTurn = (
+  channel: Channel,
+  { setConversation, active }: Pick<ConversationLifetime, "setConversation" | "active">,
+  { current, attempt }: Readonly<{ current: Proposal | Processing; attempt: number }>
+): Effect.Effect<
+  Option.Option<Proposal | Processing>,
+  Effect.Error<TurnProgress>,
+  Effect.Services<TurnProgress>
+> => {
+  if (!("status" in current) || attempt >= progressChecks) {
+    return Effect.succeedSome(current);
+  }
+
+  const pending = current;
+
+  return Effect.gen(function* () {
+    if (!active()) return Option.none();
+    yield* Effect.sync(() => setTurn(setConversation, { tag: "polling", value: pending }));
+    yield* Effect.sleep("5 seconds");
+
+    if (!active()) return Option.none();
+    const next = yield* channel.hostedTurn.progress({ payload: { turnId: pending.turnId } });
+
+    return yield* pollTurn(
+      channel,
+      { setConversation, active },
+      { current: next, attempt: attempt + 1 }
+    );
+  });
+};
+
 const followTurn = (
   channel: Channel,
   initial: Proposal | Processing,
   { setConversation, active }: ConversationLifetime
 ): Effect.Effect<void> =>
   Effect.gen(function* () {
-    let current = initial;
-    for (let attempt = 0; "status" in current && attempt < progressChecks; attempt++) {
-      if (!active()) return;
-      const pending = current;
-      yield* Effect.sync(() => setTurn(setConversation, { tag: "polling", value: pending }));
-      yield* Effect.sleep("5 seconds");
-      if (!active()) return;
-      current = yield* channel.hostedTurn.progress({ payload: { turnId: current.turnId } });
-    }
-    yield* Effect.sync(() => setTurn(setConversation, proposedTurn(current)));
+    const settled = yield* pollTurn(
+      channel,
+      { setConversation, active },
+      { current: initial, attempt: 0 }
+    );
+
+    if (Option.isNone(settled)) return;
+    yield* Effect.sync(() => setTurn(setConversation, proposedTurn(settled.value)));
   }).pipe(Effect.catch(() => Effect.sync(() => retainUncertain(setConversation, initial))));
 
 export const conversationCommands = ({
@@ -102,6 +150,7 @@ export const conversationCommands = ({
     ({ payload, entryId }) => {
       const lifetime = capture();
       const { setConversation, clearDraft, active } = lifetime;
+
       return Effect.gen(function* () {
         if (!active()) return;
         const channel = yield* client;
@@ -115,6 +164,7 @@ export const conversationCommands = ({
   progress: client.runtime.fn<Processing>()(
     (pending) => {
       const { setConversation, active } = capture();
+
       return Effect.gen(function* () {
         if (!active()) return;
         const channel = yield* client;
@@ -131,6 +181,7 @@ export const conversationCommands = ({
   receipt: client.runtime.fn<Proposal>()(
     (proposal) => {
       const { setConversation, active } = capture();
+
       return Effect.gen(function* () {
         if (!active()) return;
         const channel = yield* client;
@@ -155,6 +206,7 @@ export type VisibleAgentReply = Readonly<{
   onVisible: () => void;
   decision: Option.Option<Readonly<{ confirm: () => void; discard: () => void }>>;
 }>;
+
 type ConversationView = Readonly<{
   history: ReadonlyArray<Entry>;
   reply: Option.Option<VisibleAgentReply>;
@@ -166,15 +218,21 @@ type ConversationView = Readonly<{
   canCheckProgress: boolean;
   canRetryDelivery: boolean;
 }>;
+
 const presentStatusKind = (tag: Turn["tag"]): ConversationView["statusKind"] => {
   if (tag === "waiting" || tag === "polling") return "waiting";
+
   if (tag === "uncertain" || tag === "processing" || tag === "error") return "warning";
+
   return "information";
 };
+
 const hasProposal = (turn: Turn): turn is Extract<Turn, { value: Proposal }> =>
   "value" in turn && !("status" in turn.value);
+
 const discardable = (turn: Turn): turn is Extract<Turn, { value: Proposal }> =>
   hasProposal(turn) && turn.tag === "completed" && turn.value.confirmation !== undefined;
+
 const presentReply = (
   turn: Turn,
   actions: Readonly<{ onVisible: () => void; confirm: () => void; discard: () => void }>
@@ -191,6 +249,7 @@ const presentReply = (
             : Option.some({ confirm: actions.confirm, discard: actions.discard }),
       })
     : Option.none();
+
 const presentConversation = (
   { turn, history }: Conversation,
   actions: Readonly<{ onVisible: () => void; confirm: () => void; discard: () => void }>
@@ -205,6 +264,7 @@ const presentConversation = (
   canCheckProgress: turn.tag === "processing" || turn.tag === "uncertain",
   canRetryDelivery: turn.tag === "unconfirmed",
 });
+
 export type HostedConversation = Readonly<{
   display: ConversationView;
   submit: (text: string) => void;
@@ -227,19 +287,24 @@ const submitConversation = ({
 }>): void => {
   if (!canSubmit(turn)) return;
   const decoded = Schema.decodeOption(HostedTurnRequest)({ text });
+
   if (Option.isNone(decoded)) {
     setTurn(setConversation, { tag: "error" });
+
     return;
   }
+
   const entry: Entry = {
-    id: Effect.runSync(browserSecureRandom.uuidV4().pipe(Effect.orDie)),
+    id: browserRuntime.runSync(browserSecureRandom.uuidV4().pipe(Effect.orDie)),
     from: "user",
     text: displayText,
   };
+
   const previous: ReadonlyArray<Entry> =
     turn.tag === "completed"
       ? [{ id: turn.value.turnId, from: "assistant", text: turn.value.text }]
       : [];
+
   setConversation((current) => ({
     turn: { tag: "waiting" },
     history: [...current.history, ...previous, entry].slice(-visibleHistoryLimit),
@@ -256,6 +321,7 @@ const archiveDiscarded = (setConversation: SetConversation, proposal: Proposal):
       text: "Cambio descartado. No se aplicó ningún cambio.",
     },
   ];
+
   setConversation((current) => ({
     turn: { tag: "idle" },
     history: [...current.history, ...archived].slice(-visibleHistoryLimit),
@@ -281,10 +347,12 @@ export const presentHostedConversation = ({
 }>): HostedConversation => {
   const { turn } = conversation;
   const isCurrent = (): boolean => active() && current().turn === turn;
+
   const deliver = (proposal: Proposal): void => {
     setTurn(setConversation, { tag: "confirming", value: proposal });
     acknowledge(proposal);
   };
+
   const confirm = (): void => {
     if (!isCurrent() || turn.tag !== "completed" || turn.value.confirmation === undefined) return;
     submitConversation({
@@ -295,12 +363,15 @@ export const presentHostedConversation = ({
       propose,
     });
   };
+
   const onVisible = (): void => {
     if (isCurrent() && turn.tag === "proposal") deliver(turn.value);
   };
+
   const discard = (): void => {
     if (isCurrent() && discardable(turn)) archiveDiscarded(setConversation, turn.value);
   };
+
   return {
     display: presentConversation(conversation, { onVisible, confirm, discard }),
     submit: (text): void => {

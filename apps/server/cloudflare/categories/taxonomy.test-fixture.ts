@@ -13,6 +13,7 @@ const Capture = Schema.Struct({
   id: Schema.String,
   caller: Schema.OptionFromNullOr(CategoryId),
 });
+
 export class CategoryProbe extends DurableObject<ConstructorParameters<typeof UserStore>[1]> {
   private readonly store;
   private readonly runtime;
@@ -31,13 +32,16 @@ export class CategoryProbe extends DurableObject<ConstructorParameters<typeof Us
   override fetch(request: Request): Promise<Response> {
     if (new URL(request.url).pathname !== "/fixture/capture") return this.store.fetch(request);
     const owns = (id: string): boolean => this.ctx.id.equals(this.env.USER_STORE.idFromName(id));
+
     return this.runtime.runPromise(
       Effect.gen(function* () {
         const input = yield* Effect.tryPromise(() => request.json()).pipe(
           Effect.flatMap(Schema.decodeUnknownEffect(Capture))
         );
+
         if (!owns(input.user)) return new Response(null, { status: 403 });
         const sql = yield* SqliteClient;
+
         const result = yield* sql.withTransaction(
           Effect.gen(function* () {
             const choice = yield* categorizeLocalCapture({
@@ -48,13 +52,25 @@ export class CategoryProbe extends DurableObject<ConstructorParameters<typeof Us
                 counterparty: Option.some("Mercado Central"),
               },
             });
+
             yield* sql`INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,category_revision,occurred_at_ms,created_at_ms)
           VALUES (${input.id},${input.user},'100','COP','outflow',${choice.categoryId},${choice.revision},1,1)`;
+
             return choice;
           })
         );
+
         return Response.json(result);
-      }).pipe(Effect.catchCause(() => Effect.succeed(new Response(null, { status: 409 }))))
+      }).pipe(
+        Effect.tapCause(() =>
+          Effect.logWarning({
+            component: "categories",
+            operation: "fixtureCapture",
+            outcome: "conflict",
+          })
+        ),
+        Effect.catchCause(() => Effect.succeed(new Response(null, { status: 409 })))
+      )
     );
   }
 }
@@ -64,9 +80,11 @@ export const observerWorker = {
     if (new URL(request.url).pathname === "/release") {
       return Promise.resolve(Response.json(currentCategoryRelease));
     }
+
     return request.json().then((raw) => {
       const reference = Schema.decodeUnknownSync(CategoryReference)(raw);
       const category = interpretCategory({ release: currentCategoryRelease, reference });
+
       return Option.isNone(category)
         ? new Response(null, { status: 409 })
         : Response.json(category.value);

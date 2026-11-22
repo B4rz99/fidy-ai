@@ -11,6 +11,7 @@ const introductions = {
       "Completa tus datos para continuar con la autorización en DaviPlata a través de Wompi.",
   },
 };
+
 export const SubscriptionIntroduction = ({
   method,
 }: Readonly<{ method: keyof typeof introductions }>): JSX.Element => (

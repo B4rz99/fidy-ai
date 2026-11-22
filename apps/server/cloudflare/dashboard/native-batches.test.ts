@@ -17,23 +17,35 @@ import { canonicalRequestProtection } from "../canonical-admission/contract";
 
 const init = "dashboard.initializeDashboard",
   edit = "dashboard.applyDashboardEdit";
+
 const objectSnapshot = "SELECT kind,revision,document_json FROM user_documents ORDER BY kind";
-const child = (operation: string, input: object = {}, index = 1): object => ({
+
+type BatchChild = Readonly<{ callId: string; operation: string; input: Schema.Json }>;
+
+type TitleEdit = Readonly<{ op: "set-title"; title: string }>;
+
+const child = (operation: string, input: Schema.Json = {}, index = 1): BatchChild => ({
   callId: "22570000-0000-4000-8000-" + String(index).padStart(12, "0"),
   operation,
   input,
 });
-const title = (name: string): object => ({ op: "set-title", title: name });
+
+const title = (name: string): TitleEdit => ({ op: "set-title", title: name });
+
 const setup = Effect.fn(function* () {
   const db = yield* makeNativeTransactionJourney(undefined, nativeBillingPlatform);
   const individual = nativeBrowserWrite(db);
-  const post = Effect.fn(function* (who: typeof alice, path: string, body: object) {
+
+  const post = Effect.fn(function* (who: typeof alice, path: string, body: Schema.Json) {
     yield* Effect.sleep(canonicalRequestProtection.intervalMs);
+
     return yield* individual(who, { method: "POST", path, body });
   });
-  const batch = Effect.fn(function* (who: typeof alice, ...calls: ReadonlyArray<object>) {
+
+  const batch = Effect.fn(function* (who: typeof alice, ...calls: ReadonlyArray<BatchChild>) {
     return yield* post(who, "/operations/atomic-batch", { calls });
   });
+
   const proof = Effect.fn(function* (scope: string, id: string) {
     const token = "fin_" + id.repeat(8) + "_" + "c".repeat(43);
     yield* seedNativePAT({
@@ -43,8 +55,10 @@ const setup = Effect.fn(function* () {
       scopes: [scope],
       current: yield* Clock.currentTimeMillis,
     });
-    return Effect.fn(function* (path: string, body: object) {
+
+    return Effect.fn(function* (path: string, body: Schema.Json) {
       yield* Effect.sleep(canonicalRequestProtection.intervalMs);
+
       return yield* native(() =>
         db.send(
           new Request("https://api.fidyapp.com" + path, {
@@ -56,6 +70,7 @@ const setup = Effect.fn(function* () {
       );
     });
   });
+
   const exec = Effect.fn(function* (
     user: typeof alice,
     sql: string,
@@ -63,8 +78,50 @@ const setup = Effect.fn(function* () {
   ) {
     return yield* native(() => db.owner(user.user).exec(sql, ...params));
   });
+
   return { db, post, batch, proof, exec };
 });
+
+type Harness = Effect.Success<ReturnType<typeof setup>>;
+
+type ScopedBatch = Effect.Success<ReturnType<Harness["proof"]>>;
+
+const browserRead = Effect.fn(function* (db: Harness["db"], path: string) {
+  expect((yield* native(() => db.browser(0, path))).status, path).toBe(200);
+});
+
+const refusedDashboardChange = Effect.fn(function* (
+  { batch, exec }: Harness,
+  [change, code]: readonly [Schema.Json, string]
+) {
+  const refused = yield* batch(alice, child(init), child(edit, { payload: change }, 2));
+  expect(refused.status).toBe(400);
+  expect(yield* native(() => refused.json())).toMatchObject({
+    error: { code, failedCallIndex: 1, operation: edit },
+  });
+  expect(yield* exec(alice, objectSnapshot)).toEqual([]);
+});
+
+const deniedScopeBatch = Effect.fn(function* (
+  exec: Harness["exec"],
+  [call, calls]: readonly [ScopedBatch, ReadonlyArray<BatchChild>]
+) {
+  const denied = yield* call("/operations/atomic-batch", { calls });
+  expect(denied.status).toBe(403);
+  expect(yield* native(() => denied.json())).toMatchObject({
+    error: { code: "scope_missing" },
+  });
+  expect(yield* exec(alice, objectSnapshot)).toEqual([]);
+  expect(yield* exec(alice, "SELECT count(*) n FROM transactions")).toEqual([{ n: 0 }]);
+});
+
+const userActionRequired = Effect.fn(function* (result: Response) {
+  expect(result.status).toBe(403);
+  expect(yield* native(() => result.json())).toMatchObject({
+    error: { code: "user_action_required" },
+  });
+});
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "publishes one first edit, returns retained revisions through single and batch initialization and keeps both Users' documents independent",
@@ -107,15 +164,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* native(() => other.json())).toMatchObject({
           data: { results: [{ output: { data: { title: "Independiente" } } }] },
         });
-        for (const path of [
-          "/dashboard/catalog",
-          "/quota",
-          "/subscription/offers",
-          "/subscription/upgrade-url",
-        ]) {
-          expect((yield* native(() => db.browser(0, path))).status, path).toBe(200);
-        }
+
+        yield* Effect.forEach(
+          ["/dashboard/catalog", "/quota", "/subscription/offers", "/subscription/upgrade-url"],
+          (path) => browserRead(db, path),
+          { discard: true }
+        );
+
         expect(yield* exec(alice, objectSnapshot)).toEqual(before);
+
         const wrong = yield* native(() =>
           db.send(
             new Request("https://api.fidyapp.com/operations/atomic-batch", {
@@ -130,6 +187,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             })
           )
         );
+
         expect(wrong.ok).toBe(false);
         expect(yield* native(() => wrong.text())).not.toContain("Privado");
         expect(yield* exec(alice, objectSnapshot)).toEqual(before);
@@ -139,18 +197,21 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     "rolls back the first Dashboard child on a conflicting document, missing Widget or missing mandatory Audit",
     () =>
       Effect.gen(function* () {
-        const { post, batch, exec } = yield* setup();
-        for (const [change, code] of [
-          [title("colisión"), "validation_failed"],
-          [{ op: "remove-widget", widgetId: "30000000-0000-4000-8000-000000000099" }, "not_found"],
-        ] as const) {
-          const refused = yield* batch(alice, child(init), child(edit, { payload: change }, 2));
-          expect(refused.status).toBe(400);
-          expect(yield* native(() => refused.json())).toMatchObject({
-            error: { code, failedCallIndex: 1, operation: edit },
-          });
-          expect(yield* exec(alice, objectSnapshot)).toEqual([]);
-        }
+        const harness = yield* setup();
+        const { post, batch, exec } = harness;
+
+        yield* Effect.forEach(
+          [
+            [title("colisión"), "validation_failed"],
+            [
+              { op: "remove-widget", widgetId: "30000000-0000-4000-8000-000000000099" },
+              "not_found",
+            ],
+          ] as const,
+          (refusal) => refusedDashboardChange(harness, refusal),
+          { discard: true }
+        );
+
         yield* exec(
           alice,
           "CREATE TRIGGER deny_dashboard_audit BEFORE INSERT ON audit_entries WHEN NEW.operation='dashboard.initializeDashboard' BEGIN SELECT RAISE(IGNORE); END"
@@ -171,9 +232,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const { proof, exec } = yield* setup();
+
         const read = yield* proof("read", "r"),
           write = yield* proof("write", "w"),
           dashboard = yield* proof("dashboard", "d");
+
         const first = child(init),
           capture = child(
             "transactions.createTransaction",
@@ -187,19 +250,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             },
             2
           );
-        for (const [call, calls] of [
-          [read, [first]],
-          [write, [capture, first]],
-          [dashboard, [first, capture]],
-        ] as const) {
-          const denied = yield* call("/operations/atomic-batch", { calls });
-          expect(denied.status).toBe(403);
-          expect(yield* native(() => denied.json())).toMatchObject({
-            error: { code: "scope_missing" },
-          });
-          expect(yield* exec(alice, objectSnapshot)).toEqual([]);
-          expect(yield* exec(alice, "SELECT count(*) n FROM transactions")).toEqual([{ n: 0 }]);
-        }
+
+        yield* Effect.forEach(
+          [
+            [read, [first]],
+            [write, [capture, first]],
+            [dashboard, [first, capture]],
+          ] as const,
+          (denial) => deniedScopeBatch(exec, denial),
+          { discard: true }
+        );
+
         expect((yield* dashboard("/dashboard/initialize", {})).status).toBe(200);
         expect((yield* dashboard("/operations/atomic-batch", { calls: [first] })).status).toBe(200);
         expect(
@@ -223,9 +284,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const { proof, post, batch, exec } = yield* setup();
         const dashboard = yield* proof("dashboard", "d");
+
         const disclosure = yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(
           webSignupDisclosure()
         );
+
         yield* exec(
           alice,
           "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms,disclosure_json) VALUES(?,?,'processing_grant',?,?)",
@@ -235,21 +298,23 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           disclosure
         );
         expect((yield* post(alice, "/web/consent/withdraw", { confirm: true })).status).toBe(200);
-        for (const result of [
+
+        const signedOut = [
           yield* post(alice, "/dashboard/initialize", {}),
           yield* batch(alice, child(init)),
-        ]) {
-          expect(result.status).toBe(401);
-        }
-        for (const result of [
+        ];
+
+        expect(signedOut.map((result) => result.status)).toEqual([401, 401]);
+
+        const actionRequired = [
           yield* dashboard("/dashboard/initialize", {}),
           yield* dashboard("/operations/atomic-batch", { calls: [child(init)] }),
-        ]) {
-          expect(result.status).toBe(403);
-          expect(yield* native(() => result.json())).toMatchObject({
-            error: { code: "user_action_required" },
-          });
-        }
+        ];
+
+        yield* Effect.forEach(actionRequired, (result) => userActionRequired(result), {
+          discard: true,
+        });
+
         expect(yield* exec(alice, objectSnapshot)).toEqual([]);
         expect(
           yield* exec(
@@ -269,9 +334,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           alice,
           "CREATE TRIGGER revoke_dashboard AFTER INSERT ON audit_entries WHEN NEW.operation='dashboard.initializeDashboard' AND NEW.outcome='accepted' BEGIN UPDATE pats SET revoked_at_ms=NEW.occurred_at_ms WHERE id=NEW.pat_id; END"
         );
+
         const result = yield* batched
           ? dashboard("/operations/atomic-batch", { calls: [child(init)] })
           : dashboard("/dashboard/initialize", {});
+
         expect(result.ok).toBe(false);
         expect(yield* exec(alice, objectSnapshot)).toEqual([]);
         expect(

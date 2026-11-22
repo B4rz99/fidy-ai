@@ -2,7 +2,7 @@ import { PendingRead } from "@/ui/components/pending-read";
 
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import { type JSX, useState } from "react";
 import type { CanonicalSuccess } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
@@ -33,6 +33,7 @@ import {
 } from "./model";
 
 type Series = CanonicalSuccess<"recurring.listRecurringSeries">["data"]["series"][number];
+
 const proposal = (series: Series, today: string, timeZone: PlanInput["timeZone"]): PlanInput => ({
   name: series.counterparty,
   kind: "expense",
@@ -44,6 +45,7 @@ const proposal = (series: Series, today: string, timeZone: PlanInput["timeZone"]
   timeZone,
   counterparty: series.counterparty,
 });
+
 const SuggestionRow = ({
   series,
   view,
@@ -87,6 +89,7 @@ const SuggestionRow = ({
     <SuggestionLink series={series} view={view} save={save} disabled={disabled} />
   </article>
 );
+
 type SuggestionsProps = Readonly<{
   view: Workspace;
   save: Save;
@@ -99,6 +102,7 @@ type SuggestionsProps = Readonly<{
 
 export const Suggestions = (props: SuggestionsProps): JSX.Element => {
   const [requested, setRequested] = useState(() => Option.isSome(props.cursor));
+
   return (
     <details
       data-recurring-slot="suggestions"
@@ -133,14 +137,17 @@ const LoadedSuggestions = ({
   next,
 }: SuggestionsProps): JSX.Element => {
   const client = useRouter().options.context.apiClient;
+
   const [resource] = useState(() =>
     client.query("recurring", "listRecurringSeries", {
       query: Option.isSome(cursor) ? { cursor: cursor.value } : {},
     })
   );
+
   const state = useAtomValue(resource).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(resource);
-  if (state._tag === "Failure") {
+
+  if (Predicate.isTagged(state, "Failure")) {
     return (
       <div role="alert">
         No pudimos leer las sugerencias.{" "}
@@ -150,7 +157,11 @@ const LoadedSuggestions = ({
       </div>
     );
   }
-  if (state._tag !== "Ready") return <PendingRead label="Cargando patrones históricos" />;
+
+  if (!Predicate.isTagged(state, "Ready")) {
+    return <PendingRead label="Cargando patrones históricos" />;
+  }
+
   return (
     <SuggestionResults
       data={state.value.data}
@@ -177,6 +188,7 @@ const allPlanStatus = {
   label: "Todos",
   empty: "No hay recurrentes para estos filtros",
 };
+
 const planStatuses = [
   allPlanStatus,
   { value: "scheduled", label: "Programados", empty: "No tienes recurrentes programados" },
@@ -200,6 +212,7 @@ type ManagementProps = Readonly<{
   create: () => void;
   applyFilters: (filters: Filters) => void;
 }>;
+
 export const PlanManagement = ({
   view,
   open,
@@ -212,11 +225,13 @@ export const PlanManagement = ({
   applyFilters,
 }: ManagementProps): JSX.Element => {
   const [status, setStatus] = useState(allPlanStatus);
+
   const visiblePlans = view.document.plans.filter(
     (plan) =>
       (status.value === "all" || statusFor(plan) === status.value) &&
       matchesPlanFilters(plan, filters)
   );
+
   return (
     <section data-recurring-slot="plan-management">
       <PlanManagementHeader status={status} select={setStatus} />
@@ -284,14 +299,17 @@ type ManagementEmptyProps = Pick<ManagementProps, "readState" | "disabled" | "cr
     filtered: boolean;
     reset: () => void;
   }>;
+
+type PlanEmptyCopy = Readonly<{
+  title: string;
+  description: string;
+}>;
+
 const planEmptyCopy = ({
   hasPlans,
   filtered,
   status,
-}: Pick<ManagementEmptyProps, "hasPlans" | "filtered" | "status">): Readonly<{
-  title: string;
-  description: string;
-}> => {
+}: Pick<ManagementEmptyProps, "hasPlans" | "filtered" | "status">): PlanEmptyCopy => {
   if (!hasPlans) {
     return {
       title: "Aún no tienes recurrentes",
@@ -299,17 +317,20 @@ const planEmptyCopy = ({
         "Crea un recurrente para organizar tus próximos ingresos, gastos o transferencias.",
     };
   }
+
   if (filtered) {
     return {
       title: "Sin resultados para estos filtros",
       description: `Estado del plan: ${status.label}. Limpia los filtros para ver todos tus recurrentes.`,
     };
   }
+
   return {
     title: status.empty,
     description: "Prueba otro estado o consulta todos tus recurrentes.",
   };
 };
+
 const PlanManagementEmpty = ({
   status,
   readState,
@@ -328,7 +349,9 @@ const PlanManagementEmpty = ({
       </p>
     );
   }
+
   const copy = planEmptyCopy({ hasPlans, filtered, status });
+
   return (
     <Empty>
       <EmptyHeader>
@@ -362,6 +385,7 @@ const SuggestionLink = ({
   disabled,
 }: Readonly<{ series: Series; view: Workspace; save: Save; disabled: boolean }>): JSX.Element => {
   const [planId, setPlanId] = useState("");
+
   return (
     <>
       <div className="flex flex-wrap gap-2">
@@ -385,6 +409,7 @@ const SuggestionLink = ({
           disabled={disabled || planId === ""}
           onClick={() => {
             const plan = view.document.plans.find((entry) => entry.id === planId);
+
             if (plan !== undefined) {
               save({ kind: "suggestion", seriesId: series.id, action: "link", planId: plan.id });
             }
@@ -450,6 +475,7 @@ const SuggestionResults = ({
     <RestoreSuggestions view={view} save={save} disabled={disabled} />
   </div>
 );
+
 const RestoreSuggestions = ({
   view,
   save,
@@ -479,15 +505,22 @@ const RestoreSuggestions = ({
 
 const matchesPlanFilters = (plan: Plan, filters: Filters): boolean => {
   const input = currentPlan(plan);
+
   return Object.entries(filters).every(([key, value]) => {
     if (key === "search") return input.name.toLowerCase().includes(value.toLowerCase());
+
     if (key === "kind") return input.kind === value;
+
     if (key === "frequency") return input.frequency === value;
+
     if (key === "currency") return input.currency === value;
+
     if (key === "categoryId") return input.categoryId === value;
+
     return true;
   });
 };
+
 const PlanRow = ({
   plan,
   open,
@@ -502,6 +535,7 @@ const PlanRow = ({
   status: ReturnType<typeof planStatus>;
 }>): JSX.Element => {
   const input = currentPlan(plan);
+
   return (
     <div className="@container flex min-w-0 items-center gap-2 border-b pr-4 transition-colors last:border-b-0 hover:bg-muted/50">
       <button
@@ -558,6 +592,7 @@ const SuggestionStatus = ({
   const count = data.series.filter(
     (series) => !view.document.suggestions.some((decision) => decision.seriesId === series.id)
   ).length;
+
   return (
     <div className="grid gap-4">
       <h2 className="text-sm font-medium">Revisión de patrones</h2>
@@ -598,6 +633,7 @@ const SuggestionStatus = ({
     </div>
   );
 };
+
 const EvaluationExplanation = ({
   evaluation,
   count,
@@ -606,6 +642,7 @@ const EvaluationExplanation = ({
   count: number;
 }>): JSX.Element => {
   const countLabel = count === 1 ? "1 sugerencia nueva" : `${count} sugerencias nuevas`;
+
   switch (evaluation.kind) {
     case "not-evaluated":
       return (

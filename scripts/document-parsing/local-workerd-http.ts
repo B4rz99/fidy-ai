@@ -2,41 +2,55 @@ import { Data, Effect, Layer, ManagedRuntime, Option, Schema, Stream } from "eff
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest } from "effect/http";
 
 const maximumResponseBytes = 1_048_576;
+
 const noContentStatus = 204;
+
 const resetContentStatus = 205;
+
 const notModifiedStatus = 304;
+
 const noBodyStatuses = new Set([noContentStatus, resetContentStatus, notModifiedStatus]);
 
 const ownResponseBody = (response: Response, signal: Option.Option<AbortSignal>): Response => {
   if (response.body === null) return response;
+
   const reader: Pick<
     ReadableStreamDefaultReader<unknown>,
     "read" | "cancel" | "releaseLock"
   > = response.body.getReader();
+
   let released = false;
+
   const release = (): void => {
     if (released) return;
     released = true;
+
     if (Option.isSome(signal)) signal.value.removeEventListener("abort", cancel);
     reader.releaseLock();
   };
+
   const cancel = (): void => {
     if (released) return;
     reader.cancel().catch(() => undefined);
     release();
   };
+
   if (Option.isSome(signal)) {
     signal.value.addEventListener("abort", cancel, { once: true });
+
     if (signal.value.aborted) cancel();
   }
+
   if (noBodyStatuses.has(response.status)) {
     cancel();
+
     return new Response(null, {
       status: response.status,
       statusText: response.statusText,
       headers: response.headers,
     });
   }
+
   const body = new ReadableStream<Uint8Array>(
     {
       pull: (controller): Promise<void> =>
@@ -44,6 +58,7 @@ const ownResponseBody = (response: Response, signal: Option.Option<AbortSignal>)
           .read()
           .then((chunk) => {
             if (released) return;
+
             if (chunk.done) {
               release();
               controller.close();
@@ -60,6 +75,7 @@ const ownResponseBody = (response: Response, signal: Option.Option<AbortSignal>)
     },
     { highWaterMark: 0 }
   );
+
   return new Response(body, {
     status: response.status,
     statusText: response.statusText,
@@ -81,6 +97,7 @@ export const ProofHttpLive = HttpClient.layerMergedContext(
     HttpClient.transformResponse(client, (response) =>
       Effect.gen(function* () {
         const native = yield* FetchHttpClient.Fetch;
+
         return yield* response.pipe(
           Effect.provideService(FetchHttpClient.Fetch, ownedNativeFetch(native))
         );
@@ -118,6 +135,7 @@ const requestProof = (
     Effect.gen(function* () {
       const baseUrl = Option.getOrElse(origin, () => `http://127.0.0.1:${options.port}`);
       const url = new URL(options.path, baseUrl).href;
+
       const request =
         options.method === "GET"
           ? HttpClientRequest.get(url)
@@ -125,27 +143,35 @@ const requestProof = (
               HttpClientRequest.setBody(HttpBody.raw(options.body)),
               HttpClientRequest.setHeaders(options.headers)
             );
+
       const client = yield* HttpClient.HttpClient;
       const response = yield* HttpClient.withScope(client).execute(request);
+
       if (noBodyStatuses.has(response.status)) {
         return new Response(null, { status: response.status, headers: response.headers });
       }
+
       let bytes = 0;
       const chunks: Array<Uint8Array> = [];
       yield* Stream.runForEach(response.stream, (chunk) => {
         bytes += chunk.byteLength;
+
         if (bytes > maximumResponseBytes) {
           return Effect.fail(new WorkerdResponseTooLarge({ maximumBytes: maximumResponseBytes }));
         }
+
         if (chunk.byteLength > 0) chunks.push(chunk);
+
         return Effect.void;
       });
       const body = new Uint8Array(bytes);
       let offset = 0;
+
       for (const chunk of chunks) {
         body.set(chunk, offset);
         offset += chunk.byteLength;
       }
+
       return new Response(body, { status: response.status, headers: response.headers });
     }).pipe(
       Effect.scoped,

@@ -6,6 +6,7 @@ export const amountInCentsForBilling = (
   amount: Readonly<BigDecimal.BigDecimal>
 ): Effect.Effect<number> => {
   const [whole = "0", fraction = ""] = encodeMoneyAmount(amount).split(".");
+
   return Effect.succeed(Number(whole) * 100 + Number(fraction.padEnd(2, "0")));
 };
 
@@ -35,6 +36,7 @@ export const approvingFinalizedAtFor = (
     (transaction) =>
       Option.contains(transaction.status, "APPROVED") && Option.isSome(transaction.finalizedAt)
   );
+
   return Effect.succeed(approving === undefined ? Option.none() : approving.finalizedAt);
 };
 
@@ -45,10 +47,13 @@ type BillingTransactionStatusInput = Readonly<{
 
 const nextTransactionStatus = (input: BillingTransactionStatusInput): WompiBillingStatus => {
   if (input.observed === "APPROVED") return "APPROVED";
+
   if (Option.isSome(input.current)) {
     if (input.current.value === "APPROVED") return "APPROVED";
+
     if (terminalNegativeStatuses[input.current.value]) return input.current.value;
   }
+
   return input.observed;
 };
 
@@ -64,6 +69,7 @@ type BillingAttemptOutcomeInput = Readonly<{
 
 const nextBillingAttemptOutcome = (input: BillingAttemptOutcomeInput): BillingAttemptStatus => {
   if (input.current === "succeeded") return "succeeded";
+
   if (
     input.transactions.some(
       (transaction) =>
@@ -72,8 +78,11 @@ const nextBillingAttemptOutcome = (input: BillingAttemptOutcomeInput): BillingAt
   ) {
     return "succeeded";
   }
+
   if (input.current === "failed") return "failed";
+
   if (input.transactions.length === 0) return "pending";
+
   if (
     !input.transactions.every(
       (transaction) =>
@@ -82,13 +91,17 @@ const nextBillingAttemptOutcome = (input: BillingAttemptOutcomeInput): BillingAt
   ) {
     return "pending";
   }
+
   if (input.transactions.some((transaction) => Option.isNone(transaction.negativeObservedAt))) {
     return "pending";
   }
+
   const earliest = input.transactions
     .flatMap((transaction) => Option.toArray(transaction.negativeObservedAt))
     .reduce((candidate, observedAt) => DateTime.min(candidate, observedAt));
+
   const elapsed = DateTime.distance(earliest, input.observedAt);
+
   return Duration.toMillis(elapsed) >= Duration.toMillis(wompiRetryOpportunity)
     ? "failed"
     : "pending";

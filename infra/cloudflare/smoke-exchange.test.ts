@@ -6,6 +6,7 @@ import { describe, expect } from "vitest";
 import { checkSmokeExchange, exchangeSmoke } from "./smoke-exchange";
 
 const headers = { "x-fidy-smoke-proof": "a".repeat(64) };
+
 const exchange = (
   response: Response,
   body: Option.Option<string>
@@ -19,18 +20,20 @@ const exchange = (
       HttpClient.make((request) => Effect.succeed(HttpClientResponse.fromWeb(request, response)))
     )
   );
+
 const identity = {
   workerVersionId: "dc8dcd28-271b-4367-9840-6c244f84cb40",
   gitRevision: "0123456789abcdef0123456789abcdef01234567",
   contractDigest: "a".repeat(64),
 };
 
-for (const method of ["readiness", "synthetic"] as const) {
+(["readiness", "synthetic"] as const).forEach((method) => {
   const body = method === "readiness" ? Option.none<string>() : Option.some("{}");
   describe(`${method} smoke exchange`, () => {
     it.effect("rejects actual streamed overflow and cancels the owned reader before decoding", () =>
       Effect.gen(function* () {
         let cancelled = false;
+
         const response = new Response(
           new ReadableStream<Uint8Array>({
             pull(controller): void {
@@ -42,6 +45,7 @@ for (const method of ["readiness", "synthetic"] as const) {
           }),
           { headers: { "content-length": "1" } }
         );
+
         const result = yield* Effect.exit(exchange(response, body));
         expect(Exit.isFailure(result)).toBe(true);
         expect(cancelled).toBe(true);
@@ -61,15 +65,24 @@ for (const method of ["readiness", "synthetic"] as const) {
             }),
             body
           );
+
           expect(Option.isNone(result.result)).toBe(true);
           expect(Option.isNone(result.failureStage)).toBe(true);
+
           const checked = yield* Effect.exit(
-            checkSmokeExchange(result, { public: identity, core: identity, replayIdentity: false })
+            checkSmokeExchange(result, {
+              public: identity,
+              core: identity,
+              replayIdentity: false,
+            })
           );
+
           expect(Exit.isFailure(checked)).toBe(true);
+
           const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
             checked
           );
+
           expect(encoded).not.toContain("private-provider");
         })
     );
@@ -79,6 +92,7 @@ for (const method of ["readiness", "synthetic"] as const) {
         Effect.gen(function* () {
           let cancelled = false;
           let reading = false;
+
           const response = new Response(
             new ReadableStream<Uint8Array>({
               pull(): void {
@@ -89,6 +103,7 @@ for (const method of ["readiness", "synthetic"] as const) {
               },
             })
           );
+
           const fiber = yield* Effect.forkChild(exchange(response, body));
           yield* Effect.yieldNow;
           expect(reading).toBe(true);
@@ -109,6 +124,7 @@ for (const method of ["readiness", "synthetic"] as const) {
               },
             })
           );
+
           const result = yield* Effect.exit(exchange(response, body));
           expect(Exit.isFailure(result)).toBe(true);
           const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result);
@@ -116,7 +132,7 @@ for (const method of ["readiness", "synthetic"] as const) {
         })
     );
   });
-}
+});
 
 it.effect("allows bounded sandbox authentication to exceed the ordinary release deadline", () =>
   Effect.gen(function* () {
@@ -129,16 +145,19 @@ it.effect("allows bounded sandbox authentication to exceed the ordinary release 
       expectedContractDigest: identity.contractDigest,
       verifyBancolombiaSandbox: true,
     });
+
     const client = HttpClient.make((request) =>
       Effect.sleep("9 seconds").pipe(
         Effect.as(HttpClientResponse.fromWeb(request, Response.json({})))
       )
     );
+
     const fiber = yield* Effect.forkChild(
       exchangeSmoke({ query: "", headers, body: Option.some(body) }).pipe(
         Effect.provideService(HttpClient.HttpClient, client)
       )
     );
+
     yield* TestClock.adjust("9 seconds");
     const result = yield* Fiber.join(fiber);
     expect(result.status).toBe(200);

@@ -1,8 +1,9 @@
 import { Option, Predicate, Schema } from "effect";
 import referenceText from "../../public/reference/openapi.json?raw";
-import { ReferenceArtifact, ReferenceOperation } from "./reference-contract";
+import { ReferenceArtifact, ReferenceOperation, type ReferencePageId } from "./reference-contract";
 
 const Content = Schema.Record(Schema.String, Schema.Struct({ schema: Schema.JsonObject }));
+
 const Parameter = Schema.Struct({
   name: Schema.String,
   in: Schema.Literals(["path", "query", "header", "cookie"]),
@@ -10,6 +11,7 @@ const Parameter = Schema.Struct({
   description: Schema.optionalKey(Schema.String),
   schema: Schema.JsonObject,
 });
+
 const Operation = Schema.Struct({
   ...ReferenceOperation.fields,
   parameters: Schema.Array(Parameter),
@@ -21,6 +23,7 @@ const Operation = Schema.Struct({
     Schema.Struct({ description: Schema.String, content: Schema.optionalKey(Content) })
   ),
 });
+
 const document = Schema.decodeUnknownSync(Schema.fromJsonString(ReferenceArtifact))(referenceText);
 
 export const referenceOperations = Object.entries(document.paths)
@@ -28,6 +31,7 @@ export const referenceOperations = Object.entries(document.paths)
     Object.entries(methods).map(([method, raw]) => {
       const declaration = Schema.decodeUnknownSync(Operation)(raw);
       const [domain, name] = declaration.operationId.split(".");
+
       return { path, method: method.toUpperCase(), raw, declaration, domain, name };
     })
   )
@@ -35,11 +39,22 @@ export const referenceOperations = Object.entries(document.paths)
 
 export const referenceSchemas = Object.entries(document.components.schemas);
 
-export const operationFor = (id: string): (typeof referenceOperations)[number] => {
-  const operation = referenceOperations.find(
-    (entry) => `reference/${entry.declaration.operationId.toLowerCase()}` === id
-  );
+const operationPages = new Map(
+  referenceOperations.map(
+    (entry): [typeof ReferencePageId.Type, (typeof referenceOperations)[number]] => [
+      `reference/${entry.declaration.operationId.toLowerCase()}`,
+      entry,
+    ]
+  )
+);
+
+export const operationFor = (
+  id: typeof ReferencePageId.Type
+): (typeof referenceOperations)[number] => {
+  const operation = operationPages.get(id);
+
   if (!operation) throw new Error(`Missing published operation: ${id}`);
+
   return operation;
 };
 
@@ -53,35 +68,47 @@ const SchemaView = Schema.Struct({
   allOf: Schema.optionalKey(Schema.Array(Schema.JsonObject)),
   description: Schema.optionalKey(Schema.String),
 });
+
 export type SchemaView = typeof SchemaView.Type;
 
 export const schemaView = Schema.decodeUnknownSync(SchemaView);
 
 export const schemaTarget = (schema: Schema.JsonObject): Option.Option<string> => {
   const reference = schemaView(schema).$ref;
+
   if (!reference) return Option.none();
   const prefix = "#/components/schemas/";
+
   if (!reference.startsWith(prefix)) throw new Error("Unsupported public schema reference");
   const name = reference.slice(prefix.length);
+
   if (!Object.hasOwn(document.components.schemas, name)) {
     throw new Error(`Missing public schema: ${name}`);
   }
+
   return Option.some(name);
 };
 
 export const resolveSchema = (schema: Schema.JsonObject): Schema.JsonObject => {
   const target = schemaTarget(schema);
+
   return Option.isSome(target) ? (document.components.schemas[target.value] ?? schema) : schema;
 };
 
 export const schemaType = (schema: Schema.JsonObject): string => {
   const view = schemaView(schema);
   const target = schemaTarget(schema);
+
   if (Option.isSome(target)) return target.value;
+
   if (view.type) return Predicate.isString(view.type) ? view.type : view.type.join(" | ");
+
   if (view.anyOf) return "anyOf";
+
   if (view.oneOf) return "oneOf";
+
   if (view.allOf) return "allOf";
+
   return "JSON Schema";
 };
 
@@ -89,6 +116,7 @@ export const schemaProperties = (
   schema: Schema.JsonObject
 ): ReadonlyArray<{ name: string; schema: Schema.JsonObject; required: boolean }> => {
   const view = schemaView(resolveSchema(schema));
+
   return Object.entries(view.properties ?? {})
     .map(([name, property]) => ({
       name,

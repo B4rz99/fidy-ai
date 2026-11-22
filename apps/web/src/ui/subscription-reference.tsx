@@ -8,9 +8,12 @@ import { SubscriptionInputDecoration } from "@/ui/components/subscription-input-
 import "@/ui/components/subscription.css";
 
 const examplePeriods = ["Semanal", "Mensual", "Anual"] as const;
+
 const exampleMethods = ["Tarjeta", "Nequi", "DaviPlata"] as const;
+
 const PeriodExample = (): JSX.Element => {
   const [period, select] = useState("");
+
   return (
     <div className="subscription-offers" aria-label="Períodos de ejemplo">
       {examplePeriods.map((choice) => (
@@ -32,8 +35,10 @@ const PeriodExample = (): JSX.Element => {
     </div>
   );
 };
+
 const MethodExample = (): JSX.Element => {
   const [method, select] = useState("Tarjeta");
+
   return (
     <div className="subscription-methods" aria-label="Métodos de ejemplo">
       {exampleMethods.map((choice) => (
@@ -55,8 +60,10 @@ const MethodExample = (): JSX.Element => {
     </div>
   );
 };
+
 const ConsentExample = (): JSX.Element => {
   const [accepted, accept] = useState(false);
+
   return (
     <div className="subscription-form">
       <label className="subscription-field" htmlFor="subscription-reference-email">
@@ -81,6 +88,7 @@ const ConsentExample = (): JSX.Element => {
     </div>
   );
 };
+
 export const SubscriptionReference = (): JSX.Element => (
   <section id="subscription" aria-labelledby="subscription-reference-title">
     <p className="mb-4 text-sm text-muted-foreground">

@@ -11,6 +11,7 @@ const guard = (authority: Option.Option<Authority>): string =>
     onNone: () => "",
     onSome: ({ table, predicate }) => ` AND EXISTS (SELECT 1 FROM ${table} WHERE ${predicate})`,
   });
+
 const bindings = (
   authority: Option.Option<Authority>
 ): ReadonlyArray<string | number | Uint8Array> =>
@@ -36,13 +37,17 @@ export const subscriptionStandingQuery = (
     (Readonly<{ userId: string }> | Readonly<{ users: OwnedStatement }>)
 ): OwnedStatement => {
   const { authority } = input;
+
   if ("userId" in input && Option.isNone(Schema.decodeOption(UserId)(input.userId))) {
     return { sql: "SELECT NULL WHERE 0", params: [] };
   }
+
   const users =
     "users" in input ? input.users : { sql: "SELECT ? AS userId", params: [input.userId] };
+
   const trial = selectedUserTrialPeriodQuery({ sql: "SELECT userId FROM owner", params: [] });
   const grant = activeProGrantSelection({ sql: "SELECT userId FROM owner", params: [] });
+
   return {
     sql: `WITH owner AS MATERIALIZED (${users.sql}) SELECT ${grant.sql} AS has_pro_grant, t.startedAtMs AS started_at_ms, t.endsAtMs AS trial_ends_at_ms,
       s.price_id, a.amount, a.currency, a.billing_period, a.service_market, a.tax_treatment,
@@ -66,8 +71,10 @@ export const subscriptionAttemptsQuery = (
     (Readonly<{ userId: string }> | Readonly<{ users: OwnedStatement }>)
 ): OwnedStatement => {
   const { authority } = input;
+
   const users =
     "users" in input ? input.users : { sql: "SELECT ? AS userId", params: [input.userId] };
+
   return {
     sql: `SELECT a.id, a.price_id, a.amount, a.currency, a.billing_period,
     a.service_market, a.tax_treatment, a.time_zone, a.created_at_ms, a.status, a.finalized_at_ms,

@@ -26,6 +26,7 @@ type EditorProps = Readonly<{
   saveState: SaveState;
   writeAction: "save" | "delete";
 }>;
+
 const AmountField = ({
   amount,
   onAmount,
@@ -41,6 +42,7 @@ const AmountField = ({
     />
   </div>
 );
+
 const GroupCurrencyField = ({
   currency,
   disabled,
@@ -63,6 +65,7 @@ const GroupCurrencyField = ({
     />
   </div>
 );
+
 const GroupField = ({
   group,
   groups,
@@ -104,12 +107,8 @@ const GroupField = ({
     </p>
   </>
 );
-const useEditor = ({
-  draft,
-  groupCurrencies,
-  disabled,
-  onSubmit,
-}: Pick<EditorProps, "draft" | "groupCurrencies" | "disabled" | "onSubmit">): Readonly<{
+
+type EditorForm = Readonly<{
   amount: string;
   setAmount: (value: string) => void;
   currency: string;
@@ -117,13 +116,21 @@ const useEditor = ({
   group: string;
   onGroup: (value: string) => void;
   submit: (event: FormEvent<HTMLFormElement>) => void;
-}> => {
+}>;
+
+const useEditor = ({
+  draft,
+  groupCurrencies,
+  disabled,
+  onSubmit,
+}: Pick<EditorProps, "draft" | "groupCurrencies" | "disabled" | "onSubmit">): EditorForm => {
   const [amount, setAmount] = useState(() =>
     Option.match(draft.budget, {
       onNone: () => "",
       onSome: (budget) => BigDecimal.format(budget.cap.amount),
     })
   );
+
   const [currency, setCurrency] = useState(() =>
     Option.match(draft.budget, {
       onNone: () =>
@@ -132,14 +139,17 @@ const useEditor = ({
       onSome: (budget) => budget.cap.currency,
     })
   );
+
   const [group, setGroup] = useState(() =>
     Option.match(draft.budget, {
       onNone: () => defaultBudgetGroup(draft.category.label),
       onSome: (budget) => budget.groupName ?? defaultBudgetGroup(draft.category.label),
     })
   );
+
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
+
     if (!disabled) {
       onSubmit({
         target: draft,
@@ -152,11 +162,14 @@ const useEditor = ({
       });
     }
   };
+
   const onGroup = (next: string): void => {
     setGroup(next);
     const inherited = groupCurrencies.find((entry) => entry.group === next);
+
     if (inherited !== undefined) setCurrency(inherited.currency);
   };
+
   return { amount, setAmount, currency, setCurrency, group, onGroup, submit };
 };
 
@@ -176,18 +189,21 @@ export const BudgetEditor = ({
   const [deletionStep, setDeletionStep] = useState<"editing" | "reviewing" | "returning">(
     "editing"
   );
+
   const focusRemoval = useCallback<RefCallback<HTMLButtonElement>>(
     (button): void => {
       if (deletionStep === "returning") button?.focus();
     },
     [deletionStep]
   );
+
   const editor = useEditor({
     draft,
     groupCurrencies,
     disabled,
     onSubmit,
   });
+
   if (deletionStep === "reviewing") {
     return (
       <BudgetDeletion
@@ -201,6 +217,7 @@ export const BudgetEditor = ({
       />
     );
   }
+
   return (
     <EditorForm
       draft={draft}

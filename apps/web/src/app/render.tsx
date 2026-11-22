@@ -12,6 +12,7 @@ export const mountWebApplication = ({
   initial: InitialBrowserSession;
 }>): void => {
   const disposeDefectListeners = installBrowserDefectListeners(window);
+
   if (import.meta.env.DEV) import.meta.hot.dispose(disposeDefectListeners);
   createRoot(root, {
     onCaughtError: () => reportBrowserDefect("render_caught"),

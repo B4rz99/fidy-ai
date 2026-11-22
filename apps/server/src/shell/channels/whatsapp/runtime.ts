@@ -1,18 +1,23 @@
 import { buildProactivityTemplateSender } from "~/shell/channels/whatsapp/internal/proactivity-template";
 import type { ProactivityTemplateSender } from "./contract";
 import { buildWeeklyQuestionSender } from "~/shell/channels/whatsapp/internal/weekly-question";
-import { Effect, Option, type Redacted } from "effect";
+import { Context, Effect, Layer, Option, type Redacted } from "effect";
+import type { HttpClient } from "effect/http";
 import {
+  LookupCorrelation,
   decodeLifecycleStatus,
   lookupLifecycleStatus,
   projectHostedStatus,
 } from "~/shell/channels/whatsapp/internal/kapso-webhook";
 import { buildInsightTemplateSender } from "~/shell/channels/whatsapp/internal/insight-template";
-import { type HttpClient } from "effect/http";
 import { type E164PhoneNumber, type WhatsAppBusinessScopedUserId } from "~/core/identity/contract";
 import { TranscriptText } from "~/core/agent/contract";
 import { makeWhatsAppDelivery as buildDelivery } from "~/shell/channels/whatsapp/internal/kapso-client";
-import { type OutboundHttpService, makeKapsoOutboundHttp } from "~/shell/outbound-http/operations";
+import {
+  OutboundHttp,
+  type OutboundHttpService,
+  makeKapsoOutboundHttp,
+} from "~/shell/outbound-http/operations";
 import {
   type HostedDeliveryCorrelationToken,
   type InsightTemplateSender,
@@ -31,7 +36,7 @@ import {
   type WhatsAppStatusUnavailable,
 } from "./contract";
 
-export const makeLifecycleVerifier = (
+export const lifecycleVerifier = (
   input: Readonly<{
     apiKey: Redacted.Redacted<string>;
     httpClient: HttpClient.HttpClient;
@@ -47,6 +52,7 @@ export const makeLifecycleVerifier = (
   | WhatsAppStatusUnavailable
 >) => {
   const lookup = makeKapsoOutboundHttp(input);
+
   return Effect.fn(function* (authentication: WhatsAppLifecycleAuthentication) {
     return Option.map(
       yield* decodeLifecycleStatus(authentication, Option.some(lookup), input.admitLookup),
@@ -64,13 +70,15 @@ export const makeDeliveryVerifier = (
   InvalidWhatsAppPayload | WhatsAppStatusUnavailable
 >) => {
   const outboundHttp = makeKapsoOutboundHttp(input);
+
   return Effect.fn(function* (request: WhatsAppDeliveryLookup) {
     const verified = yield* lookupLifecycleStatus({
       ...request,
       outboundHttp,
       status: "delivered",
     });
-    return verified._tag === "Correlated" &&
+
+    return LookupCorrelation.$is("Correlated")(verified) &&
       verified.value.evidence.correlationToken === request.correlationToken
       ? Option.some(verified.value.evidence)
       : Option.none();
@@ -106,6 +114,7 @@ export const makeHostedSender = ({
     sandboxPhoneNumberId,
     outboundHttp: makeKapsoOutboundHttp({ apiKey, httpClient }),
   });
+
   return ({
     recipient,
     sandboxPhone,
@@ -134,7 +143,7 @@ export const makeWhatsAppDelivery: (
   input: Parameters<typeof buildDelivery>[0]
 ) => WhatsAppDelivery = (input) => buildDelivery(input);
 
-export const makeVoiceUnavailableSender = (
+export const voiceUnavailableSender = (
   input: Readonly<{
     apiKey: Redacted.Redacted<string>;
     httpClient: HttpClient.HttpClient;
@@ -151,6 +160,7 @@ export const makeVoiceUnavailableSender = (
     sandboxPhoneNumberId: input.sandboxPhoneNumberId,
     outboundHttp: makeKapsoOutboundHttp(input),
   });
+
   return (
     request: Readonly<{
       caller: WhatsAppInboundEvent["caller"];
@@ -168,3 +178,44 @@ export const makeVoiceUnavailableSender = (
       opaqueCallbackData: Option.none(),
     });
 };
+
+export class HostedSender extends Context.Service<
+  HostedSender,
+  ReturnType<typeof makeHostedSender>
+>()("@fidy/server/shell/channels/whatsapp/runtime/HostedSender") {
+  static readonly make = (
+    input: Parameters<typeof makeHostedSender>[0]
+  ): Effect.Effect<ReturnType<typeof makeHostedSender>> =>
+    Effect.sync(() => makeHostedSender(input));
+
+  static readonly layer = (
+    input: Parameters<typeof makeHostedSender>[0]
+  ): Layer.Layer<HostedSender> => Layer.effect(HostedSender, HostedSender.make(input));
+}
+
+type TemplateSendersService = Readonly<{
+  insight: (configuration: unknown) => InsightTemplateSender;
+  proactivity: (configuration: unknown) => ProactivityTemplateSender;
+  weeklyQuestion: (configuration: unknown) => WeeklyQuestionSender;
+}>;
+
+export class TemplateSenders extends Context.Service<TemplateSenders, TemplateSendersService>()(
+  "@fidy/server/shell/channels/whatsapp/runtime/TemplateSenders"
+) {
+  static readonly make: Effect.Effect<TemplateSendersService, never, OutboundHttp> = Effect.map(
+    Effect.service(OutboundHttp),
+    (outboundHttp) => ({
+      insight: (configuration: unknown) =>
+        buildInsightTemplateSender({ configuration, outboundHttp }),
+      proactivity: (configuration: unknown) =>
+        buildProactivityTemplateSender({ configuration, outboundHttp }),
+      weeklyQuestion: (configuration: unknown) =>
+        buildWeeklyQuestionSender({ configuration, outboundHttp }),
+    })
+  );
+
+  static readonly layer: Layer.Layer<TemplateSenders, never, OutboundHttp> = Layer.effect(
+    this,
+    this.make
+  );
+}

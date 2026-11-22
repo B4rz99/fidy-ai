@@ -8,12 +8,15 @@ import type { CaptureDraft } from "./capture-draft";
 import type { Category } from "./presentation";
 
 type Created = CanonicalSuccess<"transactions.createTransaction">["data"];
+
 type Submission = Readonly<{
   categories: ReadonlyArray<Category>;
   onCreated: (transaction: Created) => void;
   invalidate: () => void;
 }>;
+
 type Status = "editing" | "invalid" | "saving" | "saved" | "rejected" | "unknown";
+
 export type TransactionCaptureTask = Readonly<{
   draft: CaptureDraft;
   timeZone: string;
@@ -30,7 +33,9 @@ export type TransactionCaptureTask = Readonly<{
   resume: () => void;
   mount: () => () => void;
 }>;
+
 type Input = Readonly<{ client: FidyClient; initial: CaptureDraft; timeZone: string }>;
+
 type Owner = Omit<Input, "initial" | "timeZone"> & {
   get: Atom.AtomContext;
   timeZone: string;
@@ -43,6 +48,7 @@ type Owner = Omit<Input, "initial" | "timeZone"> & {
   stopped: Deferred.Deferred<void>;
   command: Option.Option<Atom.AtomResultFn<Effect.Effect<void>, void, never>>;
 };
+
 export const makeTransactionCapture = (input: Input): Atom.Atom<TransactionCaptureTask> =>
   Atom.make((get) => {
     const owner: Owner = {
@@ -58,14 +64,19 @@ export const makeTransactionCapture = (input: Input): Atom.Atom<TransactionCaptu
       stopped: Deferred.makeUnsafe<void>(),
       command: Option.none(),
     };
+
     get.addFinalizer(() => dispose(owner));
+
     return present(owner);
   });
+
 const locked = (owner: Owner): boolean =>
   owner.status === "saving" || owner.status === "unknown" || owner.status === "saved";
+
 const notify = (owner: Owner): void => {
   if (owner.active) owner.get.setSelf(present(owner));
 };
+
 const present = (owner: Owner): TransactionCaptureTask => ({
   draft: owner.draft,
   timeZone: owner.timeZone,
@@ -101,30 +112,36 @@ const present = (owner: Owner): TransactionCaptureTask => ({
   mount: () => {
     owner.active = true;
     owner.stopped = Deferred.makeUnsafe<void>();
+
     return () => dispose(owner);
   },
 });
+
 const dispose = (owner: Owner): void => {
   if (owner.status === "saving") {
     owner.status = "unknown";
     owner.attempt = Option.some(owner.draft);
     notify(owner);
   }
+
   owner.active = false;
   owner.generation += 1;
   Deferred.doneUnsafe(owner.stopped, Effect.void);
   Option.map(owner.command, (command) => owner.get.set(command, Atom.Interrupt));
 };
+
 const prepare = (
   owner: Owner,
   categories: ReadonlyArray<Category>
 ): Option.Option<CanonicalInput<"transactions.createTransaction">> => {
   const draft = owner.draft;
   const money = parseMoneyInput({ text: draft.amount, currency: draft.currency });
+
   const zoned = DateTime.makeZoned(`${draft.occurredOn}T00:00:00.000Z`, {
     timeZone: owner.timeZone,
     adjustForTimeZone: true,
   });
+
   if (
     Option.isNone(money) ||
     Option.isNone(zoned) ||
@@ -132,6 +149,7 @@ const prepare = (
   ) {
     return Option.none();
   }
+
   const input: CanonicalInput<"transactions.createTransaction"> = {
     payload: {
       money: money.value,
@@ -144,12 +162,15 @@ const prepare = (
       occurredAt: DateTime.toUtc(zoned.value),
     },
   };
+
   return isCanonicalInput("transactions.createTransaction", input)
     ? Option.some(input)
     : Option.none();
 };
+
 const refused = (cause: Cause.Cause<unknown>): boolean => {
   const error = Cause.findErrorOption(cause);
+
   return (
     Option.isSome(error) &&
     (Predicate.isTagged(error.value, "ValidationFailed") ||
@@ -157,40 +178,56 @@ const refused = (cause: Cause.Cause<unknown>): boolean => {
       Predicate.isTagged(error.value, "ResourceLimited"))
   );
 };
+
 const submit = (owner: Owner, submission: Submission): void => {
   if (!owner.active || locked(owner)) return;
   const input = prepare(owner, submission.categories);
+
   if (Option.isNone(input)) {
     owner.status = "invalid";
     notify(owner);
+
     return;
   }
+
   owner.status = "saving";
   notify(owner);
   const generation = owner.generation;
+
   const work = Effect.gen(function* () {
     const outcome = yield* Effect.gen(function* () {
       const client = yield* owner.client;
+
       return yield* client.transactions.createTransaction(input.value);
     }).pipe(Effect.exit);
+
     if (!owner.active || owner.generation !== generation) return;
-    if (outcome._tag === "Failure") {
+
+    if (Predicate.isTagged(outcome, "Failure")) {
       if (Cause.hasInterruptsOnly(outcome.cause)) return;
       owner.status = refused(outcome.cause) ? "rejected" : "unknown";
+
       if (owner.status === "unknown") owner.attempt = Option.some(owner.draft);
       notify(owner);
+
       return;
     }
+
     yield* complete(owner, { generation, submission, created: outcome.value.data });
   }).pipe(Effect.raceFirst(Deferred.await(owner.stopped)));
-  if (Option.isNone(owner.command)) {
-    const command = owner.client.runtime.fn<Effect.Effect<void>>()((effect) => effect, {
+
+  const command = Option.getOrElse(owner.command, () => {
+    const created = owner.client.runtime.fn<Effect.Effect<void>>()((effect) => effect, {
       concurrent: false,
     });
-    owner.command = Option.some(command);
-    owner.get.mount(command);
-  }
-  owner.get.set(Option.getOrThrow(owner.command), work);
+
+    owner.command = Option.some(created);
+    owner.get.mount(created);
+
+    return created;
+  });
+
+  owner.get.set(command, work);
 };
 
 const complete = (
@@ -208,6 +245,7 @@ const complete = (
     yield* Effect.sync(submission.invalidate).pipe(
       Effect.catchCause(() => Effect.sync(() => reportBrowserDefect("client_defect")))
     );
+
     if (!owner.active || owner.generation !== generation) return;
     yield* Effect.sync(() => submission.onCreated(created)).pipe(
       Effect.catchCause(() => Effect.sync(() => reportBrowserDefect("client_defect")))
@@ -219,26 +257,37 @@ export type CaptureRetention = Readonly<{
   identity: Option.Option<string>;
   mount: (input: Input, identity: string) => () => void;
 }>;
+
 type RetainedCapture = Readonly<{
   identity: string;
   resource: Atom.Atom<TransactionCaptureTask>;
   release: () => void;
 }>;
-export const makeCaptureRetention = (): Atom.Atom<CaptureRetention> =>
+
+export const captureRetention = (): Atom.Atom<CaptureRetention> =>
   Atom.make((get) => {
     let current: Option.Option<RetainedCapture> = Option.none();
     get.addFinalizer(() => Option.map(current, (retained) => retained.release()));
+
     const mount = (input: Input, identity: string): (() => void) => {
-      if (
-        Option.isNone(current) ||
-        (!get.once(current.value.resource).locked && current.value.identity !== identity)
-      ) {
+      const replace = (): RetainedCapture => {
         Option.map(current, (retained) => retained.release());
         const resource = makeTransactionCapture(input);
-        current = Option.some({ identity, resource, release: get.registry.mount(resource) });
+        const retained = { identity, resource, release: get.registry.mount(resource) };
+        current = Option.some(retained);
         get.setSelf({ resource: Option.some(resource), identity: Option.some(identity), mount });
-      }
-      return get.once(Option.getOrThrow(current).resource).mount();
+
+        return retained;
+      };
+
+      const retained =
+        Option.isNone(current) ||
+        (!get.once(current.value.resource).locked && current.value.identity !== identity)
+          ? replace()
+          : current.value;
+
+      return get.once(retained.resource).mount();
     };
+
     return { resource: Option.none(), identity: Option.none(), mount };
   });

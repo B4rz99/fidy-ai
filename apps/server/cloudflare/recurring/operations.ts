@@ -11,12 +11,14 @@ import { type UserId } from "../../src/core/identity/contract";
 
 export const ownsLocalRecurringSeries = Effect.fn(function* (user: UserId, id: string) {
   const sql = yield* SqliteClient;
+
   return (
     (yield* sql`SELECT 1 FROM recurring_series WHERE user_id=${user} AND id=${id}`).length === 1
   );
 });
 
 export const dispatchLocalRecurringSeries: typeof dispatchSeries = (unit) => dispatchSeries(unit);
+
 export const recoverLocalRecurringSeries: typeof recoverSeries = (current, storage, owns) =>
   recoverSeries(current, storage, owns);
 

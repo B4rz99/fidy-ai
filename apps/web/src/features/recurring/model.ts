@@ -3,18 +3,28 @@ import type { CanonicalInput, CanonicalSuccess } from "@/transport/client";
 import { formatMoneyWithCode } from "@/transport/money";
 
 export type WorkspaceReadState = "current" | "refreshing" | "stale";
+
 export type Workspace = CanonicalSuccess<"recurringPlans.getRecurringWorkspace">["data"];
+
 export type Occurrence = Workspace["occurrences"][number];
+
 export type Plan = Workspace["document"]["plans"][number];
+
 export type PlanInput = Plan["revisions"][number]["plan"];
+
 export type Edit = CanonicalInput<"recurringPlans.applyRecurringEdit">["payload"]["edit"];
+
 export type Filters = Omit<
   CanonicalInput<"recurringPlans.getRecurringWorkspace">["query"],
   "month" | "previousMonth" | "view"
 >;
+
 export type Category = CanonicalSuccess<"categories.listCategories">["data"][number];
+
 export type Save = (edit: Edit, onSaved?: () => void) => void;
+
 export type CreationReceipt = Readonly<{ planId: Plan["id"]; date: string; transactionId: string }>;
+
 export type CreationResultProps = Readonly<{
   receipt: CreationReceipt;
   minimumRevision: Workspace["document"]["revision"];
@@ -23,14 +33,19 @@ export type CreationResultProps = Readonly<{
   save: Save;
   close: () => void;
 }>;
-const observeCurrentPlan = (plan: Plan): Readonly<{ date: string; settings: PlanInput }> => {
+
+type CurrentPlanObservation = Readonly<{ date: string; settings: PlanInput }>;
+
+const observeCurrentPlan = (plan: Plan): CurrentPlanObservation => {
   const now = DateTime.nowUnsafe();
+
   const revision =
     plan.revisions.findLast(
       (entry) =>
         entry.from <=
         DateTime.formatIsoDate(DateTime.makeZonedUnsafe(now, { timeZone: entry.plan.timeZone }))
     ) ?? plan.revisions[0];
+
   return {
     date: DateTime.formatIsoDate(
       DateTime.makeZonedUnsafe(now, { timeZone: revision.plan.timeZone })
@@ -38,11 +53,16 @@ const observeCurrentPlan = (plan: Plan): Readonly<{ date: string; settings: Plan
     settings: revision.plan,
   };
 };
+
 export const planToday = (plan: Plan): string => observeCurrentPlan(plan).date;
+
 export const currentPlan = (plan: Plan): PlanInput => observeCurrentPlan(plan).settings;
+
 export const planStatus = (plan: Plan): "scheduled" | "stopped" | "paused" | "active" => {
   const { date, settings } = observeCurrentPlan(plan);
+
   if (plan.stoppedOn !== undefined && date >= plan.stoppedOn) return "stopped";
+
   if (
     plan.pauses.some(
       (pause) => date >= pause.from && (pause.through === undefined || date < pause.through)
@@ -50,8 +70,10 @@ export const planStatus = (plan: Plan): "scheduled" | "stopped" | "paused" | "ac
   ) {
     return "paused";
   }
+
   return date < settings.firstDate ? "scheduled" : "active";
 };
+
 export const frequencies = [
   ["weekly", "Cada semana"],
   ["fortnightly", "Cada 2 semanas"],
@@ -61,11 +83,13 @@ export const frequencies = [
   ["half-yearly", "Cada 6 meses"],
   ["yearly", "Cada año"],
 ] as const;
+
 export const kinds = [
   ["income", "Ingresos"],
   ["expense", "Gastos"],
   ["transfer", "Transferencias"],
 ] as const;
+
 export const statuses = {
   upcoming: "Próximos",
   unconfirmed: "Sin confirmar",
@@ -73,13 +97,18 @@ export const statuses = {
   completed: "Completados",
   skipped: "Omitido",
 } as const;
+
 export const money = (value: Occurrence["completed"]): string =>
   formatMoneyWithCode({ locale: "es-CO", money: value });
+
 export const expectedAmount = (item: Occurrence): string => {
   if (item.status === "completed") return money(item.completed);
+
   if (item.plan.money === undefined) return "Por confirmar";
+
   return `${money(item.plan.money)}${item.plan.amountMode === "estimated" ? " · Estimado" : ""}`;
 };
+
 export const monthLabel = (month: string): string =>
   DateTime.format(DateTime.makeUnsafe(`${month}-01`), {
     locale: "es-CO",
@@ -87,6 +116,7 @@ export const monthLabel = (month: string): string =>
     year: "numeric",
     timeZone: "UTC",
   });
+
 export const dayLabel = (date: string): string =>
   DateTime.format(DateTime.makeUnsafe(date), {
     locale: "es-CO",
@@ -95,12 +125,14 @@ export const dayLabel = (date: string): string =>
     year: "numeric",
     timeZone: "UTC",
   });
+
 export const shortMonthLabel = (month: string): string =>
   DateTime.format(DateTime.makeUnsafe(`${month}-01`), {
     locale: "es-CO",
     month: "short",
     timeZone: "UTC",
   }).replace(".", "");
+
 export const shiftMonth = ({ month, step }: Readonly<{ month: string; step: number }>): string =>
   DateTime.formatIsoDateUtc(
     DateTime.add(DateTime.makeUnsafe(`${month}-01`), { months: step })
@@ -108,19 +140,25 @@ export const shiftMonth = ({ month, step }: Readonly<{ month: string; step: numb
 
 export const planningStart = ({ month, today }: Pick<Workspace, "month" | "today">): string =>
   today.startsWith(month) ? today : `${month}-01`;
+
 export const noDateNote = (): Option.Option<string> => Option.none();
+
 export const firstDateNote = ({
   firstDate,
   month,
 }: Readonly<{ firstDate: string; month: string }>): Option.Option<string> => {
   const start = firstDate.slice(0, "2026-01".length);
+
   if (start === "" || start === month) return Option.none();
+
   if (start > month) {
     return Option.some(
       `Empieza después de ${monthLabel(month)}, así que no aparecerá en este mes.`
     );
   }
+
   const span = start === shiftMonth({ month, step: -1 }) ? "en" : "desde";
+
   return Option.some(
     `Empieza antes de ${monthLabel(month)}, así que también tendrá pagos ${span} ${monthLabel(start)}.`
   );
@@ -150,7 +188,9 @@ export const planFromTransaction = ({
 
 export const transferLabel = (items: ReadonlyArray<Occurrence>): string => {
   const transfers = items.filter((item) => item.plan.kind === "transfer");
+
   if (!transfers.some((item) => item.plan.cardPayment === true)) return "Transferencias";
+
   return transfers.every((item) => item.plan.cardPayment === true)
     ? "Pagos de tarjeta"
     : "Tarjetas y transferencias";

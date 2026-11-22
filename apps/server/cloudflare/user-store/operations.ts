@@ -16,7 +16,7 @@ import {
 } from "./internal/credential-schema";
 import { externalEventSchema, issueForwardingAddress } from "./internal/external-event-schema";
 import { registerUserLifetime as registerReservedLifetime } from "./internal/registration";
-import { Effect, Exit, Schema } from "effect";
+import { Effect, Exit, Predicate, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { UserId } from "../../src/core/identity/contract";
 
@@ -29,7 +29,9 @@ const sourceTable = `CREATE TABLE source_attestations (
  interpretation_revision TEXT NOT NULL, created_at_ms INTEGER NOT NULL,
  FOREIGN KEY(user_id,transaction_id) REFERENCES transactions(user_id,id)
 ) STRICT`;
+
 const attestationImmutable = `CREATE TRIGGER source_attestation_no_update BEFORE UPDATE ON source_attestations BEGIN SELECT RAISE(ABORT,'attestation_immutable'); END`;
+
 const dashboardAttestedMember = `CREATE TRIGGER dashboard_attested_member AFTER INSERT ON source_attestations
 WHEN (SELECT readiness FROM transaction_projection_state WHERE user_id=NEW.user_id)='ready'
   AND EXISTS(SELECT 1 FROM transactions WHERE user_id=NEW.user_id AND id=NEW.transaction_id AND reconciliation_first_id IS NOT NULL)
@@ -38,6 +40,7 @@ BEGIN
   INSERT INTO transaction_projection_leaf(user_id,id,amount,currency,direction,category_id,category_revision,counterparty,notes,occurred_at_ms,created_at_ms,revision)
     SELECT user_id,id,amount,currency,direction,category_id,category_revision,counterparty,notes,occurred_at_ms,created_at_ms,revision FROM transaction_effective_source WHERE user_id=NEW.user_id AND id IN (SELECT visible_transaction_id FROM transaction_reconciliation_decisions d JOIN transactions t ON t.reconciliation_first_id=d.first_transaction_id AND t.reconciliation_second_id=d.second_transaction_id AND t.user_id=d.user_id WHERE t.id=NEW.transaction_id AND t.user_id=NEW.user_id AND d.state='linked');
 END`;
+
 const transactionFactAttestation = `CREATE TRIGGER transaction_fact_attestation AFTER INSERT ON source_attestations BEGIN
   UPDATE transaction_projection_state SET fact_revision = fact_revision + 1,
     time_zone = CASE WHEN NEW.transaction_id = (SELECT id FROM transactions WHERE user_id = NEW.user_id ORDER BY created_at_ms, id LIMIT 1)
@@ -45,6 +48,7 @@ const transactionFactAttestation = `CREATE TRIGGER transaction_fact_attestation 
       THEN NEW.time_zone ELSE time_zone END
   WHERE user_id = NEW.user_id AND fact_revision IS NOT NULL;
 END`;
+
 const initialUserSchema = [
   `CREATE TABLE users (
   id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
@@ -1289,6 +1293,7 @@ export const userStoreHistory: StoreHistory = {
 };
 
 type RecoveryFamily<E, R> = Effect.Effect<Readonly<{ attempted: number; failed: number }>, E, R>;
+
 export const recoverUserWork = <E, R>(
   jobs:
     | ReadonlyArray<RecoveryFamily<E, R>>
@@ -1303,12 +1308,12 @@ export const recoverUserWork = <E, R>(
   R
 > =>
   Effect.forEach(
-    [
-      ...("hosted" in jobs ? jobs.families : jobs).map((family) =>
-        family.pipe(Effect.timeout("45 seconds"))
-      ),
-      ...("hosted" in jobs ? [jobs.hosted.pipe(Effect.timeout(jobs.timeoutMs))] : []),
-    ],
+    "hosted" in jobs
+      ? [
+          ...jobs.families.map((family) => family.pipe(Effect.timeout("45 seconds"))),
+          jobs.hosted.pipe(Effect.timeout(jobs.timeoutMs)),
+        ]
+      : jobs.map((family) => family.pipe(Effect.timeout("45 seconds"))),
     (family) => Effect.exit(family),
     {
       concurrency: 4,
@@ -1318,6 +1323,7 @@ export const recoverUserWork = <E, R>(
       let failedFamilies = 0,
         attempted = 0,
         failedOffers = 0;
+
       for (const result of results) {
         if (Exit.isFailure(result)) failedFamilies++;
         else {
@@ -1325,6 +1331,7 @@ export const recoverUserWork = <E, R>(
           failedOffers += result.value.failed;
         }
       }
+
       return { failedFamilies, attempted, failedOffers };
     })
   );
@@ -1335,14 +1342,16 @@ export const observeUserRegistration = Effect.fn(function* (
   settings: NativeAcceptanceSettings
 ) {
   const sql = yield* SqliteClient;
+
   if (settings.NATIVE_STORAGE_ADMISSION === "closed") {
     const credentials =
       yield* sql`SELECT issuer,subject FROM provider_credentials WHERE user_id IN(SELECT id FROM users LIMIT 1)`;
+
     if (
       !credentials.some(
         (credential) =>
-          typeof credential.issuer === "string" &&
-          typeof credential.subject === "string" &&
+          Predicate.isString(credential.issuer) &&
+          Predicate.isString(credential.subject) &&
           acceptanceSubject({
             revision: acceptanceProviderRevision(settings),
             issuer: credential.issuer,
@@ -1353,19 +1362,26 @@ export const observeUserRegistration = Effect.fn(function* (
       return "isolated" as const;
     }
   }
+
   const [row] = yield* sql`SELECT id,lifetime_registered FROM users LIMIT 1`;
+
   if (row === undefined) return "empty" as const;
+
   const user = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       id: UserId,
       lifetime_registered: Schema.Literals([0, 1]),
     })
   )(row);
+
   if (!owns(user.id)) return "unavailable" as const;
+
   if (user.lifetime_registered === 1) return "registered" as const;
   yield* registerUserLifetime(maintenance, user.id);
+
   const confirmed = yield* sql`UPDATE users SET lifetime_registered=1 WHERE id=${user.id}
     AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=${user.id}) RETURNING id`;
+
   return confirmed.length === 1 ? ("registered" as const) : ("unavailable" as const);
 });
 

@@ -9,22 +9,30 @@ import {
   operationCatalog,
   projectAtomicBatchSchemas,
 } from "@fidy/server/client";
-import { DateTime, Effect, Option, Schema } from "effect";
-import { CliFailure, type Credential } from "../credential/contract";
+import { Data, DateTime, Effect, Option, Predicate, Result, Schema } from "effect";
+import { CliFailure, type Credential, isCliFailure } from "../credential/contract";
 import { formatFailure } from "../command/operations";
 import { type CanonicalDependencies, CanonicalRequest, type OperationResult } from "./contract";
 import { type FlagPlan, assembleFlags, deriveFlags, flagHelp } from "./internal/flags";
 
+type PATCaller = Data.TaggedEnum<{ PAT: { readonly capabilities: ReadonlyArray<PATScope> } }>;
+
+const { PAT } = Data.taggedEnum<PATCaller>();
+
 const eligibleOperation = (id: string, scopes: ReadonlyArray<PATScope>): boolean => {
   const operation = operationCatalog.byId.get(id);
+
   if (operation === undefined) return false;
+
   return (
     (operation.id !== atomicBatchOperation ||
       atomicBatchChildOperations(operationCatalog).some((child) =>
         eligibleOperation(child.id, scopes)
       )) &&
-    decideOperationAccess(operation.policy.access, { _tag: "PAT", capabilities: scopes })._tag ===
+    Predicate.isTagged(
+      decideOperationAccess(operation.policy.access, PAT({ capabilities: scopes })),
       "Allowed"
+    )
   );
 };
 
@@ -54,8 +62,10 @@ const describeOperation = ({
           includeChild: (child) => eligibleOperation(child.id, scopes),
         })
       : { input: operation.input, output: operation.success };
+
   const input = Schema.toJsonSchemaDocument(schemas.input);
   const plan = deriveFlags(input);
+
   return {
     id: operation.id,
     description: operation.description,
@@ -78,11 +88,17 @@ export const discoverOperations = (
 
 const loadCredential = Effect.fn(function* (dependencies: CanonicalDependencies) {
   const saved = yield* dependencies.store.load;
-  if (Option.isNone(saved)) return yield* new CliFailure({ reason: "LoginRequired" });
-  const now = yield* DateTime.now;
-  if (saved.value.grant.pat.expiresAt.epochMilliseconds <= now.epochMilliseconds) {
-    return yield* new CliFailure({ reason: "Expired" });
+
+  if (Option.isNone(saved)) {
+    return yield* new CliFailure({ reason: "LoginRequired", cause: Option.none() });
   }
+
+  const now = yield* DateTime.now;
+
+  if (saved.value.grant.pat.expiresAt.epochMilliseconds <= now.epochMilliseconds) {
+    return yield* new CliFailure({ reason: "Expired", cause: Option.none() });
+  }
+
   return saved.value;
 });
 
@@ -94,21 +110,33 @@ const decodeInput = Effect.fn(function* (
   const decoded = yield* Schema.decodeUnknownEffect(operation.input, {
     errors: "all",
     onExcessProperty: "error",
-  })(input).pipe(Effect.mapError(() => new CliFailure({ reason: "InvalidInput" })));
+  })(input).pipe(
+    Effect.mapError(
+      (cause) => new CliFailure({ reason: "InvalidInput", cause: Option.some(cause) })
+    )
+  );
+
   if (operation.id === atomicBatchOperation) {
     const batch = yield* Schema.decodeUnknownEffect(
       Schema.Struct({ payload: getAtomicBatchInputSchema() }),
       { errors: "all", onExcessProperty: "error" }
-    )(input).pipe(Effect.mapError(() => new CliFailure({ reason: "InvalidInput" })));
-    for (const child of batch.payload.calls) {
-      if (!eligibleOperation(child.operation, scopes)) {
-        return yield* new CliFailure({ reason: "OperationUnavailable" });
-      }
+    )(input).pipe(
+      Effect.mapError(
+        (cause) => new CliFailure({ reason: "InvalidInput", cause: Option.some(cause) })
+      )
+    );
+
+    if (!batch.payload.calls.every((child) => eligibleOperation(child.operation, scopes))) {
+      return yield* new CliFailure({ reason: "OperationUnavailable", cause: Option.none() });
     }
   }
+
   const request = yield* Schema.decodeUnknownEffect(CanonicalRequest)(decoded).pipe(
-    Effect.mapError(() => new CliFailure({ reason: "InvalidInput" }))
+    Effect.mapError(
+      (cause) => new CliFailure({ reason: "InvalidInput", cause: Option.some(cause) })
+    )
   );
+
   return {
     params: request.params,
     query: request.query,
@@ -130,13 +158,16 @@ type InvocationOptions = Readonly<{
 export const invokeOperation = Effect.fn(function* (options: InvocationOptions) {
   const { id, input, credential } = options;
   const operation = operationCatalog.byId.get(id);
+
   if (operation === undefined || !eligibleOperation(id, credential.grant.pat.scopes)) {
-    return yield* new CliFailure({ reason: "OperationUnavailable" });
+    return yield* new CliFailure({ reason: "OperationUnavailable", cause: Option.none() });
   }
+
   const decoded = yield* decodeInput(operation, input, credential.grant.pat.scopes);
   let retryAfterSeconds = Option.none<number>();
   let allowance = Option.none<CanonicalAllowance>();
   let traceId = Option.none<typeof TelemetryTraceId.Type>();
+
   const client = yield* options.clientFactory({
     httpClient: options.httpClient,
     credential,
@@ -150,14 +181,22 @@ export const invokeOperation = Effect.fn(function* (options: InvocationOptions) 
       traceId = receipt;
     },
   });
+
   const separator = id.indexOf(".");
   const group = id.slice(0, separator);
   const name = id.slice(separator + 1);
   const call = client[group]?.[name];
-  if (call === undefined) return yield* new CliFailure({ reason: "OperationUnavailable" });
+
+  if (call === undefined) {
+    return yield* new CliFailure({ reason: "OperationUnavailable", cause: Option.none() });
+  }
+
   const uncertainReason = uncertainCallReason(operation.policy.kind);
+
   const result = yield* call(decoded).pipe(
-    Effect.catchDefect(() => Effect.fail(new CliFailure({ reason: uncertainReason }))),
+    Effect.catchDefect(() =>
+      Effect.fail(new CliFailure({ reason: uncertainReason, cause: Option.none() }))
+    ),
     Effect.onInterrupt(() =>
       operation.policy.kind === "mutation"
         ? options.stderr(formatFailure({ reason: "MutationAmbiguous", json: options.json }))
@@ -165,18 +204,26 @@ export const invokeOperation = Effect.fn(function* (options: InvocationOptions) 
     ),
     Effect.result
   );
-  const failed = result._tag === "Failure";
+
+  const failed = Result.isFailure(result);
+
   const envelope = yield* Schema.encodeUnknownEffect(
     failed ? operation.failure : operation.success
   )(failed ? result.failure : result.success).pipe(
-    Effect.mapError(() => new CliFailure({ reason: uncertainReason })),
+    Effect.mapError(
+      (cause) => new CliFailure({ reason: uncertainReason, cause: Option.some(cause) })
+    ),
     Effect.tapError(() => showTrace(traceId, options.stderr))
   );
+
   const output: OperationResult = { envelope, failed, retryAfterSeconds, allowance, traceId };
+
   if (unindexedBatchUnavailable(id, output)) {
     yield* showTrace(traceId, options.stderr);
-    return yield* new CliFailure({ reason: "MutationAmbiguous" });
+
+    return yield* new CliFailure({ reason: "MutationAmbiguous", cause: Option.none() });
   }
+
   return output;
 });
 
@@ -186,11 +233,13 @@ const uncertainCallReason = (
   kind === "mutation" ? "MutationAmbiguous" : "TransportUnavailable";
 
 const radix = 16;
+
 const terminalSafe = (text: string): string =>
   text.replace(
     /[\u007f-\u009f\u2028-\u202e\u2066-\u2069]/gu,
     (character) => `\\u${character.charCodeAt(0).toString(radix).padStart(4, "0")}`
   );
+
 const encodeJson = (value: unknown): string =>
   Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Json))(value);
 
@@ -199,15 +248,18 @@ export const formatOperationResult = ({
   json,
 }: Readonly<{ result: OperationResult; json: boolean }>): string => {
   const encoded = terminalSafe(encodeJson(result.envelope));
+
   return json
     ? `${encoded}\n`
     : `${result.failed ? "La operación devolvió un fallo:" : "Resultado de la operación:"}\n${encoded}\n`;
 };
 
 const failureGuidance = Schema.Struct({ error: Schema.Struct({ code: Schema.String }) });
+
 const batchRejectionGuidance = Schema.Struct({
   error: Schema.Struct({ failedCallIndex: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)) }),
 });
+
 const unindexedBatchUnavailable = (id: string, result: OperationResult): boolean =>
   id === atomicBatchOperation &&
   result.failed &&
@@ -216,6 +268,7 @@ const unindexedBatchUnavailable = (id: string, result: OperationResult): boolean
     ({ error }) => error.code === "unavailable"
   ) &&
   Option.isNone(Schema.decodeUnknownOption(batchRejectionGuidance)(result.envelope));
+
 const showBatchRejection = (
   id: string,
   result: OperationResult,
@@ -228,9 +281,11 @@ const showBatchRejection = (
         "El lote fue rechazado; sus cambios de dominio no se confirmaron. La evidencia de rechazo del servidor puede conservarse. Revisa el hijo indicado y sus permisos antes de enviar un lote corregido.\n"
       )
     : Effect.void;
+
 const suggestedGuidance = Schema.Struct({
   next: Schema.Array(Schema.Struct({ tool: Schema.String, hint: Schema.String })),
 });
+
 const showAllowance = (
   result: OperationResult,
   dependencies: CanonicalDependencies
@@ -240,18 +295,22 @@ const showAllowance = (
       "Información de llamadas canónicas no disponible; no se estima un saldo local.\n"
     );
   }
+
   const meter = result.allowance.value;
+
   return dependencies.stderr(
     meter.limit === "uncapped"
       ? "El servidor indica acceso sin medidor comercial mensual; siguen aplicando las protecciones de solicitudes y seguridad.\n"
       : `${meter.remaining} de ${meter.limit} llamadas canónicas restantes, compartidas por todos tus PAT. Reinicio: ${DateTime.formatIso(meter.resetsAt)} (UTC).\n`
   );
 };
+
 const allowanceFailureCode = Schema.Literals([
   "quota_exhausted",
   "rate_limited",
   "paywall_required",
 ]);
+
 const allowanceFailureGuidance: Readonly<Record<typeof allowanceFailureCode.Type, string>> = {
   quota_exhausted:
     "La capacidad sigue siendo Free; espera el reinicio exacto indicado por el servidor o revisa las siguientes operaciones permitidas. No se reintenta automáticamente.\n",
@@ -259,6 +318,7 @@ const allowanceFailureGuidance: Readonly<Record<typeof allowanceFailureCode.Type
     "Es una protección de solicitudes o seguridad, no agotamiento del cupo comercial. Respeta Retry-After cuando esté disponible.\n",
   paywall_required: "Esta capacidad requiere Pro; revisa las siguientes operaciones permitidas.\n",
 };
+
 const showTrace = (
   traceId: OperationResult["traceId"],
   stderr: CanonicalDependencies["stderr"]
@@ -267,6 +327,7 @@ const showTrace = (
     onNone: () => Effect.void,
     onSome: (receipt) => stderr(`Referencia de diagnóstico: ${receipt}\n`),
   });
+
 const showFailureTrace = (
   result: OperationResult,
   dependencies: CanonicalDependencies
@@ -278,46 +339,59 @@ const showFailureGuidance = Effect.fn(function* (
   dependencies: CanonicalDependencies
 ) {
   yield* showFailureTrace(result, dependencies);
+
   if (Option.isSome(result.retryAfterSeconds)) {
     yield* dependencies.stderr(
       `El servidor indica esperar ${result.retryAfterSeconds.value} segundos; no se reintenta automáticamente.\n`
     );
   }
+
   const failure = Schema.decodeUnknownOption(failureGuidance)(result.envelope);
+
   if (Option.isNone(failure)) return;
   const code = failure.value.error.code;
   const allowanceCode = Schema.decodeUnknownOption(allowanceFailureCode)(code);
+
   if (Option.isSome(allowanceCode)) {
     yield* dependencies.stderr(allowanceFailureGuidance[allowanceCode.value]);
   }
+
   if (code === "unauthenticated") {
     yield* dependencies.stderr(
       "El acceso puede estar vencido o revocado. Revisa fidy status y el permiso en la web; usa logout y login si necesitas otro permiso.\n"
     );
   }
+
   if (code === "user_action_required" || code === "consent_required") {
     yield* dependencies.stderr(
       "Revisa y restaura el Consentimiento en la aplicación web antes de continuar.\n"
     );
   }
 });
+
 const showSuggestions = Effect.fn(function* (
   result: OperationResult,
   credential: Credential,
   dependencies: CanonicalDependencies
 ) {
   const suggestions = Schema.decodeUnknownOption(suggestedGuidance)(result.envelope);
+
   if (Option.isNone(suggestions)) return;
-  for (const suggestion of suggestions.value.next) {
-    if (!eligibleOperation(suggestion.tool, credential.grant.pat.scopes)) continue;
-    yield* dependencies.stderr(
-      terminalSafe(
-        encodeJson(
-          `Posible siguiente operación: fidy ${suggestion.tool.replace(".", " ")}. ${suggestion.hint} Los argumentos sugeridos son parciales; revisa --help. No se ejecuta automáticamente.`
-        )
-      ) + "\n"
-    );
-  }
+
+  yield* Effect.forEach(
+    suggestions.value.next.filter((suggestion) =>
+      eligibleOperation(suggestion.tool, credential.grant.pat.scopes)
+    ),
+    (suggestion) =>
+      dependencies.stderr(
+        terminalSafe(
+          encodeJson(
+            `Posible siguiente operación: fidy ${suggestion.tool.replace(".", " ")}. ${suggestion.hint} Los argumentos sugeridos son parciales; revisa --help. No se ejecuta automáticamente.`
+          )
+        ) + "\n"
+      ),
+    { discard: true }
+  );
 });
 
 const readInput = Effect.fn(function* (
@@ -328,23 +402,30 @@ const readInput = Effect.fn(function* (
   if (!args.slice(2).includes("--input")) {
     return yield* Effect.try({
       try: () => assembleFlags({ args: args.slice(2), plan: deriveFlags(command.input) }),
-      catch: () => new CliFailure({ reason: "InvalidInput" }),
+      catch: () => new CliFailure({ reason: "InvalidInput", cause: Option.none() }),
     });
   }
+
   const path = args[3];
+
   if (args.length !== 4 || args[2] !== "--input" || path === undefined || !command.requiresInput) {
-    return yield* new CliFailure({ reason: "InvalidInput" });
+    return yield* new CliFailure({ reason: "InvalidInput", cause: Option.none() });
   }
+
   return yield* dependencies.readInput(path).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))),
     Effect.mapError((failure) =>
-      failure instanceof CliFailure ? failure : new CliFailure({ reason: "InvalidInput" })
+      isCliFailure(failure)
+        ? failure
+        : new CliFailure({ reason: "InvalidInput", cause: Option.none() })
     )
   );
 });
 
 const maximumArguments = 50;
+
 const maximumArgumentCharacters = 256;
+
 const Arguments = Schema.Array(
   Schema.String.check(Schema.isMaxLength(maximumArgumentCharacters))
 ).check(Schema.isMaxLength(maximumArguments));
@@ -354,11 +435,15 @@ export const runOperationCommand = Effect.fn(function* (
   dependencies: CanonicalDependencies
 ) {
   const args = yield* Schema.decodeUnknownEffect(Arguments)(inputArgs).pipe(
-    Effect.mapError(() => new CliFailure({ reason: "InvalidInput" }))
+    Effect.mapError(
+      (cause) => new CliFailure({ reason: "InvalidInput", cause: Option.some(cause) })
+    )
   );
+
   const credential = yield* loadCredential(dependencies);
   const listing = args.length === 1 && (args[0] === "commands" || args[0] === "--help");
   const id = `${args[0]}.${args[1]}`;
+
   if (listing) {
     const catalog = discoverOperations(credential.grant.pat.scopes);
     yield* dependencies.stdout(
@@ -370,23 +455,30 @@ export const runOperationCommand = Effect.fn(function* (
               .join("\n") +
             "\n"
     );
+
     return false;
   }
+
   const operation = yield* Option.match(
     Option.fromUndefinedOr(operationCatalog.byId.get(id)).pipe(
       Option.filter((candidate) => eligibleOperation(candidate.id, credential.grant.pat.scopes))
     ),
     {
-      onNone: () => new CliFailure({ reason: "OperationUnavailable" }),
+      onNone: () => new CliFailure({ reason: "OperationUnavailable", cause: Option.none() }),
       onSome: Effect.succeed,
     }
   );
+
   const command = describeOperation({ operation, scopes: credential.grant.pat.scopes });
+
   if (args.length === 3 && args[2] === "--help") {
     yield* dependencies.stdout(terminalSafe(encodeJson(command)) + "\n");
+
     return false;
   }
+
   const input = yield* readInput(args, command, dependencies);
+
   const result = yield* invokeOperation({
     id,
     input,
@@ -396,10 +488,12 @@ export const runOperationCommand = Effect.fn(function* (
     stderr: dependencies.stderr,
     json: dependencies.json,
   });
+
   yield* dependencies.stdout(formatOperationResult({ result, json: dependencies.json }));
   yield* showAllowance(result, dependencies);
   yield* showBatchRejection(id, result, dependencies);
   yield* showFailureGuidance(result, dependencies);
   yield* showSuggestions(result, credential, dependencies);
+
   return result.failed;
 });

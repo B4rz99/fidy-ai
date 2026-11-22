@@ -1,10 +1,11 @@
 import { isDeepStrictEqual } from "node:util";
-import { Option, Schema } from "effect";
+import { Option, Predicate, Schema } from "effect";
 
 const describedBinding = Schema.StructWithRest(
   Schema.Struct({ name: Schema.NonEmptyString, type: Schema.NonEmptyString }),
   [Schema.Record(Schema.String, Schema.Json)]
 );
+
 const providerVersion = Schema.Struct({
   success: Schema.Literal(true),
   result: Schema.Struct({
@@ -25,11 +26,13 @@ const providerVersion = Schema.Struct({
   }),
 });
 
+export type WorkerBindings = Readonly<Record<string, Schema.Json>>;
+
 export type WorkerResources = Readonly<{
   migrationTag: string;
-  runtime: Readonly<Record<string, unknown>>;
-  bindings: Readonly<Record<string, unknown>>;
-  exports: Readonly<Record<string, unknown>>;
+  runtime: Readonly<Record<string, Schema.Json>>;
+  bindings: WorkerBindings;
+  exports: Readonly<Record<string, Schema.Json>>;
 }>;
 
 const namespaceIdentity = Schema.is(
@@ -44,12 +47,15 @@ const versionBindings = (
   revision: string
 ): WorkerResources["bindings"] => {
   const release = bindings.find((binding) => binding.name === "RELEASE_GIT_SHA");
+
   if (release?.type !== "plain_text" || release.text !== revision) {
     throw new Error("Worker release binding does not match the attested revision");
   }
+
   if (new Set(bindings.map((binding) => binding.name)).size !== bindings.length) {
     throw new Error("Duplicate Worker binding identity");
   }
+
   if (
     bindings.some(
       (binding) => binding.type === "durable_object_namespace" && !namespaceIdentity(binding)
@@ -57,6 +63,7 @@ const versionBindings = (
   ) {
     throw new Error("Durable Object namespace identity unavailable");
   }
+
   return Object.fromEntries(
     bindings.map((binding) => [
       binding.name,
@@ -71,20 +78,26 @@ export const verifiedVersionResources = ({
   revision,
 }: Readonly<{ raw: unknown; versionId: string; revision: string }>): WorkerResources => {
   const decoded = Schema.decodeUnknownOption(providerVersion)(raw);
+
   if (Option.isNone(decoded) || decoded.value.result.id !== versionId) {
     throw new Error("Worker version identity unavailable");
   }
+
   const { bindings, script, script_runtime } = decoded.value.result.resources;
+
   const namedHandlers = Object.fromEntries(
     script.named_handlers.map(({ name, handlers }) => [name, handlers.toSorted()])
   );
+
   if (Object.keys(namedHandlers).length !== script.named_handlers.length) {
     throw new Error("Worker export identity unavailable");
   }
+
   return {
     bindings: versionBindings(bindings, revision),
-    migrationTag:
-      typeof script_runtime.migration_tag === "string" ? script_runtime.migration_tag : "",
+    migrationTag: Predicate.isString(script_runtime.migration_tag)
+      ? script_runtime.migration_tag
+      : "",
     runtime: script_runtime,
     exports: { defaultHandlers: script.handlers.toSorted(), namedHandlers },
   };

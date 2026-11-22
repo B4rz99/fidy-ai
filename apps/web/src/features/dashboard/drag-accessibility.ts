@@ -1,4 +1,4 @@
-import { dashboardDragAnnouncement, sourceLabel } from "./drag-presentation";
+import { DashboardDragOutcome, dashboardDragAnnouncement, sourceLabel } from "./drag-presentation";
 import type { Accessibility, DragEndEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/dom";
 import { Option } from "effect";
 import { dashboardDragData } from "./drag-data";
@@ -11,6 +11,7 @@ const targetLabel = (target: DashboardDropTarget): string => {
   if (target.kind === "dashboard-edge") {
     return target.edge === "top" ? "inicio del tablero" : "final del tablero";
   }
+
   switch (target.edge) {
     case "top":
       return "arriba del Widget";
@@ -61,14 +62,15 @@ export const dashboardAnnouncementText = {
       if (canceled) {
         return dashboardDragAnnouncement.ended({
           label: sourceLabel(source),
-          outcome: { _tag: "Canceled" },
+          outcome: DashboardDragOutcome.Canceled(),
         });
       }
+
       return Option.match(decodeDashboardDropTarget(targetData), {
         onNone: () =>
           dashboardDragAnnouncement.ended({
             label: sourceLabel(source),
-            outcome: { _tag: "Unplaced" },
+            outcome: DashboardDragOutcome.Unplaced(),
           }),
         onSome: (target) =>
           dashboardDragAnnouncement.over(
@@ -80,6 +82,7 @@ export const dashboardAnnouncementText = {
 };
 
 type AccessibilityOptions = NonNullable<ConstructorParameters<typeof Accessibility>[1]>;
+
 type DashboardAnnouncements = Required<AccessibilityOptions>["announcements"];
 
 export const dashboardAnnouncements: DashboardAnnouncements = {

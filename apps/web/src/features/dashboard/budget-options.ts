@@ -2,8 +2,11 @@ import type { CanonicalSuccess } from "@/transport/client";
 import type { BudgetTarget } from "./editor-model";
 
 export type BudgetChoice = BudgetTarget & Readonly<{ value: string; label: string }>;
+
 type Category = CanonicalSuccess<"categories.listCategories">["data"][number];
+
 type BudgetStatus = CanonicalSuccess<"budgets.getBudgetStatus">["data"]["statuses"][number];
+
 export const budgetChoices = ({
   statuses,
   categories,
@@ -14,6 +17,7 @@ export const budgetChoices = ({
   statuses
     .flatMap(({ budget }) => {
       const category = categories.find(({ id }) => id === budget.categoryId);
+
       return category === undefined
         ? []
         : [

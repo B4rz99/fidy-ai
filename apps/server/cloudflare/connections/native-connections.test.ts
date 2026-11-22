@@ -19,12 +19,14 @@ const inspectActiveConnection = Effect.fn(function* (
   const [connection] = yield* Schema.decodeUnknownEffect(
     Schema.Tuple([Schema.Struct({ id: Schema.String })])
   )(yield* native(() => journey.exec("SELECT id FROM connections")));
+
   const path = "/connections/" + connection.id;
   const detail = yield* native(() => journey.browser(0, path));
   expect(yield* native(() => detail.json())).toMatchObject({
     data: { id: connection.id, institutionId: "bancolombia", state: "Active" },
   });
   const accounts = yield* native(() => journey.browser(0, path + "/accounts"));
+
   const result = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       data: Schema.Tuple([
@@ -33,10 +35,12 @@ const inspectActiveConnection = Effect.fn(function* (
       next: Schema.Array(Schema.Json),
     })
   )(yield* native(() => accounts.json()));
+
   expect(result.data[0].connectionId).toBe(connection.id);
   expect(result.next).toEqual([]);
   expect((yield* native(() => journey.browser(1, path))).status).toBe(404);
 });
+
 const startBankAttempt = Effect.fn(function* (
   journey: Effect.Success<typeof nativeTransactionJourney>
 ) {
@@ -55,23 +59,31 @@ const startBankAttempt = Effect.fn(function* (
         })
       )
     );
+
   const connect = yield* send("/connections", { institutionId: "bancolombia" });
+
   const connected = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ data: Schema.Struct({ continuation: Schema.Struct({ url: Schema.String }) }) })
   )(yield* native(() => connect.json()));
+
   const begin = yield* send("/web/connections/begin", {
     attempt: new URL(connected.data.continuation.url).searchParams.get("attempt"),
   });
+
   expect(begin.status).toBe(200);
+
   const provider = (yield* native(() =>
     journey.runtime.getDurableObjectNamespace("CONNECTION_FIXTURE", "core")
   )).getByName("provider");
+
   const stats = (): Promise<{ state: string; calls: number }> =>
     provider
       .fetch("https://fixture.invalid/status")
       .then((reply) => reply.json())
       .then(Schema.decodeUnknownSync(Schema.Struct({ state: Schema.String, calls: Schema.Int })));
+
   const state = (yield* native(stats)).state;
+
   const callback = (
     subject: typeof alice,
     code = "fixture"
@@ -86,8 +98,10 @@ const startBankAttempt = Effect.fn(function* (
         }
       )
     );
+
   return { provider, stats, callback };
 });
+
 const runningSynchronization = Effect.fn(function* () {
   const journey = yield* makeNativeTransactionJourney(undefined, nativeConnectionPlatform);
   const { provider, stats, callback } = yield* startBankAttempt(journey);
@@ -104,16 +118,21 @@ const runningSynchronization = Effect.fn(function* () {
   );
   yield* inspectActiveConnection(journey);
   expect((yield* native(() => journey.browser(0))).status).toBe(200);
+
   const jobRow = yield* native(() =>
     journey.exec("SELECT id FROM connection_synchronizations WHERE state='running'")
   );
+
   const [job] = yield* Schema.decodeUnknownEffect(
     Schema.Tuple([Schema.Struct({ id: Schema.String })])
   )(jobRow);
+
   const packet = { kind: "connection-synchronization", userId: alice.user, jobId: job.id };
+
   const users = yield* native(() =>
     journey.runtime.getDurableObjectNamespace("USER_STORE", "core")
   );
+
   const resume = (user: string): Effect.Effect<Pick<Response, "status">> =>
     native(() =>
       users.getByName(user).fetch("https://user.invalid/work/connection-synchronization", {
@@ -126,14 +145,18 @@ const runningSynchronization = Effect.fn(function* () {
     journey.exec(
       "SELECT (SELECT count(*) FROM transactions) AS movements,(SELECT count(*) FROM audit_entries WHERE record_type='connection_synchronization') AS audits,(SELECT count(*) FROM connection_synchronizations WHERE state='complete') AS completed"
     );
+
   return { journey, stats, provider, resume, facts, packet };
 });
+
 const rejectedGrantJourney = Effect.gen(function* () {
   const journey = yield* makeNativeTransactionJourney(undefined, nativeConnectionPlatform);
   const first = yield* startBankAttempt(journey);
   expect((yield* first.callback(alice, "reject-held")).status).toBe(303);
+
   const grants =
     "SELECT attempt_id,state,envelope IS NOT NULL AS held,cleaned_at_ms IS NOT NULL AS cleaned FROM connection_grants ORDER BY rowid";
+
   const [failed] = yield* Schema.decodeUnknownEffect(
     Schema.Tuple([
       Schema.Struct({
@@ -144,6 +167,7 @@ const rejectedGrantJourney = Effect.gen(function* () {
       }),
     ])
   )(yield* native(() => journey.exec(grants)));
+
   expect(yield* native(() => journey.exec("SELECT state FROM connections"))).toEqual([
     { state: "Action required" },
   ]);
@@ -174,12 +198,15 @@ const rejectedGrantJourney = Effect.gen(function* () {
       failed.attempt_id
     )
   );
+
   const users = yield* native(() =>
     journey.runtime.getDurableObjectNamespace("USER_STORE", "core")
   );
+
   const recovery = yield* native(() =>
     users.getByName(alice.user).fetch("https://fixture.invalid/connection-recovery")
   );
+
   expect(recovery.status).toBe(204);
   expect(yield* native(() => journey.exec(grants))).toMatchObject([
     { attempt_id: failed.attempt_id, state: "cleanup_required", held: 0, cleaned: 1 },
@@ -191,6 +218,7 @@ const rejectedGrantJourney = Effect.gen(function* () {
     revocations: 1,
   });
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "quarantines a rejected bank exchange and revokes only its held generation after a later activation",
@@ -228,12 +256,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const journey = yield* makeNativeTransactionJourney(undefined, nativeConnectionPlatform);
         const payload = { institutionId: "bancolombia" };
+
         const first = {
           callId: alice.user,
           operation: "connections.connectInstitution",
           input: { payload },
         };
+
         const sibling = { callId: bob.user, operation: "dashboard.initializeDashboard", input: {} };
+
         const send = (path: string, body: unknown, subject = alice): Effect.Effect<Response> =>
           native(() =>
             journey.send(
@@ -249,8 +280,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               })
             )
           );
+
         const batch = (second: typeof sibling | typeof first): Effect.Effect<Response> =>
           send("/operations/atomic-batch", { calls: [first, second] });
+
         expect((yield* send("/connections", payload, bob)).status).toBe(400);
         expect((yield* batch({ ...first, callId: bob.user })).status).toBe(400);
         yield* native(() =>
@@ -272,6 +305,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const result = yield* native(() => response.json());
         const repeated = yield* send("/connections", payload);
         expect(repeated.status).toBe(200);
+
         const started = yield* Schema.decodeUnknownEffect(
           Schema.Struct({
             data: Schema.Struct({
@@ -282,6 +316,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             next: Schema.Array(Schema.Json),
           })
         )(yield* native(() => repeated.json()));
+
         expect(result).toMatchObject({
           data: { results: [{ output: started }, { callId: bob.user }] },
         });
@@ -289,9 +324,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           yield* native(() => journey.exec("SELECT count(*) AS count FROM connection_attempts"))
         ).toEqual([{ count: 1 }]);
         const url = new URL(started.data.continuation.url);
+
         const review = yield* native(() =>
           journey.browser(0, "/web/connections/review" + url.search)
         );
+
         expect(review.status).toBe(200);
         expect(yield* native(() => review.json())).toMatchObject({
           phase: "ready",
@@ -301,18 +338,21 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const begin = yield* send("/web/connections/begin", {
           attempt: url.searchParams.get("attempt"),
         });
+
         expect(begin.status).toBe(200);
         expect(
           yield* native(() =>
             journey.exec("SELECT consent_id,phase FROM connection_authorizations")
           )
         ).toEqual([{ consent_id: "test-consent", phase: "prepared" }]);
+
         const prepared = yield* Schema.decodeUnknownEffect(
           Schema.Struct({
             phase: Schema.Literal("prepared"),
             authorization: Schema.Struct({ url: Schema.String }),
           })
         )(yield* native(() => begin.json()));
+
         expect(new URL(prepared.authorization.url).searchParams.has("request_uri")).toBe(true);
       })
   );
@@ -338,18 +378,22 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             .toEqual([{ movements: 1, audits: 1, completed: 1 }])
         );
         expect((yield* resume(alice.user)).status).toBe(204);
+
         const transport = yield* native(() =>
           journey.runtime.getBindings<{
             CONNECTION_SYNCHRONIZATION_QUEUE: Queue;
             CONNECTION_SYNCHRONIZATION_WORKFLOW: Workflow;
           }>("core")
         );
+
         yield* native(() =>
           transport.CONNECTION_SYNCHRONIZATION_QUEUE.sendBatch([{ body: packet }, { body: packet }])
         );
+
         const instance = yield* native(() =>
           transport.CONNECTION_SYNCHRONIZATION_WORKFLOW.get(packet.jobId)
         );
+
         yield* native(() => instance.status()).pipe(
           Effect.repeat({
             until: (state) => state.status === "complete",
@@ -398,8 +442,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const { journey, provider, facts } = yield* runningSynchronization();
       yield* native(() => journey.exec("UPDATE connections SET state='Ended'"));
       yield* native(() => provider.fetch("https://fixture.invalid/release"));
+
       const state = (): ReturnType<typeof journey.exec> =>
         journey.exec("SELECT state FROM connection_synchronizations");
+
       yield* native(() =>
         expect
           .poll(state, {
@@ -430,8 +476,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             )
           )
         ).toEqual([{ cursor: null, last_success_ms: null, attestations: 0, references_count: 0 }]);
+
         const pending = (): ReturnType<typeof journey.exec> =>
           journey.exec("SELECT state FROM connection_synchronizations");
+
         yield* native(() => expect.poll(pending).toEqual([{ state: "pending" }]));
         yield* native(() => journey.exec("DROP TRIGGER interrupt_page"));
         expect((yield* resume(alice.user)).status).toBe(204);
@@ -445,8 +493,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const journey = yield* makeNativeTransactionJourney(undefined, nativeConnectionPlatform);
         const current = yield* Clock.currentTimeMillis;
+
         const read = "fin_rrrrrrrr_" + "a".repeat(43),
           write = "fin_wwwwwwww_" + "b".repeat(43);
+
         yield* seedNativePAT({
           db: journey,
           userId: alice.user,
@@ -461,22 +511,29 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           scopes: ["write"],
           current,
         });
+
+        const headersFor = (token: string): HeadersInit => ({
+          authorization: "Bearer " + token,
+          "content-type": "application/json",
+          "Fidy-Retry-Key": "original",
+        });
+
         const call = (token: string, method: "GET" | "POST"): Effect.Effect<Response> =>
           native(() =>
             journey.send(
-              new Request("https://api.fidyapp.com/connections", {
-                method,
-                headers: {
-                  authorization: "Bearer " + token,
-                  "content-type": "application/json",
-                  "Fidy-Retry-Key": "original",
-                },
-                ...(method === "POST"
-                  ? { body: JSON.stringify({ institutionId: "bancolombia" }) }
-                  : {}),
-              })
+              new Request(
+                "https://api.fidyapp.com/connections",
+                method === "POST"
+                  ? {
+                      method,
+                      headers: headersFor(token),
+                      body: JSON.stringify({ institutionId: "bancolombia" }),
+                    }
+                  : { method, headers: headersFor(token) }
+              )
             )
           );
+
         expect((yield* call(read, "POST")).status).toBe(403);
         expect((yield* call(read, "GET")).status).toBe(200);
         expect((yield* call(write, "GET")).status).toBe(403);
@@ -504,10 +561,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         yield* driver.step();
         yield* native(() => provider.fetch("https://fixture.invalid/release"));
         yield* native(() => journey.checkWork(alice.user));
+
         const cleanup = (): ReturnType<typeof journey.exec> =>
           journey.exec(
             "SELECT cleaned_at_ms IS NOT NULL AS cleaned,envelope IS NULL AS cleared,cleanup_access_seen AS observed FROM connection_grants"
           );
+
         yield* native(() =>
           expect
             .poll(cleanup, { timeout: 15000 })

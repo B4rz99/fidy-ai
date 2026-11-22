@@ -1,9 +1,12 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Clock, Effect, Schema } from "effect";
+import { Clock, Data, Effect, Schema } from "effect";
 import { expect } from "vitest";
 import { alice, makeNativeTransactionJourney } from "../financial-user-store.test-fixture";
 import { native } from "../user-store.test-fixture";
+import { type ReviewCommand } from "../../src/core/ingestion/contract";
+
+const ReviewWire = Data.taggedEnum<typeof ReviewCommand.Encoded>();
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("reads fresh Needs Review counts and bounded pages from the authenticated User", () =>
@@ -48,6 +51,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           now + 60000
         )
       );
+
       const edit = (payload: unknown): Effect.Effect<Response> =>
         native(() =>
           journey.send(
@@ -63,25 +67,28 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             })
           )
         );
+
       expect(
         (yield* native(() => journey.browser(1, "/ingestion/review-workspace/" + id))).status
       ).toBe(404);
-      const skip = { _tag: "Skip", items: [{ id, revision: 0 }] };
+      const skip = ReviewWire.Skip({ items: [{ id, revision: 0 }] });
       const skipped = yield* edit(skip);
       expect(skipped.status).toBe(200);
       expect(yield* native(() => skipped.json())).toMatchObject({
         data: [{ item: { id, status: "skipped" }, revision: 1 }],
       });
       expect((yield* edit(skip)).status).toBe(400);
+
       const history = yield* native(() =>
         journey.browser(0, "/ingestion/review-workspace?status=history&limit=1")
       );
+
       expect(yield* native(() => history.json())).toMatchObject({
         data: { pendingCount: 0, total: 1, selectedDetail: { revision: 1 } },
       });
-      expect((yield* edit({ _tag: "Restore", items: [{ id, revision: 1 }] })).status).toBe(200);
-      const command = {
-        _tag: "Create",
+      expect((yield* edit(ReviewWire.Restore({ items: [{ id, revision: 1 }] }))).status).toBe(200);
+
+      const command = ReviewWire.Create({
         id,
         revision: 2,
         extraction: {
@@ -89,7 +96,8 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           occurredAt: "2025-11-01T18:00:00.000Z",
           direction: "outflow",
         },
-      };
+      });
+
       const created = yield* edit(command);
       expect(created.status).toBe(200);
       expect(yield* native(() => created.json())).toMatchObject({
@@ -97,14 +105,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       });
       expect((yield* edit(command)).status).toBe(400);
       const detail = yield* native(() => journey.browser(0, "/ingestion/review-workspace/" + id));
+
       const recovered = yield* Schema.decodeUnknownEffect(
         Schema.Struct({
           data: Schema.Struct({ item: Schema.Struct({ transactionId: Schema.String }) }),
         })
       )(yield* native(() => detail.json()));
+
       const transaction = yield* native(() =>
         journey.browser(0, "/transactions/" + recovered.data.item.transactionId)
       );
+
       expect(yield* native(() => transaction.json())).toMatchObject({
         data: { money: { amount: "8.5", currency: "USD" } },
       });

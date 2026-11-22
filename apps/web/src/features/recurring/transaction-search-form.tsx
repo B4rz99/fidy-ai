@@ -23,22 +23,28 @@ type Props = Readonly<{
   timeZone: string;
   apply: (query: TransactionSearch, draft: TransactionFilters) => void;
 }>;
+
 const currencyOptions = [
   { value: "", label: "Todas las monedas" },
   ...currencyChoices(Currency.literals),
 ];
+
 export const TransactionSearchForm = ({ draft, setDraft, timeZone, apply }: Props): JSX.Element => {
   const [invalid, setInvalid] = useState(false);
+
   const change =
     (field: keyof TransactionFilters) =>
     (value: string): void =>
       setDraft({ ...draft, [field]: value });
+
   const submit = (value: TransactionFilters): void => {
     const query = transactionSearch({ draft: value, timeZone });
     setInvalid(Option.isNone(query));
     Option.map(query, (search) => apply(search, value));
   };
+
   const id = useId();
+
   return (
     <form
       aria-label="Buscar en el historial"
@@ -85,6 +91,7 @@ export const TransactionSearchForm = ({ draft, setDraft, timeZone, apply }: Prop
     </form>
   );
 };
+
 const DateAmountFields = ({
   draft,
   change,

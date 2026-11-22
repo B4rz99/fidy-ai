@@ -5,25 +5,27 @@ import { OutboundHttp } from "../../../src/shell/outbound-http/operations";
 import {
   type TestOutboundTransportRequest,
   testOutboundTransportLayer,
-} from "../../../src/shell/outbound-http/testing";
+} from "../../../test/support/outbound-http";
 import { UnknownJsonString } from "../../../src/shell/schema-codecs/contract";
 import { BillingEmail } from "../../../src/core/subscription/contract";
 import { WompiSourceId, WompiTransactionId, WompiTransactionReference } from "./wompi-model";
 import {
-  buildLayerExit,
   exitFailure,
   expectNotInspected,
   renderedFailure,
 } from "../../../src/shell/testing/credential-evidence-harness";
-import { WompiBillingClient } from "./wompi-billing-client";
+import { WompiBillingClient, WompiTransactionCreationFailed } from "./wompi-billing-client";
 
 const privateKeyFixture = `prv_test_${"f1d7c0de".repeat(3)}`;
+
 const integritySecretFixture = `test_integrity_${"f1d7c0de".repeat(3)}`;
+
 const sharedProviderConfig = {
   KAPSO_API_KEY: "test-kapso-key",
   WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
   RESEND_API_KEY: `re_${"f1d7c0de".repeat(3)}`,
 };
+
 const config = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
     ...sharedProviderConfig,
@@ -37,16 +39,20 @@ const config = ConfigProvider.layer(
 const recordedCreatedTransaction = await Bun.file(
   new URL("./fixtures/wompi-transaction-created.sandbox.json", import.meta.url)
 ).text();
+
 const recordedApprovedTransaction = await Bun.file(
   new URL("./fixtures/wompi-transaction-approved.sandbox.json", import.meta.url)
 ).text();
+
 const recordedDeclinedTransaction = await Bun.file(
   new URL("./fixtures/wompi-transaction-declined.sandbox.json", import.meta.url)
 ).text();
+
 const successResponse = (method: string): Response =>
   method === "GET"
     ? new Response(recordedApprovedTransaction)
     : new Response(recordedCreatedTransaction, { status: 201 });
+
 const clientLayer = (
   response: (method: string) => Response,
   configLayer: typeof config = config,
@@ -58,6 +64,7 @@ const clientLayer = (
       Layer.mergeAll(
         testOutboundTransportLayer((request) => {
           observeRequest?.(request);
+
           return Effect.succeed(response(request.method));
         }),
         configLayer,
@@ -65,8 +72,11 @@ const clientLayer = (
       )
     )
   );
+
 const TestLayer = clientLayer(successResponse);
+
 const walletRequests: Array<TestOutboundTransportRequest> = [];
+
 layer(
   clientLayer(successResponse, config, (request) => walletRequests.push(request)),
   {
@@ -77,21 +87,27 @@ layer(
     Effect.gen(function* () {
       walletRequests.length = 0;
       const wompi = yield* WompiBillingClient;
+
       const transaction = yield* wompi.createTransaction({
         ...creationInput,
         method: "daviplata",
       });
+
       expect(transaction.status).toBe("PENDING");
       const request = walletRequests.find((value) => value.method === "POST");
+
       if (request?.body._tag !== "Uint8Array") return yield* Effect.die("missing source charge");
+
       const body = yield* Schema.decodeEffect(UnknownJsonString)(
         new TextDecoder().decode(request.body.body)
       );
+
       expect(body).toMatchObject({ payment_source_id: 3891, amount_in_cents: 2_890_000 });
       expect(body).not.toHaveProperty("payment_method");
     })
   );
 });
+
 const creationInput = {
   method: "card" as const,
   reference: WompiTransactionReference.make("fidy-22900000-0000-4000-8000-000000000001"),
@@ -133,6 +149,7 @@ const providerGetWithoutSource = clientLayer((method) =>
       )
     : new Response(recordedCreatedTransaction, { status: 201 })
 );
+
 layer(providerGetWithoutSource, { excludeTestServices: true })("Wompi documented GET", (it) => {
   it.effect("accepts a provider lookup without the optional payment source field", () =>
     Effect.gen(function* () {
@@ -145,6 +162,7 @@ layer(providerGetWithoutSource, { excludeTestServices: true })("Wompi documented
 });
 
 const recordedRequests: Array<TestOutboundTransportRequest> = [];
+
 const credentialBoundaryLayer = clientLayer(successResponse, config, (request) =>
   recordedRequests.push(request)
 );
@@ -164,12 +182,15 @@ layer(credentialBoundaryLayer, { excludeTestServices: true })(
           yield* wompi.createTransaction(creationInput);
           const created = recordedRequests.find((request) => request.method === "POST");
           expect(created?.headers.authorization).toBe(`Bearer ${privateKeyFixture}`);
+
           if (created?.body._tag !== "Uint8Array") {
             return yield* Effect.die("missing create-transaction request body");
           }
+
           const body = yield* Schema.decodeEffect(UnknownJsonString)(
             new TextDecoder().decode(created.body.body)
           );
+
           expect(body).toMatchObject({
             signature: new Bun.CryptoHasher("sha256")
               .update(
@@ -212,10 +233,8 @@ layer(
     Effect.gen(function* () {
       const wompi = yield* WompiBillingClient;
       const failure = yield* Effect.flip(wompi.createTransaction(creationInput));
-      expect(failure).toMatchObject({
-        _tag: "WompiTransactionCreationFailed",
-        certainty: "rejected",
-      });
+      expect(failure).toBeInstanceOf(WompiTransactionCreationFailed);
+      expect(failure).toMatchObject({ certainty: "rejected" });
       const rendered = yield* renderedFailure(failure);
       expect(rendered).not.toContain(integritySecretFixture);
       expect(rendered).not.toContain(privateKeyFixture);
@@ -256,7 +275,9 @@ layer(
   );
 });
 
-for (const status of [404, 408, 429] as const) {
+const retryableRefusalStatuses = [404, 408, 429] as const;
+
+const describeRetryableRefusal = (status: (typeof retryableRefusalStatuses)[number]): void => {
   layer(
     clientLayer(() => new Response("provider refusal", { status })),
     {
@@ -271,7 +292,9 @@ for (const status of [404, 408, 429] as const) {
       })
     );
   });
-}
+};
+
+retryableRefusalStatuses.forEach(describeRetryableRefusal);
 
 layer(
   clientLayer(() => Response.error()),
@@ -296,6 +319,7 @@ const productionConfig = ConfigProvider.layer(
     WOMPI_INTEGRITY_SECRET: `prod_integrity_${"f1d7c0de".repeat(3)}`,
   })
 );
+
 layer(clientLayer(successResponse, productionConfig), { excludeTestServices: true })(
   "production Wompi configuration",
   (it) => {
@@ -319,7 +343,7 @@ const invalidConfiguration = (privateKey: string, integritySecret: string): type
     })
   );
 
-for (const [name, variable, privateKey, integritySecret] of [
+const invalidSecretCases = [
   [
     "private-key shape",
     "WOMPI_PRIVATE_KEY",
@@ -344,40 +368,61 @@ for (const [name, variable, privateKey, integritySecret] of [
     privateKeyFixture,
     `prod_integrity_${"f1d7c0de".repeat(3)}`,
   ],
-] as const) {
+] as const;
+
+const describeInvalidSecret = ([
+  name,
+  variable,
+  privateKey,
+  integritySecret,
+]: (typeof invalidSecretCases)[number]): void => {
   it.effect(`rejects invalid Wompi ${name} without echoing the candidate`, () =>
     Effect.gen(function* () {
       const failure = yield* exitFailure(
-        yield* buildLayerExit(
-          clientLayer(successResponse, invalidConfiguration(privateKey, integritySecret))
+        yield* Effect.exit(
+          Effect.scoped(
+            Layer.build(
+              clientLayer(successResponse, invalidConfiguration(privateKey, integritySecret))
+            )
+          )
         )
       );
+
       const rendered = yield* renderedFailure(failure);
+
       for (const candidate of [privateKey, integritySecret]) {
         expect(rendered).not.toContain(candidate);
       }
+
       expect(rendered).toContain(variable);
     })
   );
-}
+};
+
+invalidSecretCases.forEach(describeInvalidSecret);
 
 it.effect("rejects missing Wompi credentials with value-safe diagnostics", () =>
   Effect.gen(function* () {
     const failure = yield* exitFailure(
-      yield* buildLayerExit(
-        clientLayer(
-          successResponse,
-          ConfigProvider.layer(
-            ConfigProvider.fromUnknown({
-              ...sharedProviderConfig,
-              WOMPI_ENVIRONMENT: "sandbox",
-              WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
-              WOMPI_INTEGRITY_SECRET: integritySecretFixture,
-            })
+      yield* Effect.exit(
+        Effect.scoped(
+          Layer.build(
+            clientLayer(
+              successResponse,
+              ConfigProvider.layer(
+                ConfigProvider.fromUnknown({
+                  ...sharedProviderConfig,
+                  WOMPI_ENVIRONMENT: "sandbox",
+                  WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+                  WOMPI_INTEGRITY_SECRET: integritySecretFixture,
+                })
+              )
+            )
           )
         )
       )
     );
+
     expect(String(failure)).toContain("WOMPI_PRIVATE_KEY");
   })
 );

@@ -22,9 +22,11 @@ export const DashboardChart = ({
   categoryCount,
 }: Readonly<{ children: ReactNode; categoryCount: number }>): JSX.Element => {
   const [portal, setPortal] = useState(() => Option.none<HTMLDivElement>());
+
   const bindPortal = useCallback<RefCallback<HTMLDivElement>>((element) => {
     setPortal(Option.fromNullishOr(element));
   }, []);
+
   return (
     <DashboardTooltipPortal value={portal}>
       <div className="dashboard-chart-frame">
@@ -55,6 +57,7 @@ export const DashboardAxisTick = ({
   }>): JSX.Element => {
   const key = Option.getOrElse(Schema.decodeUnknownOption(Schema.String)(payload?.value), () => "");
   const label = labels.find((row) => row.key === key)?.label ?? key;
+
   return (
     <g transform={`translate(${x ?? 0},${y ?? 0})`}>
       <title>{label}</title>
@@ -78,8 +81,10 @@ export const DashboardAxisTick = ({
     </g>
   );
 };
+
 export const DashboardTooltip = (props: ComponentProps<typeof ChartTooltip>): JSX.Element => {
   const portal = useContext(DashboardTooltipPortal);
+
   return (
     <ChartTooltip
       {...props}

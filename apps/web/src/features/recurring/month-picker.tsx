@@ -6,9 +6,11 @@ import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/ui/comp
 import { monthLabel, shortMonthLabel } from "./model";
 
 const yearOf = (month: string): number => Number(month.slice(0, "2026".length));
+
 const monthNumbers = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
 
 type YearProps = Readonly<{ year: number; setYear: (year: number) => void }>;
+
 const YearStepper = ({ year, setYear }: YearProps): JSX.Element => (
   <div className="flex items-center justify-between">
     <Button
@@ -43,10 +45,12 @@ type GridProps = Readonly<{
   today: string;
   choose: (month: string) => void;
 }>;
+
 const MonthGrid = ({ year, month, today, choose }: GridProps): JSX.Element => (
   <div className="grid grid-cols-3 gap-1">
     {monthNumbers.map((number) => {
       const value = `${year}-${number}`;
+
       return (
         <Button
           key={value}
@@ -72,13 +76,16 @@ type MonthPickerProps = Readonly<{
   today: string;
   select: (month: string) => void;
 }>;
+
 export const MonthPicker = ({ month, today, select }: MonthPickerProps): JSX.Element => {
   const [open, setOpen] = useState(false);
   const [year, setYear] = useState(() => yearOf(month));
+
   const choose = (value: string): void => {
     setOpen(false);
     select(value);
   };
+
   return (
     <Popover
       open={open}

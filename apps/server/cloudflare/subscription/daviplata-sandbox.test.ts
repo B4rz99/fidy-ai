@@ -8,7 +8,7 @@ import {
 import {
   makeTestOutboundTransport,
   testOutboundTransportResponse,
-} from "../../src/shell/outbound-http/testing";
+} from "../../test/support/outbound-http";
 import { workerDigest } from "./internal/wompi-runtime";
 import {
   DaviplataSandboxProofFailure,
@@ -16,8 +16,14 @@ import {
   requireDaviplataSandboxPolicy,
 } from "./daviplata-sandbox.test-fixture";
 
+const ProofFailureProjection = Schema.TaggedStruct("DaviplataSandboxProofFailure", {
+  stage: Schema.String,
+});
+
 const endpoint = "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox";
+
 const policy = { sendUrl: endpoint, confirmUrl: endpoint };
+
 const outboundFor = (
   handler: Parameters<typeof makeTestOutboundTransport>[0]
 ): OutboundHttpService =>
@@ -40,6 +46,7 @@ type ProtocolPremise = Readonly<{
   malformedAt: number;
   stopAt: number;
 }>;
+
 const ordinary: ProtocolPremise = {
   name: "ordinary",
   failureStage: "destinations",
@@ -49,8 +56,10 @@ const ordinary: ProtocolPremise = {
   malformedAt: 0,
   stopAt: 3,
 };
+
 const syntheticBody = (step: number, premise: ProtocolPremise): string => {
   if (step === premise.malformedAt) return "not-json";
+
   if (step === 1) {
     return JSON.stringify({
       data: {
@@ -64,6 +73,7 @@ const syntheticBody = (step: number, premise: ProtocolPremise): string => {
       },
     });
   }
+
   return JSON.stringify({
     data: {
       subscription: {
@@ -149,12 +159,15 @@ it.each<ProtocolPremise>([
     Effect.runPromise(
       Effect.gen(function* () {
         let requests = 0;
+
         const outbound = outboundFor((request) => {
           requests += 1;
+
           return Effect.succeed(
             testOutboundTransportResponse(request, new Response(syntheticBody(requests, premise)))
           );
         });
+
         assert.deepStrictEqual(
           yield* Effect.exit(authorizeDaviplataSandbox({ outbound, policy, outcome: "approved" })),
           Exit.fail(new DaviplataSandboxProofFailure({ stage: premise.failureStage }))
@@ -169,13 +182,16 @@ it("rotates the synthetic one-use service bearer and confirms the same reusable 
     Effect.gen(function* () {
       let requests = 0;
       const authorization: Array<string> = [];
+
       const outbound = outboundFor((request) => {
         requests += 1;
         authorization.push(new Headers(request.headers).get("authorization") ?? "");
+
         return Effect.succeed(
           testOutboundTransportResponse(request, new Response(syntheticBody(requests, ordinary)))
         );
       });
+
       const token = yield* authorizeDaviplataSandbox({ outbound, policy, outcome: "declined" });
       expect(Redacted.value(token)).toBe("daviplata_devtest_synthetic");
       expect(requests).toBe(3);
@@ -191,8 +207,10 @@ it("identifies a failed OTP-send response without retaining provider content or 
   Effect.runPromise(
     Effect.gen(function* () {
       let requests = 0;
+
       const outbound = outboundFor((request) => {
         requests += 1;
+
         return Effect.succeed(
           testOutboundTransportResponse(
             request,
@@ -204,17 +222,16 @@ it("identifies a failed OTP-send response without retaining provider content or 
           )
         );
       });
+
       const failure = yield* authorizeDaviplataSandbox({
         outbound,
         policy,
         outcome: "approved",
       }).pipe(Effect.flip);
+
       const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(failure);
       const projected = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(encoded);
-      expect(projected).toEqual({
-        _tag: "DaviplataSandboxProofFailure",
-        stage: "otp-send-response",
-      });
+      expect(projected).toEqual(ProofFailureProjection.make({ stage: "otp-send-response" }));
       expect(requests).toBe(2);
     })
   ));

@@ -2,6 +2,7 @@ import type { Effect, Option, Schema } from "effect";
 import type { Prompt } from "effect/ai";
 import type { TranscriptEntry } from "~/core/agent/contract";
 import type {
+  HostedActiveRequest,
   HostedInferenceError,
   HostedTextResult,
   HostedTextToolPolicy,
@@ -11,24 +12,24 @@ export type HostedPromptProjection = Readonly<{
   prefix: ReadonlyArray<Prompt.MessageEncoded>;
   continuationTail: ReadonlyArray<Prompt.MessageEncoded>;
   suffix: ReadonlyArray<Prompt.MessageEncoded>;
-  activeRequest: Readonly<{ _tag: "Absent" }> | Readonly<{ _tag: "Present"; text: string }>;
+  activeRequest: HostedActiveRequest;
 }>;
 
-export type PreparedStructuredExecution<Output> = Readonly<{
-  execute: Effect.Effect<Output, HostedInferenceError>;
+export type PreparedStructuredExecution<Output, Requirements = never> = Readonly<{
+  execute: Effect.Effect<Output, HostedInferenceError, Requirements>;
 }>;
 
-export type HostedStructuredAdapter = Readonly<{
+export type HostedStructuredAdapter<Requirements = never> = Readonly<{
   prepare: <Output, Encoded extends Readonly<Record<string, unknown>>>(
     input: Readonly<{
       messages: ReadonlyArray<Prompt.MessageEncoded>;
       objectName: string;
       outputSchema: Schema.Codec<Output, Encoded, never, never>;
     }>
-  ) => Effect.Effect<PreparedStructuredExecution<Output>, HostedInferenceError>;
+  ) => Effect.Effect<PreparedStructuredExecution<Output, Requirements>, HostedInferenceError>;
 }>;
 
-export type HostedInferenceAdapter<Request, Continuation> = Readonly<{
+export type HostedInferenceAdapter<Request, Continuation, Requirements = never> = Readonly<{
   countText: (text: string) => Effect.Effect<number>;
   countTranscript: (entries: ReadonlyArray<TranscriptEntry>) => Effect.Effect<number>;
   prepare: (
@@ -43,7 +44,8 @@ export type HostedInferenceAdapter<Request, Continuation> = Readonly<{
     request: Request
   ) => Effect.Effect<
     Readonly<{ result: Omit<HostedTextResult, "continuation">; continuation: Continuation }>,
-    HostedInferenceError
+    HostedInferenceError,
+    Requirements
   >;
-  structured: HostedStructuredAdapter;
+  structured: HostedStructuredAdapter<Requirements>;
 }>;

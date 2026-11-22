@@ -7,7 +7,7 @@ import { useSession } from "@/session/session-context";
 import { ApplicationSurface } from "@/ui/components/application";
 import { Button } from "@/ui/components/button";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
-import { completeLogoutNavigation, makeLogoutOperation } from "./logout";
+import { completeLogoutNavigation, createLogoutOperation } from "./logout";
 import { SignedInBrand, SignedInNavigation } from "./navigation";
 import { LogoutFailure } from "./logout-failure";
 import { CompactNavigation } from "./compact-navigation";
@@ -65,6 +65,7 @@ type ApplicationShellProps = Readonly<
     prepareNavigation: (destination: string) => void;
   }
 >;
+
 export const ApplicationShell = ({
   children,
   readOnly,
@@ -74,17 +75,21 @@ export const ApplicationShell = ({
   const desktop = useDesktopNavigation();
   const router = useRouter();
   const { completeLogout } = useSession();
+
   const logoutRequest = router.options.context.webAuthClient.pipe(
     Effect.flatMap((client) => client.browserLogin.logout())
   );
+
   const [logout] = useState(() =>
     router.options.context.webAuthClient.runtime.fn<{ onLoggedOut: () => void }>()(
-      logoutRequest.pipe(makeLogoutOperation)
+      logoutRequest.pipe(createLogoutOperation)
     )
   );
+
   const status = useAtomValue(logout);
   const failed = AsyncResult.isFailure(status) && !Cause.hasInterruptsOnly(status.cause);
   const runLogout = useAtomSet(logout);
+
   const onLogout = (): void => {
     if (status.waiting) return;
     completeLogoutNavigation({
@@ -128,5 +133,6 @@ export const SignedInContent = ({
   children,
 }: Readonly<Pick<ComponentProps<"div">, "children">>): JSX.Element => {
   const { authentication } = useSession();
+
   return authentication === "expired" ? <AccessRefused withdrawn={false} /> : <>{children}</>;
 };

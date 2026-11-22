@@ -15,8 +15,10 @@ export const isReviewedOAuthExpiration = (input: OAuthExpirationReview): boolean
   input.reviewedAt <= input.current &&
   input.reviewedAt + oauthReviewLifetimeMs > input.current &&
   input.expiresAt === input.reviewedAt + input.lifetimeDays * dayMs;
+
 export const oauthAuthorizationCodeExpiresAt = (current: number): number =>
   current + oauthAuthorizationCodeLifetimeMs;
+
 export const decideOAuthCredentialExpirations = (
   input: Readonly<{ current: number; grantExpiresAt: number }>
 ): OAuthCredentialExpirations => ({

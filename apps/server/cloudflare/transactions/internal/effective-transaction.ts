@@ -1,5 +1,10 @@
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 
+type BoundStatement = Readonly<{
+  sql: string;
+  bindings: ReadonlyArray<string | number | Uint8Array>;
+}>;
+
 export type EffectiveTransactionRelation = Readonly<{
   sql: string;
   bindings: ReadonlyArray<string>;
@@ -64,12 +69,14 @@ const historyPage = ({
     userSql: string;
     userBindings: ReadonlyArray<string>;
     prefix: OwnedStatement;
-  }>): Readonly<{ sql: string; bindings: ReadonlyArray<string | number | Uint8Array> }> => {
+  }>): BoundStatement => {
   const presentation = taxonomyRevision
     ? ordinaryPresentation + ", category_revision"
     : ordinaryPresentation;
+
   const relation = relationFor(userSql, userBindings);
   const ordered = `ORDER BY occurred_at_ms DESC, created_at_ms DESC, id DESC LIMIT ${limit}`;
+
   return {
     sql: `WITH ${prefix.sql}readiness AS MATERIALIZED (SELECT EXISTS (
         SELECT 1 FROM transaction_projection_state

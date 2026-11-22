@@ -1,4 +1,4 @@
-import { DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Predicate, Schema } from "effect";
 import { type CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
 import type { ReceivedEmailContent } from "~/shell/ingestion/internal/material";
 import { TransactionExtraction } from "~/core/transactions/contract";
@@ -6,12 +6,13 @@ import { generatedFormats } from "./catalog.generated";
 import { type EmailDocument, normalizeDocumentText, parseEmailDocument } from "./document";
 import type { NotificationEmailFormat } from "./format-definition";
 import { containsCompleteFinancialNumber } from "./format-support";
-import type {
-  EmailInterpretationReviewReason,
+import {
+  type EmailInterpretationReviewReason,
   NotificationEmailInterpretation,
 } from "~/shell/ingestion/contract";
 
 const maximumCandidates = 8;
+
 const escapeRegExp = (value: string): string => value.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 
 type ValidatedCatalog = Readonly<{
@@ -46,19 +47,25 @@ const validatedCatalog = ((): ValidatedCatalog => {
   const ids = new Set<string>();
   const revisions = new Set<string>();
   const anchorFormats = new Map<string, Array<NotificationEmailFormat>>();
+
   for (const format of generatedFormats) {
     validateIdentity(format, ids, revisions);
+
     for (const rawAnchor of format.routingAnchors) {
       const anchor = normalizeDocumentText(rawAnchor);
+
       if (anchor.length < 4) {
         throw new Error("Notification format routing anchors must be specific");
       }
+
       const formats = anchorFormats.get(anchor) ?? [];
       formats.push(format);
       anchorFormats.set(anchor, formats);
     }
   }
+
   const anchors = [...anchorFormats.keys()].sort((left, right) => right.length - left.length);
+
   return {
     anchorFormats,
     matcher: new RegExp(anchors.map(escapeRegExp).join("|"), "gu"),
@@ -67,14 +74,19 @@ const validatedCatalog = ((): ValidatedCatalog => {
 
 const candidatesFor = (text: string): ReadonlyArray<NotificationEmailFormat> => {
   const candidates = new Set<NotificationEmailFormat>();
+
   for (const match of text.matchAll(validatedCatalog.matcher)) {
     const anchor = match[0];
-    const formats = Option.getOrThrow(
-      Option.fromNullishOr(validatedCatalog.anchorFormats.get(anchor))
-    );
+
+    const formats = validatedCatalog.anchorFormats.get(anchor);
+
+    if (formats === undefined) throw new Error(`Unknown email format anchor: ${anchor}`);
+
     for (const format of formats) candidates.add(format);
+
     if (candidates.size > maximumCandidates) break;
   }
+
   return [...candidates];
 };
 
@@ -83,21 +95,22 @@ type InterpretationInput = Readonly<{
   context: CapturedInterpretationContext;
 }>;
 
-const needsReview = (reason: EmailInterpretationReviewReason): NotificationEmailInterpretation => ({
-  _tag: "NeedsReview",
-  reason,
-});
+const needsReview = (reason: EmailInterpretationReviewReason): NotificationEmailInterpretation =>
+  NotificationEmailInterpretation.NeedsReview({ reason });
 
 const selectCandidate = (
   document: EmailDocument
 ): NotificationEmailFormat | EmailInterpretationReviewReason => {
   const candidates = candidatesFor(document.text);
+
   if (candidates.length === 0) {
     return "unknown-format";
   }
+
   if (candidates.length !== 1) {
     return "ambiguous-format";
   }
+
   return Option.getOrElse(Option.fromNullishOr(candidates[0]), () => "unknown-format");
 };
 
@@ -107,19 +120,22 @@ const finalizeInterpretation = (
   context: CapturedInterpretationContext
 ): NotificationEmailInterpretation => {
   const interpreted = format.interpret(document, context);
+
   if (Option.isNone(interpreted)) {
     return needsReview("invalid-format");
   }
+
   const extraction = Schema.decodeOption(TransactionExtraction)({
     money: { amount: interpreted.value.amount, currency: interpreted.value.currency },
     direction: "outflow",
     occurredAt: DateTime.formatIso(interpreted.value.occurredAt),
   });
+
   if (Option.isNone(extraction)) {
     return needsReview("invalid-format");
   }
-  return {
-    _tag: "Interpreted",
+
+  return NotificationEmailInterpretation.Interpreted({
     extraction: extraction.value,
     evidence: {
       formatId: format.id,
@@ -127,7 +143,7 @@ const finalizeInterpretation = (
       currencyBasis: interpreted.value.currencyBasis,
       accountHints: interpreted.value.accountHints,
     },
-  };
+  });
 };
 
 const interpret = (input: InterpretationInput): NotificationEmailInterpretation => {
@@ -136,21 +152,28 @@ const interpret = (input: InterpretationInput): NotificationEmailInterpretation 
     Option.getOrElse(input.content.text, () => ""),
     Option.getOrElse(input.content.html, () => ""),
   ].join("\n");
+
   if (containsCompleteFinancialNumber(suppliedText)) {
     return needsReview("invalid-format");
   }
+
   if (Option.isNone(input.content.html)) {
     return needsReview("unsupported-content");
   }
+
   const document = parseEmailDocument(input.content.html.value);
+
   if (Option.isNone(document)) {
     return needsReview("unsupported-content");
   }
+
   if (containsCompleteFinancialNumber(document.value.text)) {
     return needsReview("invalid-format");
   }
+
   const candidate = selectCandidate(document.value);
-  return typeof candidate === "string"
+
+  return Predicate.isString(candidate)
     ? needsReview(candidate)
     : finalizeInterpretation(candidate, document.value, input.context);
 };

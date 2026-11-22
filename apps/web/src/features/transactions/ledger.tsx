@@ -47,13 +47,16 @@ const features = tableFeatures({
   sortedRowModel: createSortedRowModel(),
   sortFns: { alphanumeric: sortFn_alphanumeric, text: sortFn_text },
 });
+
 type LedgerTable = ReactTable<typeof features, TransactionListRow>;
+
 const columns: Array<ColumnDef<typeof features, TransactionListRow>> = [
   { accessorKey: "counterpartyLabel", header: "Contraparte" },
   { accessorKey: "categoryLabel", header: "Categoría" },
   { accessorKey: "transactionTypeLabel", header: "Tipo" },
   { accessorKey: "moneyText", header: "Monto", enableSorting: false },
 ];
+
 type LedgerProps = Readonly<{
   locate: Option.Option<string>;
   emptyTitle: string;
@@ -79,13 +82,16 @@ type LedgerProps = Readonly<{
     onClear: () => void;
   }>;
 }>;
+
 const transactionAction = (
   row: TransactionListRow,
   selection: LedgerProps["selection"]
 ): string => {
   if (!selection.active) return "Ver transacción";
+
   return `${selection.ids.includes(row.id) ? "Deseleccionar" : "Seleccionar"} transacción`;
 };
+
 const TransactionIdentity = ({
   row,
   selected,
@@ -128,6 +134,7 @@ const TransactionIdentity = ({
     </div>
   </TableCell>
 );
+
 const TransactionClassification = ({
   row,
   onSelect,
@@ -159,11 +166,13 @@ const TransactionClassification = ({
     </TableCell>
   </>
 );
+
 const useTransactionReveal = (
   locate: Option.Option<string>,
   id: string
 ): RefCallback<HTMLTableRowElement> => {
   const revealed = useRef(false);
+
   return useCallback<RefCallback<HTMLTableRowElement>>(
     (node): void => {
       if (node === null || revealed.current || !Option.contains(locate, id)) return;
@@ -173,6 +182,7 @@ const useTransactionReveal = (
     [locate, id]
   );
 };
+
 const TransactionAmount = ({
   row,
   disabled,
@@ -203,6 +213,7 @@ const TransactionAmount = ({
     </button>
   </TableCell>
 );
+
 const TransactionRow = ({
   row,
   selected,
@@ -214,6 +225,7 @@ const TransactionRow = ({
   locate,
 }: Readonly<{ row: TransactionListRow }> & Omit<LedgerProps, "rows">): JSX.Element => {
   const reveal = useTransactionReveal(locate, row.id);
+
   return (
     <TableRow
       ref={reveal}
@@ -241,6 +253,7 @@ const TransactionRow = ({
     </TableRow>
   );
 };
+
 const LedgerHeader = ({
   table,
 }: Readonly<{
@@ -266,6 +279,7 @@ const LedgerHeader = ({
     ))}
   </TableHeader>
 );
+
 const dailyTotals = (
   rows: ReadonlyArray<TransactionListRow>,
   locale: string
@@ -278,6 +292,7 @@ const dailyTotals = (
         amount: BigDecimal.sumAll(
           rows.flatMap((row) => {
             if (row.money.currency !== currency) return [];
+
             return [
               row.direction === "inflow" ? row.money.amount : BigDecimal.negate(row.money.amount),
             ];
@@ -286,11 +301,13 @@ const dailyTotals = (
       },
     })
   );
+
 const sortValue = (sorting: SortingState): string =>
   Option.fromNullishOr(sorting[0]).pipe(
     Option.map((sort) => `${sort.id}:${sort.desc ? "desc" : "asc"}`),
     Option.getOrElse(() => "default")
   );
+
 const ColumnControls = ({
   table,
   disabled,
@@ -308,6 +325,7 @@ const ColumnControls = ({
     <DropdownMenuContent align="end">
       {table.getAllLeafColumns().flatMap((column) => {
         if (column.id !== "categoryLabel" && column.id !== "transactionTypeLabel") return [];
+
         return [
           <DropdownMenuCheckboxItem
             key={column.id}
@@ -323,12 +341,14 @@ const ColumnControls = ({
     </DropdownMenuContent>
   </DropdownMenu>
 );
+
 const sortOptions = [
   { value: "default", label: "Más recientes primero" },
   { value: "counterpartyLabel:asc", label: "Contraparte A–Z en cada día" },
   { value: "counterpartyLabel:desc", label: "Contraparte Z–A en cada día" },
   { value: "categoryLabel:asc", label: "Categoría A–Z en cada día" },
 ];
+
 const SortControl = ({
   sorting,
   onSorting,
@@ -353,6 +373,7 @@ const SortControl = ({
     }}
   />
 );
+
 const LedgerControls = ({
   table,
   sorting,
@@ -388,15 +409,19 @@ const LedgerControls = ({
     </div>
   </RecordToolbar>
 );
+
 const fallbackInitialRows = 32;
+
 const estimatedRowHeightPixels = 72;
+
 type LedgerRows = ReturnType<LedgerTable["getRowModel"]>["rows"];
-const useInitialViewportRows = (
-  sortedRows: LedgerRows
-): Readonly<{
+
+type InitialViewportRows = Readonly<{
   visible: LedgerRows;
   measure: RefCallback<HTMLTableSectionElement>;
-}> => {
+}>;
+
+const useInitialViewportRows = (sortedRows: LedgerRows): InitialViewportRows => {
   const [initial] = useState(() => ({
     all: sortedRows,
     visible: sortedRows.slice(
@@ -406,9 +431,11 @@ const useInitialViewportRows = (
         : Math.ceil(window.innerHeight / estimatedRowHeightPixels)
     ),
   }));
+
   const [count, setCount] = useState(initial.visible.length);
   const deferred = useDeferredValue(sortedRows, initial.visible);
   const preparing = sortedRows === initial.all && deferred === initial.visible;
+
   const measure = useCallback<RefCallback<HTMLTableSectionElement>>(
     (node): void => {
       if (
@@ -419,19 +446,26 @@ const useInitialViewportRows = (
       ) {
         return;
       }
+
       const shortfall = window.innerHeight - node.getBoundingClientRect().bottom;
+
       if (shortfall <= 0) return;
+
       const heights = [...node.querySelectorAll<HTMLElement>("tr[data-state]")].flatMap((row) => {
         const height = row.getBoundingClientRect().height;
+
         return height > 0 ? [height] : [];
       });
+
       if (heights.length === 0) return;
       setCount(Math.min(sortedRows.length, count + Math.ceil(shortfall / Math.min(...heights))));
     },
     [preparing, count, sortedRows.length]
   );
+
   return { visible: preparing ? sortedRows.slice(0, count) : sortedRows, measure };
 };
+
 const LedgerBody = ({
   dates,
   rows,
@@ -446,9 +480,11 @@ const LedgerBody = ({
   rowProps: Omit<LedgerProps, "rows">;
 }>): JSX.Element => {
   const { visible, measure } = useInitialViewportRows(sortedRows);
+
   const visibleDates = dates.filter((date) =>
     visible.some((item) => item.original.occurredOnText === date)
   );
+
   return (
     <TableBody ref={measure}>
       {visibleDates.map((date) => (
@@ -483,12 +519,15 @@ const LedgerBody = ({
     </TableBody>
   );
 };
+
 const emptyDescription = (partial: boolean, readOnly: boolean): string => {
   if (partial) return "Carga más transacciones para buscar en el resto del periodo.";
+
   return readOnly
     ? "Prueba otros filtros para consultar tus transacciones guardadas."
     : "Prueba otros filtros o registra una transacción.";
 };
+
 const EmptyLedger = ({
   partial,
   readOnly,
@@ -501,6 +540,7 @@ const EmptyLedger = ({
     <p className="mt-2 text-sm text-muted-foreground">{emptyDescription(partial, readOnly)}</p>
   </div>
 );
+
 const SelectionBar = ({
   selection,
   disabled,
@@ -540,6 +580,7 @@ const SelectionBar = ({
     ) : null}
   </>
 );
+
 const LedgerContents = ({
   rows,
   table,
@@ -547,6 +588,7 @@ const LedgerContents = ({
 }: LedgerProps & Readonly<{ table: LedgerTable }>): JSX.Element => {
   const sortedRows = table.getRowModel().rows;
   const dates = Array.from(new Set(rows.map((row) => row.occurredOnText)));
+
   return (
     <>
       {rows.length === 0 ? (
@@ -577,10 +619,12 @@ const LedgerContents = ({
     </>
   );
 };
+
 export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element => {
   const [visibility, setVisibility] = useState({});
   const [sorting, onSortingChange] = useState<SortingState>([]);
   const data = useMemo(() => Array.from(rows), [rows]);
+
   const table = useTable({
     features,
     data,
@@ -590,6 +634,7 @@ export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element 
     onSortingChange,
     getRowId: (row) => row.id,
   });
+
   return (
     <section
       aria-label={props.readOnly ? "Transacciones guardadas" : "Transacciones del mes"}

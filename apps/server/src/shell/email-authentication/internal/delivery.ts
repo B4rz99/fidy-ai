@@ -1,10 +1,14 @@
-import { Effect, Option, Result, Schema } from "effect";
+import { type Cause, Effect, Option, Predicate, Result, Schema } from "effect";
 import type {
   EmailProofPurpose,
   EmailVerificationCode,
 } from "~/core/email-authentication/contract";
 import { UnknownJsonString, jsonStringSchema } from "~/shell/schema-codecs/contract";
-import type { OutboundHttpFailure, OutboundHttpResponse } from "~/shell/outbound-http/contract";
+import {
+  type OutboundHttpFailure,
+  OutboundHttpRequest,
+  type OutboundHttpResponse,
+} from "~/shell/outbound-http/contract";
 import type { OutboundHttpService } from "~/shell/outbound-http/operations";
 import {
   type EmailDeliveryPortService,
@@ -12,10 +16,15 @@ import {
 } from "~/shell/email-authentication/contract";
 
 const replacementSubject = "Verifica tu nuevo correo en Fidy";
+
 const browserPairingSubject = "Tu código para iniciar sesión en Fidy";
+
 const successfulStatusMinimum = 200;
+
 const successfulStatusMaximumExclusive = 300;
+
 const rateLimitedStatus = 429;
+
 const serverErrorStatusMinimum = 500;
 
 type VerificationEmail = Readonly<{ subject: string; text: string; html: string }>;
@@ -47,23 +56,29 @@ const verificationEmailFor = (
 ): VerificationEmail => verificationEmailByPurpose[purpose](combinedCode);
 
 const maximumResendMessageIdLength = 128;
+
 const ResendSuccess = Schema.Struct({
   id: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(maximumResendMessageIdLength)),
 });
+
 const decodeResendSuccess = Schema.decodeUnknownResult(ResendSuccess);
+
 const decodeJson = Schema.decodeUnknownResult(UnknownJsonString);
 
 const decodeBoundedResendResponse = Effect.fn(function* (response: OutboundHttpResponse) {
   const successful =
     response.status >= successfulStatusMinimum &&
     response.status < successfulStatusMaximumExclusive;
+
   const json = decodeJson(new TextDecoder().decode(response.body));
+
   if (Result.isFailure(json)) {
     return yield* new EmailSendFailed({
       certainty: successful ? "ambiguous" : "rejected",
       retryable: false,
     });
   }
+
   return json.success;
 });
 
@@ -74,6 +89,7 @@ const ResendRequest = Schema.Struct({
   text: Schema.String,
   html: Schema.String,
 });
+
 const encodeResendRequest = Schema.encodeSync(jsonStringSchema(ResendRequest));
 
 const classifyResendResponse = (
@@ -82,6 +98,7 @@ const classifyResendResponse = (
   if (response.status >= serverErrorStatusMinimum) {
     return new EmailSendFailed({ certainty: "ambiguous", retryable: false });
   }
+
   return Effect.flatMap(decodeBoundedResendResponse(response), (body) => {
     if (
       response.status >= successfulStatusMinimum &&
@@ -91,6 +108,7 @@ const classifyResendResponse = (
         ? Effect.void
         : new EmailSendFailed({ certainty: "ambiguous", retryable: false });
     }
+
     return new EmailSendFailed({
       certainty: "rejected",
       retryable: response.status === rateLimitedStatus,
@@ -99,19 +117,19 @@ const classifyResendResponse = (
 };
 
 const mapResendRequestFailure = (
-  failure: OutboundHttpFailure | { readonly _tag: "TimeoutError" }
+  failure: OutboundHttpFailure | Cause.TimeoutError
 ): EmailSendFailed => {
-  const certainty =
-    failure._tag === "OutboundHttpFailure"
-      ? Option.match(failure.responseStatus, {
-          onNone: () => "ambiguous" as const,
-          onSome: (status) =>
-            (status >= successfulStatusMinimum && status < successfulStatusMaximumExclusive) ||
-            status >= serverErrorStatusMinimum
-              ? ("ambiguous" as const)
-              : ("rejected" as const),
-        })
-      : "ambiguous";
+  const certainty = Predicate.isTagged(failure, "OutboundHttpFailure")
+    ? Option.match(failure.responseStatus, {
+        onNone: () => "ambiguous" as const,
+        onSome: (status) =>
+          (status >= successfulStatusMinimum && status < successfulStatusMaximumExclusive) ||
+          status >= serverErrorStatusMinimum
+            ? ("ambiguous" as const)
+            : ("rejected" as const),
+      })
+    : "ambiguous";
+
   return new EmailSendFailed({ certainty, retryable: false });
 };
 
@@ -121,18 +139,20 @@ export const deliverySender = ({
 }: Readonly<{ outboundHttp: OutboundHttpService; from: string }>): EmailDeliveryPortService => ({
   send: (input) => {
     const projection = verificationEmailFor(input.purpose, input.combinedCode);
+
     return outboundHttp
-      .execute({
-        _tag: "ResendEmailDelivery",
-        idempotencyKey: input.idempotencyKey,
-        body: encodeResendRequest({
-          from,
-          to: [input.to],
-          subject: projection.subject,
-          text: projection.text,
-          html: projection.html,
-        }),
-      })
+      .execute(
+        OutboundHttpRequest.ResendEmailDelivery({
+          idempotencyKey: input.idempotencyKey,
+          body: encodeResendRequest({
+            from,
+            to: [input.to],
+            subject: projection.subject,
+            text: projection.text,
+            html: projection.html,
+          }),
+        })
+      )
       .pipe(
         Effect.timeout("14 seconds"),
         Effect.mapError(mapResendRequestFailure),

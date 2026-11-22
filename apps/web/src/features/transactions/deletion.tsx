@@ -8,6 +8,7 @@ import type { Transaction } from "./presentation";
 
 const DeletionFeedback = ({ status }: Readonly<{ status: DeletionStatus }>): JSX.Element => {
   if (status === "saving") return <output>Eliminando transacción…</output>;
+
   if (status === "rejected") {
     return (
       <p role="alert">
@@ -16,6 +17,7 @@ const DeletionFeedback = ({ status }: Readonly<{ status: DeletionStatus }>): JSX
       </p>
     );
   }
+
   if (status === "uncertain") {
     return (
       <p role="alert">
@@ -23,6 +25,7 @@ const DeletionFeedback = ({ status }: Readonly<{ status: DeletionStatus }>): JSX
       </p>
     );
   }
+
   return <></>;
 };
 
@@ -30,8 +33,10 @@ const deletionStatus = (
   status: ReturnType<typeof useTransactionCorrections>["status"]
 ): DeletionStatus => {
   if (status === "recovering" || status === "refreshing") return "saving";
+
   return status === "recovered" ? "idle" : status;
 };
+
 export const TransactionDeletion = (
   props: Readonly<{
     transaction: Transaction;
@@ -43,11 +48,14 @@ export const TransactionDeletion = (
 ): JSX.Element => {
   const owner = useTransactionCorrections();
   const status = deletionStatus(owner.status);
+
   const confirm = (): void => {
     if (!props.editable) return;
     owner.confirmDeletion(props.transaction.id, props.onDeleted);
   };
+
   const admitted = Option.contains(owner.reviewingDeletion, props.transaction.id);
+
   return (
     <section aria-label="Eliminar transacción" className="flex flex-col gap-4">
       <h3 className="sr-only">¿Eliminar esta transacción?</h3>

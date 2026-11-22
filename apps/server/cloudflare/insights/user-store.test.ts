@@ -37,11 +37,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const tail = yield* Schema.decodeUnknownEffect(ids)(yield* native(() => last.json()));
         expect(tail.data).toEqual([{ id: "22460000-0000-4000-8000-000000000065" }]);
         expect(last.headers.get("link")).toBeNull();
+
         const denied = (): Effect.Effect<Response> =>
           nativeBrowserWrite(journey)(alice, {
             path: "/insights/" + bob.user + "/read",
             method: "POST",
           });
+
         expect((yield* denied()).status).toBe(404);
         yield* native(() =>
           journey.exec(
@@ -66,15 +68,20 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const journey = yield* nativeTransactionJourney;
+
         const send = (user: typeof alice, path: string, body?: unknown): Effect.Effect<Response> =>
           nativeBrowserWrite(journey)(user, { path, method: "POST", body });
+
         const initially = yield* native(() => journey.browser(0, "/insights/reminder"));
         expect(initially.status).toBe(200);
         expect(yield* native(() => initially.json())).toMatchObject({ data: null });
+
         const occurrence = alice.session,
           schedule = bob.session;
+
         const now = yield* Clock.currentTimeMillis;
         const next = DateTime.formatIso(DateTime.makeUnsafe(now + 86400000));
+
         const instructions = {
           id: schedule,
           version: 1,
@@ -86,6 +93,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           timing: { hour: 18, minute: 0 },
           nextScheduledAt: next,
         };
+
         yield* native(() =>
           journey.exec(
             "INSERT INTO proactive_grants(user_id,kind,id,record_json) VALUES(?,'manual-entry-reminder',?,'{}')",
@@ -103,6 +111,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             bob.user
           )
         );
+
         const event = {
           id: occurrence,
           kind: "manual-entry-reminder",
@@ -115,6 +124,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           moneyGroups: [],
           lifecycleState: "pending",
         };
+
         yield* native(() =>
           journey.exec(
             "INSERT INTO insight_events(user_id,id,schedule_id,revision,scheduled_ms,event_json) VALUES(?,?,?,1,?,?)",
@@ -125,12 +135,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             JSON.stringify(event)
           )
         );
+
         const evidence = {
           sentAt: DateTime.formatIso(DateTime.makeUnsafe(now)),
           channel: "whatsapp",
           provider: "kapso",
           providerMessageId: "wamid.test",
         };
+
         expect((yield* send(bob, "/insights/" + occurrence + "/read")).status).toBe(404);
         const token = "fin_insread1_" + "i".repeat(43);
         yield* seedNativePAT({
@@ -140,16 +152,18 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           scopes: ["read"],
           current: now,
         });
+
         const agent = (method: string, path: string, body?: unknown): Effect.Effect<Response> =>
           native(() =>
             journey.send(
               new Request("https://api.fidyapp.com" + path, {
                 method,
                 headers: { authorization: "Bearer " + token, "content-type": "application/json" },
-                ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+                body: body === undefined ? null : JSON.stringify(body),
               })
             )
           );
+
         const listing = yield* agent("GET", "/insights/pending");
         expect(listing.status).toBe(200);
         expect(yield* native(() => listing.json())).toMatchObject({ data: [{ id: occurrence }] });
@@ -180,6 +194,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             providerMessageId: "wamid.other",
           })).status
         ).toBe(400);
+
         const changed = yield* send(alice, "/operations/atomic-batch", {
           calls: [
             {
@@ -201,6 +216,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             },
           ],
         });
+
         expect(changed.status).toBe(200);
         const dismissed = yield* send(alice, "/insights/" + occurrence + "/dismissed");
         expect(dismissed.status).toBe(200);

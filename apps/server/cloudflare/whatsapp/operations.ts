@@ -5,5 +5,6 @@ import {
 
 export const claimRegisteredSend: typeof claimRegisteredSendOwned = (...args) =>
   claimRegisteredSendOwned(...args);
+
 export const recordRegisteredSend: typeof recordRegisteredSendOwned = (...args) =>
   recordRegisteredSendOwned(...args);

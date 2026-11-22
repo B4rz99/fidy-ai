@@ -4,9 +4,12 @@ import { receiveWompiBillingEvent } from "./internal/billing-workflow";
 import { expect, it, vi } from "vitest";
 import { Effect, Option } from "effect";
 import { verifiedWompiEventHint } from "./internal/wompi-event";
+import { WompiBillingEvent } from "./contract";
 
 const secret = "prod_events_OcHnIzeBl5socpwByQ4hA52Em3USQ93Z";
+
 const checksum = "5A18EC5E8FDB7DF463E9F94774CBA8F583BA21BD04A09CEFF2EA68A4BC0AEFBE";
+
 const event = {
   event: "transaction.updated",
   environment: "prod",
@@ -19,12 +22,14 @@ const event = {
   },
   timestamp: 1530291411,
 };
+
 const request = (body: unknown, header = checksum): Request =>
   new Request("https://example.test/providers/wompi/billing-events", {
     method: "POST",
     headers: { "content-type": "application/json", "x-event-checksum": header },
     body: JSON.stringify(body),
   });
+
 const verify = (
   body: unknown,
   header = checksum
@@ -80,6 +85,7 @@ it("acknowledges the signed Wompi event only after the billing Queue accepts its
   Effect.runPromise(
     Effect.gen(function* () {
       const messages: unknown[] = [];
+
       const ingress = (send: (value: unknown) => Promise<void>): Effect.Effect<Response> =>
         receiveWompiBillingEvent({
           request: request(event),
@@ -89,23 +95,24 @@ it("acknowledges the signed Wompi event only after the billing Queue accepts its
             BILLING_COLLECTION_QUEUE: { send },
           },
         });
+
       expect((yield* ingress(() => Promise.reject(new Error("queue unavailable")))).status).toBe(
         503
       );
       expect(
         (yield* ingress((value) => {
           messages.push(value);
+
           return Promise.resolve();
         })).status
       ).toBe(200);
       expect(messages).toEqual([
-        {
-          _tag: "WompiBillingEvent",
+        WompiBillingEvent.make({
           environment: "production",
           transactionId: "1234-1610641025-49201",
           signedAt: 1530291411,
           signedStatus: "APPROVED",
-        },
+        }),
       ]);
     })
   ));
@@ -115,25 +122,40 @@ it("acknowledges duplicate billing work only when its Workflow is active, comple
     Effect.gen(function* () {
       let status: InstanceStatus["status"] = "unknown";
       const restart = vi.fn(() => Promise.resolve());
+
       const workflow: BillingObservationWorkflow = {
         create: () => Promise.reject(new Error("creation unavailable")),
         get: () => Promise.resolve({ status: () => Promise.resolve({ status }), restart }),
       };
-      const offer = offerNativeBillingWork(workflow, {
-        _tag: "WompiBillingEvent",
-        environment: "production",
-        signedStatus: "APPROVED",
-        signedAt: event.timestamp,
-        transactionId: event.data.transaction.id,
-      });
-      for (const unavailable of ["unknown", "paused", "terminated"] as const) {
-        status = unavailable;
-        expect(yield* Effect.isFailure(offer)).toBe(true);
-      }
-      for (const confirmed of ["queued", "running", "waiting", "complete"] as const) {
-        status = confirmed;
-        expect(yield* Effect.isSuccess(offer)).toBe(true);
-      }
+
+      const offer = offerNativeBillingWork(
+        workflow,
+        WompiBillingEvent.make({
+          environment: "production",
+          signedStatus: "APPROVED",
+          signedAt: event.timestamp,
+          transactionId: event.data.transaction.id,
+        })
+      );
+
+      yield* Effect.forEach(
+        ["unknown", "paused", "terminated"] as const,
+        Effect.fnUntraced(function* (unavailable) {
+          status = unavailable;
+          expect(yield* Effect.isFailure(offer)).toBe(true);
+        }),
+        { discard: true }
+      );
+
+      yield* Effect.forEach(
+        ["queued", "running", "waiting", "complete"] as const,
+        Effect.fnUntraced(function* (confirmed) {
+          status = confirmed;
+          expect(yield* Effect.isSuccess(offer)).toBe(true);
+        }),
+        { discard: true }
+      );
+
       expect(restart).not.toHaveBeenCalled();
       status = "errored";
       restart.mockRejectedValueOnce(new Error("restart unavailable"));

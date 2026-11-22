@@ -8,6 +8,7 @@ export const CapturedInterpretationContext = Schema.Struct({
   locale: Locale,
   timeZone: IanaTimeZone,
 }).annotate({ identifier: "CapturedInterpretationContext" });
+
 export type CapturedInterpretationContext = typeof CapturedInterpretationContext.Type;
 
 export const InterpretationRevision = Schema.NonEmptyString.check(
@@ -16,4 +17,5 @@ export const InterpretationRevision = Schema.NonEmptyString.check(
 )
   .pipe(Schema.brand("InterpretationRevision"))
   .annotate({ identifier: "InterpretationRevision" });
+
 export type InterpretationRevision = typeof InterpretationRevision.Type;

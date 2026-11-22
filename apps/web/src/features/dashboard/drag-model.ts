@@ -9,7 +9,7 @@ type ResolveDropInput = Readonly<{
   canceled: boolean;
   source: Option.Option<DashboardDragSource>;
   target: Option.Option<DashboardDropTarget>;
-  makeWidgetId: () => WidgetId;
+  makeWidgetId: () => Option.Option<WidgetId>;
 }>;
 
 const isOwnEdge = (source: DashboardDragSource, target: DashboardDropTarget): boolean =>
@@ -46,16 +46,16 @@ export const resolveDashboardDrop = ({
   ) {
     return Option.none();
   }
+
   const decodedSource = source.value;
   const decodedTarget = target.value;
-  return Option.some(
-    decodedSource.kind === "widget"
-      ? existingWidgetGesture(decodedSource, decodedTarget)
-      : {
-          kind: "add-catalog-widget",
-          entry: decodedSource.entry,
-          newWidgetId: makeWidgetId(),
-          target: decodedTarget,
-        }
-  );
+
+  return decodedSource.kind === "widget"
+    ? Option.some(existingWidgetGesture(decodedSource, decodedTarget))
+    : Option.map(makeWidgetId(), (newWidgetId) => ({
+        kind: "add-catalog-widget",
+        entry: decodedSource.entry,
+        newWidgetId,
+        target: decodedTarget,
+      }));
 };

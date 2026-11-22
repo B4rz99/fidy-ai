@@ -1,6 +1,7 @@
 import type { SmokeEnvironment } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 
 const proofLength = 64;
+
 const unavailable = (): never => {
   throw new Error("Unexpected synthetic binding access");
 };
@@ -14,11 +15,13 @@ export const unavailableBucket: R2Bucket = {
   createMultipartUpload: unavailable,
   resumeMultipartUpload: unavailable,
 };
+
 export const unavailableQueue: Queue = {
   send: unavailable,
   sendBatch: unavailable,
   metrics: unavailable,
 };
+
 export const unavailableWorkflow: Workflow = {
   create: unavailable,
   get: unavailable,
@@ -30,14 +33,9 @@ export class SyntheticBindings {
   static withMethods<Binding extends object>(
     this: void,
     binding: Binding,
-    methods: Readonly<Record<string, unknown>>
+    methods: Partial<Record<keyof Binding, (...args: never[]) => object>>
   ): Binding {
-    return new Proxy(binding, {
-      get: (target, key, receiver): unknown =>
-        typeof key === "string" && Object.hasOwn(methods, key)
-          ? methods[key]
-          : Reflect.get(target, key, receiver),
-    });
+    return { ...binding, ...methods };
   }
 }
 

@@ -8,18 +8,23 @@ type QueryLifetime = Readonly<{
 const lifetime = Atom.make((get) => {
   let active = true;
   const pending = new Set<() => void>();
+
   const retire = (): void => {
     active = false;
+
     for (const settle of pending) settle();
     pending.clear();
   };
+
   get.addFinalizer(retire);
+
   return {
     retire,
     active: (): boolean => active,
     observe: (settle: () => void): (() => void) => {
       if (active) pending.add(settle);
       else settle();
+
       return () => pending.delete(settle);
     },
   };

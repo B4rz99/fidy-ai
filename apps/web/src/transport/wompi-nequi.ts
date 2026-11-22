@@ -5,14 +5,18 @@ import {
   readBoundedWompiResponse,
   wompiTokenizationOrigin,
 } from "./wompi-tokenization";
+import { reportBrowserDefect } from "./browser-defects";
 
 export class NequiAuthorizationFailed extends Data.TaggedError("NequiAuthorizationFailed")<{
   readonly reason: "declined" | "unavailable" | "expired";
 }> {}
-const ignoreCancellation = (): void => {};
+
 const maximumTokenCharacters = 4096;
+
 const maximumApprovalChecks = 100;
+
 const authorizationLifetimeMillis = 300_000;
+
 const TokenResponse = Schema.Struct({
   data: Schema.Struct({
     id: Schema.String.check(
@@ -22,10 +26,15 @@ const TokenResponse = Schema.Struct({
     status: Schema.Literals(["PENDING", "APPROVED", "DECLINED", "ERROR"]),
   }),
 });
+
 const PhoneNumber = Schema.String.check(Schema.isPattern(/^3[0-9]{9}$/u));
+
 const NequiRequest = jsonStringSchema(Schema.Struct({ phone_number: PhoneNumber }));
+
 const decodeJson = Schema.decodeUnknownResult(UnknownJsonString);
+
 const decodeToken = Schema.decodeUnknownResult(TokenResponse);
+
 const failure = (): NequiAuthorizationFailed =>
   new NequiAuthorizationFailed({ reason: "unavailable" });
 
@@ -54,21 +63,30 @@ const requestToken = (
           cache: "no-store",
           referrerPolicy: "no-referrer",
           signal,
-          ...(Option.isNone(input.body) ? {} : { body: input.body.value }),
+          ...Option.match(input.body, {
+            onNone: () => ({}),
+            onSome: (body) => ({ body }),
+          }),
         }),
       catch: failure,
     });
+
     if (!response.ok) {
       yield* Effect.sync(() => {
-        response.body?.cancel().catch(ignoreCancellation);
+        response.body?.cancel().catch(() => reportBrowserDefect("client_defect"));
       });
+
       return yield* failure();
     }
+
     const text = yield* readBoundedWompiResponse(response).pipe(Effect.mapError(failure));
     const json = decodeJson(text);
+
     if (Result.isFailure(json)) return yield* failure();
     const decoded = decodeToken(json.success);
+
     if (Result.isFailure(decoded)) return yield* failure();
+
     return { token: decoded.success.data.id, status: decoded.success.data.status };
   }).pipe(Effect.timeout("15 seconds"), Effect.mapError(failure));
 
@@ -88,6 +106,7 @@ const initiateAuthorization = (
     const phone = yield* Schema.decodeEffect(PhoneNumber)(Redacted.value(input.phoneNumber)).pipe(
       Effect.mapError(failure)
     );
+
     return yield* requestToken({
       url: `${origin}/v1/tokens/nequi`,
       publicKey: input.publicKey,
@@ -101,9 +120,12 @@ const initiateAuthorization = (
   });
 
 const notify = (callback: () => void): Effect.Effect<void> =>
-  Effect.try({ try: callback, catch: () => undefined }).pipe(Effect.ignore);
+  Effect.sync(callback).pipe(
+    Effect.catchDefect(() => Effect.sync(() => reportBrowserDefect("client_defect")))
+  );
 
 type TokenObservation = Effect.Success<ReturnType<typeof requestToken>>;
+
 const approvalObserved = (
   observation: TokenObservation,
   token: Redacted.Redacted<string>,
@@ -113,12 +135,17 @@ const approvalObserved = (
     if ((yield* Clock.currentTimeMillis) >= deadline) {
       return yield* new NequiAuthorizationFailed({ reason: "expired" });
     }
+
     if (observation.token !== Redacted.value(token)) return yield* failure();
+
     if (observation.status === "APPROVED") return true;
+
     if (observation.status === "DECLINED") {
       return yield* new NequiAuthorizationFailed({ reason: "declined" });
     }
+
     if (observation.status !== "PENDING") return yield* failure();
+
     return false;
   });
 
@@ -131,8 +158,10 @@ const waitForApproval = (
     const { origin, token, deadline } = authorization;
     let current = initial;
     let checks = 0;
+
     while (!(yield* approvalObserved(current, token, deadline))) {
       if (checks >= maximumApprovalChecks) return yield* failure();
+
       if (checks === 0) yield* notify(input.onAwaiting);
       yield* Effect.sleep("3 seconds");
       checks++;
@@ -143,6 +172,7 @@ const waitForApproval = (
         body: Option.none(),
       });
     }
+
     return token;
   });
 
@@ -163,25 +193,33 @@ export const withApprovedNequiWithWompi: {
     Effect.suspend(() => {
       let ownedToken: Option.Option<Redacted.Redacted<string>> = Option.none();
       let phoneCleared = false;
+
       const clearPhone = Effect.suspend(() => {
         if (phoneCleared) return Effect.void;
         phoneCleared = true;
         Redacted.wipeUnsafe(input.phoneNumber);
+
         return notify(input.clearPhone);
       });
+
       const authorize = Effect.gen(function* () {
         const startedAt = yield* Clock.currentTimeMillis;
         const deadline = startedAt + authorizationLifetimeMillis;
+
         const origin = yield* wompiTokenizationOrigin(input.publicKey).pipe(
           Effect.mapError(failure)
         );
+
         const initial = yield* initiateAuthorization(input, origin).pipe(
           Effect.ensuring(clearPhone)
         );
+
         const prefix = input.publicKey.startsWith("pub_test_") ? "nequi_test_" : "nequi_prod_";
+
         if (!initial.token.startsWith(prefix)) return yield* failure();
         const token = Redacted.make(initial.token);
         ownedToken = Option.some(token);
+
         return yield* waitForApproval(input, initial, { origin, token, deadline });
       }).pipe(
         Effect.timeoutOrElse({
@@ -189,10 +227,12 @@ export const withApprovedNequiWithWompi: {
           orElse: () => Effect.fail(new NequiAuthorizationFailed({ reason: "expired" })),
         })
       );
+
       const wipeToken = Effect.sync(() => {
         if (Option.isSome(ownedToken)) Redacted.wipeUnsafe(ownedToken.value);
         ownedToken = Option.none();
       });
+
       return authorize.pipe(
         Effect.flatMap(consume),
         Effect.ensuring(clearPhone),

@@ -110,6 +110,7 @@ const hostedAuditTable = connectionAuditTable
     "(pat_id IS NOT NULL OR session_id IS NOT NULL",
     "(hosted_turn_id IS NOT NULL OR pat_id IS NOT NULL OR session_id IS NOT NULL"
   );
+
 const hostedAuditGuards = [
   "CREATE TRIGGER audit_entries_immutable BEFORE UPDATE ON audit_entries BEGIN SELECT RAISE(ABORT,'audit_immutable'); END",
   "CREATE INDEX audit_entries_oauth_activity ON audit_entries(user_id,oauth_connection_id,occurred_at_ms DESC,id DESC) WHERE record_type='credential_call'",

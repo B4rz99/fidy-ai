@@ -3,17 +3,11 @@ import { boundaryViolations } from "./boundaries.mjs";
 import { launderingViolations } from "./laundering.mjs";
 
 const publication = process.argv.includes("--publication");
+
 const { forbiddenRules, packageRoot, report } = await loadGraph(
   process.argv[2] ?? process.cwd(),
   process.argv.slice(3).filter((argument) => argument !== "--publication")
 );
-
-/** @param {string} name - Rule identifier; every rule must explain its boundary. */
-const ruleReason = (name) => {
-  const reason = forbiddenRules.find((rule) => rule.name === name)?.comment;
-  if (!reason) throw new Error(`Dependency rule ${name} has no explanatory comment`);
-  return reason;
-};
 
 /** @param {string} path - Package-relative module path. */
 const displayPath = (path) => path.replace(/^(?:\.\.\/)+node_modules\//u, "node_modules/");
@@ -27,8 +21,15 @@ const reportViolations = (report) => {
           ...violation.cycle.map((step) => displayPath(step.name)),
         ].join(" → ")
       : `${displayPath(violation.from)} → ${displayPath(violation.to)}`;
+
     console.error(`${violation.rule.severity} ${violation.rule.name}: ${path}`);
-    console.error(`  ${ruleReason(violation.rule.name)}\n`);
+    const reason = forbiddenRules.find((rule) => rule.name === violation.rule.name)?.comment;
+
+    if (!reason) {
+      throw new Error(`Dependency rule ${violation.rule.name} has no explanatory comment`);
+    }
+
+    console.error(`  ${reason}\n`);
   }
 
   if (report.summary.error > 0) {
@@ -43,16 +44,21 @@ const reportViolations = (report) => {
 const boundaries = packageRoot.endsWith("/apps/server")
   ? boundaryViolations(report, packageRoot)
   : [];
+
 const publications =
   publication && packageRoot.endsWith("/apps/server")
     ? launderingViolations(report, packageRoot)
     : [];
+
 for (const { name, from, to, reason } of [...boundaries, ...publications]) {
   console.error(`error ${name}: ${displayPath(from)} → ${displayPath(to)}`);
   console.error(`  ${reason}\n`);
 }
+
 reportViolations(report);
+
 if (boundaries.length + publications.length > 0) process.exit(1);
+
 console.log(
   `module graph clean: ${report.summary.totalCruised} modules, ${report.summary.totalDependenciesCruised} dependencies.`
 );

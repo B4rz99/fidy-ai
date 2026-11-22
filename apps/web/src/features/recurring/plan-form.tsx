@@ -11,6 +11,7 @@ import { planDraft, planFields } from "./plan-fields";
 
 const parsePlan = (form: FormData, timeZone: PlanInput["timeZone"]): Option.Option<PlanInput> =>
   Schema.decodeOption(Schema.toCodecJson(RecurringPlanInput))(planFields({ form, timeZone }));
+
 export const PlanForm = ({
   initial,
   categories,
@@ -25,12 +26,14 @@ export const PlanForm = ({
   const [amountMode, setAmountMode] = useState(initial.amountMode ?? "unknown");
   const [invalid, setInvalid] = useState(false);
   const [problems, setProblems] = useState<ReadonlyArray<PlanProblem>>([]);
+
   const edited = (field: string): void =>
     setProblems((current) =>
       current.some((problem) => problem.clearedBy.includes(field))
         ? current.filter((problem) => !problem.clearedBy.includes(field))
         : current
     );
+
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -39,16 +42,19 @@ export const PlanForm = ({
     setProblems(found);
     setInvalid(found.length === 0 && Option.isNone(parsed));
     const first = found[0];
+
     if (first !== undefined) {
       event.currentTarget.querySelector<HTMLElement>(`#recurring-${first.field}`)?.focus();
     }
+
     if (Option.isSome(parsed)) onSubmit(parsed.value);
   };
+
   return (
     <form
       onSubmit={submit}
       onChange={(event) => {
-        if (event.target instanceof HTMLInputElement) edited(event.target.name);
+        if (Schema.is(Schema.instanceOf(HTMLInputElement))(event.target)) edited(event.target.name);
       }}
       data-recurring-slot="plan-form"
       className="grid gap-4"
@@ -94,6 +100,7 @@ const AmountFields = ({
         ]}
         onChange={(value) => {
           const parsed = Schema.decodeUnknownOption(RecurringPlanInput.fields.amountMode)(value);
+
           if (Option.isSome(parsed)) setAmountMode(parsed.value);
         }}
       />

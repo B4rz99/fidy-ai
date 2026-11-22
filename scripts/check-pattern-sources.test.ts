@@ -13,7 +13,9 @@ const FixturePaths = Schema.Record(
 );
 
 const repositoryRoot = Bun.fileURLToPath(new URL("..", import.meta.url));
+
 const temporaryRoots: Array<string> = [];
+
 afterEach(() => {
   for (const root of temporaryRoots.splice(0)) Bun.spawnSync(["rm", "-rf", root]);
 });
@@ -25,11 +27,13 @@ const fixture = Effect.gen(function* () {
   const sourceText = yield* Effect.tryPromise(() =>
     Bun.file(`${repositoryRoot}/.patterns/sources.json`).text()
   ).pipe(Effect.orDie);
+
   const sources = yield* Schema.decodeEffect(Schema.fromJsonString(FixturePaths))(sourceText);
   const temporary = Bun.spawnSync(["mktemp", "-d"]);
   expect(temporary.exitCode).toBe(0);
   const root = new TextDecoder().decode(temporary.stdout).trim();
   temporaryRoots.push(root);
+
   const paths = new Set([
     "package.json",
     ".patterns/sources.json",
@@ -40,24 +44,33 @@ const fixture = Effect.gen(function* () {
       ...source.patches.map((patch) => patch.path),
     ]),
   ]);
-  for (const path of paths) {
-    const content = yield* Effect.tryPromise(() =>
-      Bun.file(`${repositoryRoot}/${path}`).text()
-    ).pipe(Effect.orDie);
-    yield* write(`${root}/${path}`, content);
-  }
+
+  yield* Effect.forEach(
+    paths,
+    (path) =>
+      Effect.tryPromise(() => Bun.file(`${repositoryRoot}/${path}`).text()).pipe(
+        Effect.orDie,
+        Effect.flatMap((content) => write(`${root}/${path}`, content))
+      ),
+    { discard: true }
+  );
+
   yield* write(`${root}/.patterns/INDEX.md`, "[HTTP](http.md)\n");
   yield* write(`${root}/.patterns/http.md`, "# HTTP\n");
+
   return root;
 });
 
-const run = (root: string): Readonly<{ status: number; stderr: string }> => {
+type CheckRun = Readonly<{ status: number; stderr: string }>;
+
+const run = (root: string): CheckRun => {
   const result = Bun.spawnSync([
     process.execPath,
     `${repositoryRoot}/scripts/check-pattern-sources.ts`,
     "--root",
     root,
   ]);
+
   return { status: result.exitCode, stderr: new TextDecoder().decode(result.stderr) };
 };
 

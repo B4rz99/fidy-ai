@@ -8,9 +8,12 @@ import { NativeSelect, NativeSelectOption } from "@/ui/components/native-select"
 import { TransactionMonth, shiftTransactionMonth } from "./period";
 
 const monthOffset = "YYYY-".length;
+
 const monthFormatter = new Intl.DateTimeFormat("es-CO", { month: "long", timeZone: "UTC" });
+
 const months = Array.from({ length: 12 }, (_, index) => {
   const value = String(index + 1).padStart(2, "0");
+
   return {
     value,
     label: monthFormatter.format(
@@ -18,8 +21,10 @@ const months = Array.from({ length: 12 }, (_, index) => {
     ),
   };
 });
+
 const years = Array.from({ length: 9997 }, (_, index) => {
   const year = String(index + 2).padStart(4, "0");
+
   return { value: year, label: year };
 });
 
@@ -76,9 +81,11 @@ const PeriodChoices = ({
   const id = useId();
   const year = value.slice(0, 4);
   const month = value.slice(monthOffset);
+
   const changePeriod = (next: string): void => {
     if (Schema.is(TransactionMonth)(next)) onChange(next);
   };
+
   return (
     <>
       <div data-period-field="month">

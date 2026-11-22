@@ -19,6 +19,7 @@ export const EnrollmentConsent = ({
   setDecisions: (decisions: EnrollmentDecisions) => void;
 }>): JSX.Element => {
   const id = useId();
+
   return (
     <div className="subscription-consents">
       <p>{enrollment.recurringDisclosure.displayedText}</p>
@@ -65,6 +66,7 @@ export const EnrollmentConsent = ({
     </div>
   );
 };
+
 export const BillingEmailField = ({
   email,
   disabled,

@@ -13,6 +13,7 @@ import {
   type CanonicalRejectedFailure,
   NextOperations,
   OperationResponse,
+  omittedTag,
 } from "~/shell/public-http/contract";
 import { operationPolicy, verifiedWhatsAppHostedOnly } from "~/shell/canonical-policy/contract";
 
@@ -29,7 +30,7 @@ export class BrowserLoginPairingApprovalRejected
     Brand.Brand<"BrowserLoginPairingApprovalRejected">
   >("BrowserLoginPairingApprovalRejected")(
     {
-      _tag: Schema.tagDefaultOmit("BrowserLoginPairingApprovalRejected"),
+      ...omittedTag("BrowserLoginPairingApprovalRejected"),
       error: Schema.Struct({
         code: Schema.Literal("validation_failed"),
         message: Schema.Literal(browserLoginApprovalGenericMessage),
@@ -49,7 +50,7 @@ export class BrowserLoginPairingApprovalRateLimited
     Brand.Brand<"BrowserLoginPairingApprovalRateLimited">
   >("BrowserLoginPairingApprovalRateLimited")(
     {
-      _tag: Schema.tagDefaultOmit("BrowserLoginPairingApprovalRateLimited"),
+      ...omittedTag("BrowserLoginPairingApprovalRateLimited"),
       error: Schema.Struct({
         code: Schema.Literal("rate_limited"),
         message: Schema.Literal(browserLoginApprovalGenericMessage),
@@ -157,6 +158,7 @@ export const RedeemBrowserLoginPairingPayload = Schema.Struct({
   pairingId: Schema.optional(Schema.Unknown),
   privateVerifier: Schema.optional(Schema.Unknown),
 });
+
 export type RedeemBrowserLoginPairingPayload = typeof RedeemBrowserLoginPairingPayload.Type;
 
 export const PendingBrowserLoginPairing = Schema.Struct({
@@ -166,11 +168,13 @@ export const PendingBrowserLoginPairing = Schema.Struct({
     Schema.isGreaterThanOrEqualTo(browserLoginPollingIntervalSeconds)
   ),
 }).annotate({ identifier: "PendingBrowserLoginPairing", httpApiStatus: 202 });
+
 export type PendingBrowserLoginPairing = typeof PendingBrowserLoginPairing.Type;
 
 export const AuthenticatedBrowserLoginPairing = Schema.Struct({
   status: Schema.Literal("authenticated"),
 }).annotate({ identifier: "AuthenticatedBrowserLoginPairing", httpApiStatus: 200 });
+
 export type AuthenticatedBrowserLoginPairing = typeof AuthenticatedBrowserLoginPairing.Type;
 
 export const BrowserLoginWebAuthGroup = HttpApiGroup.make("browserLogin")

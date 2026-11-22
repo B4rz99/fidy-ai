@@ -20,16 +20,19 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           alice.user,
           owner.now
         );
+
         const provider = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("wompi-fixture", "ProviderState", {
             name: "provider",
           })
         );
+
         yield* native(() =>
           provider.exec(
             "CREATE TABLE held_source(issued INTEGER,released INTEGER); INSERT INTO held_source VALUES(0,0)"
           )
         );
+
         const send = (path: string, body: unknown): Effect.Effect<MiniflareResponse> =>
           native(() =>
             runtime.dispatchFetch(
@@ -49,13 +52,16 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               }
             )
           );
+
         const prepared = yield* send("prepare", {
           method: "card",
           priceId: "22700000-0000-4000-8000-000000000002",
         });
+
         const { enrollmentId } = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ enrollmentId: Schema.String })
         )(yield* native(() => prepared.json()));
+
         const submitted = yield* send("submit", {
           method: "card",
           paymentSourceMode: "create",
@@ -69,6 +75,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             authorizedRecurringCharges: true,
           },
         }).pipe(Effect.forkChild({ startImmediately: true }));
+
         const issued = yield* native(() => provider.exec("SELECT issued FROM held_source")).pipe(
           Effect.repeat({
             until: (rows) => rows[0]?.issued === 1,
@@ -76,21 +83,32 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             schedule: Schedule.spaced("30 millis"),
           })
         );
+
         expect(issued).toEqual([{ issued: 1 }]);
-        if (eraseFirst) expect((yield* admitPurge(runtime)).status).toBe(202);
+
+        yield* Effect.gen(function* () {
+          expect((yield* admitPurge(runtime)).status).toBe(202);
+        }).pipe(Effect.when(Effect.succeed(eraseFirst)));
+
         const [registration] = yield* owner.exec(
           "SELECT request FROM billing_admissions WHERE subject_id=?",
           enrollmentId
         );
+
         const body = yield* Schema.decodeUnknownEffect(Schema.String)(registration?.request);
         const users = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
+
         const reply = yield* native(() =>
           users
             .getByName(alice.user)
             .fetch("https://user.invalid/billing/registration-cancel", { method: "POST", body })
         );
+
         expect(yield* native(() => reply.json())).toMatchObject({ outcome: "cancelled" });
-        if (!eraseFirst) expect((yield* admitPurge(runtime)).status).toBe(202);
+
+        yield* Effect.gen(function* () {
+          expect((yield* admitPurge(runtime)).status).toBe(202);
+        }).pipe(Effect.when(Effect.succeed(!eraseFirst)));
         const driver = yield* caseDriver(runtime);
         expect(yield* driver.step().pipe(Effect.repeat({ times: 5 }))).toBe("Draining");
         yield* native(() => provider.exec("UPDATE held_source SET released=1"));
@@ -110,7 +128,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* native(() => provider.exec("SELECT issued FROM held_source"))).toEqual([
           { issued: 1 },
         ]);
-      }),
-    30000
+      })
   );
 });

@@ -1,12 +1,65 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Clock, Effect } from "effect";
+import type { Miniflare } from "miniflare";
 import { expect } from "vitest";
 import { native, nativeHostedPlatform } from "../user-store.test-fixture";
 import { maintenanceName, registerLifetimeUrl, watchdogUrl } from "./contract";
 
 const held = "22610000-0000-4000-8000-000000000001";
+
 const healthy = "22610000-0000-4000-8000-000000000002";
+
+type Stub = ReturnType<Awaited<ReturnType<Miniflare["getDurableObjectNamespace"]>>["getByName"]>;
+
+type Round = Readonly<{
+  maintenance: Stub;
+  registry: Awaited<ReturnType<Miniflare["unsafeGetDurableObjectStorage"]>>;
+  stalled: Stub;
+  now: number;
+}>;
+
+const registerAt =
+  (maintenance: Stub, now: number): ((name: string) => Effect.Effect<number>) =>
+  (name) =>
+    native(() =>
+      maintenance.fetch(registerLifetimeUrl, {
+        method: "POST",
+        headers: { "fidy-user-id": name, "fidy-registration-issued-ms": String(now) },
+      })
+    ).pipe(Effect.map(({ status }) => status));
+
+const deliverRound = ({
+  maintenance,
+  registry,
+  stalled,
+  now,
+}: Round): ((delivery: number) => Effect.Effect<void>) =>
+  Effect.fnUntraced(function* (delivery) {
+    yield* native(() => registry.exec("UPDATE watchdog_progress SET minute=-1"));
+
+    const tick = yield* native(() =>
+      maintenance.fetch(watchdogUrl, {
+        method: "POST",
+        headers: { "x-maintenance-scheduled-at": String(now + delivery) },
+      })
+    );
+
+    expect(tick.status).toBe(204);
+
+    const progress = yield* native(() =>
+      registry.exec("SELECT attempted,observed,failed,unknown,wraps FROM watchdog_progress")
+    );
+
+    expect(progress).toEqual([
+      { attempted: 5, observed: 4, failed: 0, unknown: 1, wraps: delivery },
+    ]);
+
+    const heldChecks = yield* native(() => stalled.fetch("https://fixture.invalid/held-checks"));
+
+    const observed = yield* native(() => heldChecks.json());
+    expect(observed).toEqual({ admitted: delivery, aborted: delivery, active: 0 });
+  });
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
@@ -15,50 +68,29 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const runtime = yield* (yield* nativeHostedPlatform)();
         const owners = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
+
         const namespace = yield* native(() =>
           runtime.getDurableObjectNamespace("MAINTENANCE", "core")
         );
+
         const maintenance = namespace.getByName(maintenanceName);
         const stalled = owners.getByName(held);
         expect(
           (yield* native(() => stalled.fetch("https://fixture.invalid/hold-check"))).status
         ).toBe(204);
         const now = yield* Clock.currentTimeMillis;
-        for (const name of [held, healthy]) {
-          expect(
-            (yield* native(() =>
-              maintenance.fetch(registerLifetimeUrl, {
-                method: "POST",
-                headers: { "fidy-user-id": name, "fidy-registration-issued-ms": String(now) },
-              })
-            )).status
-          ).toBe(204);
-        }
+
+        expect(yield* Effect.forEach([held, healthy], registerAt(maintenance, now))).toEqual([
+          204, 204,
+        ]);
+
         const registry = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("core", "Maintenance", { name: maintenanceName })
         );
-        for (const delivery of [1, 2]) {
-          yield* native(() => registry.exec("UPDATE watchdog_progress SET minute=-1"));
-          const tick = yield* native(() =>
-            maintenance.fetch(watchdogUrl, {
-              method: "POST",
-              headers: { "x-maintenance-scheduled-at": String(now + delivery) },
-            })
-          );
-          expect(tick.status).toBe(204);
-          const progress = yield* native(() =>
-            registry.exec("SELECT attempted,observed,failed,unknown,wraps FROM watchdog_progress")
-          );
-          expect(progress).toEqual([
-            { attempted: 5, observed: 4, failed: 0, unknown: 1, wraps: delivery },
-          ]);
-          const heldChecks = yield* native(() =>
-            stalled.fetch("https://fixture.invalid/held-checks")
-          );
-          const observed = yield* native(() => heldChecks.json());
-          expect(observed).toEqual({ admitted: delivery, aborted: delivery, active: 0 });
-        }
-      }),
-    25000
+
+        yield* Effect.forEach([1, 2], deliverRound({ maintenance, registry, stalled, now }), {
+          discard: true,
+        });
+      })
   );
 });

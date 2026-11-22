@@ -18,6 +18,7 @@ const maximumAttestationNameLength = 80;
 export const SourceAttestationId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("SourceAttestationId"))
   .annotate({ identifier: "SourceAttestationId" });
+
 export type SourceAttestationId = typeof SourceAttestationId.Type;
 
 const SourceName = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
@@ -54,6 +55,7 @@ export const StatementLineSourceAttestation = Schema.Struct({
   sourceFormat: StatementSourceFormat,
   extractorRevision: InterpretationRevision,
 });
+
 export type StatementLineSourceAttestation = typeof StatementLineSourceAttestation.Type;
 
 export const NotificationEmailSourceAttestation = Schema.Struct({
@@ -66,18 +68,21 @@ export const NotificationEmailSourceAttestation = Schema.Struct({
   extractorRevision: InterpretationRevision,
   deterministicInterpretation: Schema.OptionFromOptionalKey(NotificationInterpretationEvidence),
 });
+
 export type NotificationEmailSourceAttestation = typeof NotificationEmailSourceAttestation.Type;
 
 const ConnectionMovementSource = Schema.Struct({
   ...SourceAttestationCommon.fields,
   kind: Schema.Literal("connection-movement"),
 });
+
 export const SourceAttestation = Schema.Union([
   ConnectionMovementSource,
   ManualSourceAttestation,
   StatementLineSourceAttestation,
   NotificationEmailSourceAttestation,
 ]).annotate({ identifier: "SourceAttestation" });
+
 export type SourceAttestation = typeof SourceAttestation.Type;
 
 export const SourceAttestationKind = Schema.Union([

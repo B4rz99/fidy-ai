@@ -1,3 +1,4 @@
+import { ConsentSubject, PATRevocationProtection } from "~/shell/consent/contract";
 import type { PATActivityAuthority } from "~/shell/audit/contract";
 import { type UserId } from "~/core/identity/contract";
 import { Effect, Option, Schema } from "effect";
@@ -13,7 +14,7 @@ import {
   patMetadataResponseFromRows,
   listPATsResponse as readPATs,
 } from "~/shell/tokens/internal/list-pats";
-import { type OwnedStatement } from "~/shell/owner-write/contract";
+import { type OwnedStatement, type PreparedRead } from "~/shell/owner-write/contract";
 import {
   expiredPATConsentIdentities,
   expiredPairingConsentIdentities,
@@ -29,15 +30,19 @@ import {
 } from "~/shell/web-session/operations";
 import {
   type PATAuthority,
-  type PATGrantSelection,
+  PATGrantSelection,
   type PATSubject,
-  type PairingGrantSelection,
+  PairingGrantSelection,
 } from "./contract";
 
 export const pairingMilliseconds = 600_000;
+
 export const maxPairingsPerWindow = 4000;
+
 export const maxActivePATs = 100;
+
 export const issuanceWindowMilliseconds = 600_000;
+
 export const maxIssuancesPerUserWindow = 20;
 
 type ManualPATInput = Readonly<{
@@ -73,9 +78,10 @@ export const issueManualPAT = ({
         ...freshSessionParams({ session, time: input.current }),
       ],
     },
-    subject: { _tag: "User", userId: session.user_id },
+    subject: ConsentSubject.User({ userId: session.user_id }),
     requirement: "unrevoked",
   });
+
   return {
     sql: `${protectedIssue.sql}
       AND (SELECT count(*) FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?) < ?
@@ -99,6 +105,7 @@ export const approvePairingGrant = ({
   input,
 }: Readonly<{ session: FreshSessionSubject; input: ApprovalInput }>): OwnedStatement => {
   const live = liveSessionConditions({ session, current: input.current });
+
   return protectConsentStatement({
     statement: {
       sql: `UPDATE pat_pairings SET state = 'approved_awaiting_claim', user_id = ?, approved_at_ms = ?, pat_expires_at_ms = ?
@@ -112,7 +119,7 @@ export const approvePairingGrant = ({
         ...live.params,
       ],
     },
-    subject: { _tag: "User", userId: session.user_id },
+    subject: ConsentSubject.User({ userId: session.user_id }),
     requirement: "unrevoked",
   });
 };
@@ -133,9 +140,10 @@ export const claimPairingGrant = (
         input.current,
       ],
     },
-    subject: { _tag: "Owner", column: "pat_pairings.user_id" },
+    subject: ConsentSubject.Owner({ column: "pat_pairings.user_id" }),
     requirement: "unrevoked",
   });
+
   return {
     sql: `${protectedClaim.sql}
       AND (SELECT count(*) FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?) < ?
@@ -157,6 +165,7 @@ export const recordLivePATUse = ({
   current,
 }: Readonly<{ subject: PATSubject; current: number }>): OwnedStatement => {
   const authority = livePATAuthority({ subject, current });
+
   return {
     sql: `UPDATE pats SET last_used_at_ms = ? WHERE ${authority.predicate}`,
     params: [current, ...authority.bindings],
@@ -194,7 +203,10 @@ export const revokeOnePAT = ({
         ...freshSessionParams({ session, time: input.current }),
       ],
     },
-    evidence: { _tag: "UserPAT", sessionId: session.id, occurredAtMs: Option.some(input.current) },
+    evidence: PATRevocationProtection.UserPAT({
+      sessionId: session.id,
+      occurredAtMs: Option.some(input.current),
+    }),
   });
 
 export const revokeEveryPAT = ({
@@ -212,7 +224,10 @@ export const revokeEveryPAT = ({
         ...freshSessionParams({ session, time: current }),
       ],
     },
-    evidence: { _tag: "UserPAT", sessionId: session.id, occurredAtMs: Option.none() },
+    evidence: PATRevocationProtection.UserPAT({
+      sessionId: session.id,
+      occurredAtMs: Option.none(),
+    }),
   });
 
 export const revokeEveryPairing = ({
@@ -225,7 +240,7 @@ export const revokeEveryPairing = ({
         AND state = 'approved_awaiting_claim' AND ${freshSessionExists}`,
       params: [session.user_id, ...freshSessionParams({ session, time: current })],
     },
-    evidence: { _tag: "UserPairing", sessionId: session.id },
+    evidence: PATRevocationProtection.UserPairing({ sessionId: session.id }),
   });
 
 export const expireApprovedPairings = (current: number): OwnedStatement =>
@@ -235,7 +250,7 @@ export const expireApprovedPairings = (current: number): OwnedStatement =>
         AND expires_at_ms <= ?`,
       params: [current],
     },
-    evidence: { _tag: "ExpiredPairing" },
+    evidence: PATRevocationProtection.ExpiredPairing(),
   });
 
 export const expireFixedPATs = (current: number): OwnedStatement =>
@@ -244,7 +259,7 @@ export const expireFixedPATs = (current: number): OwnedStatement =>
       sql: `UPDATE pats SET revoked_at_ms = ? WHERE revoked_at_ms IS NULL AND expires_at_ms <= ?`,
       params: [current, current],
     },
-    evidence: { _tag: "ExpiredPAT" },
+    evidence: PATRevocationProtection.ExpiredPAT(),
   });
 
 export const sweepUnapprovedPairings = ({
@@ -311,12 +326,7 @@ export const recordPendingPoll = (
 ): OwnedStatement => ({
   sql: `UPDATE pat_pairings SET last_poll_at_ms = ? WHERE id = ?
     AND state = 'pending_approval' AND last_poll_at_ms ${Option.isSome(input.lastPoll) ? "= ?" : "IS NULL"} AND expires_at_ms > ?`,
-  params: [
-    input.current,
-    input.pairingId,
-    ...(Option.isSome(input.lastPoll) ? [input.lastPoll.value] : []),
-    input.current,
-  ],
+  params: [input.current, input.pairingId, ...Option.toArray(input.lastPoll), input.current],
 });
 
 export const insertClaimedPAT = (
@@ -365,7 +375,7 @@ export const livePATCredential = ({
       predicate: liveCredentialPredicate,
       bindings: [subject.patId, subject.userId, subject.digest, current],
     },
-    subject: { _tag: "Owner", column: "pats.user_id" },
+    subject: ConsentSubject.Owner({ column: "pats.user_id" }),
     requirement: "unrevoked",
   });
 
@@ -374,6 +384,7 @@ export const livePATAuthority = ({
   current,
 }: Readonly<{ subject: PATSubject; current: number }>): PATAuthority => {
   const credential = livePATCredential({ subject, current });
+
   return {
     ...credential,
     predicate: `${credential.predicate}
@@ -403,17 +414,15 @@ export const preparePATMetadata = (
     }>;
   }> &
     (Readonly<{ userId: string }> | Readonly<{ users: OwnedStatement }>)
-): Readonly<{
-  statement: OwnedStatement;
-  decode: (rows: unknown) => Effect.Effect<
-    {
-      readonly data: ActivePATList;
-      readonly next: ReadonlyArray<never>;
-    },
-    Unavailable
-  >;
-}> => {
+): PreparedRead<
+  {
+    readonly data: ActivePATList;
+    readonly next: ReadonlyArray<never>;
+  },
+  Unavailable
+> => {
   const metadata = patMetadataQuery({ ...input, session: Option.none() });
+
   return {
     statement: {
       sql: `SELECT * FROM (${metadata.sql}) WHERE EXISTS (SELECT 1 FROM ${input.authority.table} WHERE ${input.authority.predicate})`,
@@ -425,6 +434,7 @@ export const preparePATMetadata = (
 
 export const patExpiryCompletion = (current: number): OwnedStatement => {
   const evidence = expiredPATConsentIdentities(current);
+
   return {
     sql: `INSERT INTO sql_assertions (scope, accepted) SELECT 'pat_atomic', CASE WHEN NOT EXISTS (
         SELECT 1 FROM (${evidence.sql}) r JOIN pats p ON p.id = r.id
@@ -437,6 +447,7 @@ export const patExpiryCompletion = (current: number): OwnedStatement => {
 
 export const pairingExpiryCompletion = (current: number): OwnedStatement => {
   const evidence = expiredPairingConsentIdentities(current);
+
   return {
     sql: `INSERT INTO sql_assertions (scope, accepted) SELECT 'pat_atomic', CASE WHEN NOT EXISTS (
         SELECT 1 FROM (${evidence.sql}) r JOIN pat_pairings p ON p.id = r.id
@@ -470,44 +481,44 @@ export const patIdentityQuery = (
 
 export const revocablePATGrants = (
   input: Readonly<{ userId: string; current: number; shortId: Option.Option<string> }>
-): PATGrantSelection => ({
-  _tag: "PATGrants",
-  statement: {
-    sql: `SELECT id,user_id,request_id,pairing_id FROM pats WHERE user_id = ?
+): PATGrantSelection =>
+  PATGrantSelection.PATGrants({
+    statement: {
+      sql: `SELECT id,user_id,request_id,pairing_id FROM pats WHERE user_id = ?
     AND revoked_at_ms IS NULL AND expires_at_ms > ? ${Option.isSome(input.shortId) ? "AND short_id = ?" : ""}`,
-    params: [input.userId, input.current, ...Option.toArray(input.shortId)],
-  },
-});
+      params: [input.userId, input.current, ...Option.toArray(input.shortId)],
+    },
+  });
 
-export const revocablePairingGrants = (userId: string): PairingGrantSelection => ({
-  _tag: "PairingGrants",
-  statement: {
-    sql: "SELECT id,user_id FROM pat_pairings WHERE user_id = ? AND state = 'approved_awaiting_claim'",
-    params: [userId],
-  },
-});
+export const revocablePairingGrants = (userId: string): PairingGrantSelection =>
+  PairingGrantSelection.PairingGrants({
+    statement: {
+      sql: "SELECT id,user_id FROM pat_pairings WHERE user_id = ? AND state = 'approved_awaiting_claim'",
+      params: [userId],
+    },
+  });
 
 export const expiredPATGrants = (
   input: Readonly<{ current: number; limit: number }>
-): PATGrantSelection => ({
-  _tag: "PATGrants",
-  statement: {
-    sql: `SELECT id,user_id,request_id,pairing_id FROM pats WHERE revoked_at_ms IS NULL
+): PATGrantSelection =>
+  PATGrantSelection.PATGrants({
+    statement: {
+      sql: `SELECT id,user_id,request_id,pairing_id FROM pats WHERE revoked_at_ms IS NULL
     AND expires_at_ms <= ? ORDER BY expires_at_ms LIMIT ?`,
-    params: [input.current, input.limit],
-  },
-});
+      params: [input.current, input.limit],
+    },
+  });
 
 export const expiredPairingGrants = (
   input: Readonly<{ current: number; limit: number }>
-): PairingGrantSelection => ({
-  _tag: "PairingGrants",
-  statement: {
-    sql: `SELECT id,user_id FROM pat_pairings WHERE state = 'approved_awaiting_claim'
+): PairingGrantSelection =>
+  PairingGrantSelection.PairingGrants({
+    statement: {
+      sql: `SELECT id,user_id FROM pat_pairings WHERE state = 'approved_awaiting_claim'
     AND expires_at_ms <= ? ORDER BY expires_at_ms LIMIT ?`,
-    params: [input.current, input.limit],
-  },
-});
+      params: [input.current, input.limit],
+    },
+  });
 
 export const preparePATActivityMetadata = (
   input: Readonly<{
@@ -515,10 +526,7 @@ export const preparePATActivityMetadata = (
     shortId: string;
     authority: PATActivityAuthority;
   }>
-): Readonly<{
-  statement: OwnedStatement;
-  decode: (rows: unknown) => Effect.Effect<Option.Option<PATActivityMetadata>, Schema.SchemaError>;
-}> => ({
+): PreparedRead<Option.Option<PATActivityMetadata>, Schema.SchemaError> => ({
   statement: {
     sql: `SELECT short_id,recipient_label,scopes_json,created_at_ms,last_used_at_ms,expires_at_ms,revoked_at_ms
       FROM pats WHERE user_id = ? AND short_id = ?
@@ -540,11 +548,15 @@ export const preparePATActivityMetadata = (
           })
         ).check(Schema.isMaxLength(1))
       )(raw);
+
       const row = rows[0];
+
       if (row === undefined) return Option.none();
+
       const scopes = yield* Schema.decodeEffect(
         Schema.fromJsonString(PATActivityMetadata.fields.scopes)
       )(row.scopes_json);
+
       return Option.some(
         yield* Schema.decodeEffect(Schema.toType(PATActivityMetadata))({
           shortId: row.short_id,

@@ -26,12 +26,15 @@ export const providerConfiguration: typeof nativeProviderConfiguration = (...arg
 
 export const callbackRedirect: typeof nativeCallbackRedirect = (...args) =>
   nativeCallbackRedirect(...args);
+
 export const cookieVerifier: typeof nativeCookieVerifier = (...args) =>
   nativeCookieVerifier(...args);
+
 export const validCode: typeof nativeValidCode = (...args) => nativeValidCode(...args);
 
 export const prepareAttempt: typeof nativePrepareAttempt = (...args) =>
   nativePrepareAttempt(...args);
+
 export const startedResponse: typeof nativeStartedResponse = (...args) =>
   nativeStartedResponse(...args);
 

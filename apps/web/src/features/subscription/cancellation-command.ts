@@ -1,16 +1,19 @@
 import { authenticationEndedEvent } from "@/session/authentication-channel";
-import { Effect, Option } from "effect";
+import { Data, Effect, Option, Predicate } from "effect";
 import { type AsyncResult, Atom } from "effect/reactivity";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 import type { CanonicalSuccess, FidyClient, SubscriptionStatus } from "@/transport/client";
 
 export type Cancellation = CanonicalSuccess<"subscription.cancelSubscription">["data"];
+
 type CancellationFailure = Effect.Error<
   ReturnType<Effect.Success<FidyClient>["subscription"]["cancelSubscription"]>
 >;
+
 type StatusFailure = Effect.Error<
   ReturnType<Effect.Success<FidyClient>["subscription"]["getSubscriptionStatus"]>
 >;
+
 export const subscriptionStatusQuery: (
   client: FidyClient
 ) => Atom.Atom<
@@ -23,12 +26,21 @@ type Observation = AsyncResult.AsyncResult<
   CanonicalSuccess<"subscription.getSubscriptionStatus">,
   StatusFailure
 >;
+
 type Paid = Option.Option.Value<SubscriptionStatus["paidSubscription"]>;
-type Phase =
-  | Readonly<{ _tag: "Ready" | "Confirmed" | "Unknown" | "Disposed" }>
-  | Readonly<{ _tag: "Reviewing"; paid: Paid; observation: Observation }>
-  | Readonly<{ _tag: "Cancelling"; paid: Paid }>
-  | Readonly<{ _tag: "Refreshing"; uncertain: boolean }>;
+
+type Phase = Data.TaggedEnum<{
+  Ready: {};
+  Confirmed: {};
+  Unknown: {};
+  Disposed: {};
+  Reviewing: Readonly<{ paid: Paid; observation: Observation }>;
+  Cancelling: Readonly<{ paid: Paid }>;
+  Refreshing: Readonly<{ uncertain: boolean }>;
+}>;
+
+const Phase = Data.taggedEnum<Phase>();
+
 export type CancellationManagement = Readonly<{
   cancellation: Option.Option<Cancellation>;
   paid: SubscriptionStatus["paidSubscription"];
@@ -46,6 +58,7 @@ export type CancellationManagement = Readonly<{
   refresh: () => void;
   mount: () => () => void;
 }>;
+
 type Owner = {
   client: FidyClient;
   get: Atom.AtomContext;
@@ -58,43 +71,60 @@ type Owner = {
   command: Atom.AtomResultFn<Effect.Effect<void>, void, never>;
   mount: () => () => void;
 };
+
 const notify = (owner: Owner): void => owner.get.setSelf(present(owner));
+
 const dispose = (owner: Owner): void => {
   owner.active = false;
   owner.generation += 1;
-  if (owner.phase._tag === "Cancelling" || owner.phase._tag === "Refreshing") {
-    owner.phase = { _tag: "Unknown" };
-  } else if (owner.phase._tag === "Reviewing") {
-    owner.phase = { _tag: "Ready" };
+
+  if (
+    Predicate.isTagged(owner.phase, "Cancelling") ||
+    Predicate.isTagged(owner.phase, "Refreshing")
+  ) {
+    owner.phase = Phase.Unknown();
+  } else if (Predicate.isTagged(owner.phase, "Reviewing")) {
+    owner.phase = Phase.Ready();
   }
+
   owner.get.set(owner.command, Atom.Interrupt);
 };
+
 const mount = (owner: Owner): (() => void) => {
   owner.active = true;
   notify(owner);
+
   const retire = (): void => {
     dispose(owner);
-    owner.phase = { _tag: "Disposed" };
+    owner.phase = Phase.Disposed();
     notify(owner);
   };
+
   globalThis.addEventListener(authenticationEndedEvent, retire);
   globalThis.addEventListener("pagehide", retire);
+
   return () => {
     globalThis.removeEventListener(authenticationEndedEvent, retire);
     globalThis.removeEventListener("pagehide", retire);
     dispose(owner);
   };
 };
+
 const observe = (
   owner: Owner
 ): CanonicalQueryState<CanonicalSuccess<"subscription.getSubscriptionStatus">, StatusFailure> =>
   presentCanonicalQuery(owner.get.once(subscriptionStatusQuery(owner.client)));
+
 const fresh = (owner: Owner): Option.Option<SubscriptionStatus> => {
   const status = observe(owner);
-  return status._tag === "Ready" && !status.waiting && Option.isNone(status.refreshFailure)
+
+  return Predicate.isTagged(status, "Ready") &&
+    !status.waiting &&
+    Option.isNone(status.refreshFailure)
     ? Option.some(status.value.data)
     : Option.none();
 };
+
 const execute = (
   owner: Owner,
   phase: Phase,
@@ -112,14 +142,21 @@ const execute = (
       Effect.flatMap((outcome) =>
         Effect.sync(() => {
           if (!current(owner, { generation, phase })) return;
-          if (outcome._tag === "Failure") {
-            owner.phase = { _tag: "Unknown" };
+
+          if (Predicate.isTagged(outcome, "Failure")) {
+            owner.phase = Phase.Unknown();
           } else {
             owner.evidence = Option.orElse(outcome.value, () => owner.evidence);
-            owner.phase = { _tag: Option.isSome(owner.evidence) ? "Confirmed" : "Ready" };
+            owner.phase = Option.isSome(owner.evidence) ? Phase.Confirmed() : Phase.Ready();
           }
+
           notify(owner);
-          if (outcome._tag === "Success" && phase._tag === "Cancelling" && owner.active) {
+
+          if (
+            Predicate.isTagged(outcome, "Success") &&
+            Predicate.isTagged(phase, "Cancelling") &&
+            owner.active
+          ) {
             owner.get.refresh(subscriptionStatusQuery(owner.client));
           }
         })
@@ -127,18 +164,28 @@ const execute = (
     )
   );
 };
+
 type Snapshot = Readonly<{
   phase: Phase;
   generation: number;
 }>;
+
 const current = (owner: Owner, snapshot: Snapshot): boolean =>
   owner.active && owner.generation === snapshot.generation && owner.phase === snapshot.phase;
+
 const review = (owner: Owner, snapshot: Snapshot): void => {
   const status = fresh(owner);
-  if (!current(owner, snapshot) || snapshot.phase._tag !== "Ready" || Option.isNone(status)) {
+
+  if (
+    !current(owner, snapshot) ||
+    !Predicate.isTagged(snapshot.phase, "Ready") ||
+    Option.isNone(status)
+  ) {
     return;
   }
+
   const paid = status.value.paidSubscription;
+
   if (
     Option.isSome(owner.evidence) ||
     Option.isSome(status.value.cancellation) ||
@@ -146,43 +193,48 @@ const review = (owner: Owner, snapshot: Snapshot): void => {
   ) {
     return;
   }
-  owner.phase = {
-    _tag: "Reviewing",
+
+  owner.phase = Phase.Reviewing({
     paid: paid.value,
     observation: owner.get.once(subscriptionStatusQuery(owner.client)),
-  };
+  });
   owner.restoreFocus = false;
   notify(owner);
 };
+
 const confirm = (owner: Owner, snapshot: Snapshot): void => {
   const phase = snapshot.phase;
+
   if (
     !current(owner, snapshot) ||
-    phase._tag !== "Reviewing" ||
+    !Predicate.isTagged(phase, "Reviewing") ||
     Option.isNone(fresh(owner)) ||
     phase.observation !== owner.get.once(subscriptionStatusQuery(owner.client))
   ) {
     return;
   }
+
   execute(
     owner,
-    { _tag: "Cancelling", paid: phase.paid },
+    Phase.Cancelling({ paid: phase.paid }),
     owner.client.pipe(
       Effect.flatMap((api) => api.subscription.cancelSubscription({})),
       Effect.map((response) => Option.some(response.data))
     )
   );
 };
+
 const actions = (
   owner: Owner,
   snapshot: Snapshot
 ): Pick<CancellationManagement, "review" | "back" | "confirm" | "refresh" | "mount"> => ({
   review: () => review(owner, snapshot),
   back: () => {
-    if (!current(owner, snapshot) || snapshot.phase._tag !== "Reviewing") {
+    if (!current(owner, snapshot) || !Predicate.isTagged(snapshot.phase, "Reviewing")) {
       return;
     }
-    owner.phase = { _tag: "Ready" };
+
+    owner.phase = Phase.Ready();
     owner.restoreFocus = true;
     notify(owner);
   },
@@ -190,16 +242,17 @@ const actions = (
   refresh: () => {
     if (
       !current(owner, snapshot) ||
-      snapshot.phase._tag === "Disposed" ||
-      snapshot.phase._tag === "Cancelling" ||
-      snapshot.phase._tag === "Refreshing"
+      Predicate.isTagged(snapshot.phase, "Disposed") ||
+      Predicate.isTagged(snapshot.phase, "Cancelling") ||
+      Predicate.isTagged(snapshot.phase, "Refreshing")
     ) {
       return;
     }
+
     const query = subscriptionStatusQuery(owner.client);
     execute(
       owner,
-      { _tag: "Refreshing", uncertain: snapshot.phase._tag === "Unknown" },
+      Phase.Refreshing({ uncertain: Predicate.isTagged(snapshot.phase, "Unknown") }),
       Effect.sync(() => owner.get.refresh(query)).pipe(
         Effect.andThen(owner.get.resultOnce(query, { suspendOnWaiting: true })),
         Effect.map((response) => response.data.cancellation)
@@ -208,42 +261,59 @@ const actions = (
   },
   mount: owner.mount,
 });
+
 const unavailable = (status: ReturnType<typeof observe>): boolean =>
-  status._tag === "Failure" || (status._tag === "Ready" && Option.isSome(status.refreshFailure));
-const reviewed = (phase: Phase): phase is Extract<Phase, { _tag: "Reviewing" | "Cancelling" }> =>
-  phase._tag === "Reviewing" || phase._tag === "Cancelling";
+  Predicate.isTagged(status, "Failure") ||
+  (Predicate.isTagged(status, "Ready") && Option.isSome(status.refreshFailure));
+
+const reviewed = (
+  phase: Phase
+): phase is Data.TaggedEnum.Value<Phase, "Reviewing" | "Cancelling"> =>
+  Predicate.isTagged(phase, "Reviewing") || Predicate.isTagged(phase, "Cancelling");
+
 const present = (owner: Owner): CancellationManagement => {
   const phase = owner.phase;
   const observation = owner.get.once(subscriptionStatusQuery(owner.client));
   const status = presentCanonicalQuery(observation);
-  const standing =
-    status._tag === "Ready" ? Option.some(status.value.data) : Option.none<SubscriptionStatus>();
+
+  const standing = Predicate.isTagged(status, "Ready")
+    ? Option.some(status.value.data)
+    : Option.none<SubscriptionStatus>();
+
   const cancellation = Option.orElse(owner.evidence, () =>
     Option.flatMap(standing, (value) => value.cancellation)
   );
+
   return {
     cancellation,
     paid: reviewed(phase)
       ? Option.some(phase.paid)
       : Option.flatMap(standing, (value) => value.paidSubscription),
     reviewing: reviewed(phase),
-    cancelling: phase._tag === "Cancelling",
+    cancelling: Predicate.isTagged(phase, "Cancelling"),
     unavailable: unavailable(status),
-    loading: status._tag === "Initial",
-    uncertain: phase._tag === "Unknown" || (phase._tag === "Refreshing" && phase.uncertain),
-    busy: phase._tag === "Cancelling" || phase._tag === "Refreshing" || status.waiting,
+    loading: Predicate.isTagged(status, "Initial"),
+    uncertain:
+      Predicate.isTagged(phase, "Unknown") ||
+      (Predicate.isTagged(phase, "Refreshing") && phase.uncertain),
+    busy:
+      Predicate.isTagged(phase, "Cancelling") ||
+      Predicate.isTagged(phase, "Refreshing") ||
+      status.waiting,
     interacted: owner.interacted,
     restoreFocus: owner.restoreFocus,
     ...actions(owner, { phase, generation: owner.generation }),
   };
 };
-export const makeCancellationManagement = (client: FidyClient): Atom.Atom<CancellationManagement> =>
+
+export const cancellationManagementAtom = (client: FidyClient): Atom.Atom<CancellationManagement> =>
   Atom.make((get) => {
     const command = client.runtime.fn<Effect.Effect<void>>()((work) => work);
+
     const owner: Owner = {
       client,
       get,
-      phase: { _tag: "Ready" },
+      phase: Phase.Ready(),
       evidence: Option.none(),
       active: false,
       generation: 0,
@@ -252,15 +322,18 @@ export const makeCancellationManagement = (client: FidyClient): Atom.Atom<Cancel
       command,
       mount: () => mount(owner),
     };
+
     get.mount(command);
     get.mount(subscriptionStatusQuery(client));
     get.subscribe(subscriptionStatusQuery(client), (observation) => {
-      if (owner.phase._tag === "Reviewing" && owner.phase.observation !== observation) {
-        owner.phase = { _tag: "Ready" };
+      if (Predicate.isTagged(owner.phase, "Reviewing") && owner.phase.observation !== observation) {
+        owner.phase = Phase.Ready();
         owner.restoreFocus = true;
       }
+
       notify(owner);
     });
     get.addFinalizer(() => dispose(owner));
+
     return present(owner);
   });

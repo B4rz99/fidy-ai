@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { SecureRandom } from "effect/crypto";
 import { BunCrypto, BunFileSystem } from "@effect/platform-bun";
-import { Effect, FileSystem, Option, Schema } from "effect";
+import { Data, Effect, FileSystem, Option, Result, Schema } from "effect";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import * as XLSX from "xlsx/xlsx.mjs";
 import type { WorkBook, WorkSheet } from "xlsx";
@@ -16,33 +16,61 @@ import { type HostedWorkerProof, hostedWorkerProof } from "./hosted-worker";
 import { stopProofProcess } from "./proof-command";
 
 const baseline = process.argv.includes("--baseline");
+
 const remote = process.argv.includes("--remote");
+
 const durable = process.argv.includes("--durable");
+
 if (durable && !remote) throw new Error("Durable proof requires hosted mode");
+
 const hostedRuntime = durable ? "cloudflare-durable-object" : "cloudflare-worker";
+
 if (baseline && remote) throw new Error("Hosted proof only supports the current bounded parser");
+
 const port = 8795;
+
 const proofNameSuffixLength = 8;
+
 const inspectorPort = 9295;
+
 const readinessAttempts = 80;
+
 const readinessDelay = 500;
+
 const localRequestTimeout = 1000;
+
 const remoteRequestTimeout = 5000;
+
 const requestTimeout = remote ? remoteRequestTimeout : localRequestTimeout;
+
 const cpuLimit = 30000;
+
 const smallStatementRows = 8;
+
 const mediumStatementRows = 32;
+
 const largerStatementRows = 128;
+
 const thousandStatementRows = 1000;
+
 const malformedFileStatus = 422;
+
 const sharedLength = 4096;
+
 const formattedRows = 512;
+
 const boundedRows = 8000;
+
 const escapedRepetitions = 1024;
+
 const outsideNumericDigits = 129;
+
 const root = new URL("../..", import.meta.url).pathname;
+
 const directory = `${root}/.xlsx-work-proof`;
+
 const fixtureRoot = `${root}/scripts/document-parsing/fixtures/xlsx-work`;
+
 const workResult = Schema.Struct({
   outcome: Schema.Literal("parsed"),
   rowCount: Schema.Int,
@@ -54,24 +82,35 @@ const workResult = Schema.Struct({
   acceptedRows: Schema.Int,
   reviewRows: Schema.Int,
 });
+
 const parsedOnly = Schema.Struct({
   outcome: Schema.Literal("parsed"),
   rowCount: Schema.Int,
   elapsedMilliseconds: Schema.Finite,
 });
+
 const rejected = Schema.Struct({ outcome: Schema.Literal("rejected"), reason: Schema.String });
+
 const runtimeFailure = Schema.Struct({
   outcome: Schema.Literal("runtime-failure"),
   httpStatus: Schema.Int,
   cloudflareErrorCode: Schema.optional(Schema.String),
 });
-const decodeResponse = Schema.decodeUnknownSync(Schema.Union([workResult, parsedOnly, rejected]));
+
+const decodeAccepted = Schema.decodeUnknownSync(Schema.Union([workResult, parsedOnly]));
+
+const decodeRejected = Schema.decodeUnknownSync(rejected);
+
 const readProofResponse = Effect.fn(function* (response: Response) {
   if (response.headers.get("content-type")?.includes("application/json") === true) {
-    return decodeResponse(yield* Effect.tryPromise(() => response.json()));
+    const decode = response.ok ? decodeAccepted : decodeRejected;
+
+    return decode(yield* Effect.tryPromise(() => response.json()));
   }
+
   const body = yield* Effect.tryPromise(() => response.text());
   const errorCode = /(?:error code:|Error)\s*(\d{4})/iu.exec(body)?.[1];
+
   return {
     outcome: "runtime-failure" as const,
     httpStatus: response.status,
@@ -90,6 +129,7 @@ const measurementBase = Schema.Struct({
   retainedHeapBeforeBytes: Schema.optional(Schema.Int),
   retainedHeapAfterBytes: Schema.optional(Schema.Int),
 });
+
 const measurementCodec = Schema.fromJsonString(
   Schema.Union([
     Schema.Struct({ ...measurementBase.fields, ...workResult.fields }),
@@ -98,6 +138,7 @@ const measurementCodec = Schema.fromJsonString(
     Schema.Struct({ ...measurementBase.fields, ...runtimeFailure.fields }),
   ])
 );
+
 const overlapCodec = Schema.fromJsonString(
   Schema.Struct({
     baseline: Schema.Boolean,
@@ -108,6 +149,7 @@ const overlapCodec = Schema.fromJsonString(
     retainedHeapAfterBytes: Schema.optional(Schema.Int),
   })
 );
+
 const configCodec = Schema.fromJsonString(
   Schema.Struct({
     name: Schema.String,
@@ -132,12 +174,22 @@ const configCodec = Schema.fromJsonString(
     ),
   })
 );
+
+class XlsxProofFailure extends Data.TaggedError("XlsxProofFailure")<{
+  readonly message: string;
+}> {}
+
+const isArrayBuffer = Schema.is(Schema.instanceOf(ArrayBuffer));
+
 const writeWorkbook = (book: WorkBook): Uint8Array => {
   const fresh: WorkBook & { SSF: Record<number, string> } = { ...book, SSF: { 0: "General" } };
   const buffer: unknown = XLSX.write(fresh, { type: "array", compression: true, bookSST: true });
-  if (!(buffer instanceof ArrayBuffer)) throw new Error("Expected workbook bytes");
+
+  if (!isArrayBuffer(buffer)) throw new Error("Expected workbook bytes");
+
   return new Uint8Array(buffer);
 };
+
 const synthetic = (
   input: Readonly<{ rows: number; text: string; formatted: boolean }>
 ): Uint8Array => {
@@ -147,29 +199,38 @@ const synthetic = (
     "COP",
     input.text,
   ]);
+
   const sheet: WorkSheet = XLSX.utils.aoa_to_sheet([
     ["fecha", "valor", "moneda", "contraparte"],
     ...rows,
   ]);
+
   if (input.formatted) {
     for (let index = 0; index < input.rows; index += 1) {
       sheet[`D${index + 2}`] = { t: "s", v: input.text, z: '@"suffix"' };
     }
   }
+
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book, sheet, "Statement");
+
   return writeWorkbook(book);
 };
+
 const manyCells = (rows = 20000): Uint8Array => {
   const columns = 12;
   const book = XLSX.utils.book_new();
+
   const data = [
     Array.from({ length: columns }, (_, index) => `Header${index}`),
     ...Array.from({ length: rows }, (_, index) => Array.from({ length: columns }, () => index + 1)),
   ];
+
   XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(data), "Statement");
+
   return writeWorkbook(book);
 };
+
 const longAmount = (): Uint8Array => {
   const source = synthetic({ rows: 1, text: "Cafe", formatted: false });
   const entries = unzipSync(source);
@@ -180,8 +241,10 @@ const longAmount = (): Uint8Array => {
       `<t>${"1".repeat(outsideNumericDigits)}</t>`
     )
   );
+
   return zipSync(entries);
 };
+
 const fixtures = Effect.fn(function* () {
   return [
     ...(yield* Effect.forEach(
@@ -223,6 +286,7 @@ const fixtures = Effect.fn(function* () {
     { name: "bounded-cells", bytes: manyCells(boundedRows) },
   ];
 });
+
 const send = (
   payload: Readonly<{ bytes: Uint8Array; path: "/statement" | "/statement-work" }>,
   signal: AbortSignal,
@@ -236,6 +300,7 @@ const send = (
     headers: {},
     signal,
   };
+
   return Option.isSome(target)
     ? requestHostedProof({
         ...input,
@@ -244,6 +309,7 @@ const send = (
       })
     : requestWorkerd(input);
 };
+
 const probeReady = Effect.fn(function* (target: Option.Option<HostedWorkerProof>) {
   const reply = yield* Effect.tryPromise(() =>
     send(
@@ -255,6 +321,7 @@ const probeReady = Effect.fn(function* (target: Option.Option<HostedWorkerProof>
       target
     )
   );
+
   yield* Effect.try(() => {
     if (remote ? reply.status !== malformedFileStatus : !reply.ok) {
       throw new Error("XLSX proof is not ready");
@@ -262,38 +329,47 @@ const probeReady = Effect.fn(function* (target: Option.Option<HostedWorkerProof>
   });
   const value = yield* Effect.tryPromise(() => reply.json());
   yield* Effect.try(() => {
-    const parsed = decodeResponse(value);
+    const parsed = remote ? decodeRejected(value) : decodeAccepted(value);
+
     const ready = remote
       ? parsed.outcome === "rejected" && parsed.reason === "malformed-file"
       : parsed.outcome === "parsed" && parsed.rowCount === 1;
+
     if (!ready) {
       throw new Error("XLSX readiness fixture did not parse");
     }
   });
 });
+
 const waitReady = Effect.fn(function* (target: Option.Option<HostedWorkerProof>) {
-  for (let attempt = 0; attempt < readinessAttempts; attempt += 1) {
-    const response = yield* Effect.result(probeReady(target));
-    if (response._tag === "Success") return;
-    yield* Effect.sleep(readinessDelay);
+  const response = yield* Effect.result(probeReady(target)).pipe(
+    Effect.tap((result) => (Result.isSuccess(result) ? Effect.void : Effect.sleep(readinessDelay))),
+    Effect.repeat({ until: Result.isSuccess, times: readinessAttempts - 1 })
+  );
+
+  if (Result.isFailure(response)) {
+    return yield* new XlsxProofFailure({ message: "XLSX proof worker did not become ready" });
   }
-  throw new Error("XLSX proof worker did not become ready");
 });
+
 const waitInspector = Effect.fn(function* () {
-  for (let attempt = 0; attempt < readinessAttempts; attempt += 1) {
-    const target = yield* Effect.result(
-      Effect.tryPromise(() =>
-        inspectorTarget({
-          port: inspectorPort,
-          signal: Option.some(AbortSignal.timeout(requestTimeout)),
-        })
-      )
-    );
-    if (target._tag === "Success") return target.success;
-    yield* Effect.sleep(readinessDelay);
+  const target = yield* Effect.result(
+    inspectorTarget({
+      port: inspectorPort,
+      signal: Option.some(AbortSignal.timeout(requestTimeout)),
+    })
+  ).pipe(
+    Effect.tap((result) => (Result.isSuccess(result) ? Effect.void : Effect.sleep(readinessDelay))),
+    Effect.repeat({ until: Result.isSuccess, times: readinessAttempts - 1 })
+  );
+
+  if (Result.isFailure(target)) {
+    return yield* new XlsxProofFailure({ message: "XLSX proof inspector did not become ready" });
   }
-  throw new Error("XLSX proof inspector did not become ready");
+
+  return target.success;
 });
+
 const measure = Effect.fn(function* (
   fixture: Readonly<{ name: string; bytes: Uint8Array; path: "/statement" | "/statement-work" }>,
   debuggerUrl: string,
@@ -303,10 +379,11 @@ const measure = Effect.fn(function* (
     (sum, entry) => sum + entry.length,
     0
   );
-  const before = remote
-    ? undefined
-    : yield* Effect.tryPromise(() => heapUsage({ debuggerUrl, signal: Option.none() }));
+
+  const before = remote ? undefined : yield* heapUsage({ debuggerUrl, signal: Option.none() });
+
   const startedAt = performance.now();
+
   const profiled = remote
     ? {
         response: yield* Effect.tryPromise(() =>
@@ -314,18 +391,17 @@ const measure = Effect.fn(function* (
         ),
         cpuMilliseconds: undefined,
       }
-    : yield* Effect.tryPromise(() =>
-        profileWorkerRequest({
-          debuggerUrl,
-          signal: Option.none(),
-          sendRequest: (signal) => send(fixture, signal, target),
-        })
-      );
+    : yield* profileWorkerRequest({
+        debuggerUrl,
+        signal: Option.none(),
+        sendRequest: (signal) => send(fixture, signal, target),
+      });
+
   const result = yield* readProofResponse(profiled.response);
   const requestRoundTripMilliseconds = performance.now() - startedAt;
-  const after = remote
-    ? undefined
-    : yield* Effect.tryPromise(() => heapUsage({ debuggerUrl, signal: Option.none() }));
+
+  const after = remote ? undefined : yield* heapUsage({ debuggerUrl, signal: Option.none() });
+
   const output = yield* Schema.encodeEffect(measurementCodec)({
     baseline,
     runtime: remote ? hostedRuntime : "local-workerd",
@@ -338,8 +414,10 @@ const measure = Effect.fn(function* (
     retainedHeapBeforeBytes: before,
     retainedHeapAfterBytes: after,
   });
+
   process.stdout.write(output + "\n");
 });
+
 const previousParser = baseline
   ? Bun.spawnSync(
       [
@@ -350,26 +428,41 @@ const previousParser = baseline
       { cwd: root, timeout: 120_000, maxBuffer: 1_048_576, killSignal: "SIGKILL" }
     ).stdout.toString()
   : "";
-const proofConfig = (name: string, retiring = false): string =>
-  Schema.encodeSync(configCodec)({
+
+const proofMigrations = (
+  retiring: boolean
+): ReadonlyArray<
+  | Readonly<{ tag: string; new_sqlite_classes: ReadonlyArray<string> }>
+  | Readonly<{ tag: string; deleted_classes: ReadonlyArray<string> }>
+> => {
+  const created = { tag: "created", new_sqlite_classes: ["XlsxParserProof"] };
+
+  return retiring ? [created, { tag: "retired", deleted_classes: ["XlsxParserProof"] }] : [created];
+};
+
+const proofConfig = (name: string, retiring = false): string => {
+  const limits = remote ? {} : { limits: { cpu_ms: cpuLimit } };
+
+  const durableObjects = durable
+    ? {
+        durable_objects: {
+          bindings: retiring ? [] : [{ name: "PARSER_PROOF", class_name: "XlsxParserProof" }],
+        },
+        migrations: proofMigrations(retiring),
+      }
+    : {};
+
+  return Schema.encodeSync(configCodec)({
     name,
     main: "worker.js",
     compatibility_date: "2026-09-08",
-    ...(remote ? {} : { limits: { cpu_ms: cpuLimit } }),
+    ...limits,
     workers_dev: remote,
     preview_urls: false,
-    ...(durable
-      ? {
-          durable_objects: {
-            bindings: retiring ? [] : [{ name: "PARSER_PROOF", class_name: "XlsxParserProof" }],
-          },
-          migrations: [
-            { tag: "created", new_sqlite_classes: ["XlsxParserProof"] },
-            ...(retiring ? [{ tag: "retired", deleted_classes: ["XlsxParserProof"] }] : []),
-          ],
-        }
-      : {}),
+    ...durableObjects,
   });
+};
+
 const buildWorker = Effect.fn(function* (name: string) {
   const built = yield* Effect.tryPromise(() =>
     Bun.build({
@@ -396,9 +489,14 @@ const buildWorker = Effect.fn(function* (name: string) {
       naming: "worker.js",
     })
   );
-  if (!built.success) throw new Error("XLSX proof bundle failed");
+
+  if (!built.success) {
+    return yield* new XlsxProofFailure({ message: "XLSX proof bundle failed" });
+  }
+
   yield* Effect.tryPromise(() => Bun.write(`${directory}/wrangler.json`, proofConfig(name)));
 });
+
 const startWorker = (): ReturnType<typeof Bun.spawn> =>
   Bun.spawn(
     [
@@ -424,16 +522,20 @@ const overlapRequests = Effect.fn(function* (
 ) {
   const { name, target } = input;
   const startedAt = performance.now();
+
   const responses = yield* Effect.tryPromise(() =>
     Promise.all([
       send({ bytes: overlap, path: "/statement-work" }, AbortSignal.timeout(cpuLimit), target),
       send({ bytes: overlap, path: "/statement-work" }, AbortSignal.timeout(cpuLimit), target),
     ])
   );
+
   const results = yield* Effect.forEach(responses, readProofResponse);
+
   const retainedHeapAfterBytes = remote
     ? undefined
-    : yield* Effect.tryPromise(() => heapUsage({ debuggerUrl, signal: Option.none() }));
+    : yield* heapUsage({ debuggerUrl, signal: Option.none() });
+
   const output = yield* Schema.encodeEffect(overlapCodec)({
     baseline,
     runtime: remote ? hostedRuntime : "local-workerd",
@@ -442,33 +544,40 @@ const overlapRequests = Effect.fn(function* (
     outcomes: results.map((result) => result.outcome),
     retainedHeapAfterBytes,
   });
+
   process.stdout.write(output + "\n");
 });
+
 const releaseWorker = (worker: Bun.Subprocess): Effect.Effect<void> =>
   stopProofProcess(worker).pipe(Effect.orDie);
+
 const measureParserOnly = Effect.fn(function* (
   debuggerUrl: string,
   target: Option.Option<HostedWorkerProof>
 ) {
-  for (const rows of [
-    1,
-    smallStatementRows,
-    mediumStatementRows,
-    largerStatementRows,
-    thousandStatementRows,
-    boundedRows,
-  ]) {
-    yield* measure(
-      {
-        name: `parse-only-ordinary-${rows}-rows`,
-        path: "/statement",
-        bytes: synthetic({ rows, text: "Cafe", formatted: false }),
-      },
-      debuggerUrl,
-      target
-    );
-  }
+  yield* Effect.forEach(
+    [
+      1,
+      smallStatementRows,
+      mediumStatementRows,
+      largerStatementRows,
+      thousandStatementRows,
+      boundedRows,
+    ],
+    (rows) =>
+      measure(
+        {
+          name: `parse-only-ordinary-${rows}-rows`,
+          path: "/statement",
+          bytes: synthetic({ rows, text: "Cafe", formatted: false }),
+        },
+        debuggerUrl,
+        target
+      ),
+    { discard: true }
+  );
 });
+
 const program = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   yield* fs.makeDirectory(directory, { recursive: true });
@@ -478,11 +587,14 @@ const program = Effect.gen(function* () {
       yield* fs.remove(directory, { recursive: true, force: true });
     }).pipe(Effect.orDie)
   );
+
   const suffix = remote
     ? (yield* (yield* SecureRandom.SecureRandom).uuidV4()).slice(0, proofNameSuffixLength)
     : "local";
+
   const name = `xlsx-proof-${suffix}`;
   yield* buildWorker(name);
+
   const target = remote
     ? Option.some(
         yield* hostedWorkerProof({
@@ -498,13 +610,18 @@ const program = Effect.gen(function* () {
         })
       )
     : Option.none<HostedWorkerProof>();
+
   if (!remote) yield* Effect.acquireRelease(Effect.sync(startWorker), releaseWorker);
   yield* waitReady(target);
   const debuggerUrl = remote ? "" : yield* waitInspector();
   yield* measureParserOnly(debuggerUrl, target);
-  for (const fixture of yield* fixtures()) {
-    yield* measure({ ...fixture, path: "/statement-work" }, debuggerUrl, target);
-  }
+
+  yield* Effect.forEach(
+    yield* fixtures(),
+    (fixture) => measure({ ...fixture, path: "/statement-work" }, debuggerUrl, target),
+    { discard: true }
+  );
+
   yield* overlapRequests(
     debuggerUrl,
     synthetic({ rows: 1000, text: " ".repeat(sharedLength - 4) + "Cafe", formatted: false }),
@@ -515,6 +632,7 @@ const program = Effect.gen(function* () {
     target,
   });
 });
+
 await Effect.runPromise(
   program.pipe(
     Effect.scoped,

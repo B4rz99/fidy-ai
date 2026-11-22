@@ -5,7 +5,9 @@ const interruptOnAbort = (signal: AbortSignal): Effect.Effect<never> =>
   Effect.callback<never>((resume) => {
     const interrupt = (): void => resume(Effect.interrupt);
     signal.addEventListener("abort", interrupt, { once: true });
+
     if (signal.aborted) interrupt();
+
     return Effect.sync(() => signal.removeEventListener("abort", interrupt));
   });
 

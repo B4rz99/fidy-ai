@@ -96,7 +96,7 @@ const monthlyIncomeAndExpenses = DashboardCatalogEntry.make({
   },
 });
 
-export const makeDashboardCatalog = (
+export const dashboardCatalog = (
   input: Readonly<{ readonly restaurantCategoryId: CategoryId }>
 ): DashboardCatalog => [
   monthlySpending,
@@ -121,18 +121,19 @@ const defaultLeaf = (entry: DashboardCatalogEntry, id: WidgetId): LeafNode => ({
   widget: makeCatalogWidget({ entry, id }),
 });
 
-export const makeDefaultDashboard = (
+export const defaultDashboard = (
   input: Readonly<{
     readonly restaurantCategoryId: CategoryId;
     readonly widgetIds: DefaultWidgetIds;
   }>
 ): DashboardDocument => {
-  const catalog = makeDashboardCatalog({ restaurantCategoryId: input.restaurantCategoryId });
+  const catalog = dashboardCatalog({ restaurantCategoryId: input.restaurantCategoryId });
   const [firstId, secondId, thirdId, fourthId] = input.widgetIds;
   const first = defaultLeaf(catalog[0], firstId);
   const second = defaultLeaf(catalog[1], secondId);
   const third = defaultLeaf(catalog[2], thirdId);
   const fourth = defaultLeaf(catalog[3], fourthId);
+
   return {
     title: DashboardTitle.make("Tablero"),
     layout: {
@@ -244,20 +245,26 @@ const periodCache = new WeakMap<
 
 export const resolveDashboardPeriod = (input: PeriodInput): AppliedDashboardPeriod => {
   let zones = periodCache.get(input.now);
+
   if (zones === undefined) {
     zones = new Map();
     periodCache.set(input.now, zones);
   }
+
   let periods = zones.get(input.timeZone);
+
   if (periods === undefined) {
     periods = new Map();
     zones.set(input.timeZone, periods);
   }
+
   let period = periods.get(input.period);
+
   if (period === undefined) {
     period = calculatePeriod(input);
     periods.set(input.period, period);
   }
+
   return { ...period };
 };
 
@@ -271,13 +278,16 @@ export const dashboardMoneyGroupsFromSums = (
     Currency,
     { inflow: ReadonlyMoney["amount"]; outflow: ReadonlyMoney["amount"] }
   >();
+
   for (const fact of facts) {
     const group = groups.get(fact.money.currency) ?? { inflow: zero, outflow: zero };
     group[fact.direction] = BigDecimal.sum(group[fact.direction], fact.money.amount);
     groups.set(fact.money.currency, group);
   }
+
   return [...groups.keys()].sort().map((currency) => {
     const group = groups.get(currency) ?? { inflow: zero, outflow: zero };
+
     return {
       currency,
       inflow: money(currency, group.inflow),
@@ -288,6 +298,7 @@ export const dashboardMoneyGroupsFromSums = (
 
 const metricMoney = (fact: DashboardMetricFact): ReadonlyMoney => {
   if (fact.aggregation !== "average") return fact.money;
+
   return money(
     fact.sum.currency,
     BigDecimal.divideUnsafe(fact.sum.amount, BigDecimal.make(fact.count, 0)).pipe(
@@ -360,6 +371,7 @@ const categoryGroups = (
   lookupCategory: (id: string) => Option.Option<Category>
 ): Option.Option<ReadonlyArray<DashboardChartBucket>> => {
   const grouped = new Map<string, Array<ProjectedContribution>>();
+
   for (const range of ranges) {
     for (const fact of selectedContributions(widget, range.contributions)) {
       const existing = grouped.get(fact.categoryId) ?? [];
@@ -367,16 +379,20 @@ const categoryGroups = (
       grouped.set(fact.categoryId, existing);
     }
   }
+
   const results: Array<DashboardChartBucket> = [];
+
   for (const id of [...grouped.keys()].sort()) {
     const category = lookupCategory(id);
     const contributions = grouped.get(id);
+
     if (Option.isNone(category) || contributions === undefined) return Option.none();
     results.push({
       key: { kind: "category", category: category.value },
       moneyGroups: sums(contributions),
     });
   }
+
   return Option.some(results);
 };
 
@@ -391,8 +407,10 @@ export const projectAggregateChart = ({
 }>): Option.Option<ReadonlyArray<DashboardChartBucket>> => {
   if (widget.groupBy === "category") return categoryGroups(widget, ranges, lookupCategory);
   const buckets: Array<DashboardChartBucket> = [];
+
   for (const { key, contributions } of ranges) {
     const moneyGroups = sums(selectedContributions(widget, contributions));
+
     if (moneyGroups.length > 0) {
       buckets.push({
         key: widget.groupBy === "day" ? { kind: "day", date: key } : { kind: "month", month: key },
@@ -400,6 +418,7 @@ export const projectAggregateChart = ({
       });
     }
   }
+
   return Option.some(buckets);
 };
 
@@ -408,6 +427,7 @@ export const projectAggregateMetric: {
   (ranges: ReadonlyArray<ProjectedRange>): (widget: MetricWidget) => MoneyGroups;
 } = Function.dual(2, (widget: MetricWidget, ranges: ReadonlyArray<ProjectedRange>): MoneyGroups => {
   const groups = new Map<string, ProjectedContribution>();
+
   for (const { contributions } of ranges) {
     for (const fact of selectedContributions(widget, contributions)) {
       const key = `${fact.sum.currency}:${fact.direction}`;
@@ -431,6 +451,7 @@ export const projectAggregateMetric: {
       );
     }
   }
+
   const metrics: ReadonlyArray<DashboardMetricFact> = [...groups.values()].map((group) =>
     widget.aggregation === "average"
       ? { aggregation: "average", direction: group.direction, sum: group.sum, count: group.count }
@@ -440,6 +461,7 @@ export const projectAggregateMetric: {
           money: widget.aggregation === "maximum" ? group.maximum : group.sum,
         }
   );
+
   return dashboardMoneyGroupsFromMetrics(metrics);
 });
 
@@ -486,6 +508,7 @@ export const dashboardProjectionRanges: {
       period: widget.type === "budget-bar" ? "this-month" : widget.period,
       timeZone,
     });
+
     if (widget.type !== "spending-chart" || widget.groupBy === "category") {
       return [
         {
@@ -495,9 +518,11 @@ export const dashboardProjectionRanges: {
         },
       ];
     }
+
     const ranges: Array<DashboardProjectionRange> = [];
     const zone = DateTime.zoneMakeNamedUnsafe(timeZone);
     let start = DateTime.setZone(period.from, zone);
+
     while (DateTime.Order(DateTime.toUtc(start), period.toExclusive) < 0) {
       const next = DateTime.add(start, widget.groupBy === "day" ? { days: 1 } : { months: 1 });
       const nextUtc = DateTime.toUtc(next);
@@ -511,6 +536,7 @@ export const dashboardProjectionRanges: {
       });
       start = next;
     }
+
     return ranges;
   }
 );

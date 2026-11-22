@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Clock, Effect } from "effect";
+import { Clock, Effect, Option } from "effect";
 import { expect } from "vitest";
 import { native, nativeBrowserPlatform } from "../user-store.test-fixture";
 import { signAcceptanceRequest } from "./operations";
@@ -17,11 +17,14 @@ const closedKeys = Effect.fn(function* (redirected: boolean) {
     SMOKE_PROOF: "b".repeat(64),
     BROWSER_ORIGIN: "https://app.fidyapp.com",
   };
+
   const runtime = yield* (yield* nativeBrowserPlatform)(undefined, [], settings);
   const core = yield* native(() => runtime.getWorker("core"));
+
   const { FIXTURE_PROVIDER: issuer } = yield* native(() =>
     runtime.getBindings<{ FIXTURE_PROVIDER: Fetcher }>("core")
   );
+
   const invoke = Effect.fn(function* (role: string, path: string, body: string) {
     const assertion = yield* native(() =>
       issuer
@@ -33,11 +36,13 @@ const closedKeys = Effect.fn(function* (redirected: boolean) {
         )
         .then((res) => res.text())
     );
+
     const request = new Request("https://core.internal/internal/" + path, {
       method: "POST",
       headers: { "cf-access-jwt-assertion": assertion, "content-type": "application/json" },
       body,
     });
+
     request.headers.set(
       acceptanceProofHeader,
       yield* signAcceptanceRequest({
@@ -47,6 +52,7 @@ const closedKeys = Effect.fn(function* (redirected: boolean) {
         deadline: (yield* Clock.currentTimeMillis) + acceptanceLifetimeMs,
       })
     );
+
     return yield* native(() =>
       core.fetch(request.url, {
         method: request.method,
@@ -55,9 +61,12 @@ const closedKeys = Effect.fn(function* (redirected: boolean) {
       })
     );
   });
+
   const beta = yield* invoke("beta", "beta-pro", '{"action":"list"}');
   expect(beta.status).toBe(redirected ? 401 : 200);
-  if (!redirected) expect(yield* native(() => beta.json())).toEqual({ entries: [], next: null });
+
+  const listed = redirected ? Option.none() : Option.some(yield* native(() => beta.json()));
+  expect(listed).toEqual(redirected ? Option.none() : Option.some({ entries: [], next: null }));
   expect((yield* invoke("reviewer", "sample-review", "{}")).status).toBe(redirected ? 401 : 400);
   expect((yield* invoke("reviewer", "beta-pro", '{"action":"list"}')).status).toBe(401);
   expect(
@@ -66,6 +75,7 @@ const closedKeys = Effect.fn(function* (redirected: boolean) {
     )
   ).toBe(0);
 });
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "verifies signed beta and sample operators in a closed workerd installation using their exact pinned issuer",

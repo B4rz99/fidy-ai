@@ -1,22 +1,19 @@
 import { Key01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Predicate } from "effect";
 import type { JSX, ReactNode } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
+import { RotationState } from "./view-state";
 
-export type RotationState =
-  | Readonly<{ _tag: "Idle" }>
-  | Readonly<{ _tag: "Reviewing" }>
-  | Readonly<{ _tag: "Rotating" }>
-  | Readonly<{ _tag: "Disclosed"; copied: boolean }>
-  | Readonly<{ _tag: "Uncertain" }>
-  | Readonly<{ _tag: "Unauthenticated" }>
-  | Readonly<{ _tag: "Disposed" }>
-  | Readonly<{ _tag: "FreshSessionRequired" }>;
+const signInRequired = Predicate.or(
+  Predicate.or(RotationState.$is("FreshSessionRequired"), RotationState.$is("Unauthenticated")),
+  RotationState.$is("Uncertain")
+);
 
 const RotationFeedback = ({ state }: { state: RotationState }): JSX.Element => (
   <div className="flex flex-col gap-4">
-    {state._tag === "Reviewing" ? (
+    {RotationState.$is("Reviewing")(state) ? (
       <Alert>
         <AlertTitle>Revisa antes de continuar</AlertTitle>
         <AlertDescription>
@@ -25,7 +22,7 @@ const RotationFeedback = ({ state }: { state: RotationState }): JSX.Element => (
         </AlertDescription>
       </Alert>
     ) : null}
-    {state._tag === "FreshSessionRequired" ? (
+    {RotationState.$is("FreshSessionRequired")(state) ? (
       <Alert>
         <AlertTitle>Inicia sesión de nuevo</AlertTitle>
         <AlertDescription>
@@ -34,13 +31,13 @@ const RotationFeedback = ({ state }: { state: RotationState }): JSX.Element => (
         </AlertDescription>
       </Alert>
     ) : null}
-    {state._tag === "Unauthenticated" ? (
+    {RotationState.$is("Unauthenticated")(state) ? (
       <Alert>
         <AlertTitle>Inicia sesión para continuar</AlertTitle>
         <AlertDescription>Necesitas una sesión válida para crear un código nuevo.</AlertDescription>
       </Alert>
     ) : null}
-    {state._tag === "Uncertain" ? (
+    {RotationState.$is("Uncertain")(state) ? (
       <Alert variant="warning">
         <AlertTitle>No pudimos confirmar el código nuevo.</AlertTitle>
         <AlertDescription>
@@ -54,7 +51,10 @@ const RotationFeedback = ({ state }: { state: RotationState }): JSX.Element => (
 );
 
 const actionLabel = (state: RotationState): string => {
-  if (state._tag === "Rotating") return "Creando código…";
+  if (RotationState.$is("Rotating")(state)) {
+    return "Creando código…";
+  }
+
   return "Crear un código nuevo";
 };
 
@@ -65,8 +65,11 @@ const RotationAction = (props: {
   onConfirm: () => void;
   onCancel: () => void;
 }): JSX.Element => {
-  if (props.state._tag === "Disposed") return <></>;
-  if (props.state._tag === "Reviewing") {
+  if (RotationState.$is("Disposed")(props.state)) {
+    return <></>;
+  }
+
+  if (RotationState.$is("Reviewing")(props.state)) {
     return (
       <div className="flex flex-wrap gap-2">
         <Button contentLayout="wrap" onClick={props.onConfirm} type="button">
@@ -78,11 +81,8 @@ const RotationAction = (props: {
       </div>
     );
   }
-  if (
-    props.state._tag === "FreshSessionRequired" ||
-    props.state._tag === "Unauthenticated" ||
-    props.state._tag === "Uncertain"
-  ) {
+
+  if (signInRequired(props.state)) {
     return (
       <div>
         <Button
@@ -94,16 +94,17 @@ const RotationAction = (props: {
       </div>
     );
   }
+
   return (
     <div className="flex flex-wrap gap-2">
-      {props.state._tag === "Disclosed" ? (
+      {RotationState.$is("Disclosed")(props.state) ? (
         <Button contentLayout="wrap" onClick={props.onCopy} type="button">
           {props.state.copied ? "Copiado" : "Copiar código"}
         </Button>
       ) : (
         <Button
           contentLayout="wrap"
-          disabled={props.state._tag === "Rotating"}
+          disabled={RotationState.$is("Rotating")(props.state)}
           onClick={props.onStart}
           type="button"
           variant="outline"

@@ -9,19 +9,24 @@ import {
   type TransactionFilters,
   transactionSearch,
 } from "./transaction-filters";
+import { reportBrowserDefect } from "@/transport/browser-defects";
 
 type WorkspaceScope = Readonly<{
   month: string;
   filters: Filters;
   previous: Option.Option<string>;
 }>;
+
 type Scope = Readonly<{ key: string; workspace: WorkspaceScope }>;
+
 type OccurrenceIdentity = Pick<Occurrence, "planId" | "date">;
+
 const OccurrenceSelection = Schema.Struct({
   kind: Schema.Literal("occurrence"),
   planId: RecurringPlanId,
   date: RecurringDate,
 });
+
 const LinkSelection = Schema.Struct({
   kind: Schema.Literal("link"),
   planId: RecurringPlanId,
@@ -30,14 +35,19 @@ const LinkSelection = Schema.Struct({
   pickerIndex: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   browser: TransactionBrowserState,
 });
+
 const Selection = Schema.Union([OccurrenceSelection, LinkSelection]);
+
 type Selection = typeof Selection.Type;
+
 const SavedView = Schema.Struct({
   binding: Schema.String,
   scope: Schema.String,
   selection: Schema.optionalKey(Selection),
 });
+
 const HistoryView = Schema.Struct({ recurringView: SavedView });
+
 const readSelection = (state: unknown, binding: string, scope: Scope): Option.Option<Selection> =>
   Schema.decodeUnknownOption(HistoryView)(state).pipe(
     Option.filter(
@@ -45,6 +55,7 @@ const readSelection = (state: unknown, binding: string, scope: Scope): Option.Op
     ),
     Option.flatMap(({ recurringView }) => Option.fromUndefinedOr(recurringView.selection))
   );
+
 const saveSelection = ({
   router,
   scope,
@@ -76,8 +87,9 @@ const saveSelection = ({
         },
       }),
     })
-    .catch(() => undefined);
+    .catch(() => reportBrowserDefect("navigation_failed"));
 };
+
 export type RecurringNavigation = Readonly<{
   selection: Option.Option<Selection>;
   open: (item: OccurrenceIdentity) => void;
@@ -86,17 +98,21 @@ export type RecurringNavigation = Readonly<{
   close: () => void;
   returnToOccurrence: () => void;
 }>;
+
 const linkSelection = (
   selection: Option.Option<Selection>
 ): Option.Option<typeof LinkSelection.Type> =>
   Option.filter(selection, (value) => value.kind === "link");
+
 const sameOccurrence = (left: OccurrenceIdentity, right: OccurrenceIdentity): boolean =>
   left.planId === right.planId && left.date === right.date;
+
 const validBrowser = (selection: Selection): boolean =>
   selection.kind !== "link" ||
   Option.isSome(
     transactionSearch({ draft: selection.browser.applied, timeZone: "America/Bogota" })
   );
+
 const makeLinkSelection = ({
   item,
   filters,
@@ -109,10 +125,12 @@ const makeLinkSelection = ({
   remembered: Option.Option<typeof LinkSelection.Type>;
 }>): typeof LinkSelection.Type => {
   const previous = Option.filter(remembered, (value) => sameOccurrence(value, item));
+
   const browser = Option.match(previous, {
     onNone: () => ({ draft: filters, applied: filters, cursors: [] }),
     onSome: (value) => ({ ...value.browser, selectedId: undefined }),
   });
+
   const next = {
     ...item,
     kind: "link" as const,
@@ -120,23 +138,30 @@ const makeLinkSelection = ({
     occurrenceIndex: index,
     pickerIndex: index + 1,
   };
+
   return next;
 };
+
 export const useRecurringNavigation = (workspace: WorkspaceScope): RecurringNavigation => {
   const scope = {
     key: `${workspace.month}:${JSON.stringify(workspace.filters)}:${Option.getOrElse(workspace.previous, () => "")}`,
     workspace,
   };
+
   const router = useRouter();
   const location = useRouterState({ select: (state) => state.location });
+
   const selection = readSelection(
     location.state,
     router.options.context.sessionBinding,
     scope
   ).pipe(Option.filter(validBrowser));
+
   const [remembered, remember] = useState(() => linkSelection(selection));
+
   const save = (value: Option.Option<Selection>, replace: boolean): void =>
     saveSelection({ router, scope, selection: value, replace });
+
   const link = (item: OccurrenceIdentity, filters: TransactionFilters): void => {
     const next = makeLinkSelection({
       item,
@@ -144,14 +169,18 @@ export const useRecurringNavigation = (workspace: WorkspaceScope): RecurringNavi
       index: location.state.__TSR_index,
       remembered,
     });
+
     remember(Option.some(next));
     save(Option.some(next), false);
   };
+
   const changeBrowser = (browser: TransactionBrowserState, replace: boolean): void => {
     const current = linkSelection(selection);
+
     if (Option.isNone(current)) return;
     const next = { ...current.value, browser };
     remember(Option.some(next));
+
     if (
       replace &&
       current.value.browser.selectedId !== undefined &&
@@ -160,6 +189,7 @@ export const useRecurringNavigation = (workspace: WorkspaceScope): RecurringNavi
       restorePicker({ router, scope, value: next });
     } else save(Option.some(next), replace);
   };
+
   return {
     selection,
     open: (item) => save(Option.some({ ...item, kind: "occurrence" }), false),
@@ -181,12 +211,14 @@ export const useRecurringNavigation = (workspace: WorkspaceScope): RecurringNavi
     returnToOccurrence: () => returnToOccurrence({ router, scope, selection }),
   };
 };
+
 const returnToIndex = ({
   router,
   index,
   fallback,
 }: Readonly<{ router: RegisteredRouter; index: number; fallback: () => void }>): void => {
   const distance = router.latestLocation.state.__TSR_index - index;
+
   if (distance > 0 && distance <= 2) router.history.go(-distance);
   else fallback();
 };
@@ -211,23 +243,31 @@ const restorePicker = ({
   value: typeof LinkSelection.Type;
 }>): void => {
   const binding = router.options.context.sessionBinding;
+
   const save = (): void =>
     saveSelection({ router, scope, selection: Option.some(value), replace: true });
+
   const distance = router.latestLocation.state.__TSR_index - value.pickerIndex;
+
   if (distance <= 0 || distance > 2) {
     save();
+
     return;
   }
+
   const finish = (): void => {
     stop();
     const location = router.history.location;
+
     if (
       location.state.__TSR_index !== value.pickerIndex ||
       router.options.context.sessionBinding !== binding
     ) {
       return;
     }
+
     const target = readSelection(location.state, binding, scope);
+
     if (
       Option.exists(
         target,
@@ -237,6 +277,7 @@ const restorePicker = ({
       save();
     }
   };
+
   const stop = router.history.subscribe(finish);
   router.history.go(-distance);
 };
@@ -251,6 +292,7 @@ const returnToOccurrence = ({
   selection: Option.Option<Selection>;
 }>): void => {
   const current = linkSelection(selection);
+
   if (Option.isNone(current)) return;
   const value = current.value;
   returnToIndex({

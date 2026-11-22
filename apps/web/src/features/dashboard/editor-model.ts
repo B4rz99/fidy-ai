@@ -5,24 +5,41 @@ import type { CanonicalSuccess } from "@/transport/client";
 import type { DashboardDropTarget } from "./drag-data";
 
 type CanonicalDashboardEdit = DashboardEdit;
+
 type AddWidgetEdit = Extract<CanonicalDashboardEdit, { readonly op: "add-widget" }>;
+
 type ResizeRegionEdit = Extract<CanonicalDashboardEdit, { readonly op: "resize-region" }>;
+
 type Placement = AddWidgetEdit["at"];
+
 type DashboardWidget = AddWidgetEdit["widget"];
+
 export type BudgetWidget = Extract<DashboardWidget, { readonly type: "budget-bar" }>;
+
 export type BudgetTarget = Pick<BudgetWidget, "categoryId" | "currency">;
+
 type WidgetId = DashboardWidget["id"];
 
 const uuidOctets = 16;
+
 const uuidVersionOctet = 6;
+
 const uuidVariantOctet = 8;
+
 const lowNibbleMask = 0x0f;
+
 const lowSixBitsMask = 0x3f;
+
 const uuidVersionFourBits = 0x40;
+
 const uuidRfcVariantBits = 0x80;
+
 const firstGroupEnd = 8;
+
 const secondGroupEnd = 12;
+
 const thirdGroupEnd = 16;
+
 const fourthGroupEnd = 20;
 
 export const freshWidgetId = (): WidgetId => {
@@ -32,6 +49,7 @@ export const freshWidgetId = (): WidgetId => {
   bytes[uuidVersionOctet] = (versionOctet & lowNibbleMask) | uuidVersionFourBits;
   bytes[uuidVariantOctet] = (variantOctet & lowSixBitsMask) | uuidRfcVariantBits;
   const hex = Hex.encode(bytes);
+
   return Schema.decodeSync(WidgetIdSchema)(
     `${hex.slice(0, firstGroupEnd)}-${hex.slice(firstGroupEnd, secondGroupEnd)}-${hex.slice(secondGroupEnd, thirdGroupEnd)}-${hex.slice(thirdGroupEnd, fourthGroupEnd)}-${hex.slice(fourthGroupEnd)}`
   );
@@ -61,6 +79,7 @@ export type DashboardGesture =
 
 const placementFor = (target: Readonly<DashboardDropTarget>): Placement => {
   if (target.kind === "dashboard-edge") return target.edge;
+
   switch (target.edge) {
     case "top":
       return { besideWidget: target.widgetId, axis: "column", side: "before" };
@@ -77,7 +96,7 @@ const placementFor = (target: Readonly<DashboardDropTarget>): Placement => {
 
 const editFor = (
   gesture: Readonly<Exclude<DashboardGesture, { kind: "configure-budget" }>>
-): unknown => {
+): typeof DashboardEdit.Encoded => {
   switch (gesture.kind) {
     case "move-widget":
       return { op: "move-widget", widgetId: gesture.widgetId, at: placementFor(gesture.target) };

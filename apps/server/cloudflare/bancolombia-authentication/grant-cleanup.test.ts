@@ -1,6 +1,7 @@
+import * as assert from "node:assert/strict";
 import { Digest, SecureRandom } from "effect/crypto";
 import { expect, it } from "@effect/vitest";
-import { Context, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
+import { Context, Effect, Exit, Layer, Option, Predicate, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { exportJWK, exportPKCS8, generateKeyPair } from "jose";
 import { TestCrypto } from "../../src/shell/testing/crypto-harness";
@@ -8,7 +9,9 @@ import { BancolombiaAuthorizationFailed } from "./contract";
 import { revokeBancolombiaSandboxGrant } from "./operations";
 
 const as = "https://as1-api-open-finance-sandbox.ambientesbc.com";
+
 const clientId = "10000000-0000-4000-8000-000000000001";
+
 type Scenario =
   | "ready"
   | "refresh-rejected"
@@ -22,6 +25,7 @@ type Scenario =
   | "empty"
   | "expired-access"
   | "proof-write";
+
 const inspectResponse = (scenario: Scenario, active: boolean, hint: string): Response =>
   scenario === "unauthorized"
     ? new Response(null, { status: 401 })
@@ -33,6 +37,7 @@ const inspectResponse = (scenario: Scenario, active: boolean, hint: string): Res
             : scenario === "still-active" || active,
         client_id: scenario === "foreign-client" ? "other-client" : clientId,
       });
+
 const cleanup = Effect.fn(function* (scenario: Scenario) {
   const services = yield* Layer.build(TestCrypto);
   const secureRandom = Context.get(services, SecureRandom.SecureRandom);
@@ -40,6 +45,7 @@ const cleanup = Effect.fn(function* (scenario: Scenario) {
   const key = yield* Effect.tryPromise(() => generateKeyPair("RS256", { extractable: true }));
   const revoked = new Set<string>();
   const requests: string[] = [];
+
   const httpClient = HttpClient.make((request) =>
     Effect.gen(function* () {
       if (request.method === "GET") {
@@ -64,25 +70,31 @@ const cleanup = Effect.fn(function* (scenario: Scenario) {
           })
         );
       }
-      if (request.body._tag !== "Uint8Array") throw new Error("Expected form");
+
+      assert.ok(Predicate.isTagged(request.body, "Uint8Array"), "Expected form");
       const form = new URLSearchParams(new TextDecoder().decode(request.body.body));
       const token = yield* Schema.decodeUnknownEffect(Schema.String)(form.get("token"));
       const hint = yield* Schema.decodeUnknownEffect(Schema.String)(form.get("token_type_hint"));
       requests.push(`${request.url}:${hint}`);
+
       if (request.url === `${as}/token/revoke`) {
         const rejected = scenario === "refresh-rejected" && hint === "refresh_token";
+
         if (!rejected) revoked.add(token);
+
         return HttpClientResponse.fromWeb(
           request,
           new Response(null, { status: rejected ? 503 : 200 })
         );
       }
+
       return HttpClientResponse.fromWeb(
         request,
         inspectResponse(scenario, !revoked.has(token), hint)
       );
     }).pipe(Effect.orDie)
   );
+
   const result = yield* revokeBancolombiaSandboxGrant({
     secureRandom,
     digest,
@@ -98,7 +110,8 @@ const cleanup = Effect.fn(function* (scenario: Scenario) {
       scenario === "proof-write"
         ? Option.some({
             observedTokens: [],
-            recordActive: () => Effect.fail(new BancolombiaAuthorizationFailed()),
+            recordActive: () =>
+              Effect.fail(new BancolombiaAuthorizationFailed({ cause: undefined })),
           })
         : Option.none(),
     grant: {
@@ -113,8 +126,10 @@ const cleanup = Effect.fn(function* (scenario: Scenario) {
       expiresAtMilliseconds: scenario === "expired-access" ? 0 : 300000,
     },
   }).pipe(Effect.exit);
+
   return { result, revoked, requests };
 });
+
 it.effect(
   "revokes both held customer tokens and verifies they are inactive without obtaining new authority",
   () =>
@@ -132,6 +147,7 @@ it.effect(
       ]);
     })
 );
+
 it.effect(
   "still attempts access-token cleanup when refresh revocation fails and refuses completion",
   () =>
@@ -156,9 +172,11 @@ it.effect.each([
     const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result);
     expect(encoded).not.toContain("synthetic-access");
     expect(encoded).not.toContain("synthetic-refresh");
-    if (scenario !== "still-active") expect([...revoked]).toEqual([]);
+
+    expect(scenario === "still-active" ? [] : [...revoked]).toEqual([]);
   })
 );
+
 it.effect("cleans a grant that has no refresh token", () =>
   Effect.gen(function* () {
     const { result, revoked } = yield* cleanup("access-only");

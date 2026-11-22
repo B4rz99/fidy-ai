@@ -10,19 +10,21 @@ import { PaymentFeedback } from "./workspace";
 import {
   type Cancellation,
   type CancellationManagement,
-  type makeCancellationManagement,
+  type cancellationManagementAtom,
 } from "./cancellation-command";
 
 const dateFormatter = new Intl.DateTimeFormat("es-CO", {
   dateStyle: "long",
   timeZone: "America/Bogota",
 });
+
 const sourceMessages: Readonly<Record<Cancellation["sourceCancellation"], string>> = {
   detached: "La fuente de pago reutilizable quedó desvinculada de los cobros de Fidy.",
   "void-pending":
     "Fidy detuvo las renovaciones. La anulación de la fuente de pago en Wompi sigue pendiente; consulta el estado para verificarla.",
   voided: "Wompi confirmó la anulación de la fuente de pago reutilizable.",
 };
+
 const CancellationResult = ({
   value,
   focus,
@@ -45,9 +47,11 @@ const CancellationResult = ({
     <p>Tu historial de pagos permanece disponible.</p>
   </PaymentFeedback>
 );
+
 const focusElement: RefCallback<HTMLElement> = (node) => {
   node?.focus();
 };
+
 const CancellationReview = ({
   paid,
   busy,
@@ -99,7 +103,8 @@ const CancellationReview = ({
   </section>
 );
 
-type CancellationCommand = ReturnType<typeof makeCancellationManagement>;
+type CancellationCommand = ReturnType<typeof cancellationManagementAtom>;
+
 const CancellationActions = ({
   current,
   reviewing,
@@ -122,6 +127,7 @@ const CancellationActions = ({
       </PaymentFeedback>
     );
   }
+
   return Option.match(current.paid, {
     onNone: () => <p>No tienes una suscripción pagada con renovaciones para cancelar.</p>,
     onSome: (paid) =>
@@ -165,6 +171,7 @@ export const SubscriptionCancellationManagement = ({
   const mounted = useCallback(() => mount(), [mount]);
   const reviewing = current.reviewing;
   const restoreFocus = current.restoreFocus;
+
   if (current.loading) {
     return (
       <section ref={mounted} aria-label="Renovaciones de la suscripción" className="py-5">
@@ -172,6 +179,7 @@ export const SubscriptionCancellationManagement = ({
       </section>
     );
   }
+
   return (
     <section
       ref={mounted}

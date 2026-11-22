@@ -32,8 +32,11 @@ import { type QuotaStatus } from "../../src/core/quotas/contract";
 import { localCanonicalArguments as readArguments } from "./internal/request-input";
 
 export const canonicalAdmissionUnavailable = (): Response => unavailable();
+
 export const noAuthority = (): Response => unauthorized();
+
 export const rateLimited = (): Response => limited();
+
 const attachStanding = (response: Response, status: QuotaStatus, current: number): Response =>
   standingResponse({ response, status, current });
 
@@ -46,6 +49,7 @@ export const attachCanonicalStanding = ({
 
 export const runLocalMutation: typeof mutateLocal = (input, invalidTarget) =>
   mutateLocal(input, invalidTarget);
+
 export const admitLocalRequest: typeof admitLocal = (input) => admitLocal(input);
 
 export const sweepLocalReceipts: typeof sweepReceipts = (current) => sweepReceipts(current);
@@ -57,6 +61,7 @@ type LocalWrite<E> = {
   targets: ReadonlyArray<string>;
   commit: Effect.Effect<LocalMutationResult, E, SqliteClient>;
 };
+
 export const prepareLocalWrite = <E, Failure = never>(
   write:
     | LocalWrite<E>
@@ -80,11 +85,14 @@ export const prepareLocalWrite = <E, Failure = never>(
     Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
   ),
 });
+
 export const commitLocalWrite = (
   preparation: LocalMutationPreparation
 ): LocalMutationPlan["commit"] =>
   "commit" in preparation ? preparation.commit : Effect.succeed(preparation);
+
 export const runLocalBatch: typeof executeBatch = (unit, owners) => executeBatch(unit, owners);
+
 export const localCanonicalArguments: typeof readArguments = (request, operation) =>
   readArguments(request, operation);
 
@@ -99,6 +107,7 @@ export const localPreparationSubject: typeof localPreparationSubjectOwned = (...
   localPreparationSubjectOwned(...args);
 
 export const isNativeAccountQuery: typeof accountQuery = (operation) => accountQuery(operation);
+
 export const readNativeAccountQuery: typeof accountQueryResult = (...args) =>
   accountQueryResult(...args);
 

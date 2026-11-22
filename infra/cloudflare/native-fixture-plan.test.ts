@@ -13,7 +13,9 @@ import { nativeResourceInventory } from "./native-graph";
 import provider from "./native-retained-provider.json" with { type: "json" };
 
 const revision = "a".repeat(40);
+
 type Row = ReturnType<typeof describePlan>["resources"][number];
+
 const row = (logicalId: string, resourceType: string, action: Row["action"]): Row => ({
   logicalId,
   resourceType,
@@ -21,14 +23,18 @@ const row = (logicalId: string, resourceType: string, action: Row["action"]): Ro
   fqn: logicalId,
   bindings: [],
 });
+
 const validate = (rows: readonly Row[], fallback = false): void =>
   requireFixtureLifecycle({ rows, fallback });
-const retained = [...nativeResourceInventory(provider.revision)]
-  .filter(([id]) => id.includes(provider.revision))
-  .map(([id, type]) => row(id, type, "delete"));
-const creation = [...nativeResourceInventory(revision)]
-  .filter(([id]) => id.includes(revision))
-  .map(([id, type]) => row(id, type, "create"));
+
+const retained = [...nativeResourceInventory(provider.revision)].flatMap(([id, type]) =>
+  id.includes(provider.revision) ? [row(id, type, "delete")] : []
+);
+
+const creation = [...nativeResourceInventory(revision)].flatMap(([id, type]) =>
+  id.includes(revision) ? [row(id, type, "create")] : []
+);
+
 it("updates only the repaired pair and its existing smoke executor on the captured installation", () => {
   const approved = [
     ...retained,
@@ -36,7 +42,9 @@ it("updates only the repaired pair and its existing smoke executor on the captur
     row("Core", "Cloudflare.Worker", "update"),
     row("Ingress", "Cloudflare.Worker", "update"),
   ];
+
   expect(() => validate(approved, true)).not.toThrow();
+
   for (const foreign of [
     ...creation,
     row("Web", "Cloudflare.Worker", "update"),
@@ -45,6 +53,7 @@ it("updates only the repaired pair and its existing smoke executor on the captur
   ]) {
     expect(() => validate([...approved, foreign], true)).toThrow();
   }
+
   for (const missing of approved) {
     expect(() =>
       validate(
@@ -54,13 +63,16 @@ it("updates only the repaired pair and its existing smoke executor on the captur
     ).toThrow();
   }
 });
+
 it("uploads only code to the prepared pair and refuses a new provider or resource", () => {
   const active = [
     ...retained,
     row("Core", "Cloudflare.Worker", "update"),
     row("Ingress", "Cloudflare.Worker", "update"),
   ];
+
   expect(() => validate(active)).not.toThrow();
+
   for (const extra of [...creation, row("Web", "Cloudflare.Worker", "update")]) {
     expect(() => validate([...active, extra])).toThrow();
   }
@@ -72,6 +84,7 @@ it("uses the existing Alchemy state Worker for preview and apply of a signed rel
       nativePlanOptions({ profile: "ci", preview, fingerprint: "a".repeat(64) }).updateStateStore
     ).toBe(false);
   }
+
   expect(
     nativePlanOptions({ profile: "ci", preview: false, fingerprint: "" }).updateStateStore
   ).toBe(true);
@@ -84,6 +97,7 @@ it("projects only known resource and action names from a refused inventory", () 
     { ...row("Core", "private-type", "update"), fqn: "private-coordinate" },
     row("Build", "Command.Build", "noop"),
   ];
+
   const observed = projectFixtureInventory(rows);
   expect(observed).toEqual([
     { action: "update", logicalId: "Web", resourceType: "Cloudflare.Worker" },
@@ -98,8 +112,10 @@ it("allows only the two existing Workers and four new smoke resources in the suc
     row("Core", "Cloudflare.Worker", "update"),
     row("Ingress", "Cloudflare.Worker", "update"),
   ];
+
   const rows = [...pair, ...creation];
   expect(() => requireSuccessorLifecycle({ rows, revision })).not.toThrow();
+
   for (const foreign of [
     ...retained,
     row("Web", "Cloudflare.Worker", "update"),
@@ -109,6 +125,7 @@ it("allows only the two existing Workers and four new smoke resources in the suc
   ]) {
     expect(() => requireSuccessorLifecycle({ rows: [...rows, foreign], revision })).toThrow();
   }
+
   for (const missing of rows) {
     expect(() =>
       requireSuccessorLifecycle({
@@ -126,12 +143,14 @@ it("allows the same plan in provider order and rejects changes before any upload
     member: "performance-2",
     resources: [...creation, row("Core", "Cloudflare.Worker", "update")],
   };
+
   expect(() =>
     requireSameSuccessorPlan({
       approved: plan,
       observed: { ...plan, resources: [...plan.resources].reverse() },
     })
   ).not.toThrow();
+
   for (const changed of [
     { ...plan, revision: provider.revision },
     { ...plan, applied: true },
@@ -144,13 +163,16 @@ it("allows the same plan in provider order and rejects changes before any upload
 
 it("keeps the successor smoke generation and every other resource unchanged for the active pair", () => {
   const existing = creation.map((entry) => ({ ...entry, action: "noop" as const }));
+
   const active = [
     ...existing,
     row("Core", "Cloudflare.Worker", "update"),
     row("Ingress", "Cloudflare.Worker", "update"),
   ];
+
   expect(() => requireActiveSuccessorLifecycle({ rows: active, revision })).not.toThrow();
   expect(() => requireActiveSuccessorLifecycle({ rows: active.slice(1), revision })).toThrow();
+
   for (const unexpected of creation) {
     expect(() =>
       requireActiveSuccessorLifecycle({
@@ -167,10 +189,13 @@ it("permits reconciliation of the sole Smoke consumer only against unchanged ups
   const consumer = row("ReleaseSmokeConsumer-" + revision, "Cloudflare.Queues.Consumer", "create");
   const queue = row("ReleaseSmokeQueue-" + revision, "Cloudflare.Queues.Queue", "noop");
   const worker = row("ReleaseSmoke-" + revision, "Cloudflare.Worker", "noop");
+
   const verify = (rows: readonly Row[]): string =>
     requireSmokeConsumerReconciliation({ rows, revision });
+
   expect(verify([consumer, queue, worker])).toBe("create");
   expect(verify([{ ...consumer, action: "noop" }, queue, worker])).toBe("noop");
+
   for (const rows of [
     [consumer, queue],
     [consumer, { ...queue, action: "update" }, worker],

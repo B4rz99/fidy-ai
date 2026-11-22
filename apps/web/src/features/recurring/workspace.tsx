@@ -8,7 +8,7 @@ import {
 } from "./creation-draft";
 import { PendingRead } from "@/ui/components/pending-read";
 import { lazyRouteComponent, useRouterState } from "@tanstack/react-router";
-import { Array, Option } from "effect";
+import { Array, Option, Predicate } from "effect";
 import {
   type Dispatch,
   type JSX,
@@ -50,10 +50,15 @@ import {
 } from "./model";
 
 const OccurrenceDetails = lazyRouteComponent(() => import("./details"), "OccurrenceDetails");
+
 const PlanLifecycle = lazyRouteComponent(() => import("./lifecycle"), "PlanLifecycle");
+
 const TransactionLink = lazyRouteComponent(() => import("./transaction-link"), "TransactionLink");
+
 const CreatePlan = lazyRouteComponent(() => import("./create-plan"), "CreatePlan");
+
 const CreationResult = lazyRouteComponent(() => import("./creation-result"), "CreationResult");
+
 const PlanForm = lazyRouteComponent(() => import("./plan-form"), "PlanForm");
 
 type Panel =
@@ -66,6 +71,7 @@ type Panel =
   | Readonly<{ kind: "occurrence" | "link"; planId: Occurrence["planId"]; date: string }>
   | (CreationReceipt & Readonly<{ kind: "created" }>)
   | Readonly<{ kind: "plan"; planId: Occurrence["planId"] }>;
+
 type Props = Readonly<{
   calendar: boolean;
   setCalendar: (value: boolean) => void;
@@ -86,6 +92,7 @@ type Props = Readonly<{
   revealEarlier: RefCallback<HTMLDetailsElement>;
   timeZone: PlanInput["timeZone"];
 }>;
+
 const selectedOccurrence = (
   view: Workspace,
   panel: Extract<Panel, { kind: "occurrence" | "link" }>
@@ -94,7 +101,9 @@ const selectedOccurrence = (
     [...view.occurrences, ...view.previous],
     (item) => item.planId === panel.planId && item.date === panel.date
   );
+
 type EditorProps = Pick<Props, "view" | "categories" | "disabled" | "save" | "statusFor">;
+
 type SheetProps = EditorProps &
   Pick<Props, "notice"> &
   Readonly<{
@@ -103,6 +112,7 @@ type SheetProps = EditorProps &
     link: () => void;
     cancel: () => void;
   }>;
+
 const Editor = ({
   panel,
   view,
@@ -125,6 +135,7 @@ const Editor = ({
       <OccurrenceEditor panel={panel} {...{ view, categories, disabled, save, statusFor, link }} />
     );
   }
+
   if (panel.kind === "create") {
     return (
       <PlanningMonthContext value={Option.some(view.month)}>
@@ -138,6 +149,7 @@ const Editor = ({
       </PlanningMonthContext>
     );
   }
+
   if (panel.kind === "created") {
     return (
       <CreationResult
@@ -151,8 +163,10 @@ const Editor = ({
       />
     );
   }
+
   return <PlanEditor planId={panel.planId} {...{ view, categories, disabled, save, statusFor }} />;
 };
+
 const OccurrenceEditor = ({
   panel,
   view,
@@ -169,10 +183,12 @@ const OccurrenceEditor = ({
   const invalidIds = new Set(view.invalidFulfillmentIds);
   const item = selectedOccurrence(view, panel);
   const plan = view.document.plans.find((entry) => entry.id === panel.planId);
+
   const lifecycle =
     plan === undefined ? null : (
       <PlanLifecycle plan={plan} status={statusFor(plan)} save={save} disabled={disabled} />
     );
+
   if (Option.isNone(item) || plan === undefined) {
     return (
       <div className="grid gap-5">
@@ -181,6 +197,7 @@ const OccurrenceEditor = ({
       </div>
     );
   }
+
   return (
     <div className="grid gap-5">
       {lifecycle}
@@ -204,6 +221,7 @@ const OccurrenceEditor = ({
     </div>
   );
 };
+
 const PlanEditor = ({
   planId,
   view,
@@ -214,6 +232,7 @@ const PlanEditor = ({
 }: EditorProps & Readonly<{ planId: Plan["id"] }>): JSX.Element => {
   const plan = view.document.plans.find((entry) => entry.id === planId);
   const settings = plan === undefined ? undefined : currentPlan(plan);
+
   return plan === undefined || settings === undefined ? (
     <p>Plan no disponible.</p>
   ) : (
@@ -231,6 +250,7 @@ const PlanEditor = ({
     </div>
   );
 };
+
 const Matching = ({ view }: Pick<Props, "view">): JSX.Element => (
   <>
     {view.matchesComplete ? null : (
@@ -252,6 +272,7 @@ const Matching = ({ view }: Pick<Props, "view">): JSX.Element => (
     ))}
   </>
 );
+
 const Monthly = ({
   filters,
   applyFilters,
@@ -298,6 +319,7 @@ const Monthly = ({
     />
   </>
 );
+
 const PreviousItems = ({
   view,
   earlier,
@@ -350,6 +372,7 @@ const PreviousItems = ({
     </div>
   </details>
 );
+
 const useWorkspacePanel = (
   view: Workspace,
   filters: Filters,
@@ -361,28 +384,39 @@ const useWorkspacePanel = (
     filters,
     previous,
   });
+
   const [localPanel, setLocalPanel] = useState<Option.Option<Panel>>(() => Option.none());
   const panel = Option.orElse(localPanel, () => navigation.selection);
+
   const setPanel: Dispatch<SetStateAction<Option.Option<Panel>>> = (update) => {
-    if (typeof update === "function") {
+    if (Predicate.isFunction(update)) {
       setLocalPanel(update);
+
       if (Option.isSome(navigation.selection) && Option.isNone(update(navigation.selection))) {
         navigation.close();
       }
+
       return;
     }
+
     const next = update;
+
     if (Option.isSome(next) && next.value.kind === "occurrence") {
       setLocalPanel(Option.none());
       navigation.open(next.value);
+
       return;
     }
+
     setLocalPanel(next);
+
     if (Option.isSome(navigation.selection)) navigation.close();
   };
+
   const link = (): void => {
     if (Option.isNone(panel) || panel.value.kind !== "occurrence") return;
     const item = selectedOccurrence(view, panel.value);
+
     if (Option.isNone(item)) return;
     setLocalPanel(Option.none());
     navigation.link(item.value, {
@@ -391,12 +425,16 @@ const useWorkspacePanel = (
       direction: item.value.plan.kind === "income" ? "inflow" : "outflow",
     });
   };
+
   return { panel, setPanel, link, navigation };
 };
+
 const isCreation = (panel: Option.Option<Panel>): boolean =>
   Option.exists(panel, (selected) => selected.kind === "create");
+
 const isFreshCreation = (panel: Panel): boolean =>
   panel.kind === "create" && Option.isNone(panel.seriesId);
+
 const useDraftingPanel = (
   props: Props
 ): ReturnType<typeof useWorkspacePanel> &
@@ -408,17 +446,22 @@ const useDraftingPanel = (
   }> => {
   const draft = useCreationDraft(props.timeZone);
   const workspace = useWorkspacePanel(props.view, props.filters, props.previous);
+
   const setPanel: Dispatch<SetStateAction<Option.Option<Panel>>> = (update) => {
-    const leaving = typeof update === "function" || !isCreation(update);
+    const leaving = Predicate.isFunction(update) || !isCreation(update);
+
     if (leaving && Option.exists(workspace.panel, isFreshCreation)) draft.keep();
     workspace.setPanel(update);
   };
+
   const creation = (
     initial: Partial<PlanInput> & Pick<PlanInput, "timeZone">,
     restored: boolean
   ): void => setPanel(Option.some({ kind: "create", initial, seriesId: Option.none(), restored }));
+
   const blank = (): void =>
     creation({ firstDate: planningStart(props.view), timeZone: props.timeZone }, false);
+
   return {
     ...workspace,
     setPanel,
@@ -434,30 +477,40 @@ const useDraftingPanel = (
     },
     cancel: () => {
       setPanel(Option.none());
+
       if (isCreation(workspace.panel)) draft.clear();
     },
   };
 };
+
 export const RecurringWorkspace = (props: Props): JSX.Element => {
   const { disabled, filters, calendar, setCalendar, tab, setTab } = props;
   const [filtersOpen, setFiltersOpen] = useState(Object.keys(filters).length > 0);
+
   const { panel, setPanel, navigation, link, draft, create, control, cancel } =
     useDraftingPanel(props);
+
   const save: Save = (edit, onSaved) =>
     props.save(edit, () => {
       if (onSaved !== undefined) onSaved();
       else if (edit.kind !== "lifecycle" || edit.action === "stop") {
         setPanel((current) => (current === panel ? Option.none() : current));
       }
+
       if (edit.kind === "create") draft.clear();
     });
+
   const editing = { ...props, save };
+
   const open = (item: Occurrence): void =>
     setPanel(Option.some({ kind: "occurrence", planId: item.planId, date: item.date }));
+
   if (Option.isSome(panel) && panel.value.kind === "link") {
     const selection = panel.value;
+
     return <LinkWorkspace {...editing} selection={selection} navigation={navigation} />;
   }
+
   return (
     <RecurringSurface>
       <RecurringToolbar
@@ -504,6 +557,7 @@ const LinkWorkspace = ({
   }>): JSX.Element => {
   const close = navigation.returnToOccurrence;
   const item = selectedOccurrence(props.view, selection);
+
   return Option.isSome(item) ? (
     <Suspense fallback={<PendingRead label="Cargando vinculación" />}>
       <TransactionLink
@@ -537,6 +591,7 @@ type WorkspaceBodyProps = Readonly<{
   setPanel: Dispatch<SetStateAction<Option.Option<Panel>>>;
   open: (item: Occurrence) => void;
 }>;
+
 const WorkspaceBody = ({
   props,
   create,
@@ -548,6 +603,7 @@ const WorkspaceBody = ({
   open,
 }: WorkspaceBodyProps): JSX.Element => {
   const { view, disabled, save, filters, timeZone } = props;
+
   return (
     <main data-recurring-slot="content">
       <WorkspaceSuggestions
@@ -608,15 +664,19 @@ const editorTitle = (panel: Option.Option<Panel>, view: Workspace): string =>
           )
         );
       }
+
       if (selected.kind === "create") {
         return "Nuevo recurrente";
       }
+
       if (selected.kind === "created") {
         return "Recurrente guardado";
       }
+
       return "Editar recurrente";
     },
   });
+
 const EditorSheet = ({
   notice,
   panel,
@@ -630,6 +690,7 @@ const EditorSheet = ({
   cancel,
 }: SheetProps): JSX.Element => {
   const { theme, toggle } = useTheme();
+
   const active = useRouterState({
     select: (state) => state.location.pathname === "/app/recurring",
   });
@@ -700,6 +761,7 @@ const MonthItems = ({
       </>
     );
   }
+
   return calendar ? (
     <MonthCalendar key={view.month} view={view} open={open} />
   ) : (
@@ -723,6 +785,7 @@ const WorkspaceSuggestions = ({
 }: Pick<Props, "view" | "save" | "disabled" | "timeZone"> &
   Readonly<{ setPanel: (panel: Option.Option<Panel>) => void }>): JSX.Element => {
   const [cursor, setCursor] = useState<Option.Option<string>>(() => Option.none());
+
   return (
     <>
       <Suggestions

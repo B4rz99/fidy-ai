@@ -8,6 +8,7 @@ import {
 } from "../../canonical-work/operations";
 
 const Input = Schema.toCodecJson(CreateTransactionInput);
+
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: maximumTransactionInputBytes,
   deadlineMilliseconds: 2000,

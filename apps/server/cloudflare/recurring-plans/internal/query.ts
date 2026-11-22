@@ -30,25 +30,35 @@ import { workspaceMonths } from "./read-projection";
 import { type Transaction } from "../../../src/core/transactions/contract";
 
 type Query = typeof RecurringWorkspaceQuery.Type;
+
 const monthLength = 7;
+
 export const previousMonth = (month: string): string =>
   DateTime.formatIsoDateUtc(
     DateTime.subtract(DateTime.makeUnsafe(`${month}-01`), { months: 1 })
   ).slice(0, monthLength);
+
+type CheckedSchedule = Readonly<{
+  document: RecurringSchedule;
+  invalid: ReadonlyArray<string>;
+}>;
+
 const checkedDocument = ({
   document,
   transactions,
-}: Readonly<{ document: RecurringSchedule; transactions: ReadonlyArray<Transaction> }>): Readonly<{
+}: Readonly<{
   document: RecurringSchedule;
-  invalid: ReadonlyArray<string>;
-}> => {
+  transactions: ReadonlyArray<Transaction>;
+}>): CheckedSchedule => {
   const invalid = document.fulfillments
     .filter((mark) => {
       if (mark.transactionId === undefined) return false;
       const transaction = transactions.find((entry) => entry.id === mark.transactionId);
       const plan = document.plans.find((entry) => entry.id === mark.planId);
+
       if (transaction === undefined || plan === undefined) return true;
       const settings = retainedOccurrencePlan(document, plan, mark.date);
+
       return !validRecurringFulfillment({
         mark,
         fact: planningFact({ transaction, timeZone: settings.timeZone }),
@@ -56,6 +66,7 @@ const checkedDocument = ({
       });
     })
     .map((mark) => mark.id);
+
   return {
     document: {
       ...document,
@@ -64,18 +75,22 @@ const checkedDocument = ({
     invalid,
   };
 };
+
 export type AutomaticProjection = Readonly<{
   document: RecurringSchedule;
   matches: (typeof RecurringWorkspace.Type)["matches"];
 }> &
   (Readonly<{ complete: false }> | Readonly<{ complete: true; unambiguous: boolean }>);
+
 export const matchingRange = (month: string): PlanningTransactionRange => {
   const start = DateTime.makeUnsafe(`${month}-01`);
+
   return {
     from: DateTime.formatIso(DateTime.subtract(start, { days: 4 })),
     through: DateTime.formatIso(DateTime.add(start, { months: 1, days: 4 })),
   };
 };
+
 export const automaticFromFacts = ({
   document,
   allocations,
@@ -92,23 +107,30 @@ export const automaticFromFacts = ({
   if (document.plans.length === 0) {
     return { document, complete: true, unambiguous: true, matches: [] };
   }
+
   if (Option.isNone(selection) || !selection.value.complete) {
     return { document, complete: false, matches: [] };
   }
+
   const start = DateTime.makeUnsafe(`${month}-01`);
+
   const nextMonth = DateTime.formatIsoDateUtc(DateTime.add(start, { months: 1 })).slice(
     0,
     monthLength
   );
+
   const items = [previousMonth(month), month, nextMonth].flatMap((selected) =>
     projectRecurringMonth({ document, month: selected, now })
   );
+
   const candidates = matchCandidates({
     document: allocations,
     items,
     transactions: selection.value.transactions,
   });
+
   const matches = uniqueRecurringMatches(candidates);
+
   return matchedProjection(document, matches, matches.length === candidates.length);
 };
 
@@ -121,27 +143,39 @@ const matchCandidates = ({
   items: Parameters<typeof recurringMatchCandidates>[0]["items"];
   transactions: ReadonlyArray<Transaction>;
 }>): ReturnType<typeof recurringMatchCandidates> => {
-  const factsByTimeZone = new Map<string, ReadonlyArray<ReturnType<typeof planningFact>>>();
   const allocatedOccurrences = new Set(
     document.fulfillments.map((mark) => `${mark.planId}:${mark.date}`)
   );
-  const pairs = items
-    .filter((item) => !allocatedOccurrences.has(`${item.planId}:${item.date}`))
-    .flatMap((item) => {
-      const timeZone = item.plan.timeZone;
-      let facts = factsByTimeZone.get(timeZone);
-      if (facts === undefined) {
-        facts = transactions.map((transaction) => planningFact({ transaction, timeZone }));
-        factsByTimeZone.set(timeZone, facts);
-      }
-      return recurringMatchCandidates({ document, items: [item], facts });
-    });
-  return pairs;
+
+  const open = items.filter((item) => !allocatedOccurrences.has(`${item.planId}:${item.date}`));
+
+  const factsByTimeZone = new Map(
+    Array.from(new Set(open.map((item) => item.plan.timeZone)), (timeZone) => [
+      timeZone,
+      transactions.map((transaction) => planningFact({ transaction, timeZone })),
+    ])
+  );
+
+  return open.flatMap((item) =>
+    recurringMatchCandidates({
+      document,
+      items: [item],
+      facts: factsByTimeZone.get(item.plan.timeZone) ?? [],
+    })
+  );
 };
 
 export const automaticMatches = (
   input: Parameters<typeof matchCandidates>[0]
 ): ReturnType<typeof uniqueRecurringMatches> => uniqueRecurringMatches(matchCandidates(input));
+
+type ObservedProjection = Readonly<{
+  preferences: UserPreferences;
+  transactions: ReadonlyArray<Transaction>;
+  invalid: ReadonlyArray<string>;
+  earlier: AutomaticProjection;
+  matched: AutomaticProjection;
+}>;
 
 const projectWorkspaceSnapshot = ({
   document,
@@ -153,14 +187,9 @@ const projectWorkspaceSnapshot = ({
   query: Query;
   now: DateTime.Utc;
   observed: PlanningTransactionSnapshot<UserPreferences>;
-}>): Readonly<{
-  preferences: UserPreferences;
-  transactions: ReadonlyArray<Transaction>;
-  invalid: ReadonlyArray<string>;
-  earlier: AutomaticProjection;
-  matched: AutomaticProjection;
-}> => {
+}>): ObservedProjection => {
   const checked = checkedDocument({ document, transactions: observed.selected });
+
   const projection = (selected: string, index: number): AutomaticProjection =>
     automaticFromFacts({
       document: checked.document,
@@ -169,6 +198,7 @@ const projectWorkspaceSnapshot = ({
       now,
       selection: observed.ranges[index] ?? Option.none(),
     });
+
   return {
     preferences: observed.snapshot,
     transactions: [
@@ -195,7 +225,7 @@ export const workspaceFromReadProjection = ({
 > =>
   workspaceMonths(input.query).every((month) => projection.months.includes(month))
     ? workspaceFromFacts({ ...input, document: projection.schedule, editing: projection.editing })
-    : Effect.fail(new RecurringPlanningUnavailable());
+    : Effect.fail(new RecurringPlanningUnavailable({ cause: Option.none() }));
 
 const workspaceFromFacts = ({
   document,
@@ -212,22 +242,27 @@ const workspaceFromFacts = ({
 }>): Effect.Effect<typeof RecurringWorkspace.Type, Schema.SchemaError> =>
   Effect.gen(function* () {
     const prior = query.previousMonth ?? previousMonth(query.month);
+
     const { preferences, transactions, earlier, matched, invalid } = projectWorkspaceSnapshot({
       document,
       query,
       now,
       observed,
     });
+
     const previous = filterRecurring({
       items: projectRecurringMonth({ document: earlier.document, month: prior, now }),
       filters: query,
     }).filter((item) => item.status !== "completed" && item.status !== "skipped");
+
     const earliest = earliestMonth(document, query.month);
+
     const items = filterRecurring({
       items: projectRecurringMonth({ document: matched.document, month: query.month, now }),
       filters: query,
     });
-    return yield* Schema.decodeEffect(Schema.toType(RecurringWorkspace))({
+
+    const workspace = {
       document: editing,
       month: query.month,
       today: DateTime.formatIsoDate(
@@ -235,7 +270,6 @@ const workspaceFromFacts = ({
       ),
       occurrences: items,
       previous,
-      ...(prior > earliest ? { previousMonth: previousMonth(prior) } : {}),
       summary: summarizeRecurring(items),
       linkedTransactions: transactionSummaries({
         transactions,
@@ -246,7 +280,11 @@ const workspaceFromFacts = ({
       matches: matched.matches.filter(({ item }) => item.expectedDate.startsWith(query.month)),
       matchesComplete:
         matched.complete && earlier.complete && matched.unambiguous && earlier.unambiguous,
-    });
+    };
+
+    return yield* Schema.decodeEffect(Schema.toType(RecurringWorkspace))(
+      prior > earliest ? { ...workspace, previousMonth: previousMonth(prior) } : workspace
+    );
   });
 
 const matchedProjection = (
@@ -301,15 +339,10 @@ const transactionSummaries = ({
   invalid: RecurringSchedule["fulfillments"];
 }>): (typeof RecurringWorkspace.Type)["linkedTransactions"] => {
   const ids = new Set([...marks, ...invalid].map((mark) => mark.transactionId));
-  return [...new Map(transactions.map((transaction) => [transaction.id, transaction])).values()]
-    .filter((transaction) => ids.has(transaction.id))
-    .map(({ id, money, counterparty, direction, categoryId, notes, occurredAt }) => ({
-      id,
-      money,
-      counterparty,
-      direction,
-      categoryId,
-      notes,
-      occurredAt,
-    }));
+
+  return [
+    ...new Map(transactions.map((transaction) => [transaction.id, transaction])).values(),
+  ].flatMap(({ id, money, counterparty, direction, categoryId, notes, occurredAt }) =>
+    ids.has(id) ? [{ id, money, counterparty, direction, categoryId, notes, occurredAt }] : []
+  );
 };

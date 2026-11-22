@@ -1,7 +1,7 @@
 import { Effect, Redacted } from "effect";
 import { FetchHttpClient, HttpBody, type HttpClient, HttpClientRequest } from "effect/http";
 import type { OpenAiHttpService } from "~/shell/outbound-http/contract";
-import { makeProviderTransport } from "./transport";
+import { providerTransport } from "./transport";
 
 const maximumResponseBytes = 524_288;
 
@@ -12,7 +12,8 @@ export const openAiHttp = ({
   apiKey: Redacted.Redacted<string>;
   client: HttpClient.HttpClient;
 }>): OpenAiHttpService => {
-  const http = makeProviderTransport("openai")(client);
+  const http = providerTransport("openai")(client);
+
   return {
     execute: (body) =>
       http

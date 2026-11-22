@@ -3,12 +3,15 @@
 import { Effect, Option, Predicate, Schema } from "effect";
 
 const effectFamilyVersion = /^4\.(?:0\.0-(?:beta|rc)\.\d+|\d+\.\d+)$/u;
+
 const PackageEntry = Schema.TupleWithRest(Schema.Tuple([Schema.String]), [Schema.Unknown]);
+
 const Manifest = Schema.Struct({
   dependencies: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
   devDependencies: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
   overrides: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
 });
+
 const Lockfile = Schema.Struct({
   packages: Schema.Record(Schema.String, PackageEntry),
   workspaces: Schema.Record(Schema.String, Manifest),
@@ -29,13 +32,16 @@ type Finding = {
 const repositoryRoot = (): string => {
   const args = Bun.argv.slice(2);
   const rootIndex = args.indexOf("--root");
+
   if (rootIndex === -1) return Bun.fileURLToPath(new URL("..", import.meta.url));
 
   const selected = Option.fromUndefinedOr(args[rootIndex + 1]);
+
   if (Option.isNone(selected)) {
     process.stderr.write("--root requires a repository path\n");
     process.exit(2);
   }
+
   return selected.value.replace(/\/$/u, "");
 };
 
@@ -69,8 +75,10 @@ const directPins = (
 ): ReadonlyArray<Finding> =>
   manifests.flatMap(({ path, value }) =>
     [...Object.entries(value.dependencies ?? {}), ...Object.entries(value.devDependencies ?? {})]
+      .values()
       .filter(([name]) => isCoordinatedEffectPackage(name))
       .map(([packageName, version]) => ({ packageName, version, location: path }))
+      .toArray()
   );
 
 type PackageIdentity = {
@@ -80,7 +88,9 @@ type PackageIdentity = {
 
 const packageIdentity = (resolved: string): Option.Option<PackageIdentity> => {
   const versionSeparator = resolved.lastIndexOf("@");
+
   if (versionSeparator <= 0 || versionSeparator === resolved.length - 1) return Option.none();
+
   return Option.some({
     packageName: resolved.slice(0, versionSeparator),
     version: resolved.slice(versionSeparator + 1),
@@ -115,11 +125,14 @@ const missingOverrides = ({
   readonly selectedVersion: string;
 }): ReadonlyArray<Finding> => {
   const directlySelected = new Set(direct.map(({ packageName }) => packageName));
+
   return locked.flatMap(({ packageName }) => {
     if (!isPackageFamily(packageName, "@effect/platform") || directlySelected.has(packageName)) {
       return [];
     }
+
     const override = overrides[packageName];
+
     return override === selectedVersion
       ? []
       : [
@@ -139,8 +152,10 @@ const overridePins = (
   Object.entries(overrides).flatMap(([name, selection]) => {
     const separator = name.lastIndexOf("@");
     const packageName = separator > 0 ? name.slice(0, separator) : name;
+
     if (!isCoordinatedEffectPackage(packageName)) return [];
     const versions = Predicate.isString(selection) ? [selection] : Object.values(selection);
+
     return versions.map((version) => ({ packageName: `${name} override`, version, location }));
   });
 
@@ -155,26 +170,34 @@ const lockedWorkspacePins = (lockfile: typeof Lockfile.Type): ReadonlyArray<Find
 const main = Effect.gen(function* () {
   const root = repositoryRoot();
   const lockfile = yield* readLockfile(`${root}/bun.lock`);
+
   const manifests = yield* Effect.forEach(Object.keys(lockfile.workspaces), (workspace) => {
     const path = manifestPath(root, workspace);
+
     return Effect.map(readJson(Manifest, path), (value) => ({ path, value }));
   });
+
   const direct = directPins(manifests);
   const selected = direct.find(({ packageName }) => packageName === "effect");
+
   if (selected === undefined || !effectFamilyVersion.test(selected.version)) {
     const finding = Option.match(Option.fromUndefinedOr(selected), {
       onNone: () => ({ version: "missing", location: "workspace manifests" }),
       onSome: ({ version, location }) => ({ version, location }),
     });
+
     process.stderr.write(
       `Effect dependency family check failed:\n- effect: ${finding.version} (${finding.location})\n`
     );
+
     return yield* Effect.sync(() => process.exit(1));
   }
 
   const locked = lockedPackages(lockfile);
+
   const rootOverrides = manifests.find(({ path }) => path === `${root}/package.json`)?.value
     .overrides;
+
   const findings = [
     ...mismatches(direct, selected.version),
     ...mismatches(locked, selected.version),
@@ -198,6 +221,7 @@ const main = Effect.gen(function* () {
         .map(({ packageName, version, location }) => `- ${packageName}: ${version} (${location})`)
         .join("\n")}\n`
     );
+
     return yield* Effect.sync(() => process.exit(1));
   }
 

@@ -20,18 +20,25 @@ type Props = Readonly<{
   disabled: boolean;
   onChange: (value: string) => void;
 }>;
+
 const hoursPerDay = 24;
+
 const minutesPerHour = 60;
+
 const clockOptions = (length: number): ReadonlyArray<Readonly<{ value: string; label: string }>> =>
   Array.from({ length }, (_, index) => {
     const value = String(index).padStart(2, "0");
+
     return { value, label: value };
   });
+
 const hours = clockOptions(hoursPerDay);
+
 const minutes = clockOptions(minutesPerHour);
 
 export const TimeField = (props: Props): JSX.Element => {
   const [open, setOpen] = useState(false);
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
@@ -61,8 +68,10 @@ export const TimeField = (props: Props): JSX.Element => {
     </Popover>
   );
 };
+
 const TimeChoices = ({ id, value, disabled, onChange }: Props): JSX.Element => {
   const [hour = "00", minute = "00"] = value.split(":");
+
   return (
     <div className="grid grid-cols-2 gap-3 py-2">
       <div className="grid gap-2">

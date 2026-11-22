@@ -19,5 +19,6 @@ export const processingConsentTransport = (
       });
     }
   }
+
   return Option.none();
 };

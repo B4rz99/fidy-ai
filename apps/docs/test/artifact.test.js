@@ -43,9 +43,11 @@ await test("all generated documentation and reference links resolve inside the p
           assert.ok(path);
           const target = resolve(root, `.${path}`);
           const candidates = [target, resolve(target, "index.html")];
+
           const outcomes = await Promise.allSettled(
             candidates.map((candidate) => access(candidate))
           );
+
           assert.ok(
             outcomes.some((outcome) => outcome.status === "fulfilled"),
             `Broken link ${path} in ${dirname(file)}`

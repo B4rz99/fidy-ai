@@ -1,4 +1,4 @@
-import { Data, type Effect } from "effect";
+import { Data, type Effect, type Option } from "effect";
 
 export type ScheduledOperation =
   | "provider.authenticationRetention"
@@ -42,26 +42,37 @@ export type ScheduledActivity<E = void> = Readonly<{
   work: Effect.Effect<unknown, E>;
 }>;
 
-export class ScheduledWorkFailed extends Data.TaggedError("ScheduledWorkFailed") {}
+export class ScheduledWorkFailed extends Data.TaggedError("ScheduledWorkFailed")<{
+  readonly cause: Option.Option<unknown>;
+}> {}
 
 export class EmailScheduleUnavailable extends Data.TaggedError("EmailScheduleUnavailable") {}
 
 export const maintenanceName = "core-maintenance-v1";
+
 export const registrationAcceptedStatus = 204;
+
 export const registerLifetimeUrl = "https://maintenance.invalid/lifetime/register";
+
 export const fenceLifetimeUrl = "https://maintenance.invalid/lifetime/fence";
+
 export const retireLifetimeUrl = "https://maintenance.invalid/lifetime/retire";
+
 export class UserRegistrationUnavailable extends Data.TaggedError("UserRegistrationUnavailable") {}
 
 export const watchdogUrl = "https://maintenance.invalid/watchdog";
+
 export const ownerCheckUrl = "https://owner.internal/work/check";
+
 const privateCheckRequest =
   (url: string) =>
   (request: Request): boolean =>
     request.url === url &&
     request.method === "POST" &&
     (request.body === null || request.headers.get("content-length") === "0");
+
 export const completedCheckStatus = 204;
+
 export const ownerCheckResponse = (repaired = false): Response =>
   new Response(null, {
     status: completedCheckStatus,
@@ -69,6 +80,7 @@ export const ownerCheckResponse = (repaired = false): Response =>
   });
 
 export const ownerCheckRequest = privateCheckRequest(ownerCheckUrl);
+
 export const watchdogRequest = privateCheckRequest(watchdogUrl);
 
 export const expireLifetimeUrl = "https://maintenance.invalid/lifetime/expire";

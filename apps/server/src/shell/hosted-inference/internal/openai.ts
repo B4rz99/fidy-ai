@@ -1,4 +1,4 @@
-import { type Duration, Effect, Option, Schema } from "effect";
+import { type Duration, Effect, Option, Predicate, Schema } from "effect";
 import { type Prompt, Tool } from "effect/ai";
 import { type TranscriptEntry, maximumModelRoundMillis } from "~/core/agent/contract";
 import { operationCatalog } from "~/shell/api";
@@ -9,7 +9,9 @@ import {
 } from "~/shell/canonical-operations/operations";
 import {
   type ApprovedOpenAiModel,
+  HostedActiveRequest,
   HostedInferenceError,
+  HostedInferenceFailureReason,
   type HostedInferenceService,
   type HostedInvalidOutputDescription,
   type HostedTextResult,
@@ -22,23 +24,27 @@ import type {
   HostedPromptProjection,
   HostedStructuredAdapter,
 } from "./adapter";
-import { makeHostedInferenceInternal } from "./inference";
+import { hostedInferenceInternal } from "./inference";
 import { hostedOutputTokenReserve } from "./limits";
 import { exactTranscriptPromptInternal } from "./prompt";
 import { openAiProviderSchema } from "./provider-schema";
 import generatedToolParameters from "./tool-parameters.generated.json";
 
 type OpenAiInputItem = OpenAiRequest["messages"][number];
+
 type OpenAiFunctionCall = NonNullable<
   Extract<OpenAiInputItem, { readonly role: "assistant" }>["tool_calls"]
 >[number];
+
 type OpenAiRequestBase = Pick<
   OpenAiRequest,
   "messages" | "max_completion_tokens" | "temperature" | "stream" | "reasoning_effort" | "store"
 >;
+
 type OpenAiTool = Extract<OpenAiRequest, { readonly tool_choice: "auto" }>["tools"][number];
 
 type OpenAiContinuation = ReadonlyArray<OpenAiInputItem>;
+
 type PreparedOpenAiRequest = Readonly<{
   continuationPrefix: OpenAiContinuation;
   maximumToolCalls: number;
@@ -47,40 +53,49 @@ type PreparedOpenAiRequest = Readonly<{
 }>;
 
 const bytesPerKibibyte = 1024;
+
 const providerResponseMaximumKibibytes = 512;
+
 const providerResponseMaximumBytes = providerResponseMaximumKibibytes * bytesPerKibibyte;
+
 const hostedContextTokens = 256_000;
+
 const HTTP_OK_MINIMUM = 200;
+
 const HTTP_REDIRECTION_MINIMUM = 300;
+
 const HTTP_REQUEST_TIMEOUT = 408;
+
 const HTTP_TOO_MANY_REQUESTS = 429;
+
 const HTTP_SERVER_ERROR_MINIMUM = 500;
+
 const structuredExecutionTimeout = "30 seconds";
 
 const providerUnavailable = (retryable: boolean): HostedInferenceError =>
   new HostedInferenceError({
-    reason: { _tag: "ProviderUnavailable" },
+    reason: HostedInferenceFailureReason.ProviderUnavailable(),
     retryable,
     retryAfter: Option.none(),
   });
 
 const invalidProviderOutput = (description: HostedInvalidOutputDescription): HostedInferenceError =>
   new HostedInferenceError({
-    reason: { _tag: "InvalidOutput", description },
+    reason: HostedInferenceFailureReason.InvalidOutput({ description }),
     retryable: false,
     retryAfter: Option.none(),
   });
 
 const structuredOutputExceeded = (): HostedInferenceError =>
   new HostedInferenceError({
-    reason: { _tag: "StructuredOutputExceeded" },
+    reason: HostedInferenceFailureReason.StructuredOutputExceeded(),
     retryable: false,
     retryAfter: Option.none(),
   });
 
 const structuredOutputTimedOut = (): HostedInferenceError =>
   new HostedInferenceError({
-    reason: { _tag: "StructuredOutputTimedOut" },
+    reason: HostedInferenceFailureReason.StructuredOutputTimedOut(),
     retryable: false,
     retryAfter: Option.none(),
   });
@@ -122,15 +137,19 @@ const ProviderResponse = Schema.Struct({
 });
 
 type ProviderResponse = typeof ProviderResponse.Type;
+
 type FunctionCallItem = typeof ProviderFunctionCall.Type;
 
 const parametersByWireName = new Map(
   generatedToolParameters.map(({ wireName, parameters }) => [wireName, parameters])
 );
+
 const openAiOperationBindings = hostedOperationBindings(operationCatalog).map(
   ({ operation, wireName }) => {
     const parameters = parametersByWireName.get(wireName);
+
     if (parameters === undefined) throw new Error("Hosted tool parameters must be generated");
+
     return { operation, wireName, parameters };
   }
 );
@@ -150,13 +169,14 @@ const tokenUpperBound = (value: string): number => byteLength(value);
 const promptParts = (
   content: string | ReadonlyArray<Prompt.PartEncoded>
 ): ReadonlyArray<Prompt.PartEncoded> =>
-  typeof content === "string" ? [{ type: "text", text: content }] : content;
+  Predicate.isString(content) ? [{ type: "text", text: content }] : content;
 
 const projectAssistant = (
   message: Prompt.AssistantMessageEncoded
 ): ReadonlyArray<OpenAiInputItem> => {
   const parts = promptParts(message.content);
   const text = parts.flatMap((part) => (part.type === "text" ? [part.text] : []));
+
   const toolCalls = parts.flatMap((part): ReadonlyArray<OpenAiFunctionCall> =>
     part.type === "tool-call"
       ? [
@@ -168,15 +188,17 @@ const projectAssistant = (
         ]
       : []
   );
+
   if (text.length + toolCalls.length !== parts.length) {
     throw new Error("Hosted context contains unsupported assistant content");
   }
+
+  const content = text.length > 0 ? text.join("\n") : null;
+
   return [
-    {
-      role: "assistant",
-      content: text.length > 0 ? text.join("\n") : null,
-      ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
-    },
+    toolCalls.length > 0
+      ? { role: "assistant", content, tool_calls: toolCalls }
+      : { role: "assistant", content },
   ];
 };
 
@@ -185,6 +207,7 @@ const projectTool = (message: Prompt.ToolMessageEncoded): ReadonlyArray<OpenAiIn
     if (part.type !== "tool-result") {
       throw new Error("Hosted context contains unsupported tool content");
     }
+
     return { role: "tool", tool_call_id: part.id, content: JSON.stringify(part.result) };
   });
 
@@ -201,6 +224,7 @@ const projectMessage = (message: Prompt.MessageEncoded): ReadonlyArray<OpenAiInp
               if (part.type !== "text") {
                 throw new Error("Hosted context contains unsupported User media");
               }
+
               return part.text;
             })
             .join("\n"),
@@ -228,6 +252,7 @@ const projectMessages = (
       const tail = projection.continuationTail.flatMap(projectMessage);
       const suffix = projection.suffix.flatMap(projectMessage);
       const feedbackIndex = prefix.findLastIndex((message) => message.role === "system") + 1;
+
       return {
         input: [
           ...prefix.slice(0, feedbackIndex),
@@ -247,6 +272,7 @@ const toolsFor = (
   availableOperations: HostedTextToolPolicy["availableOperations"]
 ): ReadonlyArray<OpenAiTool> => {
   const available = new Set(availableOperations);
+
   return openAiOperationBindings
     .filter(({ operation }) => available.has(operation.id))
     .map(({ operation, parameters, wireName }) => ({
@@ -274,6 +300,7 @@ const makeTextRequest = (
   policy: HostedTextToolPolicy
 ): OpenAiRequest => {
   const tools = policy.toolChoice === "auto" ? toolsFor(policy.availableOperations) : [];
+
   const capabilityFrame: OpenAiInputItem = {
     role: "system",
     content:
@@ -282,16 +309,19 @@ const makeTextRequest = (
         : "Usa solo las herramientas adjuntas a esta ronda. " +
           "Sus descripciones y esquemas definen las consultas posibles. No atribuyas capacidades adicionales a una herramienta; listar Transactions no consulta un Balance bancario.",
   };
+
   const request = makeRequest([capabilityFrame, ...messages]);
+
   return policy.toolChoice === "auto" ? { ...request, tool_choice: "auto", tools } : request;
 };
 
 const capacityCheck = (request: OpenAiRequest): Effect.Effect<number, HostedInferenceError> => {
   const inputTokens = tokenUpperBound(JSON.stringify(request));
+
   return inputTokens + hostedOutputTokenReserve > hostedContextTokens
     ? Effect.fail(
         new HostedInferenceError({
-          reason: { _tag: "CapacityExceeded", inputTokens },
+          reason: HostedInferenceFailureReason.CapacityExceeded({ inputTokens }),
           retryable: false,
           retryAfter: Option.none(),
         })
@@ -302,10 +332,12 @@ const capacityCheck = (request: OpenAiRequest): Effect.Effect<number, HostedInfe
 const decodeChunks = (chunks: ReadonlyArray<Uint8Array>, size: number): string => {
   const bytes = new Uint8Array(size);
   let offset = 0;
+
   for (const chunk of chunks) {
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
+
   return new TextDecoder().decode(bytes);
 };
 
@@ -323,27 +355,38 @@ const releaseReader = (reader: ReadableStreamDefaultReader<unknown>): Effect.Eff
     )
   );
 
-const collectResponseBody = Effect.fnUntraced(function* (
+const collectResponseBody = (
   reader: ReadableStreamDefaultReader<unknown>,
   overflow: () => HostedInferenceError
-) {
+): Effect.Effect<string, HostedInferenceError> => {
   const chunks: Array<Uint8Array> = [];
-  let size = 0;
-  for (;;) {
-    const chunk = yield* Effect.tryPromise({
+
+  const readFrom = (size: number): Effect.Effect<string, HostedInferenceError> =>
+    Effect.tryPromise({
       try: () => reader.read(),
       catch: () => invalidProviderOutput("Hosted provider response was invalid"),
-    });
-    if (chunk.done) return decodeChunks(chunks, size);
-    const bytes = yield* Schema.decodeUnknownEffect(Schema.Uint8Array)(chunk.value).pipe(
-      Effect.mapError(() => invalidProviderOutput("Hosted provider response was invalid"))
+    }).pipe(
+      Effect.flatMap((chunk) =>
+        chunk.done
+          ? Effect.succeed(decodeChunks(chunks, size))
+          : Schema.decodeUnknownEffect(Schema.Uint8Array)(chunk.value).pipe(
+              Effect.mapError(() => invalidProviderOutput("Hosted provider response was invalid")),
+              Effect.flatMap((bytes) => {
+                if (size + bytes.byteLength > providerResponseMaximumBytes) {
+                  return Effect.fail(overflow());
+                }
+
+                if (bytes.byteLength === 0) return readFrom(size);
+                chunks.push(bytes);
+
+                return readFrom(size + bytes.byteLength);
+              })
+            )
+      )
     );
-    if (size + bytes.byteLength > providerResponseMaximumBytes) return yield* overflow();
-    if (bytes.byteLength === 0) continue;
-    chunks.push(bytes);
-    size += bytes.byteLength;
-  }
-});
+
+  return readFrom(0);
+};
 
 const readBoundedBody = (
   response: Response,
@@ -352,7 +395,9 @@ const readBoundedBody = (
   if (response.body === null) {
     return Effect.fail(invalidProviderOutput("Hosted provider response was invalid"));
   }
+
   const body = response.body;
+
   return Effect.acquireUseRelease(
     Effect.try({
       try: (): ReadableStreamDefaultReader<unknown> => body.getReader(),
@@ -363,11 +408,11 @@ const readBoundedBody = (
   );
 };
 
-type InvokeInput = Readonly<{
+type InvokeInput<Requirements> = Readonly<{
   model: ApprovedOpenAiModel;
   overflow: () => HostedInferenceError;
   request: OpenAiRequest;
-  run: OpenAiRun;
+  run: OpenAiRun<Requirements>;
   timeout: Duration.Input;
   timeoutFailure: () => HostedInferenceError;
 }>;
@@ -389,6 +434,7 @@ const validateProviderResponse = (
   response: ProviderResponse
 ): Effect.Effect<ProviderResponse, HostedInferenceError> => {
   const choice = response.choices[0];
+
   if (
     choice === undefined ||
     response.choices.length !== 1 ||
@@ -397,6 +443,7 @@ const validateProviderResponse = (
   ) {
     return Effect.fail(invalidProviderOutput("Hosted provider response was invalid"));
   }
+
   return Effect.succeed(response);
 };
 
@@ -410,6 +457,7 @@ const providerRefusal = (response: Response): Effect.Effect<never, HostedInferen
       response.status === HTTP_TOO_MANY_REQUESTS ||
       response.status >= HTTP_SERVER_ERROR_MINIMUM
   );
+
   if (
     response.status !== HTTP_TOO_MANY_REQUESTS ||
     response.headers.get("content-type")?.startsWith("application/json") !== true
@@ -418,34 +466,39 @@ const providerRefusal = (response: Response): Effect.Effect<never, HostedInferen
       Effect.andThen(Effect.fail(fallback))
     );
   }
+
   return readBoundedBody(response, () => fallback).pipe(
     Effect.flatMap((body) => Schema.decodeEffect(ProviderErrors)(body)),
     Effect.map((body) =>
       body.error.code === "insufficient_quota"
         ? new HostedInferenceError({
-            reason: { _tag: "ProviderQuotaExceeded" },
+            reason: HostedInferenceFailureReason.ProviderQuotaExceeded(),
             retryable: false,
             retryAfter: Option.none(),
           })
         : fallback
     ),
-    Effect.orElseSucceed(() => fallback),
-    Effect.flatMap(Effect.fail)
+    Effect.matchEffect({
+      onFailure: () => Effect.fail(fallback),
+      onSuccess: Effect.fail,
+    })
   );
 };
 
-const invoke = ({
+const invoke = <Requirements>({
   model,
   overflow,
   request,
   run,
   timeout,
   timeoutFailure,
-}: InvokeInput): Effect.Effect<ProviderResponse, HostedInferenceError> =>
+}: InvokeInput<Requirements>): Effect.Effect<
+  ProviderResponse,
+  HostedInferenceError,
+  Requirements
+> =>
   run(model, request).pipe(
-    Effect.mapError((failure) =>
-      failure instanceof HostedInferenceError ? failure : providerUnavailable(true)
-    ),
+    Effect.catchTag("UnknownError", () => Effect.fail(providerUnavailable(true))),
     Effect.flatMap((response) =>
       response.status >= HTTP_OK_MINIMUM && response.status < HTTP_REDIRECTION_MINIMUM
         ? readBoundedBody(response, overflow)
@@ -467,19 +520,20 @@ const decodeToolCall = (
   const binding = Schema.is(HostedOperationWireName)(item.function.name)
     ? operationByWireName.get(item.function.name)
     : undefined;
+
   if (binding === undefined || !visibleOperations.includes(binding.operation.id)) {
     return Effect.fail(invalidProviderOutput("Hosted provider response was invalid"));
   }
+
   return Effect.try({
     try: () => Tool.unsafeSecureJsonParse(item.function.arguments),
     catch: () => invalidProviderOutput("Hosted tool arguments were invalid"),
   }).pipe(
-    Effect.flatMap(Schema.decodeUnknownEffect(binding.operation.input)),
-    Effect.flatMap(Schema.encodeEffect(binding.operation.input)),
-    Effect.mapError((error) =>
-      error instanceof HostedInferenceError
-        ? error
-        : invalidProviderOutput("Hosted tool arguments were invalid")
+    Effect.flatMap((parsed) =>
+      Schema.decodeUnknownEffect(binding.operation.input)(parsed).pipe(
+        Effect.flatMap(Schema.encodeEffect(binding.operation.input)),
+        Effect.mapError(() => invalidProviderOutput("Hosted tool arguments were invalid"))
+      )
     ),
     Effect.map((params) => ({ id: item.id, operation: binding.operation.id, params }))
   );
@@ -493,6 +547,7 @@ const finishReason = (
   hasToolCalls: boolean
 ): HostedTextResult["finishReason"] => {
   if (hasToolCalls) return "tool-calls";
+
   return response.choices[0]?.finish_reason === "length" ? "length" : "stop";
 };
 
@@ -502,18 +557,23 @@ const decodeResult = (
 ): Effect.Effect<Omit<HostedTextResult, "continuation">, HostedInferenceError> =>
   Effect.gen(function* () {
     const functionCalls = response.choices[0]?.message.tool_calls ?? [];
+
     if (functionCalls.length > request.maximumToolCalls) {
       return yield* invalidProviderOutput(
         "Deterministic model exceeded the hosted tool-call limit"
       );
     }
+
     const toolCalls = yield* Effect.forEach(functionCalls, (item) =>
       decodeToolCall(item, request.visibleOperations)
     );
+
     const text = outputText(response);
+
     if (toolCalls.length === 0 && text.trim().length === 0) {
       return yield* invalidProviderOutput("Hosted provider response was invalid");
     }
+
     return {
       text,
       toolCalls,
@@ -526,10 +586,10 @@ const decodeResult = (
     };
   });
 
-const makeStructuredAdapter = (
-  run: OpenAiRun,
+const makeStructuredAdapter = <Requirements>(
+  run: OpenAiRun<Requirements>,
   model: ApprovedOpenAiModel
-): HostedStructuredAdapter => ({
+): HostedStructuredAdapter<Requirements> => ({
   prepare: (input) =>
     Effect.gen(function* () {
       const messages = yield* projectMessages(
@@ -538,14 +598,16 @@ const makeStructuredAdapter = (
           prefix: input.messages,
           continuationTail: [],
           suffix: [],
-          activeRequest: { _tag: "Absent" },
+          activeRequest: HostedActiveRequest.Absent(),
         },
         Option.none()
       );
+
       const schema = yield* Effect.try({
         try: () => openAiProviderSchema(input.outputSchema),
         catch: () => invalidProviderOutput("Hosted structured schema was invalid"),
       });
+
       const request: OpenAiRequest = {
         ...makeRequest(messages.input),
         response_format: {
@@ -553,7 +615,9 @@ const makeStructuredAdapter = (
           json_schema: { name: input.objectName, schema, strict: true },
         },
       };
+
       yield* capacityCheck(request);
+
       return {
         execute: invoke({
           model,
@@ -582,26 +646,26 @@ const makeStructuredAdapter = (
 
 const continuationItems = (response: ProviderResponse): ReadonlyArray<OpenAiInputItem> => {
   const message = response.choices[0]?.message;
+
   if (message === undefined) return [];
+
   return [
-    {
-      role: "assistant",
-      content: message.content,
-      ...(message.tool_calls === undefined ? {} : { tool_calls: message.tool_calls }),
-    },
+    message.tool_calls === undefined
+      ? { role: "assistant", content: message.content }
+      : { role: "assistant", content: message.content, tool_calls: message.tool_calls },
   ];
 };
 
-type ConfiguredOpenAi = Readonly<{
-  run: OpenAiRun;
+type ConfiguredOpenAi<Requirements> = Readonly<{
+  run: OpenAiRun<Requirements>;
   model: ApprovedOpenAiModel;
 }>;
 
-export const makeOpenAiInferenceServiceInternal = ({
+export const makeOpenAiInferenceServiceInternal = <Requirements>({
   run,
   model,
-}: ConfiguredOpenAi): HostedInferenceService => {
-  const adapter: HostedInferenceAdapter<PreparedOpenAiRequest, OpenAiContinuation> = {
+}: ConfiguredOpenAi<Requirements>): HostedInferenceService<Requirements> => {
+  const adapter: HostedInferenceAdapter<PreparedOpenAiRequest, OpenAiContinuation, Requirements> = {
     countText: (text) => Effect.succeed(tokenUpperBound(text)),
     countTranscript: (entries: ReadonlyArray<TranscriptEntry>) =>
       projectMessages(
@@ -610,7 +674,7 @@ export const makeOpenAiInferenceServiceInternal = ({
           prefix: exactTranscriptPromptInternal(entries),
           continuationTail: [],
           suffix: [],
-          activeRequest: { _tag: "Absent" },
+          activeRequest: HostedActiveRequest.Absent(),
         },
         Option.none()
       ).pipe(
@@ -624,8 +688,10 @@ export const makeOpenAiInferenceServiceInternal = ({
           semanticInput.projection,
           semanticInput.continuation
         );
+
         const request = makeTextRequest(messages.input, semanticInput);
         yield* capacityCheck(request);
+
         return {
           continuationPrefix: messages.continuationPrefix,
           maximumToolCalls:
@@ -654,5 +720,6 @@ export const makeOpenAiInferenceServiceInternal = ({
       ),
     structured: makeStructuredAdapter(run, model),
   };
-  return makeHostedInferenceInternal(adapter);
+
+  return hostedInferenceInternal(adapter);
 };

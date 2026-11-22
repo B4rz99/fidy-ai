@@ -7,9 +7,12 @@ import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const directory = fileURLToPath(new URL(".", import.meta.url));
+
 let fixture = "";
+
 before(async () => {
   fixture = await mkdtemp(join(tmpdir(), "fidy-inspector-transport-"));
+
   const certificate = spawnSync(
     "openssl",
     [
@@ -31,32 +34,31 @@ before(async () => {
     ],
     { stdio: "ignore" }
   );
+
   assert.equal(certificate.status, 0, "openssl must create the disposable loopback certificate");
 });
+
 after(async () => rm(fixture, { recursive: true, force: true }));
+
 await Promise.all(
   ["cancel", "concurrent"].map((mode) =>
     test(`Inspector HTTP/2 ${mode} settles with the isolated dispatcher`, () => {
       const baseline = process.env.FIDY_INSPECTOR_BASELINE === "1";
-      const result = spawnSync(
-        process.execPath,
-        [
-          ...(baseline ? [] : ["--import", "./fetch-dispatcher.mjs"]),
-          "./transport-fixture.mjs",
-          fixture,
-          mode,
-        ],
-        {
-          cwd: directory,
-          timeout: 10_000,
-          encoding: "utf8",
-          env: {
-            PATH: process.env.PATH,
-            NODE_EXTRA_CA_CERTS: join(fixture, "cert.pem"),
-            NODE_OPTIONS: "",
-          },
-        }
-      );
+      const childArguments = ["./transport-fixture.mjs", fixture, mode];
+
+      if (!baseline) childArguments.unshift("--import", "./fetch-dispatcher.mjs");
+
+      const result = spawnSync(process.execPath, childArguments, {
+        cwd: directory,
+        timeout: 10_000,
+        encoding: "utf8",
+        env: {
+          PATH: process.env.PATH,
+          NODE_EXTRA_CA_CERTS: join(fixture, "cert.pem"),
+          NODE_OPTIONS: "",
+        },
+      });
+
       assert.equal(
         result.error,
         undefined,

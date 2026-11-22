@@ -18,8 +18,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const db = yield* nativeTransactionJourney,
           current = yield* Clock.currentTimeMillis;
+
         const token = "fin_memwrit1_" + "w".repeat(43);
         yield* seedNativePAT({ db, userId: alice.user, token, scopes: ["write"], current });
+
         const write = (text: string): Effect.Effect<Response> =>
           native(() =>
             db.send(
@@ -34,15 +36,18 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               })
             )
           );
+
         const first = yield* write("monthly");
         expect(first.status).toBe(201);
         const firstBody = yield* native(() => first.text());
+
         const receipts = (): Effect.Effect<Awaited<ReturnType<typeof db.exec>>> =>
           native(() =>
             db.exec(
               "SELECT accepted_at_ms FROM canonical_request_receipts WHERE operation='memory.remember'"
             )
           );
+
         const accepted = yield* receipts();
         expect(accepted).toHaveLength(1);
         const again = yield* write("monthly");
@@ -50,12 +55,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* native(() => again.text())).toBe(firstBody);
         expect((yield* write("different")).status).toBe(400);
         expect(yield* receipts()).toEqual(accepted);
+
         const admissions = (): Effect.Effect<Awaited<ReturnType<typeof db.exec>>> =>
           native(() =>
             db.exec(
               "SELECT count(*) AS n FROM audit_entries WHERE record_type='request_admission' AND operation='memory.remember'"
             )
           );
+
         expect(yield* admissions()).toEqual([{ n: 1 }]);
         yield* native(() =>
           db.exec(
@@ -82,8 +89,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const db = yield* nativeTransactionJourney,
           current = yield* Clock.currentTimeMillis;
+
         const reader = "fin_memread1_" + "r".repeat(43),
           writer = "fin_memwrit1_" + "w".repeat(43);
+
         yield* seedNativePAT({
           db,
           userId: alice.user,
@@ -92,16 +101,18 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           current: current - 86400000,
         });
         yield* seedNativePAT({ db, userId: alice.user, token: writer, scopes: ["write"], current });
+
         const send = (token: string, method: string, suffix = ""): Effect.Effect<Response> =>
           native(() =>
             db.send(
               new Request("https://api.fidyapp.com/memories" + suffix, {
                 method,
                 headers: { authorization: "Bearer " + token, "content-type": "application/json" },
-                ...(method === "POST" ? { body: JSON.stringify({ text: "pat" }) } : {}),
+                body: method === "POST" ? JSON.stringify({ text: "pat" }) : null,
               })
             )
           );
+
         expect((yield* send(writer, "POST")).status).toBe(201);
         const recalled = yield* send(reader, "GET");
         expect(recalled.status).toBe(200);
@@ -166,11 +177,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const journey = yield* nativeTransactionJourney;
+
         const send = (
           user: typeof alice,
           path: string,
           options: { method: string } | { method: string; body: unknown }
         ): Effect.Effect<Response> => nativeBrowserWrite(journey)(user, { path, ...options });
+
         const created = yield* send(alice, "/operations/atomic-batch", {
           method: "POST",
           body: {
@@ -184,13 +197,16 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             ],
           },
         });
+
         expect(created.status).toBe(200);
         const reply = yield* native(() => journey.browser(0, "/memories"));
         const recalled = yield* native(() => reply.json());
         expect(recalled).toMatchObject({ data: [{ text: "monthly\nlimit" }] });
+
         const [row] = yield* native(() =>
           journey.exec("SELECT id FROM memories WHERE user_id=?", alice.user)
         );
+
         const path = "/memories/" + (yield* Schema.decodeUnknownEffect(Schema.String)(row?.id));
         expect((yield* send(bob, path, { method: "DELETE" })).status).toBe(404);
         expect(

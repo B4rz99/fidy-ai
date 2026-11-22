@@ -1,17 +1,23 @@
 import { Option } from "effect";
-import type { HostedAdmissionDecision, HostedAdmissionRequest } from "./contract";
+import { HostedAdmissionDecision, type HostedAdmissionRequest } from "./contract";
 
 const millisecondsPerSecond = 1_000;
+
 const secondsPerMinute = 60;
+
 const idleMinutes = 15;
+
 export const hostedSessionIdleMilliseconds = idleMinutes * secondsPerMinute * millisecondsPerSecond;
 
 const invalidState = ({ userId, nowMs, state }: HostedAdmissionRequest): boolean => {
   if (!Number.isSafeInteger(nowMs) || nowMs < 0) return true;
+
   if (Option.isNone(state.session)) return Option.isSome(state.pendingStartedAtMs);
   const session = state.session.value;
+
   const invalidInstant = (instant: Option.Option<number>): boolean =>
     Option.exists(instant, (value) => value < session.startedAtMs || value > nowMs);
+
   return (
     session.userId !== userId ||
     session.startedAtMs > nowMs ||
@@ -21,22 +27,29 @@ const invalidState = ({ userId, nowMs, state }: HostedAdmissionRequest): boolean
 };
 
 export const decideHostedAdmission = (request: HostedAdmissionRequest): HostedAdmissionDecision => {
-  if (invalidState(request)) return { _tag: "Refused", reason: "InvalidState" };
+  if (invalidState(request)) return HostedAdmissionDecision.Refused({ reason: "InvalidState" });
+
   if (request.revoked || Option.isNone(request.currentConsent)) {
-    return { _tag: "Refused", reason: "ConsentRequired" };
+    return HostedAdmissionDecision.Refused({ reason: "ConsentRequired" });
   }
-  if (Option.isSome(request.state.pendingStartedAtMs)) return { _tag: "RecoverPending" };
+
+  if (Option.isSome(request.state.pendingStartedAtMs)) {
+    return HostedAdmissionDecision.RecoverPending();
+  }
+
   if (Option.isSome(request.state.session)) {
     const session = request.state.session.value;
     const lastActivity = Option.getOrElse(session.lastActivityAtMs, () => session.startedAtMs);
+
     if (
       session.status === "active" &&
       request.nowMs - lastActivity < hostedSessionIdleMilliseconds
     ) {
-      return { _tag: "ContinueSession", sessionId: session.id };
+      return HostedAdmissionDecision.ContinueSession({ sessionId: session.id });
     }
   }
-  return { _tag: "BeginSession", consentBasis: request.currentConsent.value };
+
+  return HostedAdmissionDecision.BeginSession({ consentBasis: request.currentConsent.value });
 };
 
 export const defaultCompactionTriggerTokens = 100_000;
@@ -51,6 +64,7 @@ export const terminalPrefixCursor = (
   >
 ): Option.Option<number> => {
   const pending = entries.findIndex((entry) => entry.status === "pending");
+
   return pending === 0
     ? Option.none()
     : Option.fromNullishOr(entries.at(pending < 0 ? -1 : pending - 1)?.sequence);

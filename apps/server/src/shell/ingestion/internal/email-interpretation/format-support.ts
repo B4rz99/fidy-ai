@@ -5,8 +5,13 @@ import { AccountHints, type NotificationCurrencyBasis } from "~/core/transaction
 import type { EmailDocument } from "./document";
 import type { FormatInterpretation } from "./format-definition";
 
-const rowCell = (row: ReadonlyArray<string>, index: number): string =>
-  Option.getOrThrow(Option.fromNullishOr(row[index]));
+const rowCell = (row: ReadonlyArray<string>, index: number): string => {
+  const cell = row[index];
+
+  if (cell === undefined) throw new Error(`Missing email table cell ${index}`);
+
+  return cell;
+};
 
 export const findField: {
   (labels: ReadonlyArray<string>): (document: EmailDocument) => Option.Option<string>;
@@ -15,6 +20,7 @@ export const findField: {
   const values = document.rows
     .filter((row) => row.length === 2 && labels.includes(rowCell(row, 0)))
     .map((row) => rowCell(row, 1));
+
   return values.length === 1 && values[0] !== "" ? Option.some(rowCell(values, 0)) : Option.none();
 });
 
@@ -30,6 +36,7 @@ export type FormatCurrencyDefault = Readonly<{
 }>;
 
 const currencyFieldLabels = ["currency", "currency:", "moneda", "moneda:"];
+
 const minimumCompleteFinancialDigits = 10;
 
 export const resolveCurrency = (input: {
@@ -40,16 +47,22 @@ export const resolveCurrency = (input: {
   const currencyFields = input.document.rows
     .filter((row) => currencyFieldLabels.includes(rowCell(row, 0)))
     .map((row) => rowCell(row, 1));
+
   if (currencyFields.length > 1) return Option.none();
   const localEvidenceText = [input.amountText, ...currencyFields].join(" ");
+
   const localCodes = Array.from(localEvidenceText.matchAll(/\b[A-Za-z]{3}\b/gu), (match) =>
     match[0].toUpperCase()
   );
+
   if (localCodes.some((code) => !Schema.is(Currency)(code))) return Option.none();
   const distinctCodes = [...new Set(localCodes)];
+
   if (distinctCodes.length > 1 || /[€£¥]/u.test(localEvidenceText)) return Option.none();
+
   if (distinctCodes.length === 1) {
     const decoded = Schema.decodeUnknownOption(Currency)(rowCell(distinctCodes, 0));
+
     return Option.map(decoded, (currency) => ({
       currency,
       basis: "explicit" as const,
@@ -59,7 +72,9 @@ export const resolveCurrency = (input: {
         .trim(),
     }));
   }
+
   if (currencyFields.length === 1) return Option.none();
+
   return Option.some({
     ...input.defaultRule,
     numericText: input.amountText.replaceAll("$", "").trim(),
@@ -69,11 +84,14 @@ export const resolveCurrency = (input: {
 export const containsCompleteFinancialNumber = (text: string): boolean => {
   for (const match of text.matchAll(/[0-9][0-9 .-]*[0-9]/gu)) {
     const candidate = match[0].trim();
+
     if (/^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}$/u.test(candidate)) continue;
+
     if (Array.from(candidate.matchAll(/[0-9]/gu)).length >= minimumCompleteFinancialDigits) {
       return true;
     }
   }
+
   return false;
 };
 
@@ -88,7 +106,9 @@ export const parseAmount: {
     "comma-grouped-decimal": /^(?:0|[1-9]\d*|[1-9]\d{0,2}(?:,\d{3})+)(?:\.\d{1,2})?$/u,
     "dot-grouped": /^(?:0|[1-9]\d*|[1-9]\d{0,2}(?:\.\d{3})+)$/u,
   };
+
   if (!patterns[style].test(value)) return Option.none();
+
   return Option.some(
     style === "dot-grouped" ? value.replaceAll(".", "") : value.replaceAll(",", "")
   );
@@ -106,13 +126,17 @@ type OccurredAtInput = Readonly<{
 const parseOccurredAt = (input: OccurredAtInput): Option.Option<DateTime.Utc> => {
   const datePattern =
     input.dateStyle === "slash" ? /^(\d{4})\/(\d{2})\/(\d{2})$/u : /^(\d{4})-(\d{2})-(\d{2})$/u;
+
   const date = datePattern.exec(input.dateText);
   const time = /^(\d{2}):(\d{2})(?::(\d{2}))?$/u.exec(input.timeText);
+
   if (date === null || time === null) {
     return Option.none();
   }
+
   const [, year, month, day] = date;
   const [, hour, minute, second = "0"] = time;
+
   const parts = {
     year: Number(year),
     month: Number(month),
@@ -121,12 +145,15 @@ const parseOccurredAt = (input: OccurredAtInput): Option.Option<DateTime.Utc> =>
     minute: Number(minute),
     second: Number(second),
   };
+
   const zoned = DateTime.makeZoned(parts, {
     timeZone: input.context.timeZone,
     adjustForTimeZone: true,
   });
+
   return Option.flatMap(zoned, (value) => {
     const actual = DateTime.toParts(value);
+
     const actualValues = [
       actual.year,
       actual.month,
@@ -135,6 +162,7 @@ const parseOccurredAt = (input: OccurredAtInput): Option.Option<DateTime.Utc> =>
       actual.minute,
       actual.second,
     ];
+
     return actualValues.every((part, index) => part === Object.values(parts)[index])
       ? Option.some(DateTime.toUtc(value))
       : Option.none();

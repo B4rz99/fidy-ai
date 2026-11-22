@@ -2,8 +2,11 @@ import { Effect, Schema } from "effect";
 import { type ProviderRead, readProviderList as pages } from "./native-provider-list";
 
 const name = Schema.NonEmptyString;
+
 const success = Schema.Literal(true);
+
 const incumbent = (id: string): boolean => id.startsWith("fidycloudflare-") || id === "fidy-web";
+
 const activeWorkflowStatuses = [
   "queued",
   "running",
@@ -11,14 +14,19 @@ const activeWorkflowStatuses = [
   "waitingForPause",
   "rollingBack",
 ] as const;
+
 const empty = Schema.Struct({ success, result: Schema.Tuple([]) });
+
 const worker = Schema.Struct({ id: name });
+
 const queue = Schema.Struct({
   queue_id: name,
   queue_name: name,
   settings: Schema.optional(Schema.Struct({ delivery_paused: Schema.optional(Schema.Boolean) })),
 });
+
 const workflow = Schema.Struct({ name, script_name: name });
+
 const assertNoWriter = Effect.fn(function* (read: ProviderRead, id: string) {
   const path = "workers/scripts/" + id;
   yield* Schema.decodeUnknownEffect(
@@ -42,14 +50,17 @@ export const verifyIncumbentFence = Effect.fn(function* (
   const scripts = (yield* pages(read, "workers/scripts", worker)).filter((item) =>
     incumbent(item.id)
   );
+
   if (phase === "staging" && !scripts.some((item) => item.id.startsWith("fidycloudflare-core-"))) {
     return yield* Effect.fail(Error("Incumbent Core inventory is missing"));
   }
+
   yield* Effect.forEach(scripts, (item) => assertNoWriter(read, item.id), {
     concurrency: 3,
     discard: true,
   });
   const queues = (yield* pages(read, "queues", queue)).filter((item) => incumbent(item.queue_name));
+
   if (
     (phase === "staging" &&
       !queues.some((item) => item.queue_name.startsWith("fidycloudflare-asyncdeadletters-"))) ||
@@ -57,9 +68,11 @@ export const verifyIncumbentFence = Effect.fn(function* (
   ) {
     return yield* Effect.fail(Error("Incumbent queues and dead letters must have paused delivery"));
   }
+
   const workflows = (yield* pages(read, "workflows", workflow)).filter((item) =>
     incumbent(item.script_name)
   );
+
   yield* Effect.forEach(
     workflows,
     (item) =>
@@ -77,6 +90,7 @@ export const verifyIncumbentFence = Effect.fn(function* (
       ),
     { concurrency: 2, discard: true }
   );
+
   return {
     scripts: scripts.map((item) => item.id),
     pausedQueues: queues.map((item) => ({ name: item.queue_name, id: item.queue_id })),
@@ -93,6 +107,7 @@ const emailRule = Schema.Struct({
     })
   ),
 });
+
 const deliversToIncumbent = (rule: typeof emailRule.Type, nativeClosed: boolean): boolean =>
   rule.enabled &&
   rule.actions.some(
@@ -101,20 +116,24 @@ const deliversToIncumbent = (rule: typeof emailRule.Type, nativeClosed: boolean)
       (action.value === undefined ||
         action.value.some((id) => incumbent(id) || (nativeClosed && id === "fidy-native-email")))
   );
+
 export const verifyIncumbentMail = Effect.fn(function* (
   account: ProviderRead,
   zone: ProviderRead,
   phase: "staging" | "retirement" = "staging"
 ) {
   const path = "email/routing/rules";
+
   const catchAll = yield* Schema.decodeUnknownEffect(Schema.Struct({ success, result: emailRule }))(
     yield* zone(path + "/catch_all")
   );
+
   const rules = [
     ...(yield* pages(account, path, emailRule)),
     ...(yield* pages(zone, path, emailRule)),
     catchAll.result,
   ];
+
   if (rules.some((rule) => deliversToIncumbent(rule, phase === "staging"))) {
     return yield* Effect.fail(Error("Email delivery to the fenced application is enabled"));
   }

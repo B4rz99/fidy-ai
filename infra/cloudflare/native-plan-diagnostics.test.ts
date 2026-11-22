@@ -1,5 +1,5 @@
 import * as Alchemist from "alchemy/Alchemist";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { it, layer } from "@effect/vitest";
 import { expect } from "vitest";
@@ -10,20 +10,54 @@ import {
 } from "./native-plan-diagnostics";
 import { nativeResourceFailureMessage } from "./resource-failure";
 
+const Forbidden = Schema.TaggedStruct("Forbidden", { code: Schema.Finite });
+
+const StateStoreError = Schema.TaggedStruct("StateStoreError", {
+  http: Schema.Struct({ status: Schema.Finite }),
+});
+
+const OwnedBySomeoneElse = Schema.TaggedStruct("OwnedBySomeoneElse", {});
+
+const CloudflareParseError = Schema.TaggedStruct("CloudflareParseError", { body: Schema.String });
+
+const PlanPhaseChanged = Schema.TaggedStruct("plan.phase", {
+  phase: Schema.Literal("computing-plan"),
+});
+
+const ResourceDiffStarted = Schema.TaggedStruct("plan.resource.started", {
+  fqn: Schema.String,
+  logicalId: Schema.String,
+  resourceType: Schema.String,
+  total: Schema.Finite,
+});
+
+const ResourcePlanned = Schema.TaggedStruct("plan.resource.completed", {
+  fqn: Schema.String,
+  logicalId: Schema.String,
+  resourceType: Schema.String,
+  action: Schema.Literal("create"),
+  bindings: Schema.Array(Schema.Never),
+  completed: Schema.Finite,
+  total: Schema.Finite,
+});
+
 const revision = "1".repeat(40);
+
 const start = (
   report: Alchemist.ProgressReporter,
   logicalId: string,
   resourceType: string
 ): Effect.Effect<void> =>
-  report({ _tag: "plan.resource.started", fqn: "private-fqn", logicalId, resourceType, total: 2 });
+  report(ResourceDiffStarted.make({ fqn: "private-fqn", logicalId, resourceType, total: 2 }));
 
 it.effect("forwards the successful plan and progress", () =>
   Effect.gen(function* () {
     const phases: string[] = [];
+
     const result = yield* Effect.gen(function* () {
       const report = yield* Alchemist.Progress;
-      yield* report({ _tag: "plan.phase", phase: "computing-plan" });
+      yield* report(PlanPhaseChanged.make({ phase: "computing-plan" }));
+
       return "verified";
     }).pipe(
       diagnoseNativePlan(revision),
@@ -33,6 +67,7 @@ it.effect("forwards the successful plan and progress", () =>
         })
       )
     );
+
     expect(result).toBe("verified");
     expect(phases).toEqual(["plan.phase"]);
   })
@@ -40,14 +75,14 @@ it.effect("forwards the successful plan and progress", () =>
 
 layer(FetchHttpClient.layer)("native planner HTTP reads", (suite) => {
   suite.effect.each([
-    { error: { _tag: "Forbidden", code: 10001 }, category: "Forbidden; code=10001" },
+    { error: Forbidden.make({ code: 10001 }), category: "Forbidden; code=10001" },
     {
-      error: { _tag: "StateStoreError", http: { status: 403 } },
+      error: StateStoreError.make({ http: { status: 403 } }),
       category: "StateStoreError; HTTP 403",
     },
-    { error: { _tag: "OwnedBySomeoneElse" }, category: "OwnedBySomeoneElse" },
+    { error: OwnedBySomeoneElse.make({}), category: "OwnedBySomeoneElse" },
     {
-      error: { _tag: "CloudflareParseError", body: "private-body" },
+      error: CloudflareParseError.make({ body: "private-body" }),
       category: "CloudflareParseError",
     },
     { error: Error("private-message"), category: "Error" },
@@ -59,28 +94,31 @@ layer(FetchHttpClient.layer)("native planner HTTP reads", (suite) => {
           preconnect: fetch.preconnect,
         }
       );
+
       const failure = yield* Effect.gen(function* () {
         const report = yield* Alchemist.Progress;
-        yield* report({ _tag: "plan.phase", phase: "computing-plan" });
+        yield* report(PlanPhaseChanged.make({ phase: "computing-plan" }));
         yield* start(report, "ReleaseSmokeQueue-" + revision, "Cloudflare.Queues.Queue");
         yield* start(report, "private-resource", "private-type");
         yield* start(report, "ForwardedEmail", "Cloudflare.Worker");
-        yield* report({
-          _tag: "plan.resource.completed",
-          fqn: "private-fqn",
-          logicalId: "ForwardedEmail",
-          resourceType: "Cloudflare.Worker",
-          action: "create",
-          bindings: [],
-          completed: 1,
-          total: 3,
-        });
+        yield* report(
+          ResourcePlanned.make({
+            fqn: "private-fqn",
+            logicalId: "ForwardedEmail",
+            resourceType: "Cloudflare.Worker",
+            action: "create",
+            bindings: [],
+            completed: 1,
+            total: 3,
+          })
+        );
         yield* HttpClient.get(
           "https://api.cloudflare.com/client/v4/accounts/private/queues?secret=private"
         );
         yield* HttpClient.get(
           "https://alchemy-state-store.private.workers.dev/state/stacks/private/stages/private/resources/private"
         );
+
         return yield* Effect.fail(error);
       }).pipe(
         diagnoseNativePlan(revision),
@@ -90,6 +128,7 @@ layer(FetchHttpClient.layer)("native planner HTTP reads", (suite) => {
           onSuccess: () => "unexpected success",
         })
       );
+
       expect(failure).toContain("(" + category + ")");
       expect(failure).toContain(
         "Planner phase computing-plan. Resource diffs completed 1/3. Unfinished resources [ReleaseSmokeQueue]. Observed reads [queues 403, state resource 403]."
@@ -108,6 +147,7 @@ layer(FetchHttpClient.layer)("closed installation target", (suite) => {
         const request = HttpClient.get(
           "https://api.cloudflare.com/client/v4/accounts/private/builds/workers/private/triggers"
         ).pipe(Effect.andThen(Effect.fail(Error("private-provider-message"))));
+
         const failure = yield* request.pipe(
           diagnoseFreshTarget,
           Effect.provideService(
@@ -119,6 +159,7 @@ layer(FetchHttpClient.layer)("closed installation target", (suite) => {
           ),
           Effect.matchCause({ onFailure: nativeResourceFailureMessage, onSuccess: () => "" })
         );
+
         expect(failure).toContain("Worker Build triggers 403");
         expect(failure).not.toContain("private");
       })
@@ -131,12 +172,14 @@ layer(FetchHttpClient.layer)("scoped successor upload", (suite) => {
     () =>
       Effect.gen(function* () {
         const account = "https://api.cloudflare.com/client/v4/accounts/private-account";
+
         const failure = yield* Effect.gen(function* () {
           yield* HttpClient.post(account + "/workers/scripts/fidy-native-storage-ingress/versions");
           yield* HttpClient.put(
             account + "/workflows/fidy-native-smoke-" + revision + "?secret=private"
           );
           yield* HttpClient.put(account + "/workflows/private-unreviewed-name");
+
           return yield* Effect.fail(Error("private-provider-message"));
         }).pipe(
           diagnoseSuccessorApply(revision),
@@ -147,7 +190,9 @@ layer(FetchHttpClient.layer)("scoped successor upload", (suite) => {
                 Promise.resolve(
                   new Response("private-response", {
                     status:
-                      input instanceof URL && input.pathname.includes("/workflows/") ? 422 : 200,
+                      Schema.is(Schema.URL)(input) && input.pathname.includes("/workflows/")
+                        ? 422
+                        : 200,
                   })
                 ),
               { preconnect: fetch.preconnect }
@@ -155,6 +200,7 @@ layer(FetchHttpClient.layer)("scoped successor upload", (suite) => {
           ),
           Effect.matchCause({ onFailure: nativeResourceFailureMessage, onSuccess: () => "" })
         );
+
         expect(failure).toContain("Observed writes [Ingress version 200, Smoke Workflow 422].");
         expect(failure).not.toContain("private");
         expect(failure).not.toContain(revision);

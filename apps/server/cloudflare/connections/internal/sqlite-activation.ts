@@ -1,8 +1,7 @@
 import { withStoreCapacity } from "../../runtime/sqlite/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Effect, Redacted, Schema } from "effect";
+import { Clock, Effect, Predicate, Redacted, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
-import { SecureRandom } from "effect/crypto";
 import { InstitutionId } from "../../../src/core/connections/contract";
 import { digestBytes, newId } from "../../secret-material/operations";
 import {
@@ -23,10 +22,13 @@ import {
 import { admitSynchronization } from "./synchronization";
 
 const maxReferenceLength = 256;
+
 const maximumAccounts = 1000;
+
 const accountsSchema = Schema.Array(
   Schema.String.check(Schema.isBetweenLength(1, maxReferenceLength))
 ).check(Schema.isMaxLength(maximumAccounts));
+
 const Pending = Schema.Struct({
   id: Schema.String,
   connectionId: Schema.String,
@@ -36,11 +38,13 @@ const Pending = Schema.Struct({
   expiresAt: Schema.Int,
   withdrawal: Schema.Int,
 });
+
 const checkRegistration = Effect.fn(function* (user: string) {
   if (!(yield* institutionsForUser(user)).includes(InstitutionId.make("bancolombia"))) {
     return yield* failed();
   }
 });
+
 type Activation = {
   unit: BrowserUnit;
   proof: BrowserProof;
@@ -49,14 +53,17 @@ type Activation = {
   key: Redacted.Redacted<string>;
   canSynchronize: boolean;
 };
+
 const claimCallback = Effect.fn(function* ({ unit, proof, callback }: Activation) {
   const sql = yield* SqliteClient;
   const digest = Base64Url.encode(yield* digestBytes(new TextEncoder().encode(callback.state)));
+
   return yield* withStoreCapacity("growth")(
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
       const who = yield* session(proof, unit.owns, { fresh: false, current: now });
       yield* checkRegistration(who.userId);
+
       const [row] =
         yield* sql`SELECT a.id,a.connection_id AS connectionId,b.consent_id AS consentId,b.verifier,b.intent_json AS intentJson,a.expires_at_ms AS expiresAt,
       (SELECT coalesce(max(rowid),0) FROM consent_history WHERE user_id=${who.userId} AND record_type='processing_withdrawal') AS withdrawal
@@ -64,6 +71,7 @@ const claimCallback = Effect.fn(function* ({ unit, proof, callback }: Activation
       WHERE c.user_id=${who.userId} AND c.state='Connecting' AND a.prepared_session_id=${who.id} AND a.status='consumed'
       AND a.expires_at_ms>${now} AND b.phase='prepared' AND b.state_digest=${digest} AND b.consent_id IS NOT NULL
       AND NOT EXISTS(SELECT 1 FROM connection_attempts newer WHERE newer.connection_id=c.id AND newer.rowid>a.rowid)`;
+
       const attempt = yield* Schema.decodeUnknownEffect(Pending)(row);
       yield* one(
         yield* sql`INSERT INTO connection_grants(attempt_id,state,claimed_at_ms) VALUES(${attempt.id},'claimed',${now}) RETURNING attempt_id`
@@ -72,27 +80,33 @@ const claimCallback = Effect.fn(function* ({ unit, proof, callback }: Activation
         yield* sql`UPDATE connection_authorizations SET phase='failed',verifier=NULL,handoff_url=NULL WHERE attempt_id=${attempt.id} AND phase='prepared' RETURNING attempt_id`
       );
       yield* auditBrowser(who, { operation: "connections.claimAuthorization", current: now });
+
       return { ...attempt, who };
     })
   );
 });
+
 const settleAccounts = Effect.fn(function* (
   { unit, proof, canSynchronize }: Activation,
   claim: Effect.Success<ReturnType<typeof claimCallback>>,
   accounts: ReadonlyArray<string>
 ) {
   const sql = yield* SqliteClient;
+
   const intent = yield* Schema.decodeEffect(Schema.fromJsonString(ConnectionConsentIntent))(
     claim.intentJson
   );
+
   yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
       const who = yield* session(proof, unit.owns, { fresh: false, current: now });
       yield* checkRegistration(who.userId);
+
       if (unit.request.signal.aborted || now >= claim.expiresAt || who.id !== claim.who.id) {
         return yield* failed();
       }
+
       yield* one(
         yield* sql`UPDATE connection_grants SET state='active' WHERE attempt_id=${claim.id} AND state='quarantined' AND expires_at_ms>${now}
         AND EXISTS(SELECT 1 FROM connection_attempts a JOIN connections c ON c.id=a.connection_id WHERE a.id=${claim.id} AND c.id=${claim.connectionId} AND c.user_id=${who.userId} AND c.state='Connecting'
@@ -100,37 +114,48 @@ const settleAccounts = Effect.fn(function* (
         AND NOT EXISTS(SELECT 1 FROM consent_history WHERE user_id=${who.userId} AND record_type='processing_withdrawal' AND rowid>${claim.withdrawal}) RETURNING attempt_id`
       );
       yield* sql`UPDATE connection_grants SET state='cleanup_required' WHERE state='active' AND attempt_id<>${claim.id} AND attempt_id IN(SELECT id FROM connection_attempts WHERE connection_id=${claim.connectionId})`;
-      for (const reference of accounts) {
-        yield* sql`INSERT INTO connection_accounts(id,connection_id,provider_reference,grant_attempt_id) VALUES(${newId()},${claim.connectionId},${reference},${claim.id})
+
+      yield* Effect.forEach(
+        accounts,
+        Effect.fnUntraced(function* (reference) {
+          yield* sql`INSERT INTO connection_accounts(id,connection_id,provider_reference,grant_attempt_id) VALUES(${newId()},${claim.connectionId},${reference},${claim.id})
           ON CONFLICT(connection_id,provider_reference) DO UPDATE SET grant_attempt_id=excluded.grant_attempt_id`;
-      }
+        }),
+        { discard: true }
+      );
+
       yield* one(
         yield* sql`UPDATE connections SET state='Active',updated_at_ms=${now} WHERE id=${claim.connectionId} AND user_id=${who.userId} AND state='Connecting' RETURNING id`
       );
       yield* auditBrowser(who, { operation: "connections.completeAuthorization", current: now });
+
       if (canSynchronize && intent.permissions.includes("ReadTransactionsDetail")) {
         yield* admitSynchronization(claim.id, now, unit.storage);
       }
     })
   );
 });
+
 export const activate = Effect.fn(function* (input: Activation) {
   const { callback, bank, key } = input;
   yield* decodeGrantKey(key);
   const sql = yield* SqliteClient;
   const claim = yield* claimCallback(input);
-  const entropy = yield* SecureRandom.SecureRandom;
+
   const activation = Effect.gen(function* () {
-    if (callback.result._tag !== "Code") return yield* failed();
+    if (!Predicate.isTagged(callback.result, "Code")) return yield* failed();
+
     const intent = yield* Schema.decodeEffect(Schema.fromJsonString(ConnectionConsentIntent))(
       claim.intentJson
     );
+
     const purpose = yield* grantPurpose({
       ...claim,
       userId: claim.who.userId,
       attemptId: claim.id,
       clientId: bank.clientId,
     });
+
     const accounts = yield* bank
       .activate({
         userId: claim.who.userId,
@@ -146,14 +171,13 @@ export const activate = Effect.fn(function* (input: Activation) {
             yield* one(
               yield* sql`UPDATE connection_grants SET state='quarantined',envelope=${envelope},expires_at_ms=${grant.expiresAtMilliseconds} WHERE attempt_id=${claim.id} AND state='claimed' AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Draining') RETURNING attempt_id`
             );
-          }).pipe(
-            Effect.provideService(SecureRandom.SecureRandom, entropy),
-            Effect.mapError(failed)
-          ),
+          }).pipe(Effect.mapError(failed)),
       })
       .pipe(Effect.flatMap(Schema.decodeUnknownEffect(accountsSchema)));
+
     yield* settleAccounts(input, claim, accounts);
   });
+
   yield* activation.pipe(
     Effect.onError(() =>
       sql

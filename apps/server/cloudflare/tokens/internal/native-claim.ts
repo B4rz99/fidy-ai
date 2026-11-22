@@ -1,5 +1,5 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Predicate, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import { UserId } from "../../../src/core/identity/contract";
 import { PAT, PATPairingId } from "../../../src/core/tokens/contract";
@@ -20,6 +20,8 @@ import {
   unavailable,
 } from "./pat-shared";
 import { PATUnavailable } from "../contract";
+
+const isResponse = Schema.is(Schema.instanceOf(Response));
 
 const claimResponse = Effect.fn(function* ({
   pairing,
@@ -43,6 +45,7 @@ const claimResponse = Effect.fn(function* ({
       revoked_at_ms: null,
     })
   );
+
   return response({
     status: 200,
     body: { bearer, pat: yield* Schema.encodeEffect(Schema.toCodecJson(PAT))(pat) },
@@ -53,6 +56,7 @@ const Claim = Schema.Struct({
   id: PATPairingId,
   digest: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u)),
 });
+
 const Pairing = Schema.Struct({
   id: PATPairingId,
   user_id: UserId,
@@ -74,7 +78,9 @@ const Pairing = Schema.Struct({
   scopes_json: Schema.String,
   recipient_label: Schema.String,
 });
+
 const maximumPollSeconds = 60;
+
 const applyDecision = Effect.fn(function* ({
   decision,
   pairing,
@@ -87,19 +93,25 @@ const applyDecision = Effect.fn(function* ({
   current: number;
 }) {
   const sql = yield* SqliteClient;
-  if (decision._tag === "WrongProof") {
-    yield* sql`UPDATE pat_pairings SET wrong_attempts=${decision.wrongProofAttempts} WHERE id=${id}`;
+
+  if (Predicate.isTagged(decision, "WrongProof")) {
+    yield* sql`UPDATE pat_pairings SET wrong_attempts=${decision.wrongProofAttempts} WHERE id=${id} AND wrong_attempts=${pairing.wrong_attempts}`;
+
     return invalid();
   }
-  if (decision._tag === "SlowDown") {
-    yield* sql`UPDATE pat_pairings SET minimum_poll_seconds=${Math.min(maximumPollSeconds, decision.minimumPollIntervalSeconds)} WHERE id=${id}`;
+
+  if (Predicate.isTagged(decision, "SlowDown")) {
+    yield* sql`UPDATE pat_pairings SET minimum_poll_seconds=${Math.min(maximumPollSeconds, decision.minimumPollIntervalSeconds)} WHERE id=${id} AND minimum_poll_seconds=${pairing.minimum_poll_seconds}`;
+
     return response({
       status: 429,
       body: { error: { code: "rate_limited", retryAfterSeconds: decision.retryAfterSeconds } },
     });
   }
-  if (decision._tag === "Pending") {
-    yield* sql`UPDATE pat_pairings SET last_poll_at_ms=${current} WHERE id=${id}`;
+
+  if (Predicate.isTagged(decision, "Pending")) {
+    yield* sql`UPDATE pat_pairings SET last_poll_at_ms=${current} WHERE id=${id} AND last_poll_at_ms IS ${pairing.last_poll_at_ms}`;
+
     return response({
       status: 202,
       body: {
@@ -109,19 +121,22 @@ const applyDecision = Effect.fn(function* ({
       },
     });
   }
+
   if (
-    decision._tag !== "Claim" ||
+    !Predicate.isTagged(decision, "Claim") ||
     pairing.approved_at_ms === null ||
     pairing.pat_expires_at_ms === null
   ) {
     return invalid();
   }
+
   return {
     ...pairing,
     approved_at_ms: pairing.approved_at_ms,
     pat_expires_at_ms: pairing.pat_expires_at_ms,
   };
 });
+
 const observe = Effect.fn(function* (
   id: string,
   proof: Uint8Array,
@@ -129,11 +144,15 @@ const observe = Effect.fn(function* (
 ) {
   const sql = yield* SqliteClient;
   const current = yield* Clock.currentTimeMillis;
+
   const [row] =
     yield* sql`SELECT *,proof_digest=${proof} AS proof_matches FROM pat_pairings pairing WHERE id=${id} AND NOT EXISTS(SELECT 1 FROM erasure_requests e WHERE e.user_id=pairing.user_id)`;
+
   if (row === undefined) return invalid();
   const pairing = yield* Schema.decodeUnknownEffect(Pairing)(row);
+
   if (!owns(pairing.user_id)) return invalid();
+
   const decision = yield* decidePATPairingClaim({
     lifecycle: pairing.state,
     proofMatches: pairing.proof_matches === 1,
@@ -146,9 +165,12 @@ const observe = Effect.fn(function* (
     expiresAt: DateTime.makeUnsafe(pairing.expires_at_ms),
     attemptedAt: DateTime.makeUnsafe(current),
   });
+
   return yield* applyDecision({ decision, pairing, id, current });
 });
+
 type Claimable = Exclude<Effect.Success<ReturnType<typeof observe>>, Response>;
+
 const issueClaim = Effect.fn(function* ({
   patId,
   shortId,
@@ -163,6 +185,7 @@ const issueClaim = Effect.fn(function* ({
   pairing: Claimable;
 }) {
   const sql = yield* SqliteClient;
+
   const issue = insertClaimedPAT({
     patId,
     shortId,
@@ -176,21 +199,36 @@ const issueClaim = Effect.fn(function* ({
     pairingId: pairing.id,
     userId: pairing.user_id,
   });
+
   const audit = recordClaimedPAT({ id: newId(), userId: pairing.user_id, patId, current });
-  for (const statement of [issue, audit]) {
-    if ((yield* sql.unsafe(statement.sql + " RETURNING id", statement.params)).length === 0) {
-      return yield* new PATUnavailable();
-    }
-  }
+
+  yield* Effect.forEach(
+    [issue, audit],
+    (statement) =>
+      sql
+        .unsafe(statement.sql + " RETURNING id", statement.params)
+        .pipe(
+          Effect.flatMap((rows) =>
+            rows.length === 0
+              ? Effect.fail(new PATUnavailable({ cause: Option.none() }))
+              : Effect.void
+          )
+        ),
+    { discard: true }
+  );
 });
+
 export const localClaim = Effect.fn(
   function* (request: Request, directory: Directory, owns: (user: string) => boolean) {
     const requestProof = yield* decodeBody({ request, schema: Claim });
+
     if (Option.isNone(requestProof)) return invalid();
     const input = requestProof.value;
     const proof = yield* Effect.fromResult(Hex.decode(input.digest));
     const first = yield* observe(input.id, proof, owns).pipe(withStoreCapacity("required"));
-    if (first instanceof Response) return first;
+
+    if (isResponse(first)) return first;
+
     const route = yield* directoryEvidence(
       directory,
       {
@@ -202,35 +240,46 @@ export const localClaim = Effect.fn(
       },
       Reservation
     );
+
     if (Option.isNone(route) || route.value.expires_at_ms !== first.pat_expires_at_ms) {
       return unavailable();
     }
+
     const { short_id: shortId, pat_id: patId } = route.value;
     const bearer = newBearer(shortId);
     const bearerDigest = yield* Effect.tryPromise(() => digest(bearer));
     const sql = yield* SqliteClient;
+
     return yield* Effect.gen(function* () {
       const pairing = yield* observe(input.id, proof, owns);
-      if (pairing instanceof Response) return pairing;
+
+      if (isResponse(pairing)) return pairing;
+
       if (
         pairing.user_id !== first.user_id ||
         pairing.pat_expires_at_ms !== route.value.expires_at_ms
       ) {
         return invalid();
       }
+
       const current = yield* Clock.currentTimeMillis;
+
       const claim = claimPairingGrant({
         pairingId: input.id,
         userId: pairing.user_id,
         proofDigest: proof,
         current,
       });
+
       if ((yield* sql.unsafe(claim.sql + " RETURNING id", claim.params)).length === 0) {
         return invalid();
       }
+
       yield* issueClaim({ patId, shortId, bearerDigest, current, pairing });
+
       return yield* claimResponse({ pairing, patId, shortId, bearer });
     }).pipe(withStoreCapacity("growth"));
   },
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() => Effect.succeed(unavailable()))
 );

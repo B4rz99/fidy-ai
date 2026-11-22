@@ -1,7 +1,7 @@
 import { Delete02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { Effect } from "effect";
+import { Effect, Predicate } from "effect";
 import { type JSX, type ReactNode, useState } from "react";
 import type { WebAuthClient } from "@/transport/client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
@@ -27,18 +27,20 @@ const ErasureSection = ({ children }: Readonly<{ children: ReactNode }>): JSX.El
 
 export const ErasureRequest = ({ client }: Readonly<{ client: WebAuthClient }>): JSX.Element => {
   const [confirmed, confirm] = useState(false);
+
   const [command] = useState(() =>
     client.runtime.fn<void>()(() =>
       client.pipe(
         Effect.flatMap((api) => api.processingConsent.erase({ payload: { confirm: true } })),
-        Effect.as(true),
-        Effect.catchCause(() => Effect.succeed(false))
+        Effect.asVoid
       )
     )
   );
+
   const result = useAtomValue(command);
   const submit = useAtomSet(command);
-  const accepted = result._tag === "Success" && result.value;
+  const accepted = Predicate.isTagged(result, "Success");
+
   return (
     <ErasureSection>
       <label htmlFor="erasure-confirmation" className="flex items-center gap-3">
@@ -61,7 +63,7 @@ export const ErasureRequest = ({ client }: Readonly<{ client: WebAuthClient }>):
           {result.waiting ? "Registrando solicitud…" : "Solicitar eliminación"}
         </Button>
       </div>
-      <ErasureFeedback accepted={accepted} failed={result._tag === "Success" && !result.value} />
+      <ErasureFeedback accepted={accepted} failed={Predicate.isTagged(result, "Failure")} />
     </ErasureSection>
   );
 };

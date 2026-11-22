@@ -3,20 +3,26 @@ import { type CaseCommand, RegisterFailure, TitularCase } from "./contract";
 import { caseDeadlines, parseDate } from "./calendar";
 
 const bogotaZone = DateTime.zoneMakeNamedUnsafe("America/Bogota");
+
 const localDate = (atMs: number): string =>
   DateTime.formatIsoDate(DateTime.setZone(DateTime.makeUnsafe(atMs), bogotaZone));
+
 const refuse = (): Effect.Effect<never, RegisterFailure> =>
-  Effect.fail(new RegisterFailure({ reason: "InvalidTransition" }));
+  Effect.fail(RegisterFailure.make({ reason: "InvalidTransition" }));
+
 type TransitionCommand = Exclude<CaseCommand, { action: "Receive" }>;
+
 type CaseTransition<Command = TransitionCommand> = Readonly<{
   current: TitularCase;
   command: Command;
   atMs: number;
 }>;
+
 type ResolutionCommand = Extract<
   CaseCommand,
   { action: "RecordOwnerResult" | "RecordWithdrawal" | "ReferErasure" | "PrepareResponse" }
 >;
+
 type AdministrativeCommand = Extract<
   CaseCommand,
   { action: "Assign" | "RequestCompletion" | "RecordCompletion" | "RecordVerification" }
@@ -26,7 +32,9 @@ const receive = (
   input: Readonly<{ command: Extract<CaseCommand, { action: "Receive" }>; atMs: number }>
 ): Effect.Effect<TitularCase, RegisterFailure> => {
   const date = DateTime.make(input.command.receivedAtMs);
+
   if (Option.isNone(date) || input.command.receivedAtMs > input.atMs) return refuse();
+
   return Effect.succeed(
     TitularCase.make({
       caseId: input.command.caseId,
@@ -62,6 +70,7 @@ const extend = ({
   atMs: number;
 }>): Effect.Effect<TitularCase, RegisterFailure> => {
   const targets = caseDeadlines(current);
+
   if (
     Option.isSome(current.extension) ||
     Option.isNone(targets.response) ||
@@ -69,6 +78,7 @@ const extend = ({
   ) {
     return refuse();
   }
+
   if (
     localDate(atMs) > targets.response.value ||
     Option.isNone(parseDate(command.responseDate)) ||
@@ -77,6 +87,7 @@ const extend = ({
   ) {
     return refuse();
   }
+
   return Effect.succeed({
     ...current,
     extension: Option.some({
@@ -100,9 +111,11 @@ const prepareResponse = (
     Withdrawal: current.withdrawalRef,
     Erasure: Option.map(current.erasureHandoff, (handoff) => handoff.evidenceRef),
   };
+
   if (Option.isNone(current.verificationRef) || Option.isNone(required[current.kind])) {
     return refuse();
   }
+
   return Effect.succeed({ ...current, delivery: { status: "Pending", responseRef: evidenceRef } });
 };
 
@@ -116,14 +129,17 @@ const recordDelivery = (
   }>
 ): Effect.Effect<TitularCase, RegisterFailure> => {
   const { current, command } = input;
+
   if (current.delivery.status === "NotPrepared" || Option.isNone(current.verificationRef)) {
     return refuse();
   }
+
   const status = {
     RecordResponse: "Confirmed",
     DeliveryFailed: "Failed",
     DeliveryUncertain: "Uncertain",
   } as const;
+
   return Effect.succeed({
     ...current,
     delivery: {
@@ -148,15 +164,18 @@ const referErasure = ({
   ) {
     return refuse();
   }
+
   if (
     command.withdrawal.status === "Recorded" &&
     !Option.contains(command.withdrawal.reference)(current.withdrawalRef)
   ) {
     return refuse();
   }
+
   if (command.withdrawal.status !== "Recorded" && Option.isSome(current.withdrawalRef)) {
     return refuse();
   }
+
   return Effect.succeed({
     ...current,
     erasureHandoff: Option.some({
@@ -173,6 +192,7 @@ const recordResolution = ({
   command,
 }: CaseTransition<ResolutionCommand>): Effect.Effect<TitularCase, RegisterFailure> => {
   if (Option.isNone(current.verificationRef)) return refuse();
+
   switch (command.action) {
     case "RecordOwnerResult":
       return Effect.succeed({ ...current, ownerResultRef: Option.some(command.evidenceRef) });
@@ -202,6 +222,7 @@ const requestCompletion = ({
         ...current,
         completion: Option.some({ evidenceRef: command.evidenceRef, requestedAtMs: atMs }),
       });
+
 const completeRequest = ({
   current,
   command,
@@ -235,6 +256,7 @@ const recordAdministrative = ({
         : Effect.succeed({ ...current, verificationRef: Option.some(command.evidenceRef) });
   }
 };
+
 const recordTransition = (input: CaseTransition): Effect.Effect<TitularCase, RegisterFailure> =>
   Match.value(input.command).pipe(
     Match.discriminatorsExhaustive("action")({
@@ -276,8 +298,9 @@ const currentRevision = ({
     previous.value.caseId !== command.caseId ||
     previous.value.revision !== command.revision
   ) {
-    return Effect.fail(new RegisterFailure({ reason: "Conflict" }));
+    return Effect.fail(RegisterFailure.make({ reason: "Conflict" }));
   }
+
   return Effect.succeed(previous.value);
 };
 
@@ -285,13 +308,17 @@ export const applyCaseCommand = Effect.fn(function* (
   input: Readonly<{ command: CaseCommand; previous: Option.Option<TitularCase>; atMs: number }>
 ) {
   const { command, previous, atMs } = input;
+
   if (command.action === "Receive") {
     return yield* Option.isSome(previous)
-      ? Effect.fail(new RegisterFailure({ reason: "Conflict" }))
+      ? Effect.fail(RegisterFailure.make({ reason: "Conflict" }))
       : receive({ command, atMs });
   }
+
   const current = yield* currentRevision({ previous, command });
+
   if (atMs < current.updatedAtMs || current.delivery.status === "Confirmed") return yield* refuse();
   const next = yield* recordTransition({ current, command, atMs });
+
   return { ...next, revision: current.revision + 1, updatedAtMs: atMs };
 });

@@ -18,12 +18,14 @@ import {
 } from "./contract";
 import { initializeSharedStores } from "../../storage-bootstrap/operations";
 import { releaseProbeName, storeTransactionUrl } from "../sqlite/contract";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Layer, ManagedRuntime, Option, Predicate, Result, Schema } from "effect";
 
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
 import { SmokeWork, smokeExecutionId, smokeLifetimeMs, smokeMarkerKey } from "./internal/protocol";
 import { SmokeBindingFailed, platform } from "./internal/platform";
+
+const boundaryRuntime = ManagedRuntime.make(Layer.empty);
 
 export const verifySmokeIdentity = ({
   expected,
@@ -38,11 +40,17 @@ const fail = (stage: SmokeFailureStage = "platform"): Response =>
     { status: "unavailable" },
     { status: 503, headers: { [smokeFailureHeader]: stage } }
   );
+
 const refused = (): Response => Response.json({}, { status: 404 });
+
 const maxBodyBytes = 512;
+
 const acceptedStatus = 202;
+
 const completedStatus = 200;
+
 const storeProofStatus = 204;
+
 const bodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: maxBodyBytes,
   deadlineMilliseconds: 3000,
@@ -81,25 +89,33 @@ const checkBindings = Effect.fn(function* (environment: SmokeEnvironment, work: 
     environment.WOMPI_INTEGRITY_SECRET,
     environment.WOMPI_EVENT_SECRET,
   ];
-  if (secrets.some((secret) => typeof secret !== "string" || secret.length === 0)) {
+
+  if (secrets.some((secret) => !Predicate.isString(secret) || secret.length === 0)) {
     return yield* new SmokeBindingFailed({ stage: "secrets" });
   }
+
   yield* initializeSharedStores(environment).pipe(
+    Effect.tapError(Effect.logDebug),
     Effect.mapError(() => new SmokeBindingFailed({ stage: "schema" }))
   );
   const store = environment.USER_STORE;
+
   if (store === undefined) return yield* new SmokeBindingFailed({ stage: "schema" });
+
   const checked = yield* platform({
     stage: "schema",
     tryWork: () => store.getByName(releaseProbeName).fetch(storeTransactionUrl, { method: "POST" }),
   });
+
   if (checked.status !== storeProofStatus) {
     return yield* new SmokeBindingFailed({ stage: "schema" });
   }
+
   yield* platform({
     tryWork: () => environment.SMOKE_BUCKET.put(smokeMarkerKey(work), work.contractDigest),
     stage: "storage",
   });
+
   if (
     (yield* platform({
       tryWork: () =>
@@ -118,9 +134,11 @@ const matchesCore = (probe: SmokeRequestType, environment: SmokeEnvironment): bo
 
 const identityFailure = (probe: SmokeRequestType, environment: SmokeEnvironment): Response => {
   const response = fail("identity");
+
   const version = Schema.decodeOption(SmokeIdentity.fields.workerVersionId)(
     environment.CF_VERSION_METADATA.id
   );
+
   if (Option.isSome(version)) response.headers.set(smokeCoreVersionHeader, version.value);
   response.headers.set(
     smokeIdentityHeader,
@@ -132,6 +150,7 @@ const identityFailure = (probe: SmokeRequestType, environment: SmokeEnvironment)
       .map((equal) => (equal ? "1" : "0"))
       .join("")
   );
+
   return response;
 };
 
@@ -142,17 +161,22 @@ const startProbe = Effect.fn(function* (
 ) {
   if (Number(request.headers.get("content-length")) > maxBodyBytes) return refused();
   const decoded = yield* boundedJsonBody({ request, policy: bodyPolicy, schema: SmokeRequest });
+
   if (Option.isNone(decoded)) return refused();
   const probe = decoded.value;
+
   if (probe.expectedGitRevision === smokeDiagnosticRevision || !matchesCore(probe, environment)) {
     return identityFailure(probe, environment);
   }
+
   const admitted = yield* platform({
     stage: "admission",
     tryWork: () => environment.SMOKE_LIMITER.limit({ key: "release-smoke" }),
   });
+
   if (!admitted.success) return fail("admission");
   const now = yield* Clock.currentTimeMillis;
+
   const work: SmokeWork = {
     protocolVersion: 2,
     probeId: probe.probeId,
@@ -163,13 +187,17 @@ const startProbe = Effect.fn(function* (
     coreVersionId: environment.CF_VERSION_METADATA.id,
     expiresAtMs: now + smokeLifetimeMs,
   };
+
   yield* checkBindings(environment, work);
+
   if (probe.verifyBancolombiaSandbox === true) {
     yield* bankAuthentication.pipe(
       Effect.mapError((error) => new SmokeBindingFailed({ stage: error.stage }))
     );
   }
+
   yield* platform({ stage: "publication", tryWork: () => environment.SMOKE_QUEUE.send(work) });
+
   return responseFor(environment, "pending", acceptedStatus);
 });
 
@@ -200,6 +228,7 @@ const validCompletion = ({
   now: number;
 }>): boolean => {
   const decoded = Schema.decodeUnknownOption(SmokeCompletion)(output);
+
   return (
     Option.isSome(decoded) &&
     decoded.value.probeId === probeId &&
@@ -212,12 +241,16 @@ const validCompletion = ({
 
 const getProbe = Effect.fn(function* (request: Request, environment: SmokeEnvironment) {
   const parameters = new URL(request.url).searchParams;
+
   if (parameters.get("readiness") === "1") {
     return responseFor(environment, "pending", completedStatus);
   }
+
   const probeId = Schema.decodeUnknownOption(SmokeWork.fields.probeId)(parameters.get("probeId"));
+
   if (Option.isNone(probeId)) return refused();
   const now = yield* Clock.currentTimeMillis;
+
   const lookup = yield* platform({
     stage: "probe_read",
     tryWork: () =>
@@ -227,11 +260,15 @@ const getProbe = Effect.fn(function* (request: Request, environment: SmokeEnviro
           coreVersionId: environment.CF_VERSION_METADATA.id,
         })
       ).then((instance) => instance.status()),
-  }).pipe(Effect.result);
-  if (lookup._tag === "Failure") return responseFor(environment, "pending", completedStatus);
+  }).pipe(Effect.tapError(Effect.logDebug), Effect.result);
+
+  if (Result.isFailure(lookup)) return responseFor(environment, "pending", completedStatus);
   const state = lookup.success;
+
   if (state.status === "errored" || state.status === "terminated") return fail("probe_state");
+
   if (state.status !== "complete") return responseFor(environment, "pending", completedStatus);
+
   if (
     !validCompletion({
       output: state.output,
@@ -243,6 +280,7 @@ const getProbe = Effect.fn(function* (request: Request, environment: SmokeEnviro
   ) {
     return fail("probe_state");
   }
+
   return responseFor(environment, "passed", completedStatus);
 });
 
@@ -255,9 +293,10 @@ export const handleSmoke = ({
   environment: SmokeEnvironment;
   bankAuthentication: Option.Option<Effect.Effect<void, BancolombiaAuthenticationFailed>>;
 }>): Promise<Response> =>
-  Effect.runPromise(
+  boundaryRuntime.runPromise(
     Effect.gen(function* () {
       if (!smokeProofAccepted({ request, secret: environment.SMOKE_PROOF })) return refused();
+
       if (request.method === "POST") {
         return yield* startProbe(
           request,
@@ -267,9 +306,12 @@ export const handleSmoke = ({
           )
         );
       }
+
       if (request.method === "GET") return yield* getProbe(request, environment);
+
       return refused();
     }).pipe(
+      Effect.tapCause(Effect.logDebug),
       Effect.catch((error) => Effect.succeed(fail(error.stage))),
       Effect.catchCause(() => Effect.succeed(fail("platform")))
     ),
@@ -281,13 +323,17 @@ const receiveMessage = Effect.fn(function* (
   environment: SmokeQueueEnvironment
 ) {
   const decoded = Schema.decodeUnknownOption(SmokeWork)(message.body);
+
   if (Option.isNone(decoded)) return yield* new SmokeBindingFailed({ stage: "platform" });
   const work = decoded.value;
   const now = yield* Clock.currentTimeMillis;
+
   if (work.expiresAtMs <= now || work.expiresAtMs > now + smokeLifetimeMs) {
     message.ack();
+
     return;
   }
+
   const id = smokeExecutionId(work);
   yield* platform({
     stage: "platform",
@@ -298,6 +344,7 @@ const receiveMessage = Effect.fn(function* (
         retention: { successRetention: "1 day", errorRetention: "1 day" },
       }),
   }).pipe(
+    Effect.tapError(Effect.logDebug),
     Effect.catch(() =>
       platform({ stage: "platform", tryWork: () => environment.SMOKE_WORKFLOW.get(id) })
     )
@@ -309,11 +356,12 @@ export const receiveSmoke = ({
   batch,
   environment,
 }: Readonly<{ batch: MessageBatch<unknown>; environment: SmokeQueueEnvironment }>): Promise<void> =>
-  Effect.runPromise(
+  boundaryRuntime.runPromise(
     Effect.gen(function* () {
       if (batch.queue !== environment.SMOKE_QUEUE_NAME) {
         return yield* new SmokeBindingFailed({ stage: "platform" });
       }
+
       yield* Effect.forEach(batch.messages, (message) => receiveMessage(message, environment), {
         discard: true,
         concurrency: 4,

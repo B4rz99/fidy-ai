@@ -14,7 +14,15 @@ const latest = edgeSecurityPolicy.rulesets.customFirewall.rules.map((rule, index
   enabled: rule.enabled,
   action_parameters: rule.actionParameters,
 }));
-const custom = (rules: ReadonlyArray<unknown>): unknown => ({
+
+type CustomRuleset = Readonly<{
+  id: string;
+  kind: string;
+  phase: string;
+  rules: ReadonlyArray<unknown>;
+}>;
+
+const custom = (rules: ReadonlyArray<unknown>): CustomRuleset => ({
   id: "a".repeat(32),
   kind: "zone",
   phase: "http_request_firewall_custom",
@@ -30,6 +38,7 @@ const previous = latest.map((rule) => ({
     )
     .replace(' "storage-acceptance.fidyapp.com" "storage-web-acceptance.fidyapp.com"', ""),
 }));
+
 it("changes exactly the three owned host expressions and keeps all unrelated controls intact", () => {
   const changes = nativeEdgeChanges(custom(previous));
   expect(changes).toHaveLength(3);
@@ -39,6 +48,7 @@ it("changes exactly the three owned host expressions and keeps all unrelated con
   expect(changes[0]?.body.action_parameters).toEqual(latest[0]?.action_parameters);
   expect(nativeEdgeChanges(custom([latest[0], ...previous.slice(1)]))).toHaveLength(2);
   expect(nativeEdgeChanges(custom(latest))).toEqual([]);
+
   for (const rows of [
     [...latest].reverse(),
     latest.slice(1),
@@ -80,20 +90,25 @@ it("preserves explicit skip logging and omits read-only metadata from the PATCH"
 it.effect("planning validates the complete incumbent ruleset without writing to the zone", () =>
   Effect.gen(function* () {
     const account = "a".repeat(32);
+
     const zone = {
       id: "b".repeat(32),
       name: "fidyapp.com",
       status: "active",
       account: { id: account },
     };
+
     const methods: string[] = [];
+
     const client = HttpClient.make((request) => {
       methods.push(request.method);
       const result = request.url.includes("/rulesets/") ? custom(previous) : [zone];
+
       return Effect.succeed(
         HttpClientResponse.fromWeb(request, Response.json({ success: true, result }))
       );
     });
+
     yield* verifyNativeEdge({ account, token: "fixture" }, client, "plan");
     expect(methods).toEqual(["GET", "GET"]);
   })

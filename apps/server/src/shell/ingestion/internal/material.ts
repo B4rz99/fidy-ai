@@ -29,6 +29,7 @@ export const ReceivedInlineImage = Schema.Struct({
   mediaType: Schema.Literals(["image/jpeg", "image/png", "image/gif", "image/webp"]),
   content: Schema.Uint8Array,
 });
+
 export type ReceivedInlineImage = typeof ReceivedInlineImage.Type;
 
 export const ReceivedEmailContent = Schema.Struct({
@@ -52,6 +53,7 @@ export const ReceivedEmailContent = Schema.Struct({
   ),
   createdAt: UtcTimestamp,
 }).annotate({ identifier: "ReceivedEmailContent" });
+
 export type ReceivedEmailContent = typeof ReceivedEmailContent.Type;
 
 const RawEmailIngestSampleFields = Schema.Struct({
@@ -65,6 +67,7 @@ const RawEmailIngestSampleFields = Schema.Struct({
   retainedAt: UtcTimestamp,
   expiresAt: UtcTimestamp,
 });
+
 const validRawEmailRetention = Schema.makeFilter<
   Readonly<Pick<typeof RawEmailIngestSampleFields.Type, "retainedAt" | "expiresAt">>
 >((sample) =>
@@ -76,6 +79,7 @@ const validRawEmailRetention = Schema.makeFilter<
 export const RawEmailIngestSample = RawEmailIngestSampleFields.check(
   validRawEmailRetention
 ).annotate({ identifier: "RawEmailIngestSample" });
+
 export type RawEmailIngestSample = typeof RawEmailIngestSample.Type;
 
 export const AnonymizedEmailIngestSample = Schema.Struct({
@@ -89,6 +93,7 @@ export const AnonymizedEmailIngestSample = Schema.Struct({
   approvedAt: UtcTimestamp,
   retainedAt: UtcTimestamp,
 }).annotate({ identifier: "AnonymizedEmailIngestSample" });
+
 export type AnonymizedEmailIngestSample = typeof AnonymizedEmailIngestSample.Type;
 
 export const StatementMappingSample = Schema.Struct({
@@ -98,4 +103,5 @@ export const StatementMappingSample = Schema.Struct({
     Schema.isMaxLength(maximumMappingSampleRows)
   ),
 });
+
 export type StatementMappingSample = typeof StatementMappingSample.Type;

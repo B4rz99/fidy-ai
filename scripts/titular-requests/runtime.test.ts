@@ -8,10 +8,14 @@ import { runCaseRegister } from "./runtime";
 import { caseDeadlines } from "./calendar";
 
 const caseId = "10000000-0000-4000-8000-000000000001";
+
 const reference = (index: number): string =>
   `20000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
+
 const receivedAtMs = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-09T17:00:00Z"));
+
 const now = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-14T14:00:00Z"));
+
 const receive = (
   kind: Extract<CaseCommand, { action: "Receive" }>["kind"]
 ): Extract<CaseCommand, { action: "Receive" }> => ({
@@ -25,11 +29,13 @@ const receive = (
   kind,
   receivedAtMs,
 });
+
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const clock = yield* Clock.Clock;
   const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "fidy-titular-test-" });
   const directory = yield* fs.realPath(temporary);
+
   const request = (value: unknown): ReturnType<typeof runCaseRegister> =>
     runCaseRegister({ directory, request: value }).pipe(
       Effect.provideService(Clock.Clock, {
@@ -42,8 +48,10 @@ const fixture = Effect.gen(function* () {
         currentTimeMillisUnsafe: () => now,
       })
     );
+
   const submit = (command: CaseCommand): ReturnType<typeof request> =>
     request({ operation: "Apply", command });
+
   return { directory, fs, request, submit, read: request({ operation: "Read", caseId }) };
 });
 
@@ -54,6 +62,7 @@ it.live(
       const setup = yield* fixture;
       const original = yield* setup.submit(receive("Complaint"));
       expect(original.targets.claimAnnotation).toEqual(Option.some("2026-10-13"));
+
       const completion = yield* setup.submit({
         action: "RequestCompletion",
         caseId,
@@ -61,7 +70,9 @@ it.live(
         revision: 0,
         evidenceRef: reference(102),
       });
+
       expect(completion.targets.completionReview).toEqual(Option.some("2026-12-14"));
+
       const repeated = yield* setup
         .submit({
           action: "RequestCompletion",
@@ -71,7 +82,9 @@ it.live(
           evidenceRef: reference(104),
         })
         .pipe(Effect.flip);
+
       expect(repeated.reason).toBe("InvalidTransition");
+
       const complete = yield* setup.submit({
         action: "RecordCompletion",
         caseId,
@@ -79,6 +92,7 @@ it.live(
         revision: 1,
         evidenceRef: reference(106),
       });
+
       const annotated = yield* setup.submit({
         action: "RecordClaimAnnotation",
         caseId,
@@ -86,6 +100,7 @@ it.live(
         revision: 2,
         evidenceRef: reference(108),
       });
+
       expect(Option.isSome(annotated.case.claimAnnotation)).toBe(true);
       expect(complete.case.receivedAtMs).toBe(original.case.receivedAtMs);
       expect(annotated.targets.response).toEqual(original.targets.response);
@@ -117,6 +132,7 @@ it.live(
     Effect.gen(function* () {
       const setup = yield* fixture;
       yield* setup.submit(receive("Correction"));
+
       const refused = yield* setup
         .submit({
           action: "PrepareResponse",
@@ -126,6 +142,7 @@ it.live(
           evidenceRef: reference(5),
         })
         .pipe(Effect.flip);
+
       expect(refused.reason).toBe("InvalidTransition");
       expect((yield* setup.read).case.revision).toBe(0);
       yield* setup.submit({
@@ -149,6 +166,7 @@ it.live(
         revision: 2,
         evidenceRef: reference(11),
       });
+
       const uncertain = yield* setup.submit({
         action: "DeliveryUncertain",
         caseId,
@@ -156,8 +174,10 @@ it.live(
         revision: 3,
         evidenceRef: reference(13),
       });
+
       expect(uncertain.case.delivery.status).toBe("Uncertain");
       expect((yield* setup.read).case.delivery.status).toBe("Uncertain");
+
       const confirmed = yield* setup.submit({
         action: "RecordResponse",
         caseId,
@@ -165,6 +185,7 @@ it.live(
         revision: 4,
         evidenceRef: reference(15),
       });
+
       expect(confirmed.case.delivery.status).toBe("Confirmed");
       expect(
         yield* setup
@@ -200,6 +221,7 @@ it.live(
         revision: 1,
         evidenceRef: reference(204),
       });
+
       const addressed = {
         action: "ReferErasure",
         caseId,
@@ -207,25 +229,31 @@ it.live(
         revision: 2,
         evidenceRef: reference(206),
       } as const;
-      for (const withdrawal of [
-        { status: "Recorded", reference: reference(207) },
-        { status: "NotRequested" },
-      ] as const) {
-        expect(yield* setup.submit({ ...addressed, withdrawal }).pipe(Effect.flip)).toMatchObject({
-          reason: "InvalidTransition",
-        });
-      }
+
+      const withdrawalRejections = yield* Effect.forEach(
+        [{ status: "Recorded", reference: reference(207) }, { status: "NotRequested" }] as const,
+        (withdrawal) => setup.submit({ ...addressed, withdrawal }).pipe(Effect.flip)
+      );
+
+      expect(withdrawalRejections).toMatchObject([
+        { reason: "InvalidTransition" },
+        { reason: "InvalidTransition" },
+      ]);
+
       const command = {
         ...addressed,
         withdrawal: { status: "Recorded", reference: reference(204) },
       } as const;
+
       const result = yield* setup.submit(command);
       expect(yield* setup.submit(command)).toEqual(result);
       expect(Option.getOrThrow(result.case.erasureHandoff).withdrawal).toEqual(command.withdrawal);
       expect(result.deletion).toBe("not-performed");
-      for (const action of ["RecordWithdrawal", "RecordVerification"] as const) {
-        expect(
-          yield* setup
+
+      const actionRejections = yield* Effect.forEach(
+        ["RecordWithdrawal", "RecordVerification"] as const,
+        (action) =>
+          setup
             .submit({
               action,
               caseId,
@@ -234,8 +262,13 @@ it.live(
               evidenceRef: reference(210),
             })
             .pipe(Effect.flip)
-        ).toMatchObject({ reason: "InvalidTransition" });
-      }
+      );
+
+      expect(actionRejections).toMatchObject([
+        { reason: "InvalidTransition" },
+        { reason: "InvalidTransition" },
+      ]);
+
       expect((yield* setup.read).case).toEqual(result.case);
     }).pipe(Effect.provide(BunServices.layer), Effect.scoped)
 );
@@ -263,6 +296,7 @@ it.live("keeps erasure a tracked handoff and never reports deletion", () =>
       revision: 0,
       evidenceRef: reference(7),
     });
+
     const referred = yield* setup.submit({
       action: "ReferErasure",
       withdrawal: { status: "NotRequested" },
@@ -271,6 +305,7 @@ it.live("keeps erasure a tracked handoff and never reports deletion", () =>
       revision: 1,
       evidenceRef: reference(9),
     });
+
     expect(Option.getOrNull(referred.case.erasureHandoff)).toEqual({
       evidenceRef: reference(9),
       authorityRef: reference(7),
@@ -321,15 +356,18 @@ it.live(
     Effect.gen(function* () {
       const setup = yield* fixture;
       yield* setup.submit(receive("Access"));
+
       const database = yield* Effect.acquireRelease(
         Effect.sync(() => new Database(`${setup.directory}/register.sqlite`)),
         (db) => Effect.sync(() => db.close())
       );
+
       yield* Effect.sync(() =>
         database.exec(
           "CREATE TRIGGER fail_history BEFORE INSERT ON events BEGIN SELECT RAISE(ABORT,'test_failure'); END"
         )
       );
+
       const command: CaseCommand = {
         action: "Assign",
         caseId,
@@ -337,6 +375,7 @@ it.live(
         revision: 0,
         ownerRef: reference(5),
       };
+
       expect(yield* setup.submit(command).pipe(Effect.flip)).toMatchObject({
         reason: "Unavailable",
       });
@@ -373,6 +412,7 @@ it.live("records one notified extension within its cap without moving the origin
   Effect.gen(function* () {
     const setup = yield* fixture;
     yield* setup.submit(receive("Access"));
+
     const input = {
       action: "Extend",
       caseId,
@@ -382,6 +422,7 @@ it.live("records one notified extension within its cap without moving the origin
       reasonRef: reference(6),
       responseDate: "2026-10-28",
     } as const;
+
     expect(yield* setup.submit(input).pipe(Effect.flip)).toMatchObject({
       reason: "InvalidTransition",
     });
@@ -402,17 +443,22 @@ it.live(
     Effect.gen(function* () {
       const setup = yield* fixture;
       const inputs = ["x".repeat(4097), '{"operation":"Apply","email":"private@example.test"}'];
-      for (const input of inputs) {
-        const result = yield* Effect.sync(() =>
+
+      const results = yield* Effect.forEach(inputs, (input) =>
+        Effect.sync(() =>
           Bun.spawnSync(
             [process.execPath, new URL("./main.ts", import.meta.url).pathname, setup.directory],
             { stdin: new TextEncoder().encode(input), stdout: "pipe", stderr: "pipe" }
           )
-        );
+        )
+      );
+
+      for (const result of results) {
         expect(result.exitCode).toBe(1);
         expect(new TextDecoder().decode(result.stderr)).toBe('{"error":"InvalidInput"}\n');
         expect(new TextDecoder().decode(result.stdout)).toBe("");
       }
+
       expect(yield* setup.fs.exists(`${setup.directory}/register.sqlite`)).toBe(false);
     }).pipe(Effect.provide(BunServices.layer), Effect.scoped)
 );

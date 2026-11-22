@@ -8,6 +8,7 @@ import { configuredSecret } from "~/shell/secret-material/internal/configured-se
 export const PATBearerDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)).pipe(
   Schema.brand("PATBearerDigest")
 );
+
 export type PATBearerDigest = typeof PATBearerDigest.Type;
 
 export type WompiCredentialPrefixes = Readonly<{
@@ -44,9 +45,11 @@ export const loadResendEmailDeliveryApiKey = resendApiKey();
 const WompiPrivateKey = Schema.String.check(
   Schema.isPattern(/^prv_(?:test|prod)_[A-Za-z0-9_-]{8,}$/u)
 );
+
 const WompiIntegritySecret = Schema.String.check(
   Schema.isPattern(/^test_integrity_[A-Za-z0-9_-]{8,}$|^prod_integrity_[A-Za-z0-9_-]{8,}$/u)
 );
+
 export const loadWompiPrivateKey = (
   environment: WompiEnvironment
 ): Config.Config<Redacted.Redacted<string>> =>

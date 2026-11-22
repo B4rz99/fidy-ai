@@ -2,5 +2,6 @@ import { prepareConnection, queryConnections } from "./internal/sqlite-connectio
 
 export const queryLocalConnections: typeof queryConnections = (...args) =>
   queryConnections(...args);
+
 export const prepareLocalConnection: typeof prepareConnection = (...args) =>
   prepareConnection(...args);

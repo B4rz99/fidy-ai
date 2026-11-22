@@ -1,4 +1,4 @@
-import { Option, Schema } from "effect";
+import { Option, Predicate, Schema } from "effect";
 import { admitXlsxArchive } from "./xlsx-admission";
 import { type Options, parse } from "csv-parse/sync";
 import type { CellObject, Range, WorkBook, WorkSheet } from "xlsx";
@@ -12,16 +12,27 @@ import {
 } from "~/shell/ingestion/contract";
 
 const bytesPerKibibyte = 1024;
+
 const maximumCsvRecordKibibytes = 256;
+
 const maximumRows = statementParserLimits.maximumRows;
+
 const maximumColumns = 200;
+
 const maximumCells = 250_000;
+
 const maximumXlsxCells = statementParserLimits.maximumXlsxCells;
+
 const maximumCsvRecordBytes = maximumCsvRecordKibibytes * bytesPerKibibyte;
+
 const maximumSheets = 20;
+
 const mappingSampleSize = 5;
+
 const isoDateLength = 10;
+
 const carriageReturnCodePoint = 13;
+
 const lineFeedCodePoint = 10;
 
 type ParsedStatementMaterial = ParsedStatement & StatementMappingSample;
@@ -31,6 +42,7 @@ const CsvRecord = Schema.Struct({
   raw: Schema.String,
   info: Schema.Struct({ lines: Schema.Int }),
 });
+
 type CsvRecord = typeof CsvRecord.Type;
 
 const delimiterFor = (text: string): string => {
@@ -39,31 +51,42 @@ const delimiterFor = (text: string): string => {
     { delimiter: ",", count: 0 },
     { delimiter: "\t", count: 0 },
   ];
+
   let quoted = false;
   const headerStart = Math.max(0, text.search(/[^\uFEFF\r\n]/u));
+
   for (let index = headerStart; index < text.length; index += 1) {
     const character = text[index];
+
     if (character === '"') {
       quoted = !quoted;
       continue;
     }
+
     if (quoted) continue;
+
     if (character === "\r" || character === "\n") break;
+
     for (const candidate of candidates) {
       if (character === candidate.delimiter) candidate.count += 1;
     }
   }
+
   return candidates.reduce((best, candidate) => (candidate.count > best.count ? candidate : best))
     .delimiter;
 };
 
 const enforceCsvPhysicalLineLimit = (text: string): void => {
   let lineBreaks = 0;
+
   for (let index = 0; index < text.length; index += 1) {
     const codePoint = text.charCodeAt(index);
+
     const isUnpairedCarriageReturn =
       codePoint === carriageReturnCodePoint && text.charCodeAt(index + 1) !== lineFeedCodePoint;
+
     if (codePoint === lineFeedCodePoint || isUnpairedCarriageReturn) lineBreaks += 1;
+
     if (lineBreaks > maximumRows + 1) {
       throw new StatementParseFailed({ safeReason: "resource-limit" });
     }
@@ -78,6 +101,7 @@ const enforceCsvDimensions = (text: string, options: Options): void => {
     raw: false,
     cast: (value, context): string => {
       cells += 1;
+
       if (
         context.index >= maximumColumns ||
         context.records > maximumRows ||
@@ -85,6 +109,7 @@ const enforceCsvDimensions = (text: string, options: Options): void => {
       ) {
         throw new StatementParseFailed({ safeReason: "resource-limit" });
       }
+
       return value;
     },
     on_record: (): ReturnType<NonNullable<Options["on_record"]>> => undefined,
@@ -94,6 +119,7 @@ const enforceCsvDimensions = (text: string, options: Options): void => {
 export const parseCsv = (bytes: Uint8Array): ParsedStatementMaterial => {
   const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   enforceCsvPhysicalLineLimit(text);
+
   const options = {
     bom: true,
     delimiter: delimiterFor(text),
@@ -101,14 +127,19 @@ export const parseCsv = (bytes: Uint8Array): ParsedStatementMaterial => {
     skip_empty_lines: true,
     max_record_size: maximumCsvRecordBytes,
   };
+
   enforceCsvDimensions(text, options);
+
   const records: ReadonlyArray<CsvRecord> = Schema.decodeUnknownSync(Schema.Array(CsvRecord))(
     parse(text, { ...options, info: true, raw: true })
   );
+
   const [header, ...data] = records;
+
   if (header === undefined || header.record.length === 0) {
     throw new StatementParseFailed({ safeReason: "malformed-file" });
   }
+
   const rows = data.map((record, index): ParsedStatementRow => {
     const terminators = record.raw.match(/\r\n|\n|\r/gu)?.length ?? 0;
     const finalLine = /(?:\r\n|\n|\r)$/u.test(record.raw) ? 0 : 1;
@@ -116,6 +147,7 @@ export const parseCsv = (bytes: Uint8Array): ParsedStatementMaterial => {
     const startLine = record.info.lines - physicalLines + 1;
     const fields = record.record.map(String);
     const recordNumber = index + 1;
+
     return {
       recordNumber,
       fields,
@@ -129,6 +161,7 @@ export const parseCsv = (bytes: Uint8Array): ParsedStatementMaterial => {
       },
     };
   });
+
   return {
     sourceFormat: "csv",
     headers: [String(header.record[0]), ...header.record.slice(1).map(String)],
@@ -142,7 +175,8 @@ const cellText = (cell: Option.Option<CellObject>): string =>
     onNone: () => "",
     onSome: (value) => {
       if (value.v === undefined) return "";
-      return value.v instanceof Date
+
+      return Predicate.isDate(value.v)
         ? value.v.toISOString().slice(0, isoDateLength)
         : String(value.v);
     },
@@ -150,9 +184,13 @@ const cellText = (cell: Option.Option<CellObject>): string =>
 
 const evidenceCellType = (cell: CellObject): XlsxCellEvidence["cellType"] => {
   if (cell.v === undefined) return "blank";
+
   if (cell.t === "b") return "boolean";
+
   if (cell.t === "e") return "error";
-  if (cell.t === "d" || cell.v instanceof Date) return "date";
+
+  if (cell.t === "d" || Predicate.isDate(cell.v)) return "date";
+
   return cell.t === "n" ? "number" : "string";
 };
 
@@ -188,18 +226,25 @@ const selectedSheets = (workbook: WorkBook): ReadonlyArray<SelectedSheet> => {
   if (workbook.SheetNames.length > maximumSheets) {
     throw new StatementParseFailed({ safeReason: "resource-limit" });
   }
+
   const sheets = workbook.SheetNames.flatMap((sheetName, sheetIndex) => {
     const sheet = workbook.Sheets[sheetName];
+
     if (sheet?.["!ref"] === undefined) return [];
     const range = XLSX.utils.decode_range(sheet["!ref"]);
     const fullReference: unknown = sheet["!fullref"];
+
     const originalRange = XLSX.utils.decode_range(
-      typeof fullReference === "string" ? fullReference : sheet["!ref"]
+      Predicate.isString(fullReference) ? fullReference : sheet["!ref"]
     );
+
     assertSheetLimits(originalRange);
+
     return [{ sheetIndex, sheetName, sheet, range, originalRange }];
   });
+
   if (sheets.length === 0) throw new StatementParseFailed({ safeReason: "malformed-file" });
+
   return sheets;
 };
 
@@ -207,9 +252,11 @@ const assertSheetLimits = (range: Range): number => {
   const columnCount = range.e.c - range.s.c + 1;
   const rowCount = range.e.r - range.s.r;
   const exceedsDimensions = columnCount > maximumColumns || rowCount > maximumRows;
+
   if (exceedsDimensions || columnCount * (rowCount + 1) > maximumXlsxCells) {
     throw new StatementParseFailed({ safeReason: "resource-limit" });
   }
+
   return columnCount;
 };
 
@@ -219,15 +266,19 @@ const xlsxRows = (
   recordOffset: number
 ): ReadonlyArray<ParsedStatementRow> => {
   const rows: Array<ParsedStatementRow> = [];
+
   for (let rowIndex = selected.range.s.r + 1; rowIndex <= selected.range.e.r; rowIndex += 1) {
     const cells = Array.from({ length: columnCount }, (_, offset) => {
       const address = XLSX.utils.encode_cell({
         r: rowIndex,
         c: selected.range.s.c + offset,
       });
+
       return { address, cell: Option.fromUndefinedOr(selected.sheet[address]) };
     });
+
     const fields = cells.map(({ cell }) => cellText(cell));
+
     if (fields.every((field) => field.length === 0)) continue;
     rows.push({
       recordNumber: recordOffset + rows.length + 1,
@@ -242,6 +293,7 @@ const xlsxRows = (
       },
     });
   }
+
   return rows;
 };
 
@@ -261,6 +313,7 @@ const sameHeaders = (left: ReadonlyArray<string>, right: ReadonlyArray<string>):
 
 export const parseXlsx = (bytes: Uint8Array): ParsedStatementMaterial => {
   const admitted = admitXlsxArchive(bytes);
+
   const options = {
     type: "array",
     raw: true,
@@ -272,31 +325,45 @@ export const parseXlsx = (bytes: Uint8Array): ParsedStatementMaterial => {
     cellHTML: false,
     sheetRows: maximumRows + 2,
   } as const;
+
   const workbook = XLSX.read(admitted, options);
   const sheets = selectedSheets(workbook);
   let totalCells = 0;
   let expectedHeaders = Option.none<ReadonlyArray<string>>();
   const rows: Array<ParsedStatementRow> = [];
+
   for (const selected of sheets) {
     const columnCount = assertSheetLimits(selected.range);
     totalCells += columnCount * (selected.originalRange.e.r - selected.originalRange.s.r + 1);
+
     if (totalCells > maximumXlsxCells) {
       throw new StatementParseFailed({ safeReason: "resource-limit" });
     }
+
     const headers = sheetHeaders(selected, columnCount);
+
     if (headers.every((header) => header.length === 0)) {
       throw new StatementParseFailed({ safeReason: "malformed-file" });
     }
+
     if (Option.isSome(expectedHeaders) && !sameHeaders(expectedHeaders.value, headers)) {
       throw new StatementParseFailed({ safeReason: "malformed-file" });
     }
+
     expectedHeaders = Option.some(headers);
     rows.push(...xlsxRows(selected, columnCount, rows.length));
+
     if (rows.length > maximumRows) {
       throw new StatementParseFailed({ safeReason: "resource-limit" });
     }
   }
-  const headers = Option.getOrThrow(expectedHeaders);
+
+  if (Option.isNone(expectedHeaders)) {
+    throw new StatementParseFailed({ safeReason: "malformed-file" });
+  }
+
+  const headers = expectedHeaders.value;
+
   return {
     sourceFormat: "xlsx",
     headers: [String(headers[0]), ...headers.slice(1)],

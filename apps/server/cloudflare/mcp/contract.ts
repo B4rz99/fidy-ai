@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import { OAuthCanonicalAdmission } from "../../src/shell/mcp/contract";
 
 export const maximumMcpRequestBytes = 16384;
+
 const header = Schema.optionalKey(Schema.String.check(Schema.isMaxLength(maximumMcpRequestBytes)));
 
 export const OAuthMcpAdmission = Schema.Struct({
@@ -26,4 +27,5 @@ export const OAuthMcpAdmission = Schema.Struct({
     Schema.isMaxLength(maximumMcpRequestBytes)
   ),
 });
+
 export type OAuthMcpAdmission = typeof OAuthMcpAdmission.Type;

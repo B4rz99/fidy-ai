@@ -30,6 +30,7 @@ export const makeDisclosureSender = (
     sandboxPhoneNumberId: input.sandboxPhoneNumberId,
     outboundHttp: makeKapsoOutboundHttp(input),
   });
+
   return (
     request: Readonly<{
       readonly caller: WhatsAppInboundEvent["caller"];

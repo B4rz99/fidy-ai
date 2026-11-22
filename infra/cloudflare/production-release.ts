@@ -4,9 +4,21 @@ import { stagedAccountingRevision } from "./native-fixture-signer";
 import { archivedDormant } from "./native-fallback-recovery";
 import { CategoryTaxonomyRelease } from "../../apps/server/src/core/categories/contract";
 import { compatibleCategoryReleases } from "../../apps/server/src/core/categories/operations";
-import { ReleaseSmokeFailed } from "./smoke-exchange";
+
 import { verifyStableWorkerIdentity } from "./stable-worker-identity";
-import { Cause, Data, Effect, Option, Schema, Stream } from "effect";
+import {
+  Cause,
+  Data,
+  Effect,
+  Exit,
+  Fiber,
+  Option,
+  Predicate,
+  Result,
+  Schema,
+  Stream,
+} from "effect";
+import { isReleaseSmokeFailed } from "./smoke-exchange";
 import { isDeepStrictEqual } from "node:util";
 import {
   FetchHttpClient,
@@ -29,21 +41,33 @@ import {
 } from "./release-controller";
 
 const VersionId = SmokeIdentity.fields.workerVersionId;
+
 const WorkerName = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]{1,80}$/u));
+
 const ApiDeployment = Schema.Struct({
   id: VersionId,
   versions: Schema.Array(Schema.Struct({ version_id: VersionId, percentage: Schema.Finite })),
 });
+
 const ListResponse = Schema.Struct({
   success: Schema.Literal(true),
   result: Schema.Struct({ deployments: Schema.Array(ApiDeployment) }),
 });
-const CreateResponse = Schema.Struct({ success: Schema.Literal(true), result: ApiDeployment });
+
+const CreateResponse = Schema.Struct({
+  success: Schema.Literal(true),
+  result: ApiDeployment,
+});
+
 const DeployableResponse = Schema.Struct({
   success: Schema.Literal(true),
-  result: Schema.Struct({ items: Schema.Array(Schema.Struct({ id: VersionId })) }),
+  result: Schema.Struct({
+    items: Schema.Array(Schema.Struct({ id: VersionId })),
+  }),
 });
+
 const ResourceIdentity = Schema.Struct({ logicalId: Schema.String });
+
 const ResourceLifecycle = Schema.Struct({
   status: Schema.Literals([
     "creating",
@@ -55,32 +79,43 @@ const ResourceLifecycle = Schema.Struct({
     "replaced",
   ]),
 });
+
 const stableWorkerReceiptStatuses = new Set(["created", "updated", "replaced"]);
 
 const ResourceAttributes = Schema.Record(Schema.String, Schema.Unknown);
+
 const WorkerIdentity = Schema.Struct({ workerName: WorkerName });
+
 const StateEntry = Schema.Struct({
   logicalId: Schema.String,
   status: Schema.Literals(["created", "updated", "replaced"]),
   attr: ResourceAttributes,
 });
+
 const UpdatingStateEntry = Schema.Struct({
   logicalId: Schema.String,
   status: Schema.Literal("updating"),
   attr: ResourceAttributes,
   old: Schema.Struct({ attr: ResourceAttributes }),
 });
+
 const StateMap = Schema.Record(Schema.String, Schema.Unknown);
+
 const healthSchema = Schema.Struct({
   status: Schema.Literal("available"),
   gitRevision: SmokeIdentity.fields.gitRevision,
   contractDigest: SmokeIdentity.fields.contractDigest,
 });
+
 const responseLimit = 100_000;
+
 const successStatusStart = 200;
+
 const successStatusEnd = 300;
+
 const isSuccessStatus = (status: number): boolean =>
   status >= successStatusStart && status < successStatusEnd;
+
 const DeploymentRejection = Schema.Struct({
   errors: Schema.Array(
     Schema.Struct({
@@ -92,31 +127,57 @@ const DeploymentRejection = Schema.Struct({
     })
   ),
 });
+
 const badRequest = 400;
+
 const modifiedSecretsCode = 10220;
+
 const ModifiedSecretsRejection = Schema.is(
   Schema.Struct({
     success: Schema.Literal(false),
     errors: Schema.Tuple([Schema.Struct({ code: Schema.Literal(modifiedSecretsCode) })]),
   })
 );
+
 class ModifiedDeploymentSecrets extends Data.TaggedError("ModifiedDeploymentSecrets") {}
+
 export class ReleaseFailure extends Data.TaggedError("ReleaseFailure")<{ message: string }> {}
+
+export class CausedReleaseFailure extends ReleaseFailure {
+  constructor(args: Readonly<{ message: string; cause: unknown }>) {
+    super(args);
+  }
+}
+
+export const releaseFailureFrom =
+  (message: string) =>
+  (cause: unknown): ReleaseFailure =>
+    new CausedReleaseFailure({ message, cause });
+
+export const isReleaseFailure = (value: unknown): value is ReleaseFailure =>
+  Predicate.isTagged(value, "ReleaseFailure");
+
+const isModifiedDeploymentSecrets = (value: unknown): value is ModifiedDeploymentSecrets =>
+  Predicate.isTagged(value, "ModifiedDeploymentSecrets");
 
 export const releaseFailureMessage = (cause: Cause.Cause<unknown>): string => {
   for (const reason of cause.reasons) {
-    if (Cause.isFailReason(reason) && reason.error instanceof ReleaseFailure) {
+    if (Cause.isFailReason(reason) && isReleaseFailure(reason.error)) {
       return reason.error.message;
     }
-    if (Cause.isFailReason(reason) && reason.error instanceof ModifiedDeploymentSecrets) {
+
+    if (Cause.isFailReason(reason) && isModifiedDeploymentSecrets(reason.error)) {
       return `Cloudflare deployment rejected (HTTP ${badRequest}; code ${modifiedSecretsCode})`;
     }
   }
+
   return "Production release routing failed; inspect Worker deployment state before recovery.";
 };
 
 const Json = Schema.fromJsonString(Schema.Unknown);
+
 const decodeJson = Schema.decodeUnknownEffect(Json);
+
 const encodeJson = Schema.encodeSync(Json);
 
 export type ProductionReleaseConfig = Readonly<{
@@ -129,14 +190,19 @@ export type ProductionReleaseConfig = Readonly<{
   smokeProof: string;
   smokeAttestationFile: string;
 }>;
+
 type Config = ProductionReleaseConfig;
+
 const verifiedSource = (operation: string, sealed?: string): string =>
   operation === "resume-pairing-stage"
     ? uploadedPair.revision
     : (sealed ?? archivedDormant.revision);
+
 const interruptedSuccessor = "de04a192c3836be0efb488b170a7b93b9f98f28f";
+
 const successorWorkflow =
   "B4rz99/fidy-ai/.github/workflows/native-fixture-successor-plan.yml@refs/heads/trunk";
+
 const FixtureVerifierEnvironment = Schema.Struct({
   FIXTURE_STAGED_VERIFIER_SHA: SmokeIdentity.fields.gitRevision,
   GITHUB_SHA: SmokeIdentity.fields.gitRevision,
@@ -161,12 +227,15 @@ const FixtureVerifierEnvironment = Schema.Struct({
     "verify",
   ]),
 });
+
 type FixtureVerifierEnvironment = typeof FixtureVerifierEnvironment.Type;
+
 const resumedSuccessorOperations = new Set<string>([
   "stage-fixture-successor",
   "recover-fixture-successor",
   "rollout-fixture-successor",
 ]);
+
 const matchesResumedSuccessor = (
   selected: FixtureVerifierEnvironment,
   environment: typeof process.env
@@ -176,6 +245,7 @@ const matchesResumedSuccessor = (
   environment.FIXTURE_PAIRING_APPLICATION === undefined &&
   environment.GITHUB_WORKFLOW_REF === successorWorkflow &&
   environment.GITHUB_RUN_ATTEMPT === "1";
+
 const matchesFixtureSource = (selected: FixtureVerifierEnvironment, sealed?: string): boolean =>
   !resumedSuccessorOperations.has(selected.FIXTURE_RELEASE_OPERATION) &&
   selected.RELEASE_GIT_SHA === verifiedSource(selected.FIXTURE_RELEASE_OPERATION, sealed) &&
@@ -183,6 +253,7 @@ const matchesFixtureSource = (selected: FixtureVerifierEnvironment, sealed?: str
     ["recover-fixture-fallback", "resume-pairing-rollback", "rollout", "verify"].includes(
       selected.FIXTURE_RELEASE_OPERATION
     ));
+
 const matchesAccountingContinuation = (
   selected: FixtureVerifierEnvironment,
   environment: typeof process.env
@@ -193,6 +264,7 @@ const matchesAccountingContinuation = (
   environment.FIXTURE_SUCCESSOR_RESUME === "false" &&
   environment.GITHUB_WORKFLOW_REF === successorWorkflow &&
   environment.GITHUB_RUN_ATTEMPT === "1";
+
 const matchesStagedFixture = (
   selected: FixtureVerifierEnvironment,
   environment: typeof process.env
@@ -200,16 +272,21 @@ const matchesStagedFixture = (
   if (environment.FIXTURE_ACCOUNTING_CONTINUATION === "true") {
     return matchesAccountingContinuation(selected, environment);
   }
+
   return environment.FIXTURE_SUCCESSOR_RESUME === "true"
     ? matchesResumedSuccessor(selected, environment)
     : matchesFixtureSource(selected, environment.FIXTURE_PAIRING_APPLICATION);
 };
+
 const fixtureVerifierIdentity = Effect.sync(() => {
   const environment = process.env;
+
   if (environment.FIXTURE_STAGED_VERIFIER_SHA === undefined) {
     return Option.none<{ application: string; verifier: string }>();
   }
+
   const result = Schema.decodeUnknownOption(FixtureVerifierEnvironment)(environment);
+
   if (
     Option.isNone(result) ||
     result.value.FIXTURE_STAGED_VERIFIER_SHA !== result.value.GITHUB_SHA ||
@@ -217,17 +294,21 @@ const fixtureVerifierIdentity = Effect.sync(() => {
   ) {
     throw Error("Unverified staged application source");
   }
+
   return Option.some({
     application: result.value.RELEASE_GIT_SHA,
     verifier: result.value.GITHUB_SHA,
   });
 });
+
 export const fixtureVerifier = Effect.map(
   fixtureVerifierIdentity,
   Option.map((identity) => identity.verifier)
 );
+
 const config = (): Config => {
   const environment = process.env;
+
   const decoded = Schema.decodeUnknownOption(
     Schema.Struct({
       CLOUDFLARE_ACCOUNT_ID: Schema.String.check(Schema.isPattern(/^[0-9a-f]{32}$/u)),
@@ -242,9 +323,11 @@ const config = (): Config => {
       SMOKE_PROOF: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
     })
   )(environment);
+
   if (Option.isNone(decoded)) {
     throw Error("Incomplete production release configuration");
   }
+
   return {
     account: decoded.value.CLOUDFLARE_ACCOUNT_ID,
     token: decoded.value.CLOUDFLARE_API_TOKEN,
@@ -259,11 +342,14 @@ const config = (): Config => {
 
 const deploymentRefusal = (status: number, text: string): Error => {
   const payload = Schema.decodeOption(Json)(text);
+
   if (status === badRequest && Option.exists(payload, ModifiedSecretsRejection)) {
     return new ModifiedDeploymentSecrets();
   }
+
   const rejection = Option.flatMap(payload, Schema.decodeUnknownOption(DeploymentRejection));
   const code = Option.flatMap(rejection, (value) => Option.fromNullishOr(value.errors[0]?.code));
+
   return new ReleaseFailure({
     message: `Cloudflare deployment rejected (HTTP ${status}${Option.match(code, {
       onNone: () => "",
@@ -271,42 +357,61 @@ const deploymentRefusal = (status: number, text: string): Error => {
     })})`,
   });
 };
+
 const boundedJson = Effect.fn(function* (
   response: HttpClientResponse.HttpClientResponse,
   reportDeploymentRejection: boolean
 ) {
   const rejected = !isSuccessStatus(response.status);
+
   if (rejected && !reportDeploymentRejection) {
     return yield* Effect.fail(Error("Provider rejected the release request"));
   }
+
   if (Number(response.headers["content-length"] ?? 0) > responseLimit) {
     return yield* Effect.fail(Error("Provider response exceeded limit"));
   }
+
   const chunks: Uint8Array[] = [];
   let size = 0;
   yield* Stream.runForEachWhile(response.stream, (value) =>
     Effect.sync(() => {
       size += value.byteLength;
+
       if (size > responseLimit) return false;
+
       if (value.byteLength > 0) chunks.push(value);
+
       return true;
     })
   ).pipe(Effect.mapError(() => Error("Provider response could not be read within limit")));
+
   if (size > responseLimit) {
     return yield* Effect.fail(Error("Provider response exceeded limit"));
   }
+
   const bytes = new Uint8Array(size);
   let offset = 0;
+
   for (const chunk of chunks) {
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
+
   const text = new TextDecoder().decode(bytes);
+
   return yield* rejected ? Effect.fail(deploymentRefusal(response.status, text)) : decodeJson(text);
 });
+
 export class WorkerVersionReadUnavailable extends Data.TaggedError("WorkerVersionReadUnavailable")<{
   status: number;
 }> {}
+
+export const isWorkerVersionReadUnavailable = (
+  value: unknown
+): value is WorkerVersionReadUnavailable =>
+  Predicate.isTagged(value, "WorkerVersionReadUnavailable");
+
 const notFound = 404,
   requestTimeout = 408,
   rateLimited = 429,
@@ -314,6 +419,7 @@ const notFound = 404,
   badGateway = 502,
   unavailable = 503,
   gatewayTimeout = 504;
+
 const transientVersionRead = new Set([
   notFound,
   requestTimeout,
@@ -323,6 +429,7 @@ const transientVersionRead = new Set([
   unavailable,
   gatewayTimeout,
 ]);
+
 const providerJson = Effect.fn(
   function* (
     request: HttpClientRequest.HttpClientRequest,
@@ -330,12 +437,17 @@ const providerJson = Effect.fn(
     immutableVersion: boolean = false
   ) {
     const client = yield* HttpClient.HttpClient;
+
     const response = yield* HttpClient.withScope(client)
       .execute(request)
       .pipe(Effect.mapError(() => Error("Provider request failed; inspect traffic state")));
+
     if (immutableVersion && request.method === "GET" && transientVersionRead.has(response.status)) {
-      return yield* new WorkerVersionReadUnavailable({ status: response.status });
+      return yield* new WorkerVersionReadUnavailable({
+        status: response.status,
+      });
     }
+
     return yield* boundedJson(response, reportDeploymentRejection);
   },
   Effect.scoped,
@@ -361,6 +473,7 @@ export const verifyCoreDefaultPlacement = Effect.fn(function* (
       }),
     }),
   });
+
   yield* providerJson(
     HttpClientRequest.get(
       `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(core.name)}/versions/${encodeURIComponent(core.version)}`,
@@ -370,9 +483,10 @@ export const verifyCoreDefaultPlacement = Effect.fn(function* (
     Effect.provideService(HttpClient.HttpClient, client),
     Effect.flatMap(Schema.decodeUnknownEffect(response)),
     Effect.mapError(
-      () =>
-        new ReleaseFailure({
+      (error) =>
+        new CausedReleaseFailure({
           message: "Release staging refused: Core default placement is unverified",
+          cause: error,
         })
     )
   );
@@ -393,6 +507,7 @@ const VerifiedObservability = Schema.Struct({
     }),
   }),
 });
+
 export const verifyReleaseObservability = Effect.fn(function* (
   env: Pick<Config, "account" | "token">,
   name: string,
@@ -400,56 +515,66 @@ export const verifyReleaseObservability = Effect.fn(function* (
 ) {
   const base = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}`,
     headers = { authorization: `Bearer ${env.token}` };
+
   yield* providerJson(HttpClientRequest.get(`${base}/settings`, { headers })).pipe(
     Effect.provideService(HttpClient.HttpClient, client),
     Effect.flatMap(Schema.decodeUnknownEffect(VerifiedObservability)),
     Effect.mapError(
-      () =>
-        new ReleaseFailure({
+      (error) =>
+        new CausedReleaseFailure({
           message: "Release staging refused: private operational observability is unverified",
+          cause: error,
         })
     )
   );
 });
+
 export const configureReleaseObservability = Effect.fn(function* (
   env: Pick<Config, "account" | "token">,
   names: ReadonlyArray<string>,
   client: HttpClient.HttpClient
 ) {
-  for (const name of names) {
-    const base = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}`;
-    const headers = { authorization: `Bearer ${env.token}` };
-    yield* providerJson(
-      HttpClientRequest.patch(`${base}/script-settings`, {
-        headers: { ...headers, "content-type": "application/json" },
-        body: HttpBody.text(
-          encodeJson({
-            observability: {
-              enabled: freeTierWorkerObservability.enabled,
-              head_sampling_rate: freeTierWorkerObservability.headSamplingRate,
-              redact_query_string: freeTierWorkerObservability.redactQueryString,
-              issues: freeTierWorkerObservability.issues,
-              logs: {
-                enabled: freeTierWorkerObservability.logs.enabled,
-                head_sampling_rate: freeTierWorkerObservability.logs.headSamplingRate,
-                invocation_logs: freeTierWorkerObservability.logs.invocationLogs,
-                persist: freeTierWorkerObservability.logs.persist,
-              },
-              traces: { enabled: false },
-            },
-          }),
-          "application/json"
-        ),
-      })
-    ).pipe(Effect.provideService(HttpClient.HttpClient, client));
-    yield* verifyReleaseObservability(env, name, client);
-  }
+  yield* Effect.forEach(
+    names,
+    (name) =>
+      Effect.gen(function* () {
+        const base = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}`;
+        const headers = { authorization: `Bearer ${env.token}` };
+        yield* providerJson(
+          HttpClientRequest.patch(`${base}/script-settings`, {
+            headers: { ...headers, "content-type": "application/json" },
+            body: HttpBody.text(
+              encodeJson({
+                observability: {
+                  enabled: freeTierWorkerObservability.enabled,
+                  head_sampling_rate: freeTierWorkerObservability.headSamplingRate,
+                  redact_query_string: freeTierWorkerObservability.redactQueryString,
+                  issues: freeTierWorkerObservability.issues,
+                  logs: {
+                    enabled: freeTierWorkerObservability.logs.enabled,
+                    head_sampling_rate: freeTierWorkerObservability.logs.headSamplingRate,
+                    invocation_logs: freeTierWorkerObservability.logs.invocationLogs,
+                    persist: freeTierWorkerObservability.logs.persist,
+                  },
+                  traces: { enabled: false },
+                },
+              }),
+              "application/json"
+            ),
+          })
+        ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+        yield* verifyReleaseObservability(env, name, client);
+      }),
+    { discard: true }
+  );
 });
+
 const toolingRefusal = (stream: ReadableStream<Uint8Array>): Promise<Option.Option<string>> => {
   const decoder = new TextDecoder();
   const limit = 32_768;
   let retained = "";
   let size = 0;
+
   return stream
     .pipeTo(
       new WritableStream<Uint8Array>({
@@ -462,6 +587,7 @@ const toolingRefusal = (stream: ReadableStream<Uint8Array>): Promise<Option.Opti
     )
     .then(() => {
       const output = retained + decoder.decode();
+
       return Option.fromNullishOr(output.match(/\[code: (\d{4,6})\]/u)?.[1]).pipe(
         Option.orElse(() =>
           output.includes(
@@ -472,7 +598,9 @@ const toolingRefusal = (stream: ReadableStream<Uint8Array>): Promise<Option.Opti
         ),
         Option.map((code) => {
           if (/\bqueues?\b/iu.test(output)) return `${code}; resource=queue`;
+
           if (/\bworkflows?\b/iu.test(output)) return `${code}; resource=workflow`;
+
           return code;
         })
       );
@@ -480,16 +608,19 @@ const toolingRefusal = (stream: ReadableStream<Uint8Array>): Promise<Option.Opti
 };
 
 const releaseCommandShutdownGrace = 2000;
+
 const stopReadOnlyCommand = Effect.fn(function* (child: Bun.Subprocess) {
   if (child.exitCode !== null) return;
   yield* Effect.try({
     try: () => child.kill("SIGTERM"),
     catch: () => new ReleaseFailure({ message: "Release tooling cleanup failed" }),
   });
+
   const exited = yield* Effect.tryPromise({
     try: () => child.exited,
     catch: () => new ReleaseFailure({ message: "Release tooling cleanup failed" }),
   }).pipe(Effect.timeoutOption(releaseCommandShutdownGrace));
+
   if (Option.isNone(exited)) {
     yield* Effect.try({
       try: () => child.kill("SIGKILL"),
@@ -505,66 +636,78 @@ const stopReadOnlyCommand = Effect.fn(function* (child: Bun.Subprocess) {
 const releaseOutput = (
   stream: ReadableStream<Uint8Array>,
   overflow: () => Effect.Effect<void, ReleaseFailure>
-): Promise<string> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const limit = 1_048_576;
-      const decoder = new TextDecoder();
-      let size = 0;
-      let retained = "";
-      const outputState = { exceeded: false };
-      yield* Stream.fromReadableStream({
-        evaluate: () => stream,
-        onError: () => new ReleaseFailure({ message: "Release tooling output could not be read" }),
-        releaseLockOnEnd: true,
-      }).pipe(
-        Stream.runForEach((chunk) => {
-          if (outputState.exceeded) return Effect.void;
-          size += chunk.byteLength;
-          if (size > limit) {
-            outputState.exceeded = true;
-            retained = "";
-            return overflow();
-          }
-          retained += decoder.decode(chunk, { stream: true });
-          return Effect.void;
-        })
-      );
-      if (outputState.exceeded) {
-        return yield* new ReleaseFailure({ message: "Release tooling output exceeded limit" });
-      }
-      return retained + decoder.decode();
-    })
-  );
+): Effect.Effect<string, ReleaseFailure> =>
+  Effect.gen(function* () {
+    const limit = 1_048_576;
+    const decoder = new TextDecoder();
+    let size = 0;
+    let retained = "";
+    const outputState = { exceeded: false };
+    yield* Stream.fromReadableStream({
+      evaluate: () => stream,
+      onError: () =>
+        new ReleaseFailure({
+          message: "Release tooling output could not be read",
+        }),
+      releaseLockOnEnd: true,
+    }).pipe(
+      Stream.runForEach((chunk) => {
+        if (outputState.exceeded) return Effect.void;
+        size += chunk.byteLength;
 
-const startReleaseCommand = (
+        if (size > limit) {
+          outputState.exceeded = true;
+          retained = "";
+
+          return overflow();
+        }
+
+        retained += decoder.decode(chunk, { stream: true });
+
+        return Effect.void;
+      })
+    );
+
+    if (outputState.exceeded) {
+      return yield* new ReleaseFailure({
+        message: "Release tooling output exceeded limit",
+      });
+    }
+
+    return retained + decoder.decode();
+  });
+
+const startReleaseCommand = Effect.fnUntraced(function* (
   args: ReadonlyArray<string>,
   lifetime: "read-only" | "started-write"
-): {
-  child: Bun.Subprocess<"ignore", "pipe", "pipe">;
-  settlement: Promise<
-    [
-      PromiseSettledResult<string>,
-      PromiseSettledResult<number>,
-      PromiseSettledResult<Option.Option<string>>,
-    ]
-  >;
-} => {
-  const child = Bun.spawn([...args], {
-    cwd: import.meta.dir,
-    stdout: "pipe",
-    stderr: "pipe",
-    env: process.env,
+) {
+  const child = yield* Effect.try({
+    try: () =>
+      Bun.spawn([...args], {
+        cwd: import.meta.dir,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: process.env,
+      }),
+    catch: (cause) => new CausedReleaseFailure({ message: "Release tooling failed", cause }),
   });
-  const settlement = Promise.allSettled([
-    releaseOutput(child.stdout, () =>
-      lifetime === "read-only" ? stopReadOnlyCommand(child) : Effect.void
-    ),
-    child.exited,
-    toolingRefusal(child.stderr),
+
+  const processSettlement = Promise.allSettled([child.exited, toolingRefusal(child.stderr)]);
+
+  const output = yield* releaseOutput(child.stdout, () =>
+    lifetime === "read-only" ? stopReadOnlyCommand(child) : Effect.void
+  ).pipe(Effect.result, Effect.forkDetach);
+
+  const settlement = Effect.all([
+    Fiber.join(output),
+    Effect.tryPromise({
+      try: () => processSettlement,
+      catch: (cause) => new CausedReleaseFailure({ message: "Release tooling failed", cause }),
+    }),
   ]);
+
   return { child, settlement };
-};
+});
 
 export const releaseCommand = ({
   args,
@@ -574,18 +717,12 @@ export const releaseCommand = ({
   lifetime: "read-only" | "started-write";
 }>): Effect.Effect<string, ReleaseFailure> =>
   Effect.acquireUseRelease(
-    Effect.try({
-      try: () => startReleaseCommand(args, lifetime),
-      catch: () => new ReleaseFailure({ message: "Release tooling failed" }),
-    }),
+    startReleaseCommand(args, lifetime),
     ({ settlement }) =>
-      Effect.tryPromise({
-        try: () => settlement,
-        catch: () => new ReleaseFailure({ message: "Release tooling failed" }),
-      }).pipe(
-        Effect.flatMap(([output, exit, code]) =>
-          output.status === "fulfilled" && exit.status === "fulfilled" && exit.value === 0
-            ? Effect.succeed(output.value)
+      settlement.pipe(
+        Effect.flatMap(([output, [exit, code]]) =>
+          Result.isSuccess(output) && exit.status === "fulfilled" && exit.value === 0
+            ? Effect.succeed(output.success)
             : Effect.fail(
                 new ReleaseFailure({
                   message:
@@ -599,16 +736,24 @@ export const releaseCommand = ({
     ({ child, settlement }, exit) =>
       Effect.gen(function* () {
         const cancellation = yield* Effect.exit(
-          lifetime === "read-only" && exit._tag === "Failure" && child.exitCode === null
+          lifetime === "read-only" && Exit.isFailure(exit) && child.exitCode === null
             ? stopReadOnlyCommand(child)
             : Effect.void
         );
-        const results = yield* Effect.tryPromise({
-          try: () => settlement,
-          catch: () => new ReleaseFailure({ message: "Release tooling cleanup failed" }),
-        });
-        if (cancellation._tag === "Failure") return yield* Effect.failCause(cancellation.cause);
-        if (results[1].status !== "fulfilled") {
+
+        const [, [processExit]] = yield* settlement.pipe(
+          Effect.mapError(
+            (error) =>
+              new CausedReleaseFailure({
+                message: "Release tooling cleanup failed",
+                cause: error,
+              })
+          )
+        );
+
+        if (Exit.isFailure(cancellation)) return yield* Effect.failCause(cancellation.cause);
+
+        if (processExit.status !== "fulfilled") {
           return yield* new ReleaseFailure({
             message: "Release tooling exit could not be confirmed",
           });
@@ -624,13 +769,16 @@ export const releaseCommand = ({
         : error
     )
   );
+
 const shell = (args: ReadonlyArray<string>): Effect.Effect<string, ReleaseFailure> =>
   releaseCommand({ args, lifetime: "read-only" });
+
 const readFile = (path: string): Effect.Effect<unknown, Error> =>
   Effect.tryPromise({
     try: () => Bun.file(path).text(),
     catch: () => new ReleaseFailure({ message: "Release snapshot could not be read" }),
   }).pipe(Effect.flatMap(decodeJson));
+
 const writeFile = (path: string | Bun.BunFile, content: string): Effect.Effect<void, Error> =>
   Effect.tryPromise({
     try: () => Bun.write(path, content),
@@ -642,7 +790,9 @@ type WorkerReceipt = Readonly<{
   versionId: Option.Option<string>;
   hasRolloutBaseline: boolean;
 }>;
+
 type WorkerReceipts = Readonly<{ public: WorkerReceipt; core: WorkerReceipt }>;
+
 const workerReceiptMessages = {
   Ingress: {
     missing: "Alchemy Ingress Worker resource is missing",
@@ -657,6 +807,7 @@ const workerReceiptMessages = {
     incomplete: "Alchemy Core Worker receipt is incomplete",
   },
 } as const;
+
 const safeWorkerReceiptMessages = new Set<string>([
   ...Object.values(workerReceiptMessages.Ingress),
   ...Object.values(workerReceiptMessages.Core),
@@ -679,9 +830,11 @@ const interruptedUpdateAttributes = (
   logicalId: "Ingress" | "Core"
 ): typeof ResourceAttributes.Type => {
   const interrupted = Schema.decodeUnknownOption(UpdatingStateEntry)(value);
+
   if (Option.isNone(interrupted)) throw Error(workerReceiptMessages[logicalId].incomplete);
   const currentIdentity = Schema.decodeUnknownOption(WorkerIdentity)(interrupted.value.attr);
   const previousIdentity = Schema.decodeUnknownOption(WorkerIdentity)(interrupted.value.old.attr);
+
   if (
     Option.isNone(currentIdentity) ||
     Option.isNone(previousIdentity) ||
@@ -689,6 +842,7 @@ const interruptedUpdateAttributes = (
   ) {
     throw Error(workerReceiptMessages[logicalId].incomplete);
   }
+
   return interrupted.value.attr;
 };
 
@@ -698,14 +852,18 @@ const attributesForReceipt = (
   mode: "capture" | "completed"
 ): typeof ResourceAttributes.Type => {
   const decoded = Schema.decodeUnknownOption(StateEntry)(value);
+
   if (Option.isSome(decoded)) return decoded.value.attr;
   const lifecycle = Schema.decodeUnknownOption(ResourceLifecycle)(value);
+
   if (Option.isSome(lifecycle) && lifecycle.value.status === "updating" && mode === "capture") {
     return interruptedUpdateAttributes(value, logicalId);
   }
+
   if (Option.isSome(lifecycle) && !stableWorkerReceiptStatuses.has(lifecycle.value.status)) {
     throw Error(workerReceiptMessages[logicalId].unstable);
   }
+
   throw Error(workerReceiptMessages[logicalId].incomplete);
 };
 
@@ -714,29 +872,38 @@ const decodeWorkerReceiptsWithMode = (
   mode: "capture" | "completed"
 ): WorkerReceipts => {
   const entries = decodeStateMap(output);
+
   const select = (logicalId: "Ingress" | "Core"): WorkerReceipt => {
     const matchingEntries = Object.values(entries).filter((value) => {
       const identity = Schema.decodeUnknownOption(ResourceIdentity)(value);
+
       return Option.isSome(identity) && identity.value.logicalId === logicalId;
     });
+
     if (matchingEntries.length === 0) throw Error(workerReceiptMessages[logicalId].missing);
+
     if (matchingEntries.length !== 1) throw Error(workerReceiptMessages[logicalId].ambiguous);
 
     const attributes = attributesForReceipt(matchingEntries[0], logicalId, mode);
     const identity = Schema.decodeUnknownOption(WorkerIdentity)(attributes);
+
     if (Option.isNone(identity)) throw Error(workerReceiptMessages[logicalId].incomplete);
+
     const rawVersion = Schema.decodeUnknownOption(Schema.Struct({ versionId: VersionId }))(
       attributes
     );
+
     const baseline = Schema.decodeUnknownOption(
       Schema.Struct({ hash: Schema.Record(Schema.String, Schema.Unknown) })
     )(attributes);
+
     return {
       workerName: identity.value.workerName,
       versionId: Option.map(rawVersion, (entry) => entry.versionId),
       hasRolloutBaseline: Option.isSome(baseline),
     };
   };
+
   return { public: select("Ingress"), core: select("Core") };
 };
 
@@ -749,12 +916,14 @@ export const decodeCaptureWorkerReceipts = (output: string): WorkerReceipts =>
 export const decodePairingUploadReceipts = (output: string): WorkerReceipts => {
   const receipts = decodeWorkerReceipts(output);
   const logicalId = "ReleaseSmoke-" + fixtureUpload.revision;
+
   const entries = Object.values(decodeStateMap(output)).filter((value) =>
     Option.exists(
       Schema.decodeUnknownOption(ResourceIdentity)(value),
       (item) => item.logicalId === logicalId
     )
   );
+
   const support = Schema.decodeUnknownOption(
     Schema.Struct({
       logicalId: Schema.Literal(logicalId),
@@ -765,6 +934,7 @@ export const decodePairingUploadReceipts = (output: string): WorkerReceipts => {
       }),
     })
   )(entries[0]);
+
   if (
     entries.length !== 1 ||
     Option.isNone(support) ||
@@ -773,6 +943,7 @@ export const decodePairingUploadReceipts = (output: string): WorkerReceipts => {
   ) {
     throw Error("Alchemy completed Worker versions differ from the interrupted pairing upload");
   }
+
   return receipts;
 };
 
@@ -794,9 +965,11 @@ const workersFromState = Effect.fn(function* (
     "--log-level",
     "error",
   ]);
+
   return yield* Effect.try({
     try: () => {
       if (requirePairingUpload) return decodePairingUploadReceipts(rawState);
+
       return mode === "capture"
         ? decodeCaptureWorkerReceipts(rawState)
         : decodeWorkerReceipts(rawState);
@@ -804,7 +977,7 @@ const workersFromState = Effect.fn(function* (
     catch: (cause) =>
       new ReleaseFailure({
         message:
-          cause instanceof Error && safeWorkerReceiptMessages.has(cause.message)
+          Predicate.isError(cause) && safeWorkerReceiptMessages.has(cause.message)
             ? cause.message
             : "Alchemy Worker state JSON could not be decoded",
       }),
@@ -822,6 +995,7 @@ const stableIdentity = Effect.fn(function* (
   const health = yield* Schema.decodeUnknownEffect(healthSchema)(
     yield* providerJson(HttpClientRequest.get(`${releaseOrigin}/health`))
   );
+
   yield* verifyStableWorkerIdentity(
     {
       public: { ...health, workerVersionId: input.publicVersionId },
@@ -830,7 +1004,11 @@ const stableIdentity = Effect.fn(function* (
     },
     releaseOrigin
   );
-  return { stableRevision: health.gitRevision, stableContractDigest: health.contractDigest };
+
+  return {
+    stableRevision: health.gitRevision,
+    stableContractDigest: health.contractDigest,
+  };
 });
 
 const asDeployment = (value: typeof ApiDeployment.Type): Deployment => ({
@@ -840,13 +1018,17 @@ const asDeployment = (value: typeof ApiDeployment.Type): Deployment => ({
     percentage: version.percentage,
   })),
 });
+
 const createDeployment = Effect.fn(function* (
   json: (request: HttpClientRequest.HttpClientRequest) => Effect.Effect<unknown, Error>,
   input: { url: string; token: string; versions: Deployment["versions"] }
 ) {
   const raw = yield* json(
     HttpClientRequest.post(input.url, {
-      headers: { authorization: `Bearer ${input.token}`, "content-type": "application/json" },
+      headers: {
+        authorization: `Bearer ${input.token}`,
+        "content-type": "application/json",
+      },
       body: HttpBody.text(
         encodeJson({
           strategy: "percentage",
@@ -859,11 +1041,15 @@ const createDeployment = Effect.fn(function* (
       ),
     })
   );
+
   const response = yield* Schema.decodeUnknownEffect(CreateResponse)(raw);
+
   return asDeployment(response.result);
 });
+
 const deploymentUrl = (env: Config, name: string): string =>
   `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}/deployments`;
+
 const readTrunk = Effect.fn(function* (env: Config) {
   const raw = yield* providerJson(
     HttpClientRequest.get(`https://api.github.com/repos/${env.repository}/git/ref/heads/trunk`, {
@@ -873,6 +1059,7 @@ const readTrunk = Effect.fn(function* (env: Config) {
       },
     })
   );
+
   const response = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       ref: Schema.Literal("refs/heads/trunk"),
@@ -882,8 +1069,11 @@ const readTrunk = Effect.fn(function* (env: Config) {
       }),
     })
   )(raw);
+
   const verifier = yield* fixtureVerifierIdentity;
+
   if (Option.isNone(verifier)) return response.object.sha;
+
   if (
     response.object.sha !== verifier.value.verifier ||
     env.revision !== verifier.value.application
@@ -892,6 +1082,7 @@ const readTrunk = Effect.fn(function* (env: Config) {
       message: "Current protected verifier differs from the qualified staged release",
     });
   }
+
   return env.revision;
 });
 
@@ -908,20 +1099,27 @@ export const releasePort = ({
     providerJson(request, request.method === "POST").pipe(
       Effect.provideService(HttpClient.HttpClient, client)
     );
+
   const recentDeployments = Effect.fn(function* (name: string) {
     const raw = yield* json(
       HttpClientRequest.get(deploymentUrl(env, name), {
         headers: { authorization: `Bearer ${env.token}` },
       })
     );
+
     const response = yield* Schema.decodeUnknownEffect(ListResponse)(raw);
+
     return response.result.deployments.map(asDeployment);
   });
+
   const current: ReleasePort["current"] = Effect.fn(function* (name) {
     const [active] = yield* recentDeployments(name);
+
     if (active === undefined) return yield* Effect.fail(Error(`No active deployment: ${name}`));
+
     return active;
   });
+
   return {
     trunk: () => readTrunk(env).pipe(Effect.provideService(HttpClient.HttpClient, client)),
     current,
@@ -942,8 +1140,10 @@ export const releasePort = ({
             ],
             lifetime: "started-write",
           });
+
           return yield* current(name);
         }
+
         return yield* createDeployment(json, {
           url: deploymentUrl(env, name),
           token: env.token,
@@ -975,18 +1175,22 @@ const readStablePair = Effect.fn(function* (
     { concurrency: 2 }
   ).pipe(
     Effect.mapError(
-      () =>
-        new ReleaseFailure({
+      (error) =>
+        new CausedReleaseFailure({
           message: "Release capture could not read stable Worker deployments",
+          cause: error,
         })
     )
   );
+
   const publicStable = yield* releaseController
     .servingVersion(publicDeployment)
-    .pipe(Effect.mapError(() => new ReleaseFailure({ message: "Unstable public Worker" })));
+    .pipe(Effect.mapError(releaseFailureFrom("Unstable public Worker")));
+
   const coreStable = yield* releaseController
     .servingVersion(coreDeployment)
-    .pipe(Effect.mapError(() => new ReleaseFailure({ message: "Unstable Core Worker" })));
+    .pipe(Effect.mapError(releaseFailureFrom("Unstable Core Worker")));
+
   const identity = yield* stableIdentity(
     {
       publicVersionId: publicStable,
@@ -999,13 +1203,13 @@ const readStablePair = Effect.fn(function* (
     Effect.mapError(
       (failure) =>
         new ReleaseFailure({
-          message:
-            failure instanceof ReleaseSmokeFailed
-              ? `Stable Worker capture rejected: ${failure.reason}`
-              : "Release capture could not verify the stable Worker pair",
+          message: isReleaseSmokeFailed(failure)
+            ? `Stable Worker capture rejected: ${failure.reason}`
+            : "Release capture could not verify the stable Worker pair",
         })
     )
   );
+
   return { publicStable, coreStable, identity };
 });
 
@@ -1017,13 +1221,16 @@ const readCategoryRelease = Effect.fn(function* (revision: string) {
     "show",
     revision + ":apps/server/src/core/categories/internal/taxonomy-release.json",
   ]);
+
   return yield* Schema.decodeEffect(Schema.fromJsonString(CategoryTaxonomyRelease))(source);
 });
+
 const verifyTaxonomyOverlap = Effect.fn(function* (
   snapshot: Readonly<{ stableRevision: string; revision: string }>
 ) {
   const serving = yield* readCategoryRelease(snapshot.stableRevision);
   const candidate = yield* readCategoryRelease(snapshot.revision);
+
   if (!compatibleCategoryReleases({ serving, candidate })) {
     return yield* new ReleaseFailure({
       message:
@@ -1039,6 +1246,7 @@ const proveRecoveryCorePrivate = Effect.fn(function* (
 ) {
   const account = `https://api.cloudflare.com/client/v4/accounts/${env.account}`;
   const headers = { authorization: `Bearer ${env.token}` };
+
   const raw = yield* Effect.all(
     {
       subdomain: providerJson(
@@ -1056,6 +1264,7 @@ const proveRecoveryCorePrivate = Effect.fn(function* (
     },
     { concurrency: 3 }
   ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+
   yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       success: Schema.Literal(true),
@@ -1065,25 +1274,32 @@ const proveRecoveryCorePrivate = Effect.fn(function* (
       }),
     })
   )(raw.subdomain);
+
   const domains = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       success: Schema.Literal(true),
       result: Schema.Array(Schema.Struct({ service: Schema.String })),
     })
   )(raw.domains);
+
   const routes = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       success: Schema.Literal(true),
       result: Schema.Array(
-        Schema.Struct({ script: Schema.optional(Schema.NullOr(Schema.String)) })
+        Schema.Struct({
+          script: Schema.optional(Schema.NullOr(Schema.String)),
+        })
       ),
     })
   )(raw.routes);
+
   if (
     domains.result.some((domain) => domain.service === name) ||
     routes.result.some((route) => route.script === name)
   ) {
-    return yield* new ReleaseFailure({ message: "Recovery refused: Core is publicly reachable" });
+    return yield* new ReleaseFailure({
+      message: "Recovery refused: Core is publicly reachable",
+    });
   }
 });
 
@@ -1093,6 +1309,7 @@ const readWorkerVersion = Effect.fn(function* (
   worker: { name: string; id: string }
 ) {
   const url = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(worker.name)}/versions/${worker.id}`;
+
   return yield* providerJson(
     HttpClientRequest.get(url, {
       headers: { authorization: `Bearer ${env.token}` },
@@ -1101,14 +1318,20 @@ const readWorkerVersion = Effect.fn(function* (
     true
   ).pipe(Effect.provideService(HttpClient.HttpClient, client));
 });
+
 const versionResources = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
   worker: { name: string; id: string; revision: string }
 ) {
   const raw = yield* readWorkerVersion(env, client, worker);
+
   return yield* Effect.try(() =>
-    verifiedVersionResources({ raw, versionId: worker.id, revision: worker.revision })
+    verifiedVersionResources({
+      raw,
+      versionId: worker.id,
+      revision: worker.revision,
+    })
   );
 });
 
@@ -1122,6 +1345,7 @@ const rollbackSource = Effect.fn(function* (snapshot: typeof releaseSchemas.snap
     snapshot.stableRevision,
     snapshot.revision,
   ]);
+
   const changedPaths = (yield* shell([
     "git",
     "-C",
@@ -1138,27 +1362,36 @@ const rollbackSource = Effect.fn(function* (snapshot: typeof releaseSchemas.snap
   ]))
     .trim()
     .split("\n");
+
   const workflowPaths = new Set<string>();
-  for (const revision of [snapshot.stableRevision, snapshot.revision]) {
-    const found = yield* shell([
-      "git",
-      "-C",
-      "../..",
-      "grep",
-      "-l",
-      "-F",
-      "WorkflowEntrypoint",
-      revision,
-      "--",
-      "apps/server/cloudflare/",
-    ]);
+
+  const foundByRevision = yield* Effect.forEach(
+    [snapshot.stableRevision, snapshot.revision],
+    (revision) =>
+      shell([
+        "git",
+        "-C",
+        "../..",
+        "grep",
+        "-l",
+        "-F",
+        "WorkflowEntrypoint",
+        revision,
+        "--",
+        "apps/server/cloudflare/",
+      ])
+  );
+
+  for (const found of foundByRevision) {
     for (const line of found.trim().split("\n")) {
       workflowPaths.add(line.slice(line.indexOf(":") + 1));
     }
   }
+
   const reviewedAccountingVerifier =
     snapshot.stableRevision === interruptedSuccessor &&
     snapshot.revision === stagedAccountingRevision;
+
   return {
     changedPaths: reviewedAccountingVerifier
       ? changedPaths.filter((path) => path !== "infra/cloudflare/storage-installation.ts")
@@ -1166,6 +1399,7 @@ const rollbackSource = Effect.fn(function* (snapshot: typeof releaseSchemas.snap
     workflowPaths: [...workflowPaths],
   };
 });
+
 const rollbackPort = (
   port: ReturnType<typeof releasePort>,
   env: Config,
@@ -1182,6 +1416,7 @@ const rollbackPort = (
           )
         ).pipe(Effect.provideService(HttpClient.HttpClient, client))
       );
+
       return versions.result.items.some((item) => item.id === id);
     }),
 });
@@ -1200,6 +1435,7 @@ const requireRestorationHistory = Effect.fn(function* (
 ) {
   const history = yield* port.recentDeployments(name);
   const current = history.at(0);
+
   const sameVersions =
     current !== undefined &&
     current.versions.length === previous.versions.length &&
@@ -1208,11 +1444,14 @@ const requireRestorationHistory = Effect.fn(function* (
         (actual) => actual.id === version.id && actual.percentage === version.percentage
       )
     );
+
   if (current?.id !== previous.id || !sameVersions) {
     return yield* Effect.fail(Error("Canonical restoration requires the proved live pair"));
   }
+
   return history;
 });
+
 const readCanonicalRestorationHistory = Effect.fn(function* (
   { port, snapshot }: CanonicalRestoration,
   { target, companion }: StableRestoration
@@ -1220,9 +1459,12 @@ const readCanonicalRestorationHistory = Effect.fn(function* (
   const histories = yield* Effect.forEach([target, companion], (worker) =>
     requireRestorationHistory(port, worker)
   );
+
   yield* releaseController.requireTrunk(port, snapshot.revision);
+
   return histories;
 });
+
 const retryClosedRestoration = Effect.fn(function* (
   config: CanonicalRestoration,
   input: StableRestoration,
@@ -1231,13 +1473,17 @@ const retryClosedRestoration = Effect.fn(function* (
   const { port, env, client, verifyClosedPair } = config;
   const { target } = input;
   yield* verifyClosedPair;
+
   if (!(yield* port.deployable(target.name, target.stableVersionId))) {
     return yield* Effect.fail(Error("Captured closed Worker is no longer deployable"));
   }
+
   const after = yield* readCanonicalRestorationHistory(config, input);
+
   if (!isDeepStrictEqual(before, after)) {
     return yield* Effect.fail(Error("Canonical restoration history changed after refusal"));
   }
+
   return yield* createDeployment(
     (request) =>
       providerJson(request, true).pipe(Effect.provideService(HttpClient.HttpClient, client)),
@@ -1248,6 +1494,7 @@ const retryClosedRestoration = Effect.fn(function* (
     }
   );
 });
+
 const restoreCanonicalStable = Effect.fn(function* (
   config: CanonicalRestoration,
   input: StableRestoration
@@ -1256,6 +1503,7 @@ const restoreCanonicalStable = Effect.fn(function* (
   const { target, companion } = input;
   const workers = [snapshot.public, snapshot.core];
   const captured = workers.find((worker) => worker.name === target.name);
+
   if (
     captured?.stableVersionId !== target.stableVersionId ||
     !workers.some((worker) => worker.name === companion.name && worker.name !== target.name)
@@ -1264,14 +1512,17 @@ const restoreCanonicalStable = Effect.fn(function* (
       Error("Canonical restoration target differs from the closed capture")
     );
   }
+
   const before = yield* readCanonicalRestorationHistory(config, input);
+
   return yield* port.deploy(target.name, [{ id: captured.stableVersionId, percentage: 100 }]).pipe(
     Effect.catchIf(
-      (error) => error instanceof ModifiedDeploymentSecrets,
+      (error) => isModifiedDeploymentSecrets(error),
       () => retryClosedRestoration(config, input, before)
     )
   );
 });
+
 export const canonicalRestorePort = (config: CanonicalRestoration): RollbackPort => ({
   ...config.port,
   restoreStable: (input) => restoreCanonicalStable(config, input),

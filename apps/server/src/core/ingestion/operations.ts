@@ -1,4 +1,14 @@
-import { BigDecimal, DateTime, Effect, Option, Result, Schema } from "effect";
+import {
+  BigDecimal,
+  Data,
+  DateTime,
+  Effect,
+  Match,
+  Option,
+  Result,
+  Schema,
+  type Types,
+} from "effect";
 import { allowancePeriod } from "~/core/quotas/operations";
 import type { AccessTier } from "~/core/access-tier/contract";
 import { Currency, Money, type ReadonlyMoney, encodeMoneyAmount } from "~/core/_shared/money";
@@ -25,12 +35,14 @@ import {
 } from "./contract";
 
 const captureDateParts = (
-  source: Extract<CaptureOccurrence, { readonly _tag: "LocalDate" }>
+  source: Types.ExtractTag<CaptureOccurrence, "LocalDate">
 ): Readonly<DateTime.DateTime.Parts> => {
   const [year = 0, month = 0, day = 0] = source.date.split("-").map(Number);
+
   const [hour = 0, minute = 0, second = 0] = Option.getOrElse(source.time, () => "00:00:00")
     .split(":")
     .map(Number);
+
   return { year, month, day, hour, minute, second, millisecond: 0 };
 };
 
@@ -52,23 +64,37 @@ const captureOccurrence = (
 ): Option.Option<DateTime.Utc> =>
   Option.match(occurrence, {
     onNone: () => Option.some(submittedAt),
-    onSome: (source) => {
-      if (source._tag === "Instant") return Option.some(source.value);
-      const parts = captureDateParts(source);
-      if (parts.year < 1) return Option.none();
-      const date = DateTime.makeZoned(parts, {
-        timeZone: context.timeZone,
-        adjustForTimeZone: true,
-        disambiguation: "reject",
-      });
-      if (Option.isNone(date)) return Option.none();
-      return sameCalendarParts(DateTime.toParts(date.value), parts)
-        ? Option.some(DateTime.toUtc(date.value))
-        : Option.none();
-    },
+    onSome: Match.type<CaptureOccurrence>().pipe(
+      Match.tag("Instant", (source) => Option.some(source.value)),
+      Match.tag("LocalDate", (source) => localCaptureOccurrence(source, context)),
+      Match.exhaustive
+    ),
   });
 
-type SingleCaptureProposal = Extract<CaptureProposal, { readonly _tag: "SingleMovement" }>;
+const localCaptureOccurrence = (
+  source: Types.ExtractTag<CaptureOccurrence, "LocalDate">,
+  context: CapturedInterpretationContext
+): Option.Option<DateTime.Utc> => {
+  const parts = captureDateParts(source);
+
+  if (parts.year < 1) return Option.none();
+
+  const date = DateTime.makeZoned(parts, {
+    timeZone: context.timeZone,
+    adjustForTimeZone: true,
+    disambiguation: "reject",
+  });
+
+  if (Option.isNone(date)) return Option.none();
+
+  return sameCalendarParts(DateTime.toParts(date.value), parts)
+    ? Option.some(DateTime.toUtc(date.value))
+    : Option.none();
+};
+
+type SingleCaptureProposal = Types.ExtractTag<CaptureProposal, "SingleMovement">;
+
+const Interpretation = Data.taggedEnum<CaptureInterpretation>();
 
 const captureEvidence = (
   currency: Option.Option<Currency>,
@@ -84,60 +110,73 @@ const interpretSingleCapture = (
   input: CaptureInterpretationInput
 ): CaptureInterpretation => {
   if (proposal.completion !== "completed") {
-    return { _tag: "NeedsReview", reason: "movement-not-completed" };
+    return Interpretation.NeedsReview({ reason: "movement-not-completed" });
   }
+
   if (Option.isNone(proposal.money) || Option.isNone(proposal.direction)) {
-    return { _tag: "NeedsReview", reason: "missing-required-fact" };
+    return Interpretation.NeedsReview({ reason: "missing-required-fact" });
   }
+
   const money = Money.makeOption({
     amount: proposal.money.value.amount,
     currency: Option.getOrElse(proposal.money.value.currency, () => Currency.make("COP")),
   });
+
   if (Option.isNone(money)) {
-    return { _tag: "NeedsReview", reason: "canonical-validation-failed" };
+    return Interpretation.NeedsReview({ reason: "canonical-validation-failed" });
   }
+
   const occurrence = captureOccurrence(proposal.occurrence, input.context, input.submittedAt);
+
   if (Option.isNone(occurrence) || DateTime.isGreaterThan(occurrence.value, input.now)) {
-    return { _tag: "NeedsReview", reason: "invalid-occurrence" };
+    return Interpretation.NeedsReview({ reason: "invalid-occurrence" });
   }
+
   const occurredAt = occurrence.value;
+
   const extraction = TransactionExtraction.makeOption({
     money: money.value,
     direction: proposal.direction.value,
     counterparty: proposal.counterparty,
     occurredAt,
   });
+
   if (Option.isNone(extraction)) {
-    return { _tag: "NeedsReview", reason: "canonical-validation-failed" };
+    return Interpretation.NeedsReview({ reason: "canonical-validation-failed" });
   }
-  return {
-    _tag: "Extracted",
+
+  return Interpretation.Extracted({
     extraction: extraction.value,
     evidence: captureEvidence(proposal.money.value.currency, proposal.occurrence),
-  };
+  });
 };
 
-export const interpretCapture = (input: CaptureInterpretationInput): CaptureInterpretation => {
-  switch (input.proposal._tag) {
-    case "Unparseable":
-      return { _tag: "NeedsReview", reason: "unparseable-material" };
-    case "MultipleMovements":
-      return { _tag: "NeedsReview", reason: "multiple-movements" };
-    case "SingleMovement":
-      return interpretSingleCapture(input.proposal, input);
-  }
-};
+export const interpretCapture = (input: CaptureInterpretationInput): CaptureInterpretation =>
+  Match.value(input.proposal).pipe(
+    Match.tagsExhaustive({
+      Unparseable: () => Interpretation.NeedsReview({ reason: "unparseable-material" }),
+      MultipleMovements: () => Interpretation.NeedsReview({ reason: "multiple-movements" }),
+      SingleMovement: (proposal) => interpretSingleCapture(proposal, input),
+    })
+  );
 
-const bogotaAllowancePeriod = (
-  now: DateTime.Utc
-): Readonly<{ from: DateTime.Utc; toExclusive: DateTime.Utc }> => {
+type AllowanceWindow = Readonly<{ from: DateTime.Utc; toExclusive: DateTime.Utc }>;
+
+const bogotaAllowancePeriod = (now: DateTime.Utc): AllowanceWindow => {
   const period = allowancePeriod(now);
+
   return { from: period.startsAt, toExclusive: period.resetsAt };
 };
 
-export const emailAllowancePeriod = (
-  now: DateTime.Utc
-): Readonly<{ from: DateTime.Utc; toExclusive: DateTime.Utc }> => bogotaAllowancePeriod(now);
+export const emailAllowancePeriod = (now: DateTime.Utc): AllowanceWindow =>
+  bogotaAllowancePeriod(now);
+
+export type MediaAdmissionDecision = Data.TaggedEnum<{
+  Admit: { readonly consumesFreeAllowance: boolean; readonly remaining: Option.Option<number> };
+  QuotaExhausted: { readonly resetsAt: DateTime.Utc };
+}>;
+
+export const MediaAdmissionDecision = Data.taggedEnum<MediaAdmissionDecision>();
 
 export const decideMediaAdmission = (
   input: Readonly<{
@@ -145,20 +184,21 @@ export const decideMediaAdmission = (
     consumed: number;
     now: DateTime.Utc;
   }>
-):
-  | Readonly<{ _tag: "Admit"; consumesFreeAllowance: boolean; remaining: Option.Option<number> }>
-  | Readonly<{ _tag: "QuotaExhausted"; resetsAt: DateTime.Utc }> => {
+): MediaAdmissionDecision => {
   if (input.access === "pro") {
-    return { _tag: "Admit", consumesFreeAllowance: false, remaining: Option.none() };
+    return MediaAdmissionDecision.Admit({ consumesFreeAllowance: false, remaining: Option.none() });
   }
+
   if (input.consumed >= freeMediaSubmissionCap) {
-    return { _tag: "QuotaExhausted", resetsAt: bogotaAllowancePeriod(input.now).toExclusive };
+    return MediaAdmissionDecision.QuotaExhausted({
+      resetsAt: bogotaAllowancePeriod(input.now).toExclusive,
+    });
   }
-  return {
-    _tag: "Admit",
+
+  return MediaAdmissionDecision.Admit({
     consumesFreeAllowance: true,
     remaining: Option.some(freeMediaSubmissionCap - input.consumed - 1),
-  };
+  });
 };
 
 export type ForwardedEmailProviderFailureReason =
@@ -166,12 +206,21 @@ export type ForwardedEmailProviderFailureReason =
   | "invalid-provider-response"
   | "resource-limit";
 
+type ForwardedEmailProviderFailureIssue = Readonly<{ path: ""; message: string }>;
+
 export const describeForwardedEmailProviderFailure = (
   reason: ForwardedEmailProviderFailureReason
-): Readonly<{ path: ""; message: string }> => ({
+): ForwardedEmailProviderFailureIssue => ({
   path: "",
   message: `Email retrieval stopped safely: ${reason}.`,
 });
+
+export type DeferredForwardedEmailActivation = Data.TaggedEnum<{
+  Activate: { readonly consumesFreeAllowance: boolean };
+  RemainDeferred: { readonly resumeAt: DateTime.Utc };
+}>;
+
+export const DeferredForwardedEmailActivation = Data.taggedEnum<DeferredForwardedEmailActivation>();
 
 type DecideDeferredForwardedEmailActivation = (input: {
   readonly access: AccessTier;
@@ -179,21 +228,22 @@ type DecideDeferredForwardedEmailActivation = (input: {
   readonly now: DateTime.Utc;
   readonly resumeAt: DateTime.Utc;
   readonly nextResumeAt: DateTime.Utc;
-}) =>
-  | Readonly<{ _tag: "Activate"; consumesFreeAllowance: boolean }>
-  | Readonly<{ _tag: "RemainDeferred"; resumeAt: DateTime.Utc }>;
+}) => DeferredForwardedEmailActivation;
 
 export const decideDeferredForwardedEmailActivation: DecideDeferredForwardedEmailActivation = (
   input
 ) => {
-  if (input.access === "pro") return { _tag: "Activate", consumesFreeAllowance: false };
-  if (DateTime.Order(input.resumeAt, input.now) <= 0 && input.consumed < freeForwardedEmailCap) {
-    return { _tag: "Activate", consumesFreeAllowance: true };
+  if (input.access === "pro") {
+    return DeferredForwardedEmailActivation.Activate({ consumesFreeAllowance: false });
   }
-  return {
-    _tag: "RemainDeferred",
+
+  if (DateTime.Order(input.resumeAt, input.now) <= 0 && input.consumed < freeForwardedEmailCap) {
+    return DeferredForwardedEmailActivation.Activate({ consumesFreeAllowance: true });
+  }
+
+  return DeferredForwardedEmailActivation.RemainDeferred({
     resumeAt: DateTime.Order(input.resumeAt, input.now) <= 0 ? input.nextResumeAt : input.resumeAt,
-  };
+  });
 };
 
 export const forwardedEmailAllowanceRemaining = (input: {
@@ -221,13 +271,16 @@ export const decideForwardedEmailAdmission: DecideForwardedEmailAdmission = (inp
       remaining: input.access === "pro" ? Option.none() : Option.some(0),
     };
   }
+
   if (input.access === "pro") return { status: "queued", remaining: Option.none() };
+
   if (input.consumed >= freeForwardedEmailCap) {
     return {
       status: input.deferred >= freeForwardedEmailDeferredCap ? "backlog-full" : "deferred",
       remaining: Option.some(0),
     };
   }
+
   return {
     status: "queued",
     remaining: Option.some(Math.max(0, freeForwardedEmailCap - input.consumed - 1)),
@@ -235,8 +288,11 @@ export const decideForwardedEmailAdmission: DecideForwardedEmailAdmission = (inp
 };
 
 const redactionEmail = "\uE000";
+
 const redactionMoney = "\uE001";
+
 const redactionDigits = "\uE002";
+
 const redactionText = "\uE003";
 
 export const redactEmailCandidate = (content: string): string =>
@@ -255,6 +311,7 @@ export const redactEmailCandidate = (content: string): string =>
     .replaceAll(redactionText, "[TEXT]");
 
 const mechanicallyMappedHeaders = ["fecha", "valor", "moneda", "contraparte"];
+
 const mechanicalStatementMapping = Schema.decodeSync(StatementColumnMapping)({
   dateColumn: 0,
   amountColumn: 1,
@@ -288,6 +345,7 @@ export const unmappedStatementRow = (row: ParsedStatementRow): NeedsReviewStatem
 });
 
 type StatementDirection = "inflow" | "outflow";
+
 type ExtractionDecoder<Extraction> = (
   candidate: Schema.Json
 ) => Effect.Effect<Extraction, Schema.SchemaError, never>;
@@ -311,12 +369,15 @@ const mappedDirection = (
       ),
     onSome: (index) => {
       const marker = normalizeMarker(fields[index] ?? "");
+
       if (mapping.inflowMarkers.some((candidate) => normalizeMarker(candidate) === marker)) {
         return Option.some("inflow");
       }
+
       if (mapping.outflowMarkers.some((candidate) => normalizeMarker(candidate) === marker)) {
         return Option.some("outflow");
       }
+
       return Option.none();
     },
   });
@@ -329,20 +390,26 @@ const normalizedAmount: NormalizeAmount = (source, mapping) => {
     onNone: () => value,
     onSome: (separator) => value.replaceAll(separator, ""),
   });
+
   if (mapping.decimalSeparator === ",") value = value.replace(",", ".");
   value = value.replace(/^[-+]/u, "");
+
   return /^(?:0|[1-9]\d*)(?:\.\d+)?$/u.test(value) ? Option.some(value) : Option.none();
 };
 
 type DateFormat = StatementColumnMapping["dateFormat"];
+
 type DateParts = Readonly<{ year: number; month: number; day: number }>;
+
 type DatePartInput = Readonly<{
   format: DateFormat;
   first: number;
   second: number;
   third: number;
 }>;
+
 type ParseDateParts = (input: DatePartInput) => DateParts;
+
 type ParseDate = (
   value: string,
   format: DateFormat,
@@ -351,23 +418,29 @@ type ParseDate = (
 
 const dateParts: ParseDateParts = (input) => {
   const { format, first, second, third } = input;
+
   if (format === "yyyy-MM-dd") return { year: first, month: second, day: third };
+
   if (format === "dd/MM/yyyy") return { year: third, month: second, day: first };
+
   return { year: third, month: first, day: second };
 };
 
 const parsedDate: ParseDate = (value, format, timeZone) => {
   const match = /^(\d{2,4})[-/](\d{2})[-/](\d{2,4})$/u.exec(value.trim());
+
   if (match === null) return Option.none();
   const first = Number(match[1]);
   const second = Number(match[2]);
   const third = Number(match[3]);
   const parts = dateParts({ format, first, second, third });
   const date = DateTime.makeZoned(parts, { timeZone, adjustForTimeZone: true });
+
   if (Option.isNone(date)) return Option.none();
   const actual = DateTime.toParts(date.value);
   const expectedDateKey = [parts.year, parts.month, parts.day].join("-");
   const actualDateKey = [actual.year, actual.month, actual.day].join("-");
+
   return actualDateKey === expectedDateKey
     ? Option.some(DateTime.toUtc(date.value))
     : Option.none();
@@ -407,6 +480,7 @@ const decodeMoney = Effect.fn(function* (
   amount: string
 ) {
   const currency = currencyFor(row, mapping);
+
   if (Option.isNone(currency)) {
     return review(row, {
       reason: "ambiguous-currency",
@@ -414,9 +488,11 @@ const decodeMoney = Effect.fn(function* (
       message: "The row has no recognized Currency.",
     });
   }
+
   const result = yield* Effect.result(
     Schema.decodeUnknownEffect(Money)({ amount, currency: currency.value })
   );
+
   if (Result.isFailure(result)) {
     return review(row, {
       reason: "canonical-validation-failed",
@@ -424,6 +500,7 @@ const decodeMoney = Effect.fn(function* (
       message: "The row's Money failed canonical Currency or precision validation.",
     });
   }
+
   return result.success;
 });
 
@@ -444,7 +521,9 @@ const decodeExtraction: DecodeExtraction = (decodeCandidate) => (row, mapping, f
       amount: BigDecimal.fromStringUnsafe(facts.moneyAmount),
       currency: facts.currency,
     });
+
     const direction = mappedDirection(row.fields, facts.amountSource, mapping);
+
     if (Option.isNone(direction)) {
       return review(row, {
         reason: "ambiguous-direction",
@@ -452,19 +531,27 @@ const decodeExtraction: DecodeExtraction = (decodeCandidate) => (row, mapping, f
         message: "The row's direction marker is not recognized by this statement format.",
       });
     }
+
     const counterparty = Option.flatMap(mapping.counterpartyColumn, (index) =>
       Option.liftPredicate((value: string) => value.length > 0)((row.fields[index] ?? "").trim())
     );
-    const encoded = {
+
+    const required = {
       money: {
         amount: encodeMoneyAmount(money.amount),
         currency: money.currency,
       },
       direction: direction.value,
       occurredAt: facts.occurredAt,
-      ...(Option.isSome(counterparty) ? { counterparty: counterparty.value } : {}),
     };
+
+    const encoded = Option.match(counterparty, {
+      onNone: () => required,
+      onSome: (value) => ({ ...required, counterparty: value }),
+    });
+
     const result = yield* Effect.result(decodeCandidate(encoded));
+
     if (Result.isFailure(result)) {
       return review(row, {
         reason: "canonical-validation-failed",
@@ -472,6 +559,7 @@ const decodeExtraction: DecodeExtraction = (decodeCandidate) => (row, mapping, f
         message: "The mechanically extracted facts failed canonical Transaction validation.",
       });
     }
+
     return {
       outcome: "accepted",
       recordNumber: row.recordNumber,
@@ -491,8 +579,10 @@ const unsafeFinancialCell = (cell: FinancialCell): boolean =>
 const unsafeXlsxCells = (row: ParsedStatementRow, indexes: ReadonlyArray<number>): boolean => {
   if (row.evidence.sourceFormat !== "xlsx") return false;
   const cells = row.evidence.cells;
+
   return indexes.some((index) => {
     const cell = cells[index];
+
     return cell !== undefined && unsafeFinancialCell(cell);
   });
 };
@@ -502,6 +592,7 @@ const decodeKnownMoney = Effect.fn(function* (
   mapping: StatementColumnMapping
 ) {
   const moneyIndexes = [mapping.amountColumn, ...Option.toArray(mapping.currencyColumn)];
+
   if (unsafeXlsxCells(row, moneyIndexes)) {
     return review(row, {
       reason: "malformed-source-row",
@@ -509,8 +600,10 @@ const decodeKnownMoney = Effect.fn(function* (
       message: "A mapped Money cell is a formula, boolean, or spreadsheet error.",
     });
   }
+
   const amountSource = row.fields[mapping.amountColumn] ?? "";
   const amount = normalizedAmount(amountSource, mapping);
+
   if (Option.isNone(amount)) {
     return review(row, {
       reason: "missing-required-fact",
@@ -518,7 +611,9 @@ const decodeKnownMoney = Effect.fn(function* (
       message: "The row is missing a valid amount.",
     });
   }
+
   const money = yield* decodeMoney(row, mapping, amount.value);
+
   return { money, amountSource };
 });
 
@@ -534,10 +629,13 @@ type InterpretRow = <Extraction>(
 const interpretMappedRow: InterpretRow = (row, mapping, context) =>
   Effect.gen(function* () {
     const known = yield* decodeKnownMoney(row, mapping);
+
     if ("outcome" in known) return known;
+
     if ("outcome" in known.money) return known.money;
 
     const remainingIndexes = [mapping.dateColumn, ...Option.toArray(mapping.directionColumn)];
+
     if (unsafeXlsxCells(row, remainingIndexes)) {
       return review(row, {
         reason: "malformed-source-row",
@@ -545,11 +643,13 @@ const interpretMappedRow: InterpretRow = (row, mapping, context) =>
         message: "A mapped date or direction cell is a formula, boolean, or spreadsheet error.",
       });
     }
+
     const date = parsedDate(
       row.fields[mapping.dateColumn] ?? "",
       mapping.dateFormat,
       context.timeZone
     );
+
     if (Option.isNone(date)) {
       return review(row, {
         reason: "missing-required-fact",
@@ -557,6 +657,7 @@ const interpretMappedRow: InterpretRow = (row, mapping, context) =>
         message: "The row is missing a valid date.",
       });
     }
+
     return yield* decodeExtraction(context.decodeCandidate)(row, mapping, {
       amountSource: known.amountSource,
       occurredAt: DateTime.formatIso(date.value),
@@ -569,8 +670,10 @@ const safeReviewColumn = (
   row: ParsedStatementRow,
   index: Option.Option<number>
 ): Option.Option<number> => Option.filter(index, (column) => !unsafeXlsxCells(row, [column]));
+
 const reviewText = (value: string): string =>
   Option.getOrElse(Schema.decodeOption(ReviewDraft.fields.amount)(value), () => "");
+
 const reviewCounterparty = (row: ParsedStatementRow, mapping: StatementColumnMapping): string =>
   Option.getOrElse(
     Option.flatMap(safeReviewColumn(row, mapping.counterpartyColumn), (index) =>
@@ -578,6 +681,7 @@ const reviewCounterparty = (row: ParsedStatementRow, mapping: StatementColumnMap
     ),
     () => ""
   );
+
 const statementReviewDraft = ({
   row,
   mapping,
@@ -590,22 +694,28 @@ const statementReviewDraft = ({
   knownMoney: Option.Option<Money>;
 }>): ReviewDraft => {
   const amountSource = row.fields[mapping.amountColumn] ?? "";
+
   const amount = Option.flatMap(safeReviewColumn(row, Option.some(mapping.amountColumn)), () =>
     normalizedAmount(amountSource, mapping)
   );
+
   const currencySafe =
     Option.isNone(mapping.currencyColumn) ||
     Option.isSome(safeReviewColumn(row, mapping.currencyColumn));
+
   const currency = currencySafe
     ? Option.flatMap(currencyFor(row, mapping), Schema.decodeUnknownOption(Currency))
     : Option.none();
+
   const date = Option.flatMap(safeReviewColumn(row, Option.some(mapping.dateColumn)), () =>
     parsedDate(row.fields[mapping.dateColumn] ?? "", mapping.dateFormat, timeZone)
   );
+
   const directionSafe = Option.match(mapping.directionColumn, {
     onNone: () => Option.isSome(amount),
     onSome: (index) => Option.isSome(safeReviewColumn(row, Option.some(index))),
   });
+
   return {
     amount: Option.match(knownMoney, {
       onSome: (money: ReadonlyMoney) => money.amount.pipe(encodeMoneyAmount, reviewText),
@@ -619,9 +729,11 @@ const statementReviewDraft = ({
     userProvidedFields: [],
   };
 };
+
 const interpretRow: InterpretRow = (row, mapping, context) =>
   Effect.gen(function* () {
     const result = yield* interpretMappedRow(row, mapping, context);
+
     return result.outcome === "accepted"
       ? result
       : {
@@ -651,15 +763,19 @@ export const interpretStatementRows = Effect.fn(function* <Extraction>(
       decodeCandidate,
     })
   );
+
   const counts: Record<InterpretedStatementRow<Extraction>["outcome"], number> = {
     accepted: 0,
     "needs-review": 0,
   };
+
   for (const outcome of outcomes) counts[outcome.outcome] += 1;
+
   const accounting: StatementAccounting = {
     inputRows: input.rows.length,
     acceptedRows: counts.accepted,
     needsReviewRows: counts["needs-review"],
   };
+
   return { outcomes, accounting };
 });

@@ -12,14 +12,16 @@ import { ProviderBrowserProof } from "../../src/shell/provider-authentication/co
 
 const readBody = (response: Pick<Response, "json">): Effect.Effect<unknown> =>
   native(() => response.json());
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("starts and polls a browser-private pairing without a User", () =>
     Effect.gen(function* () {
       const create = yield* nativeBrowserPlatform;
       const runtime = yield* create();
+
       const send = (
         path: string,
-        payload: object
+        payload: unknown
       ): ReturnType<ReturnType<typeof browser>["post"]> =>
         native(() =>
           runtime.dispatchFetch(`https://${productionTopology.ingress.hostname}${path}`, {
@@ -33,27 +35,36 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             body: JSON.stringify(payload),
           })
         );
+
       const started = yield* send("/web/pairings", {});
       expect(started.status).toBe(200);
+
       const proof = yield* Schema.decodeUnknownEffect(ProviderBrowserProof)(
         yield* native(() => started.json())
       );
+
       const independent = yield* send("/web/pairings", {});
+
       const unbound = yield* Schema.decodeUnknownEffect(ProviderBrowserProof)(
         yield* native(() => independent.json())
       );
+
       const pending = yield* send("/web/pairings/redeem", unbound);
       expect(pending.status).toBe(202);
       expect(pending.headers.get("set-cookie")).toBeNull();
+
       const initiated = yield* send("/web/providers/google/start", {
         ...proof,
         intent: "signup",
         consentRevision: webSignupDisclosure().revision,
       });
+
       expect(initiated.status).toBe(200);
+
       const directory = yield* native(() =>
         runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
       );
+
       yield* native(() =>
         directory.exec(
           "UPDATE provider_attempts SET state='verified',issuer=?,subject=? WHERE pairing_id=?",
@@ -72,28 +83,35 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       ).toBe(true);
       const repeat = yield* send("/web/providers/google/complete", proof);
       expect(yield* native(() => repeat.json())).toEqual({ status: "approved" });
+
       const sessions = yield* Effect.all(
         [send("/web/pairings/redeem", proof), send("/web/pairings/redeem", proof)],
         { concurrency: 2 }
       );
+
       expect(
         sessions.map((response) => response.status).sort((left, right) => left - right)
       ).toEqual([200, 400]);
+
       const cookie =
         sessions
           .find((response) => response.status === 200)
           ?.headers.get("set-cookie")
           ?.split(";")[0] ?? "";
+
       const mounted = yield* native(() =>
         runtime.dispatchFetch(
           `https://${productionTopology.ingress.hostname}/web/session/binding`,
           { headers: { origin: browserOrigins.production, cookie } }
         )
       );
+
       expect(mounted.status).toBe(200);
+
       const { binding } = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ binding: Schema.String })
       )(yield* native(() => mounted.json()));
+
       const current = yield* native(() =>
         runtime.dispatchFetch(
           `https://${productionTopology.ingress.hostname}/web/session/binding?context=transactions`,
@@ -107,6 +125,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           }
         )
       );
+
       expect(yield* native(() => current.json())).toMatchObject({
         binding,
         initial: {
@@ -115,6 +134,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           transactions: { page: { data: [] } },
         },
       });
+
       const [registration] = yield* Schema.decodeUnknownEffect(
         Schema.Array(Schema.Struct({ user_id: Schema.String }))
       )(
@@ -122,10 +142,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           directory.exec("SELECT user_id FROM provider_routes WHERE established=1")
         )
       );
+
       if (registration === undefined) return yield* Effect.die("Missing established User");
+
       const owner = yield* native(() =>
         runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: registration.user_id })
       );
+
       expect(
         yield* native(() =>
           owner.exec(
@@ -147,6 +170,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           )
         )
       ).toEqual([{ lifetime_registered: 1, starts_at_signup: 1, duration: 604800000 }]);
+
       const logout = yield* native(() =>
         runtime.dispatchFetch(`https://${productionTopology.ingress.hostname}/web/session/logout`, {
           method: "POST",
@@ -160,14 +184,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           body: "{}",
         })
       );
+
       expect(logout.status).toBe(204);
       yield* native(() => logout.arrayBuffer());
+
       const mountedAgain = yield* native(() =>
         runtime.dispatchFetch(
           `https://${productionTopology.ingress.hostname}/web/session/binding`,
           { headers: { origin: browserOrigins.production, cookie, connection: "close" } }
         )
       );
+
       expect(yield* native(() => mountedAgain.json())).toEqual({ binding: null });
     })
   );
@@ -183,13 +210,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const older = yield* verified("same-subject");
         const later = yield* verified("same-subject");
         const foreign = yield* verified("different-subject");
+
         const complete = (proof: typeof ProviderBrowserProof.Type): ReturnType<typeof post> =>
           post("/web/providers/google/complete", proof);
+
         const replay = (proof: typeof ProviderBrowserProof.Type): ReturnType<typeof post> =>
           post("/web/pairings/redeem", proof);
+
         const result = yield* Effect.all([complete(older.proof), complete(later.proof)], {
           concurrency: 2,
         });
+
         const bodies = yield* Effect.forEach(result, readBody);
         expect(
           bodies.filter(Schema.is(Schema.Struct({ status: Schema.Literal("created") })))
@@ -200,10 +231,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const other = yield* complete(foreign.proof);
         expect(other.status).toBe(200);
         yield* native(() => other.arrayBuffer());
+
         const refused = yield* replay({
           ...foreign.proof,
           privateVerifier: later.proof.privateVerifier,
         });
+
         expect(refused.status).toBe(400);
         yield* native(() => refused.arrayBuffer());
         const superseded = yield* replay(older.proof);
@@ -230,22 +263,28 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const invitationResponse = yield* signedChat(runtime, "Hola", caller);
         expect(invitationResponse.status).toBe(200);
         yield* native(() => invitationResponse.arrayBuffer());
+
         const directory = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
         );
+
         const [invitation] = yield* Schema.decodeUnknownEffect(
           Schema.Array(Schema.Struct({ id: Schema.String }))
         )(yield* native(() => directory.exec("SELECT id FROM whatsapp_invitations")));
+
         if (invitation === undefined) return yield* Effect.die("Missing signed invitation");
         const flow = yield* verified("chat-user", invitation.id);
+
         const review = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ associationCode: Schema.String, confirmationText: Schema.String })
         )(flow.review);
+
         const submit = (): ReturnType<typeof post> =>
           post("/web/providers/google/complete", {
             ...flow.proof,
             associationCode: review.associationCode,
           });
+
         expect((yield* submit()).status).toBe(400);
         const extraSpace = yield* signedChat(runtime, " " + review.confirmationText, caller);
         expect(extraSpace.status).toBe(409);
@@ -277,12 +316,16 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const runtime = yield* (yield* nativeBrowserPlatform)();
         const { verified, post } = browser(runtime);
         const { proof, attempt } = yield* verified("interrupted-subject");
+
         const directory = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
         );
+
         const owner = yield* native(() => runtime.getDurableObjectNamespace("DIRECTORY", "core"));
+
         const complete = (): ReturnType<typeof post> =>
           post("/web/providers/google/complete", proof);
+
         yield* native(() =>
           directory.exec(
             "CREATE TRIGGER lose_recovery BEFORE INSERT ON recovery_routes BEGIN SELECT RAISE(ABORT,'unavailable'); END"
@@ -291,13 +334,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const interrupted = yield* complete();
         expect(interrupted.status).toBe(503);
         yield* native(() => interrupted.arrayBuffer());
+
         const [reserved] = yield* Schema.decodeUnknownEffect(
           Schema.Array(Schema.Struct({ user_id: Schema.String }))
         )(yield* native(() => directory.exec("SELECT user_id FROM provider_routes")));
+
         if (reserved === undefined) return yield* Effect.die("Missing reservation");
+
         const store = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: reserved.user_id })
         );
+
         expect(yield* native(() => store.exec("SELECT count(*) AS n FROM users"))).toEqual([
           { n: 0 },
         ]);
@@ -305,9 +352,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const blocked = yield* post("/web/providers/google/complete", competing.proof);
         expect(blocked.status).toBe(503);
         yield* native(() => blocked.arrayBuffer());
+
         const cancel = yield* native(() =>
           owner.getByName("directory-v1").fetch(handoffCancelUrl, { method: "POST", body: attempt })
         );
+
         expect(yield* native(() => cancel.json())).toEqual({ outcome: "cancelled" });
         yield* native(() => directory.exec("DROP TRIGGER lose_recovery"));
         const late = yield* complete();
@@ -322,12 +371,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(lost.status).toBe(503);
         yield* native(() => lost.arrayBuffer());
         yield* native(() => directory.exec("DROP TRIGGER lose_ack"));
+
         const outcome = yield* native(() =>
           owner.getByName("directory-v1").fetch(handoffCancelUrl, {
             method: "POST",
             body: competing.attempt,
           })
         );
+
         expect(yield* native(() => outcome.json())).toEqual({ outcome: "committed" });
         expect(
           yield* native(() =>
@@ -359,9 +410,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const runtime = yield* (yield* nativeBrowserPlatform)();
         const { verified, post } = browser(runtime);
         const { proof, attempt } = yield* verified("cancel-race");
+
         const directory = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
         );
+
         const ns = yield* native(() => runtime.getDurableObjectNamespace("DIRECTORY", "core"));
         yield* native(() =>
           directory.exec(
@@ -371,11 +424,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const parked = yield* post("/web/providers/google/complete", proof);
         expect(parked.status).toBe(503);
         yield* native(() => parked.arrayBuffer());
+
         const [owner] = yield* Schema.decodeUnknownEffect(
           Schema.Array(Schema.Struct({ user_id: Schema.String }))
         )(yield* native(() => directory.exec("SELECT user_id FROM provider_routes")));
+
         if (owner === undefined) return yield* Effect.die("Missing reservation");
         const users = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
+
         const foreign = yield* native(() =>
           users
             .getByName("10000000-0000-4000-8000-000000000099")
@@ -385,9 +441,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               body: JSON.stringify({ ...proof, id: attempt }),
             })
         );
+
         expect(foreign.status).toBe(400);
         yield* native(() => foreign.arrayBuffer());
         yield* native(() => directory.exec("DROP TRIGGER hold"));
+
         const [completion, cancellation] = yield* Effect.all(
           [
             post("/web/providers/google/complete", proof),
@@ -399,13 +457,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           ],
           { concurrency: 2 }
         );
+
         const terminal = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ outcome: Schema.Literals(["committed", "cancelled"]) })
         )(yield* native(() => cancellation.json()));
+
         yield* native(() => completion.arrayBuffer());
+
         const local = yield* native(() =>
           runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: owner.user_id })
         );
+
         const active = terminal.outcome === "committed";
         expect(yield* native(() => local.exec("SELECT outcome FROM browser_handoffs"))).toEqual([
           terminal,

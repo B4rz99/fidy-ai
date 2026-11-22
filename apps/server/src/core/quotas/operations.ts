@@ -1,4 +1,4 @@
-import { DateTime } from "effect";
+import { Data, DateTime } from "effect";
 import type { AccessTier } from "~/core/access-tier/contract";
 import {
   type AllowanceKind,
@@ -8,11 +8,15 @@ import {
   freeAllowanceLimits,
 } from "./contract";
 
+const Meter = Data.taggedEnum<AllowanceMeter>();
+
 const bogota = DateTime.zoneMakeNamedUnsafe("America/Bogota");
+
 const limits = freeAllowanceLimits;
 
 export const allowancePeriod = (now: DateTime.Utc): AllowancePeriod => {
   const start = DateTime.startOf(DateTime.setZone(now, bogota), "month");
+
   return {
     startsAt: DateTime.toUtc(start),
     resetsAt: DateTime.toUtc(DateTime.add(start, { months: 1 })),
@@ -29,20 +33,23 @@ export const projectQuotaStatus = (
   if (input.accessTier === "pro") {
     return {
       accessTier: "pro",
-      forwardedEmails: { _tag: "Uncapped" },
-      mediaSubmissions: { _tag: "Uncapped" },
-      hostedHistoryTurns: { _tag: "Uncapped" },
-      canonicalCalls: { _tag: "Uncapped" },
+      forwardedEmails: Meter.Uncapped(),
+      mediaSubmissions: Meter.Uncapped(),
+      hostedHistoryTurns: Meter.Uncapped(),
+      canonicalCalls: Meter.Uncapped(),
     };
   }
+
   const period = allowancePeriod(input.now);
-  const meter = (allowance: AllowanceKind): AllowanceMeter => ({
-    _tag: "Limited",
-    limit: limits[allowance],
-    consumed: input.consumed[allowance],
-    remaining: Math.max(0, limits[allowance] - input.consumed[allowance]),
-    period,
-  });
+
+  const meter = (allowance: AllowanceKind): AllowanceMeter =>
+    Meter.Limited({
+      limit: limits[allowance],
+      consumed: input.consumed[allowance],
+      remaining: Math.max(0, limits[allowance] - input.consumed[allowance]),
+      period,
+    });
+
   return {
     accessTier: "free",
     forwardedEmails: meter("forwarded_email"),
@@ -52,6 +59,14 @@ export const projectQuotaStatus = (
   };
 };
 
+export type ConsumptionDecision = Data.TaggedEnum<{
+  Consume: { readonly remaining: number };
+  Uncapped: {};
+  Exhausted: { readonly allowance: AllowanceKind; readonly resetsAt: DateTime.Utc };
+}>;
+
+export const ConsumptionDecision = Data.taggedEnum<ConsumptionDecision>();
+
 export const decideConsumption = (
   input: Readonly<{
     allowance: AllowanceKind;
@@ -59,17 +74,14 @@ export const decideConsumption = (
     consumed: number;
     now: DateTime.Utc;
   }>
-):
-  | Readonly<{ _tag: "Consume"; remaining: number }>
-  | Readonly<{ _tag: "Uncapped" }>
-  | Readonly<{ _tag: "Exhausted"; allowance: AllowanceKind; resetsAt: DateTime.Utc }> => {
-  if (input.accessTier === "pro") return { _tag: "Uncapped" };
+): ConsumptionDecision => {
+  if (input.accessTier === "pro") return ConsumptionDecision.Uncapped();
   const limit = limits[input.allowance];
+
   return input.consumed >= limit
-    ? {
-        _tag: "Exhausted",
+    ? ConsumptionDecision.Exhausted({
         allowance: input.allowance,
         resetsAt: allowancePeriod(input.now).resetsAt,
-      }
-    : { _tag: "Consume", remaining: limit - input.consumed - 1 };
+      })
+    : ConsumptionDecision.Consume({ remaining: limit - input.consumed - 1 });
 };

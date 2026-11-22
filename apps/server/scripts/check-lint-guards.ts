@@ -3,7 +3,9 @@
 import { Schema } from "effect";
 
 const serverRoot = Bun.fileURLToPath(new URL("..", import.meta.url));
+
 const workspaceRoot = Bun.fileURLToPath(new URL("../../../", import.meta.url));
+
 const decode = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 
 const productionDirectories = [
@@ -12,11 +14,13 @@ const productionDirectories = [
   "apps/web/src",
   "infra/cloudflare",
 ] as const;
+
 const productionPaths = productionDirectories
   .flatMap((directory) =>
     Array.from(new Bun.Glob(`${directory}/**/*.{ts,tsx}`).scanSync({ cwd: workspaceRoot }))
   )
   .filter((path) => !path.endsWith(".test.ts") && !path.endsWith(".test.tsx"));
+
 const productionFiles = await Promise.all(
   productionPaths.map((path) =>
     Bun.file(`${workspaceRoot}${path}`)
@@ -24,8 +28,10 @@ const productionFiles = await Promise.all(
       .then((source) => ({ path, source }))
   )
 );
+
 for (const { path, source } of productionFiles) {
   const handwrittenSymbol = /\b(?:Symbol\s*\(|unique\s+symbol\b)/u.exec(source);
+
   if (handwrittenSymbol !== null) {
     const line = source.slice(0, handwrittenSymbol.index).split("\n").length;
     throw new Error(
@@ -117,8 +123,10 @@ const probes: ReadonlyArray<LintProbe> = [
 const assertProbeResult = (probe: LintProbe, exitCode: number, report: string): void => {
   if ("clean" in probe) {
     if (exitCode !== 0) throw new Error(`Expected ${probe.name} to pass.\n${report}`);
+
     return;
   }
+
   if (exitCode === 0 || !report.includes(probe.expectedRule)) {
     throw new Error(
       `Expected the ${probe.name} negative lint probe to fail with ${probe.expectedRule}.\n${report}`
@@ -132,6 +140,19 @@ const probeFiles = probes.map((probe) => ({
     probe.name === "ingestion-node-crypto" ? "src/shell/ingestion" : "src/core"
   }/.lint-${probe.name}-probe-${process.pid}.ts`,
 }));
+
+const jevVariables = new Set([
+  "CI",
+  "TYPESAFE_API_KEY",
+  "TYPESAFE_AI_API_KEY",
+  "FACTORY_API_KEY",
+  "AI_GATEWAY_API_KEY",
+  "VERCEL_OIDC_TOKEN",
+]);
+
+const lintEnvironment = Object.fromEntries(
+  Object.entries(process.env).filter(([name]) => !jevVariables.has(name))
+);
 
 try {
   await Promise.all(
@@ -149,8 +170,9 @@ try {
       "--format=json",
       ...probeFiles.map((probe) => `apps/server/${probe.path}`),
     ],
-    { cwd: workspaceRoot, stdout: "pipe", stderr: "pipe" }
+    { cwd: workspaceRoot, env: lintEnvironment, stdout: "pipe", stderr: "pipe" }
   );
+
   const report = Schema.decodeSync(
     Schema.fromJsonString(
       Schema.Struct({
@@ -159,13 +181,16 @@ try {
       })
     )
   )(decode(result.stdout));
+
   if (result.exitCode !== 1 || report.number_of_files !== probeFiles.length) {
     throw new Error(`Lint probes did not all execute.\n${decode(result.stderr)}`);
   }
+
   for (const probe of probeFiles) {
     const diagnostics = report.diagnostics.filter(
       (diagnostic) => diagnostic.filename === `apps/server/${probe.path}`
     );
+
     assertProbeResult(probe, diagnostics.length === 0 ? 0 : 1, JSON.stringify(diagnostics));
   }
 } finally {

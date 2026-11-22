@@ -1,3 +1,7 @@
+import {
+  OperationAccessCaller,
+  OperationAccessDecision,
+} from "../../../src/shell/canonical-policy/contract";
 import { confirmLocalOAuth } from "../../oauth-confirmation/operations";
 import { resolveLocalOAuthCaller } from "../../oauth-agents/operations";
 import { CurrentOAuthInvocation, type LocalOAuthInvocation } from "../../oauth-agents/contract";
@@ -16,7 +20,7 @@ import {
   QuotaStatus,
   canonicalRetryLifetimeMs,
 } from "../../../src/core/quotas/contract";
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Match, Option, Predicate, Schema } from "effect";
 import { allowancePeriod } from "../../../src/core/quotas/operations";
 import { UserId } from "../../../src/core/identity/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
@@ -60,6 +64,7 @@ export const admitLocalRequest = Effect.fn(function* ({
   const sql = yield* SqliteClient;
   const policy = canonicalRequestProtection;
   yield* sql`DELETE FROM canonical_request_leases WHERE user_id=${user} AND expires_at_ms<=${current}`;
+
   return yield* sql`INSERT INTO canonical_request_buckets(subject,virtual_at_ms)
       SELECT ${"user:" + user},${current + policy.intervalMs}
       WHERE (SELECT count(*) FROM canonical_request_leases WHERE user_id=${user}) < ${policy.concurrency}
@@ -69,27 +74,35 @@ export const admitLocalRequest = Effect.fn(function* ({
 
 export const localStanding = Effect.fn(function* (userId: string, current: number) {
   const sql = yield* SqliteClient;
+
   const select = quotaStatusSelection({
     users: { sql: "SELECT ? AS userId", params: [userId] },
     current,
   });
+
   const [row] = yield* sql.unsafe(select.sql, select.params);
+
   return yield* Effect.fromOption(
     decodeQuotaStatus({ row, current }),
     () => new CanonicalAdmissionUnavailable({ cause: "standing" })
   );
 });
+
+const isResponse = Schema.is(Schema.instanceOf(Response));
+
 const Receipt = Schema.Struct({
   operation: Schema.String,
   input_digest: Schema.String,
   status: Schema.Int,
   body: Schema.NullOr(Schema.String),
 });
+
 const bodyResponse = (status: number, body: string): Response =>
   new Response(body, {
     status,
     headers: { "content-type": "application/json", "cache-control": "no-store" },
   });
+
 const resolveSession = Effect.fn(function* ({
   proof,
   owns,
@@ -104,26 +117,33 @@ const resolveSession = Effect.fn(function* ({
   if (Option.isNone(proof)) return "unauthenticated" as const;
   const lookup = sessionLookup({ ...proof.value, current });
   const sql = yield* SqliteClient;
+
   const [row] = yield* sql.unsafe(
     lookup.statement.sql +
       " AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=web_sessions.user_id)",
     lookup.statement.params
   );
+
   const session = resolveBoundCanonicalWebSession({ lookup, row });
+
   if (Option.isNone(session) || !owns(session.value.userId)) return "unauthenticated" as const;
+
   return {
     sessionId: session.value.id,
     userId: yield* Schema.decodeEffect(UserId)(session.value.userId),
   };
 });
+
 export const localProof = Effect.fn(function* (
   request: Request,
   owns: (user: string) => boolean,
   sessionLookup: typeof boundSessionLookup = boundSessionLookup
 ) {
   const invocation = yield* CurrentOAuthInvocation;
+
   if (Option.isSome(invocation)) {
     const oauth = invocation.value;
+
     return Effect.fn(function* (current: number) {
       if (
         !owns(oauth.subject.userId) ||
@@ -132,26 +152,35 @@ export const localProof = Effect.fn(function* (
       ) {
         return "unauthenticated" as const;
       }
+
       const facts = yield* resolveLocalOAuthCaller({ subject: oauth.subject, current });
+
       return Option.isNone(facts)
         ? ("unauthenticated" as const)
         : { oauth, userId: oauth.subject.userId, scopes: facts.value.scopes };
     });
   }
+
   if (request.headers.has("authorization")) {
     const candidate = patRouteProof(request);
     const id = Option.fromNullishOr(request.headers.get(patRouteHeader));
+
     if (Option.isNone(candidate) || Option.isNone(id)) {
       return (): Effect.Effect<"unauthenticated"> => Effect.succeed("unauthenticated");
     }
+
     const digest = yield* candidate.value.digest;
+
     return (current: number): ReturnType<typeof localPATCredential> =>
       localPATCredential({ id: id.value, shortId: candidate.value.shortId, digest, current, owns });
   }
+
   const proof = yield* Effect.tryPromise(() => readBoundWebSessionProof(request));
+
   return (current: number): ReturnType<typeof resolveSession> =>
     resolveSession({ proof, owns, current, sessionLookup });
 });
+
 type Mutation<A, E> = Readonly<{
   request: Request;
   storage: DurableObjectStorage;
@@ -171,13 +200,20 @@ type Subject = Exclude<
   | { oauth: LocalOAuthInvocation; userId: UserId; scopes: PATScopes },
   string
 >;
+
 const suggestionCallerFor = (subject: Subject): SuggestedOperationCaller => {
   if ("patId" in subject) return freePatCaller(subject.scopes);
+
   if ("oauth" in subject) {
-    return { accessCaller: { _tag: "OAuthAgent", capabilities: subject.scopes }, tier: "free" };
+    return {
+      accessCaller: OperationAccessCaller.OAuthAgent({ capabilities: subject.scopes }),
+      tier: "free",
+    };
   }
-  return { accessCaller: { _tag: "WebSession", fresh: false }, tier: "free" };
+
+  return { accessCaller: OperationAccessCaller.WebSession({ fresh: false }), tier: "free" };
 };
+
 export type Call = Readonly<{
   storage: DurableObjectStorage;
   subject: Subject;
@@ -185,6 +221,7 @@ export type Call = Readonly<{
   status: QuotaStatus;
   current: number;
 }>;
+
 export type Invocation = Readonly<{ digest: Option.Option<string>; inputHash: string }>;
 
 const oneStored = (
@@ -193,18 +230,21 @@ const oneStored = (
   rows.length === 1
     ? Effect.void
     : Effect.fail(new CanonicalAdmissionUnavailable({ cause: "incomplete_local_mutation" }));
+
 const sessionOutcome = (
   outcome: LocalMutationResult["outcome"]
 ): { kind: string; reason: Option.Option<string> } =>
   outcome === "resource_limit"
     ? { kind: "validation_failed", reason: Option.some(outcome) }
     : { kind: outcome, reason: Option.none() };
+
 export const audit = Effect.fn(function* (
   { subject, operation, current }: Call,
   outcome: LocalMutationResult["outcome"]
 ) {
   const sql = yield* SqliteClient;
   const { userId } = subject;
+
   if ("oauth" in subject) {
     const stmt = recordOAuthCall({
       id: newId(),
@@ -213,16 +253,19 @@ export const audit = Effect.fn(function* (
       current,
       outcome: outcome === "success" ? "accepted" : "rejected",
     });
+
     yield* oneStored(yield* sql.unsafe(stmt.sql + " RETURNING id", stmt.params));
   } else if ("patId" in subject) {
     yield* oneStored(
       yield* sql`INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,outcome,occurred_at_ms)
       VALUES ('credential_call',${newId()},${userId},${subject.patId},${operation.id},${outcome === "success" ? "accepted" : "rejected"},${current}) RETURNING id`
     );
+
     if (outcome === "success") {
       yield* oneStored(
         yield* sql`UPDATE pats SET last_used_at_ms=${current} WHERE id=${subject.patId} AND user_id=${userId} RETURNING id`
       );
+
       const currentProof = yield* localPATCredential({
         id: subject.patId,
         shortId: subject.shortId,
@@ -230,7 +273,8 @@ export const audit = Effect.fn(function* (
         current: yield* Clock.currentTimeMillis,
         owns: (user) => user === userId,
       });
-      if (typeof currentProof === "string" || deniedAccess({ subject: currentProof, operation })) {
+
+      if (Predicate.isString(currentProof) || deniedAccess({ subject: currentProof, operation })) {
         return yield* new CanonicalAdmissionUnavailable({
           cause: "PAT authority changed during commit",
         });
@@ -244,11 +288,15 @@ export const audit = Effect.fn(function* (
     );
   }
 });
+
 export const reject = Effect.fn(function* (call: Call, response: Response) {
   yield* audit(call, "validation_failed");
+
   return attachStanding({ ...call, response });
 });
+
 const firstFailureStatus = 400;
+
 const validateOutput = Effect.fn(function* (
   operation: CatalogOperation,
   status: number,
@@ -257,7 +305,9 @@ const validateOutput = Effect.fn(function* (
   const codec = status < firstFailureStatus ? operation.success : operation.failure;
   yield* Schema.decodeEffect(codec, { onExcessProperty: "error" })(body);
 });
+
 const receiptCleanupPageSize = 32;
+
 const refilledBucketIdleMs = 60000;
 
 export const sweepLocalReceipts = Effect.fn(function* (current: number) {
@@ -269,8 +319,11 @@ export const sweepLocalReceipts = Effect.fn(function* (current: number) {
 
 const chunkedReceipt = (id: string): boolean =>
   id === "recurringPlans.applyRecurringEdit" || id === "operations.executeAtomicBatch";
+
 const receiptPartCharacters = 200_000;
+
 const ReceiptPart = Schema.Struct({ position: Schema.Int, part: Schema.String });
+
 const fullReceiptBody = Effect.fn(function* ({
   body,
   operation,
@@ -285,78 +338,106 @@ const fullReceiptBody = Effect.fn(function* ({
   if (!chunkedReceipt(operation) || body.startsWith("{")) return body;
   const length = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Int))(body);
   const sql = yield* SqliteClient;
+
   const parts = yield* Schema.decodeUnknownEffect(Schema.Array(ReceiptPart))(
     yield* sql`SELECT position,part FROM canonical_receipt_parts WHERE user_id=${user} AND retry_key_digest=${digest} ORDER BY position`
   );
+
   let next = 0;
-  for (const { position, part } of parts) {
-    if (position !== next) {
-      return yield* new CanonicalAdmissionUnavailable({ cause: "incomplete_receipt" });
-    }
-    next += part.length;
-  }
+
+  yield* Effect.forEach(
+    parts,
+    Effect.fnUntraced(function* ({ position, part }) {
+      if (position !== next) {
+        return yield* new CanonicalAdmissionUnavailable({ cause: "incomplete_receipt" });
+      }
+
+      next += part.length;
+    }),
+    { discard: true }
+  );
+
   if (next !== length) {
     return yield* new CanonicalAdmissionUnavailable({ cause: "incomplete_receipt" });
   }
+
   return parts.map((row) => row.part).join("");
 });
+
 export const replay = Effect.fn(function* (call: Call, invocation: Invocation) {
   if (Option.isNone(invocation.digest)) return Option.none<Response>();
   const sql = yield* SqliteClient;
   const { operation, current, subject } = call;
+
   const [stored] =
     yield* sql`SELECT r.operation,r.input_digest,r.status,coalesce(a.body,r.body) AS body FROM canonical_request_receipts r LEFT JOIN agent_operation_receipt_bodies a ON a.user_id=r.user_id AND a.retry_key_digest=r.retry_key_digest
     WHERE r.user_id=${subject.userId} AND r.retry_key_digest=${invocation.digest.value} AND r.accepted_at_ms>${current - canonicalRetryLifetimeMs}`;
+
   if (stored === undefined) return Option.none<Response>();
   const receipt = yield* Schema.decodeUnknownEffect(Receipt)(stored);
+
   if (receipt.operation !== operation.id || receipt.input_digest !== invocation.inputHash) {
     return Option.some(
       yield* reject(call, invalid("The retry key is already bound to different operation inputs."))
     );
   }
+
   if (receipt.body === null) {
     return Option.some(
       yield* reject(call, invalid("This completed operation cannot replay its one-time result."))
     );
   }
+
   const body = yield* fullReceiptBody({
     body: receipt.body,
     operation: operation.id,
     user: subject.userId,
     digest: invocation.digest.value,
   });
+
   const decoded = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Json))(body);
   yield* validateOutput(operation, receipt.status, decoded);
   yield* audit(call, receipt.status < firstFailureStatus ? "success" : "validation_failed");
+
   return Option.some(attachStanding({ ...call, response: bodyResponse(receipt.status, body) }));
 });
+
 export const charge = Effect.fn(function* (call: Call) {
   const { subject, current, operation, status } = call;
+
   if (
     "sessionId" in subject ||
     ["quota.getQuota", "subscription.getUpgradeUrl"].includes(operation.id)
   ) {
     return Option.none<Response>();
   }
+
   const meter = status.canonicalCalls;
-  if (meter._tag !== "Uncapped" && meter.remaining === 0) {
+
+  if (
+    Match.valueTags(meter, { Uncapped: () => false, Limited: ({ remaining }) => remaining === 0 })
+  ) {
     return Option.some(yield* reject(call, exhausted(current)));
   }
+
   const sql = yield* SqliteClient;
   const identity = newId();
   const period = DateTime.toEpochMillis(allowancePeriod(DateTime.makeUnsafe(current)).startsAt);
   yield* oneStored(
     yield* sql`INSERT INTO commercial_allowance_consumptions(user_id,allowance,identity,period_start_ms,accepted_at_ms,units)
-    VALUES(${subject.userId},'canonical_call',${identity},${period},${current},${meter._tag === "Uncapped" ? 0 : 1}) RETURNING identity`
+    VALUES(${subject.userId},'canonical_call',${identity},${period},${current},${Match.valueTags(meter, { Uncapped: () => 0, Limited: () => 1 })}) RETURNING identity`
   );
+
   if ("patId" in subject) {
     yield* oneStored(
       yield* sql`INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,occurred_at_ms)
     VALUES('request_admission',${identity},${subject.userId},${subject.patId},${operation.id},${current}) RETURNING id`
     );
   }
+
   return Option.none<Response>();
 });
+
 const financialGrowth = new Set<string>([
   "memory.remember",
   "memory.revise",
@@ -374,12 +455,14 @@ const financialGrowth = new Set<string>([
   "transactions.updateTransaction",
   "transactions.linkTransactions",
 ]);
+
 export const requiresGrowthAdmission = (operation: string): boolean =>
   financialGrowth.has(operation) ||
   operation === "ingestion.applyReviewEdit" ||
   operation === "ingestion.resolveNeedsReviewItem" ||
   operation === "pats.createManualPAT" ||
   operation === "pats.approvePATPairing";
+
 export const replayableOperations = new Set<string>([
   ...financialGrowth,
   "memory.forget",
@@ -401,35 +484,45 @@ const remainingReplayableChildren = new Set([
   "ingestion.resolveNeedsReviewItem",
   "ingestion.skipNeedsReviewItem",
 ]);
+
 export const replayableBatchChild = (id: string): boolean =>
   replayableOperations.has(id) || remainingReplayableChildren.has(id);
+
 const usesAgentReceiptBody = (operation: string): boolean =>
   operation.startsWith("memory.") || operation.startsWith("insights.");
+
 const highSurrogateStart = 0xd800;
+
 const highSurrogateEnd = 0xdbff;
+
 const writeReceiptParts = Effect.fn(function* (body: string, user: UserId, digest: string) {
   const sql = yield* SqliteClient;
   let start = 0;
+
   while (start < body.length) {
     let end = Math.min(start + receiptPartCharacters, body.length);
     const tail = body.charCodeAt(end - 1);
+
     if (tail >= highSurrogateStart && tail <= highSurrogateEnd && end < body.length) end -= 1;
     yield* sql`INSERT INTO canonical_receipt_parts(user_id,retry_key_digest,position,part) VALUES(${user},${digest},${start},${body.slice(start, end)})`;
     start = end;
   }
 });
-const receiptStorage = (
-  operation: string,
-  retain: boolean,
-  body: string
-): { parent: Option.Option<string>; agent: boolean; parts: boolean } => {
+
+type ReceiptStorage = Readonly<{ parent: Option.Option<string>; agent: boolean; parts: boolean }>;
+
+const receiptStorage = (operation: string, retain: boolean, body: string): ReceiptStorage => {
   if (!retain) return { parent: Option.none(), agent: false, parts: false };
+
   if (usesAgentReceiptBody(operation)) return { parent: Option.none(), agent: true, parts: false };
+
   if (chunkedReceipt(operation) && body.length > receiptPartCharacters) {
     return { parent: Option.some(String(body.length)), agent: false, parts: true };
   }
+
   return { parent: Option.some(body), agent: false, parts: false };
 };
+
 export const complete = Effect.fn(function* (
   call: Call,
   invocation: Invocation,
@@ -440,6 +533,7 @@ export const complete = Effect.fn(function* (
   yield* validateOutput(operation, outcome.status, outcome.body);
   yield* audit(call, outcome.outcome);
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(outcome.body);
+
   if (Option.isSome(invocation.digest)) {
     const sql = yield* SqliteClient;
     yield* preserveStoreAlarm(call.storage, current + canonicalRetryLifetimeMs);
@@ -449,25 +543,34 @@ export const complete = Effect.fn(function* (
       yield* sql`INSERT INTO canonical_request_receipts(user_id,retry_key_digest,operation,input_digest,accepted_at_ms,status,body)
       VALUES(${subject.userId},${invocation.digest.value},${operation.id},${invocation.inputHash},${current},${outcome.status},${Option.getOrNull(storage.parent)}) RETURNING status`
     );
+
     if (storage.agent) {
       yield* oneStored(
         yield* sql`INSERT INTO agent_operation_receipt_bodies(user_id,retry_key_digest,body) VALUES(${subject.userId},${invocation.digest.value},${body}) RETURNING user_id`
       );
     }
+
     if (storage.parts) yield* writeReceiptParts(body, subject.userId, invocation.digest.value);
   }
+
   return attachStanding({
     response: bodyResponse(outcome.status, body),
     status: yield* localStanding(subject.userId, current),
     current,
   });
 });
+
 const deniedAccess = (call: Pick<Call, "subject" | "operation">): boolean =>
   !("sessionId" in call.subject) &&
-  decideOperationAccess(call.operation.policy.access, {
-    _tag: "oauth" in call.subject ? "OAuthAgent" : "PAT",
-    capabilities: call.subject.scopes,
-  })._tag !== "Allowed";
+  !OperationAccessDecision.$is("Allowed")(
+    decideOperationAccess(
+      call.operation.policy.access,
+      "oauth" in call.subject
+        ? OperationAccessCaller.OAuthAgent({ capabilities: call.subject.scopes })
+        : OperationAccessCaller.PAT({ capabilities: call.subject.scopes })
+    )
+  );
+
 export const localRetryKey = Effect.fnUntraced(function* (request: Request) {
   return request.headers.has("authorization") || Option.isSome(yield* CurrentOAuthInvocation)
     ? request.headers.get("Fidy-Retry-Key")
@@ -481,27 +584,33 @@ export const localPreparationSubject = Effect.fn(function* (
 ) {
   const resolve = yield* localProof(request, owns);
   const subject = yield* resolve(yield* Clock.currentTimeMillis);
-  return typeof subject === "string" || deniedAccess({ subject, operation })
+
+  return Predicate.isString(subject) || deniedAccess({ subject, operation })
     ? Option.none<UserId>()
     : Option.some(subject.userId);
 });
+
 const prepareIdentity = Effect.fn(function* (request: Request, operation: CatalogOperation) {
   const valid = yield* validatedCanonicalInput({ request, operation });
   const key = operation.method !== "GET" ? yield* localRetryKey(request) : null;
   const validKey = Schema.decodeUnknownOption(CanonicalRetryKey)(key);
+
   const digest = Option.isSome(validKey)
     ? Option.some(yield* cryptoHash(validKey.value))
     : Option.none<string>();
+
   return {
     keyValid: key === null || Option.isSome(validKey),
     identity: Option.map(valid, ({ inputHash }): Invocation => ({ inputHash, digest })),
   };
 });
+
 const confirmCall = Effect.fn(function* (call: Call) {
   return "oauth" in call.subject && call.operation.policy.agentConfirmation === "required"
     ? yield* confirmLocalOAuth(call.subject.oauth, call.current, charge(call))
     : { paid: false, consume: Effect.void };
 });
+
 const authorizedWork = Effect.fn(function* <E>({
   call,
   invocation,
@@ -514,20 +623,26 @@ const authorizedWork = Effect.fn(function* <E>({
   work: () => Effect.Effect<LocalMutationResult, E, SqliteClient>;
 }>) {
   const confirmation = yield* confirmCall(call);
-  if (confirmation instanceof Response) return attachStanding({ ...call, response: confirmation });
+
+  if (isResponse(confirmation)) return attachStanding({ ...call, response: confirmation });
   yield* sweepLocalReceipts(call.current);
   const prior = yield* replay(call, invocation);
+
   if (Option.isSome(prior)) return prior.value;
   const refusal = confirmation.paid ? Option.none<Response>() : yield* charge(call);
+
   if (Option.isSome(refusal)) return refusal.value;
   yield* admission;
   const result = yield* work();
+
   if (result.status < firstFailureStatus) yield* confirmation.consume;
+
   return yield* complete(call, invocation, {
     ...result,
     retain: replayableOperations.has(call.operation.id),
   });
 });
+
 export const withdrawn = (): Response =>
   Response.json(
     {
@@ -539,8 +654,10 @@ export const withdrawn = (): Response =>
     },
     { status: 403 }
   );
+
 const policyRefusal = Effect.fn(function* (call: Call) {
   if (deniedAccess(call)) return Option.some(yield* reject(call, scopeMissing()));
+
   if (
     grantsRequiredTier({
       requiredTier: call.operation.policy.requiredTier,
@@ -549,6 +666,7 @@ const policyRefusal = Effect.fn(function* (call: Call) {
   ) {
     return Option.none<Response>();
   }
+
   return Option.some(
     yield* reject(
       call,
@@ -562,10 +680,12 @@ const policyRefusal = Effect.fn(function* (call: Call) {
     )
   );
 });
+
 const sessionLookupFor = (operation: string): typeof boundSessionLookup =>
   operation === "pats.revokePAT" || operation === "pats.revokeAllPATs"
     ? boundSecuritySessionLookup
     : boundSessionLookup;
+
 export const runLocalMutation = Effect.fn(function* <A, E>(
   { request, storage, operation, owns, input, work }: Mutation<A, E>,
   invalidTarget: Option.Option<LocalMutationResult> = Option.none()
@@ -573,6 +693,7 @@ export const runLocalMutation = Effect.fn(function* <A, E>(
   const resolve = yield* localProof(request, owns, sessionLookupFor(operation.id));
   const { keyValid, identity } = yield* prepareIdentity(request, operation);
   const argumentsForOwner = Option.product(yield* input, identity);
+
   const invalidInput = Option.match(invalidTarget, {
     onNone: () => ({
       response: invalid("Invalid canonical operation input."),
@@ -586,6 +707,7 @@ export const runLocalMutation = Effect.fn(function* <A, E>(
       outcome: target.outcome,
     }),
   });
+
   const prepared = Option.match(argumentsForOwner, {
     onNone: () => ({ refusal: invalidInput }) as const,
     onSome: ([value, invocation]) =>
@@ -598,23 +720,32 @@ export const runLocalMutation = Effect.fn(function* <A, E>(
             },
           } as const),
   });
+
   return yield* withStoreAdmission((admitGrowth) =>
     Effect.gen(function* () {
       const current = yield* Clock.currentTimeMillis;
       const subject = yield* resolve(current);
+
       if (subject === "unauthenticated") return noAuthority();
+
       if (subject === "consent_revoked") return withdrawn();
       const status = yield* localStanding(subject.userId, current);
       const call = { subject, status, current, operation, storage };
+
       if ((yield* admitLocalRequest({ user: subject.userId, current })).length !== 1) {
         return attachStanding({ ...call, response: rateLimited() });
       }
+
       const forbidden = yield* policyRefusal(call);
+
       if (Option.isSome(forbidden)) return forbidden.value;
+
       if (prepared.refusal !== undefined) {
         yield* audit(call, prepared.refusal.outcome);
+
         return attachStanding({ ...call, response: prepared.refusal.response });
       }
+
       return yield* authorizedWork({
         call,
         invocation: prepared.invocation,
@@ -640,8 +771,10 @@ export const readNativeAccountQuery = Effect.fn(function* (
       body: { data: [...listLaunchCategories()], next: [] },
     };
   }
+
   if (operation === "quota.getQuota") {
     const standing = yield* localStanding(user, current);
+
     return {
       status: 200,
       outcome: "success" as const,
@@ -651,6 +784,7 @@ export const readNativeAccountQuery = Effect.fn(function* (
       },
     };
   }
+
   return yield* new CanonicalAdmissionUnavailable({ cause: "unsupported account query" });
 });
 
@@ -678,16 +812,20 @@ export const externalRead = Effect.fn(function* (
     )
   );
 });
+
 export const repairReceiptAlarm = Effect.fnUntraced(function* (
   current: number,
   storage: DurableObjectStorage
 ) {
   const sql = yield* SqliteClient;
+
   const [row] =
     yield* sql`SELECT min(deadline) AS deadline FROM (SELECT min(accepted_at_ms)+${canonicalRetryLifetimeMs} AS deadline FROM canonical_request_receipts UNION ALL SELECT min(expires_at_ms) FROM canonical_request_leases UNION ALL SELECT min(virtual_at_ms)+${refilledBucketIdleMs} FROM canonical_request_buckets)`;
+
   const deadline = yield* Schema.decodeUnknownEffect(Schema.OptionFromNullOr(Schema.Int))(
     row?.deadline
   );
+
   return Option.isSome(deadline)
     ? yield* preserveStoreAlarm(storage, Math.max(current, deadline.value))
     : false;
@@ -704,6 +842,7 @@ export const sweepReceiptWork = Effect.fnUntraced(function* (
       yield* sql`DELETE FROM canonical_request_leases WHERE id IN(SELECT id FROM canonical_request_leases WHERE expires_at_ms<=${current} ORDER BY expires_at_ms LIMIT ${receiptCleanupPageSize})`;
       yield* sql`DELETE FROM canonical_request_buckets WHERE subject IN(SELECT subject FROM canonical_request_buckets WHERE virtual_at_ms<=${current - refilledBucketIdleMs} ORDER BY virtual_at_ms LIMIT ${receiptCleanupPageSize})`;
       yield* repairReceiptAlarm(current, storage);
+
       return { attempted: 0, failed: 0 };
     })
   );

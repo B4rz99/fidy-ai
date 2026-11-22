@@ -16,12 +16,11 @@ const safeHeaders = {
 };
 
 const requestPath = (input: Parameters<typeof globalThis.fetch>[0]): string =>
-  input instanceof Request ? new URL(input.url).pathname : new URL(input).pathname;
+  new URL(new Request(input).url).pathname;
 
-const respond = (
-  status: number,
-  headers: HeadersInit = safeHeaders
-): Readonly<{ status: number; headers: Headers }> => ({
+type EdgeResponse = Readonly<{ status: number; headers: Headers }>;
+
+const respond = (status: number, headers: HeadersInit = safeHeaders): EdgeResponse => ({
   status,
   headers: new Headers(headers),
 });
@@ -41,6 +40,7 @@ const expectedStatuses = new Map([
   ["/web/oauth/connect", 403],
   ["/mcp", 401],
 ]);
+
 const expectedStatus = (path: string, headers: Readonly<Record<string, string>>): number =>
   headers.origin === undefined ? (expectedStatuses.get(path) ?? 404) : 403;
 
@@ -56,10 +56,12 @@ it.effect("overlaps independent edge probes with at most four requests in flight
         Effect.gen(function* () {
           active += 1;
           maximumActive = Math.max(maximumActive, active);
+
           if (active === 4) yield* Deferred.succeed(firstGroupStarted, undefined);
           yield* Deferred.await(firstGroupStarted);
           yield* Effect.yieldNow;
           completed += 1;
+
           return respond(expectedStatus(path, headers));
         }).pipe(
           Effect.ensuring(
@@ -82,6 +84,7 @@ it.effect(
       const firstGroupStarted = yield* Deferred.make<void>();
       let started = 0;
       let closed = 0;
+
       const outcome = yield* verifyEdgeSmoke({
         candidate: Option.some({
           proof: "reserved-proof",
@@ -91,9 +94,12 @@ it.effect(
         probe: ({ path }) =>
           Effect.gen(function* () {
             started += 1;
+
             if (started === 4) yield* Deferred.succeed(firstGroupStarted, undefined);
             yield* Deferred.await(firstGroupStarted);
+
             if (path === "/health") return respond(503);
+
             return yield* Effect.never;
           }).pipe(
             Effect.ensuring(
@@ -103,6 +109,7 @@ it.effect(
             )
           ),
       }).pipe(Effect.exit);
+
       expect(Exit.isFailure(outcome)).toBe(true);
       expect(started).toBe(4);
       expect(closed).toBe(4);
@@ -119,21 +126,30 @@ it.effect("refuses missing OAuth discovery and unsafe MCP exposure before promot
       },
       { path: "/mcp", response: respond(401, { ...safeHeaders, "www-authenticate": "Bearer" }) },
     ];
-    for (const fault of faults) {
-      let inspected = false;
-      const outcome = yield* verifyEdgeSmoke({
-        candidate: Option.none(),
-        probe: ({ path, headers }) => {
-          if (path === fault.path) {
-            inspected = true;
-            return Effect.succeed(fault.response);
-          }
-          return Effect.succeed(respond(expectedStatus(path, headers)));
-        },
-      }).pipe(Effect.exit);
-      expect(inspected).toBe(true);
-      expect(Exit.isFailure(outcome)).toBe(true);
-    }
+
+    yield* Effect.forEach(
+      faults,
+      Effect.fnUntraced(function* (fault) {
+        let inspected = false;
+
+        const outcome = yield* verifyEdgeSmoke({
+          candidate: Option.none(),
+          probe: ({ path, headers }) => {
+            if (path === fault.path) {
+              inspected = true;
+
+              return Effect.succeed(fault.response);
+            }
+
+            return Effect.succeed(respond(expectedStatus(path, headers)));
+          },
+        }).pipe(Effect.exit);
+
+        expect(inspected).toBe(true);
+        expect(Exit.isFailure(outcome)).toBe(true);
+      }),
+      { discard: true }
+    );
   })
 );
 
@@ -141,25 +157,30 @@ it.effect("sends candidate routing and Origin headers on native GET probes", () 
   Effect.gen(function* () {
     const services = yield* Layer.build(FetchHttpClient.layer);
     let received = new Headers();
+
     const fetch: typeof globalThis.fetch = Object.assign(
       (
         _input: Parameters<typeof globalThis.fetch>[0],
         init?: Parameters<typeof globalThis.fetch>[1]
       ) => {
         received = new Headers(init?.headers);
+
         return Promise.resolve(new Response(null, { status: 403, headers: safeHeaders }));
       },
       { preconnect: globalThis.fetch.preconnect }
     );
+
     const headers = {
       origin: "https://untrusted.invalid",
       "cloudflare-workers-version-overrides": 'public="candidate"',
       "x-fidy-smoke-proof": "reserved-proof",
     };
+
     yield* productionProbe({ method: "GET", path: "/mcp", headers }).pipe(
       Effect.provideService(HttpClient.HttpClient, Context.get(services, HttpClient.HttpClient)),
       Effect.provideService(FetchHttpClient.Fetch, fetch)
     );
+
     for (const [name, value] of Object.entries(headers)) expect(received.get(name)).toBe(value);
   }).pipe(Effect.scoped)
 );
@@ -167,56 +188,66 @@ it.effect("sends candidate routing and Origin headers on native GET probes", () 
 it.effect("aborts every unconsumed native edge response on success and mismatch", () =>
   Effect.gen(function* () {
     const services = yield* Layer.build(FetchHttpClient.layer);
-    for (const mismatch of [false, true]) {
-      const signals: AbortSignal[] = [];
-      let pulled = 0;
-      const fetch: typeof globalThis.fetch = Object.assign(
-        (
-          input: Parameters<typeof globalThis.fetch>[0],
-          init?: Parameters<typeof globalThis.fetch>[1]
-        ): Promise<Response> => {
-          if (init?.signal !== undefined && init.signal !== null) signals.push(init.signal);
-          const path = requestPath(input);
-          const foreign = new Headers(init?.headers).has("origin");
-          return Promise.resolve(
-            new Response(
-              new ReadableStream<Uint8Array>(
-                {
-                  pull() {
-                    pulled += 1;
+
+    yield* Effect.forEach(
+      [false, true],
+      Effect.fnUntraced(function* (mismatch) {
+        const signals: AbortSignal[] = [];
+        let pulled = 0;
+
+        const fetch: typeof globalThis.fetch = Object.assign(
+          (
+            input: Parameters<typeof globalThis.fetch>[0],
+            init?: Parameters<typeof globalThis.fetch>[1]
+          ): Promise<Response> => {
+            if (init?.signal !== undefined && init.signal !== null) signals.push(init.signal);
+            const path = requestPath(input);
+            const foreign = new Headers(init?.headers).has("origin");
+
+            return Promise.resolve(
+              new Response(
+                new ReadableStream<Uint8Array>(
+                  {
+                    pull() {
+                      pulled += 1;
+                    },
                   },
-                },
-                { highWaterMark: 0 }
-              ),
-              {
-                status: mismatch
-                  ? 503
-                  : expectedStatus(path, foreign ? { origin: "https://untrusted.invalid" } : {}),
-                headers: safeHeaders,
-              }
-            )
-          );
-        },
-        { preconnect: globalThis.fetch.preconnect }
-      );
-      const outcome = yield* verifyEdgeSmoke({
-        probe: productionProbe,
-        candidate: Option.none(),
-      }).pipe(
-        Effect.provideService(HttpClient.HttpClient, Context.get(services, HttpClient.HttpClient)),
-        Effect.provideService(FetchHttpClient.Fetch, fetch),
-        Effect.exit
-      );
-      expect(Exit.isSuccess(outcome)).toBe(!mismatch);
-      if (mismatch) {
-        expect(signals.length).toBeGreaterThan(0);
-        expect(signals.length).toBeLessThanOrEqual(4);
-      } else {
-        expect(signals).toHaveLength(14);
-      }
-      expect(signals.every((signal) => signal.aborted)).toBe(true);
-      expect(pulled).toBe(0);
-    }
+                  { highWaterMark: 0 }
+                ),
+                {
+                  status: mismatch
+                    ? 503
+                    : expectedStatus(path, foreign ? { origin: "https://untrusted.invalid" } : {}),
+                  headers: safeHeaders,
+                }
+              )
+            );
+          },
+          { preconnect: globalThis.fetch.preconnect }
+        );
+
+        const outcome = yield* verifyEdgeSmoke({
+          probe: productionProbe,
+          candidate: Option.none(),
+        }).pipe(
+          Effect.provideService(
+            HttpClient.HttpClient,
+            Context.get(services, HttpClient.HttpClient)
+          ),
+          Effect.provideService(FetchHttpClient.Fetch, fetch),
+          Effect.exit
+        );
+
+        expect(Exit.isSuccess(outcome)).toBe(!mismatch);
+
+        expect(signals.length).toBeGreaterThanOrEqual(mismatch ? 1 : 14);
+        expect(signals.length).toBeLessThanOrEqual(mismatch ? 4 : 14);
+
+        expect(signals.every((signal) => signal.aborted)).toBe(true);
+        expect(pulled).toBe(0);
+      }),
+      { discard: true }
+    );
   }).pipe(Effect.scoped)
 );
 
@@ -230,9 +261,11 @@ describe("production edge smoke", () => {
           method: string;
           headers: Readonly<Record<string, string>>;
         }> = [];
+
         yield* verifyEdgeSmoke({
           probe: (input) => {
             observed.push(input);
+
             return Effect.succeed(respond(expectedStatus(input.path, input.headers)));
           },
           candidate: Option.none(),
@@ -269,13 +302,16 @@ describe("production edge smoke", () => {
           override: 'public="dc8dcd28-271b-4367-9840-6c244f84cb40"',
           publicVersionId: "dc8dcd28-271b-4367-9840-6c244f84cb40",
         };
+
         const healthHasNoProof: Array<boolean> = [];
+
         const result = yield* Effect.exit(
           verifyEdgeSmoke({
             probe: ({ path, headers }) => {
               if (path === "/health") {
                 healthHasNoProof.push(headers["x-fidy-smoke-proof"] === undefined);
               }
+
               return Effect.succeed(
                 respond(path === "/health" ? 200 : 401, {
                   ...safeHeaders,
@@ -286,6 +322,7 @@ describe("production edge smoke", () => {
             candidate: Option.some(candidate),
           })
         );
+
         expect(healthHasNoProof).toEqual([true]);
         expect(result._tag).toBe("Failure");
       })
@@ -298,17 +335,21 @@ describe("production edge smoke", () => {
         override: 'public="dc8dcd28-271b-4367-9840-6c244f84cb40"',
         publicVersionId: "dc8dcd28-271b-4367-9840-6c244f84cb40",
       };
+
       const healthHeaders: Array<boolean> = [];
+
       const result = yield* Effect.exit(
         verifyEdgeSmoke({
           probe: ({ path, headers }) => {
             if (path === "/health") {
               healthHeaders.push(headers["x-fidy-smoke-proof"] === undefined);
             }
+
             const version =
               path === "/health"
                 ? "db7cd8d3-4425-4fe7-8c81-01bf963b6067"
                 : candidate.publicVersionId;
+
             return Effect.succeed(
               respond(expectedStatus(path, headers), {
                 ...safeHeaders,
@@ -319,6 +360,7 @@ describe("production edge smoke", () => {
           candidate: Option.some(candidate),
         })
       );
+
       expect(healthHeaders).toEqual([true, false]);
       expect(result._tag).toBe("Failure");
     })
@@ -334,15 +376,21 @@ describe("production edge smoke", () => {
           respond(302, { ...safeHeaders, location: "https://api.fidyapp.com/categories" }),
           respond(401, { "cache-control": "no-store" }),
         ];
-        for (const response of challenges) {
-          const result = yield* Effect.exit(
-            verifyEdgeSmoke({
-              probe: () => Effect.succeed(response),
-              candidate: Option.none(),
-            })
-          );
-          expect(result._tag).toBe("Failure");
-        }
+
+        yield* Effect.forEach(
+          challenges,
+          Effect.fnUntraced(function* (response) {
+            const result = yield* Effect.exit(
+              verifyEdgeSmoke({
+                probe: () => Effect.succeed(response),
+                candidate: Option.none(),
+              })
+            );
+
+            expect(result._tag).toBe("Failure");
+          }),
+          { discard: true }
+        );
       })
   );
 });
@@ -357,10 +405,12 @@ it.effect(
           probe: ({ path, headers }) => {
             const response = respond(expectedStatus(path, headers));
             response.headers.delete("strict-transport-security");
+
             return Effect.succeed(response);
           },
         })
       );
+
       expect(result._tag).toBe("Failure");
     })
 );
@@ -371,6 +421,7 @@ it.effect("rejects unavailable OAuth discovery during native release verificatio
       candidate: Option.none(),
       probe: () => Effect.succeed({ status: 503, headers: new Headers() }),
     }).pipe(Effect.result);
+
     expect(outcome._tag).toBe("Failure");
   })
 );

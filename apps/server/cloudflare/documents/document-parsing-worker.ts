@@ -4,8 +4,8 @@ import {
   statementParserLimits,
 } from "../../src/shell/ingestion/contract";
 import { parseStatementFile } from "../../src/shell/ingestion/operations";
-import { Effect } from "effect";
-import { BoundedBodyReadFailed } from "../http/contract";
+import { Effect, Option, Predicate, Schema } from "effect";
+import type { BoundedBodyReadFailed } from "../http/contract";
 import { collectBoundedRequestBody } from "../http/operations";
 
 type RejectionReason =
@@ -26,13 +26,17 @@ const failureResponse = (reason: RejectionReason): Response =>
 
 const parseRequest = Effect.fn(function* (request: Request) {
   const startedAt = performance.now();
+
   const bytes = yield* collectBoundedRequestBody(
     request,
     statementParserLimits.maximumDecodedBytes
   );
+
   const parsed = yield* parseStatementFile(bytes);
+
   const work =
     new URL(request.url).pathname === "/statement-work" ? yield* measureStatementWork(parsed) : {};
+
   return Response.json({
     ...work,
     elapsedMilliseconds: performance.now() - startedAt,
@@ -42,17 +46,20 @@ const parseRequest = Effect.fn(function* (request: Request) {
   });
 });
 
-const fetch = (
-  request: Request,
-  env: Readonly<Record<string, unknown>> = {}
-): Promise<Response> => {
+const ProofKeyBinding = Schema.Struct({ XLSX_PROOF_KEY: Schema.String });
+
+const fetch = (request: Request, env: unknown = {}): Promise<Response> => {
+  const binding = Schema.decodeUnknownOption(ProofKeyBinding)(env);
+
   if (
-    typeof env.XLSX_PROOF_KEY === "string" &&
-    request.headers.get("X-Xlsx-Proof-Key") !== env.XLSX_PROOF_KEY
+    Option.isSome(binding) &&
+    request.headers.get("X-Xlsx-Proof-Key") !== binding.value.XLSX_PROOF_KEY
   ) {
     return Promise.resolve(failureResponse("not-found"));
   }
+
   const url = new URL(request.url);
+
   if (request.method !== "POST" || !["/statement", "/statement-work"].includes(url.pathname)) {
     return Promise.resolve(failureResponse("not-found"));
   }
@@ -60,11 +67,14 @@ const fetch = (
   return parseRequest(request).pipe(
     Effect.match({
       onFailure: (failure) => {
-        if (failure instanceof BoundedBodyReadFailed) {
+        if (Predicate.isTagged(failure, "BoundedBodyReadFailed")) {
           return failureResponse(failure.reason);
         }
-        const reason =
-          failure._tag === "StatementParseFailed" ? failure.safeReason : "malformed-file";
+
+        const reason = Predicate.isTagged(failure, "StatementParseFailed")
+          ? failure.safeReason
+          : "malformed-file";
+
         return failureResponse(reason);
       },
       onSuccess: (response) => response,

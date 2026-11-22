@@ -3,15 +3,18 @@ import { resolveLocalCategory } from "../../categories/operations";
 import type { CategoryId } from "../../../src/core/categories/contract";
 import type { UserId } from "../../../src/core/identity/contract";
 import { ReviewCommand } from "../../../src/core/ingestion/contract";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Predicate, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import { TransactionExtraction } from "../../../src/core/transactions/contract";
 import { digestBytes } from "../../secret-material/operations";
 import type { StatementClarificationOperation } from "./clarification-operation";
 
 const maximumReviewRows = 5000;
+
 const NullableText = Schema.NullOr(Schema.String);
+
 const NullableInstant = Schema.NullOr(Schema.Int);
+
 const ReviewSnapshot = Schema.Struct({
   id: Schema.String,
   record_number: Schema.Int,
@@ -29,6 +32,7 @@ const ReviewSnapshot = Schema.Struct({
   parser_revision: Schema.String,
   extractor_revision: Schema.String,
 });
+
 const Snapshot = Schema.Struct({
   submission: Schema.Struct({
     id: Schema.String,
@@ -61,6 +65,7 @@ const Snapshot = Schema.Struct({
     })
   ).check(Schema.isMaxLength(maximumReviewRows)),
 });
+
 const StoredSnapshot = Schema.Struct({ snapshot: Schema.String });
 
 const snapshotSql = `SELECT json_object(
@@ -91,27 +96,35 @@ type ReviewInput = Readonly<{
   reviewId: Option.Option<string>;
   extraction: Option.Option<TransactionExtraction>;
 }>;
+
 const reserveState = (snapshot: typeof Snapshot.Type, submissionId: string): string => {
   if (snapshot.entitlement === null || snapshot.entitlement.submission_id !== submissionId) {
     return "no asociada";
   }
+
   return snapshot.entitlement.consumed_at_ms === null ? "sin consumir" : "consumida";
 };
+
 const exactEffect = (input: ReviewInput, snapshot: typeof Snapshot.Type): string => {
   const undecided = snapshot.reviews.filter(
     (row) => !snapshot.decisions.some((decision) => decision.review_id === row.id)
   );
+
   const rows = undecided
     .map((row) => `${row.id} (fila ${row.record_number}, estado ${row.status})`)
     .join(", ");
+
   const target = Option.match(input.reviewId, {
     onNone: () => rows,
     onSome: (id) => {
       const row = snapshot.reviews.find((value) => value.id === id);
+
       return row === undefined ? id : `${id} (fila ${row.record_number}, estado ${row.status})`;
     },
   });
+
   let effect: string;
+
   switch (input.operation) {
     case "ingestion.resolveNeedsReviewItem":
       effect = `Resolver ${target} del envío ${input.submissionId}: crear una Transacción y su SourceAttestation con estos datos exactos: ${Option.match(input.extraction, { onNone: () => "sin datos", onSome: Schema.encodeSync(Schema.fromJsonString(TransactionExtraction)) })}; borrar la evidencia original y el Money conocido de esa fila. La primera captura consume la reserva gratuita, si existe.`;
@@ -122,6 +135,7 @@ const exactEffect = (input: ReviewInput, snapshot: typeof Snapshot.Type): string
     case "ingestion.abandonStatementSubmission":
       effect = `Abandonar permanentemente el envío ${input.submissionId}: omitir las ${undecided.length} filas restantes (${rows}) y borrar su evidencia original y Money conocido; conservar las ${snapshot.submission.accepted_rows ?? 0} capturas de extracción y las ${snapshot.decisions.filter((decision) => decision.decision === "resolved").length} Transacciones de aclaración ya creadas.`;
   }
+
   return (
     effect +
     ` Al decidir la última fila, finalizar la aclaración. Una reserva gratuita sin capturas se libera; una ya consumida se conserva. Estado actual de la reserva: ${reserveState(snapshot, input.submissionId)}.`
@@ -137,6 +151,7 @@ const categoryFor = Effect.fn(function* (
     userId: user,
     capture: { caller, direction: extraction.direction, counterparty: extraction.counterparty },
   });
+
   return category.categoryId;
 });
 
@@ -144,20 +159,26 @@ export const localClarificationReview = Effect.fn(function* (
   input: Omit<ReviewInput, "userId"> & { userId: UserId }
 ) {
   const sql = yield* SqliteClient;
+
   const [raw] = yield* sql.unsafe(
     snapshotSql.replace("statement_backfill_entitlements", "statement_backfill"),
     [input.submissionId, input.userId]
   );
+
   const encoded = yield* Schema.decodeUnknownEffect(StoredSnapshot)(raw);
   const snapshot = yield* Schema.decodeEffect(Schema.fromJsonString(Snapshot))(encoded.snapshot);
+
   const [versions] =
     yield* sql`SELECT json_group_array(json_array(id,rev)) AS revisions FROM(SELECT id,coalesce(workspace_revision,0) AS rev FROM ingestion_review_items WHERE user_id=${input.userId} AND statement_submission_id=${input.submissionId} ORDER BY id)`;
+
   const revisions = yield* Schema.decodeUnknownEffect(Schema.Struct({ revisions: Schema.String }))(
     versions
   );
+
   const category = yield* Effect.transposeOption(
     Option.map(input.extraction, (value) => categoryFor(input.userId, value, Option.none()))
   );
+
   const revision = Hex.encode(
     yield* digestBytes(
       new TextEncoder().encode(
@@ -165,6 +186,7 @@ export const localClarificationReview = Effect.fn(function* (
       )
     )
   );
+
   return {
     effect:
       exactEffect(input, snapshot) +
@@ -175,18 +197,21 @@ export const localClarificationReview = Effect.fn(function* (
     revision,
   };
 });
+
 export const localReviewEditConfirmation = Effect.fn(function* (
   command: ReviewCommand,
   user: UserId
 ) {
   const refs = "items" in command ? command.items : [command];
-  const category =
-    command._tag === "Create"
-      ? Option.some(yield* categoryFor(user, command.extraction, command.categoryId))
-      : Option.none();
+
+  const category = Predicate.isTagged(command, "Create")
+    ? Option.some(yield* categoryFor(user, command.extraction, command.categoryId))
+    : Option.none();
+
   const encoded = yield* Schema.encodeEffect(
     Schema.fromJsonString(Schema.toCodecJson(ReviewCommand))
   )(command);
+
   return {
     effect:
       encoded +

@@ -15,29 +15,34 @@ const bindingNames = {
     redirect: "MICROSOFT_REDIRECT_URI",
   },
 } as const;
+
 const apiOrigins = new Map<string, string>([
   [browserOrigins.production, installedOrigins.production.api],
   [browserOrigins.nativeAcceptance, installedOrigins.acceptance.api],
   [browserOrigins.acceptance, "https://127.0.0.1:4174"],
   [browserOrigins.local, "http://localhost:8787"],
 ]);
+
+type ProviderSettings = Readonly<{
+  clientId: string;
+  redirectUri: string;
+  configured: boolean;
+  cookieName: `__Host-fidy_${AuthenticationProvider}`;
+}>;
+
 export const providerConfiguration = ({
   environment,
   provider,
 }: Readonly<{
   environment: ProviderConfiguration;
   provider: AuthenticationProvider;
-}>): Readonly<{
-  clientId: string;
-  redirectUri: string;
-  configured: boolean;
-  cookieName: string;
-}> => {
+}>): ProviderSettings => {
   const names = bindingNames[provider];
   const clientId = environment[names.id] ?? "";
   const secret = environment[names.secret] ?? "";
   const redirectUri = environment[names.redirect] ?? "";
   const origin = apiOrigins.get(environment.BROWSER_ORIGIN);
+
   return {
     clientId,
     redirectUri,

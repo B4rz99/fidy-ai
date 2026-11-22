@@ -9,6 +9,7 @@ type Suppression = {
 const SUPPRESSION_PATTERN = new RegExp(
   ["(?:ox|es)lint-disable", "@effect" + "-diagnostics(?:-next-line)?\\b"].join("|")
 );
+
 const UNJUSTIFIED_DIAGNOSTIC_DISABLED =
   /"(?:asyncFunction|globalFetch|missingPipeableSignature|newPromise|strictBooleanExpressions)"\s*:\s*"off"/;
 
@@ -26,7 +27,12 @@ const LINTED_EXTENSIONS = [
   ".astro",
 ];
 
-const NOT_FIRST_PARTY = [".repos/"];
+const NOT_FIRST_PARTY = [
+  ".repos/",
+  ".agents/skills/install-anti-slop/",
+  "tools/oxlint/anti-slop/",
+  "tools/oxlint/oxlint-plugin-jev/",
+];
 
 const repoRoot = Bun.fileURLToPath(new URL("..", import.meta.url));
 
@@ -74,7 +80,9 @@ if (import.meta.main) {
         .then((contents) => suppressionsIn({ file, contents }))
     )
   );
+
   const found = scanned.flat();
+
   if (found.length > 0) {
     const report = found.map(({ file, line, source }) => `${file}:${line}: ${source}`).join("\n");
     process.stderr.write(

@@ -16,6 +16,7 @@ export const PrivacyTransactionCursor = Schema.Struct({
   createdAt: Transaction.fields.createdAt,
   id: Transaction.fields.id,
 });
+
 export const PrivacyTransactionRequest = Schema.Struct({
   cursor: Schema.NullOr(PrivacyTransactionCursor),
 });
@@ -28,9 +29,11 @@ export const PrivacyTransactionPage = Schema.Struct({
   categories: Schema.Array(Category).check(Schema.isMaxLength(100)),
   next: Schema.NullOr(PrivacyTransactionCursor),
 });
+
 export type PrivacyTransactionPage = typeof PrivacyTransactionPage.Type;
 
 const maximumPublicEpochMs = 253402300799999;
+
 const publicReceiptTime = Schema.Int.check(
   Schema.isBetween({ minimum: 0, maximum: maximumPublicEpochMs })
 );
@@ -44,16 +47,19 @@ export const ProcessingAuthorization = Schema.Struct({
     })
   ),
 });
+
 export type ProcessingAuthorization = typeof ProcessingAuthorization.Type;
 
 export const GrantedProcessingConsent = Schema.Struct({
   status: Schema.Literal("Granted"),
   withdrawal: Schema.Null,
 });
+
 export const MissingProcessingConsent = Schema.Struct({
   status: Schema.Literal("Missing"),
   withdrawal: Schema.Null,
 });
+
 export const RevokedProcessingConsent = Schema.Struct({
   status: Schema.Literal("Revoked"),
   withdrawal: Schema.Struct({
@@ -61,6 +67,7 @@ export const RevokedProcessingConsent = Schema.Struct({
     occurredAtMs: publicReceiptTime,
   }),
 });
+
 export const ProcessingConsentStatus = Schema.Union([
   GrantedProcessingConsent,
   MissingProcessingConsent,
@@ -77,6 +84,7 @@ export const ProcessingConsentRenewal = Schema.Struct({
   authorizationReference: OnboardingConsentGrantId,
   disclosureSha256: Sha256Digest,
 });
+
 export const ProcessingConsentRenewalReceipt = Schema.Struct({
   status: Schema.Literal("Granted"),
   renewal: Schema.Struct({

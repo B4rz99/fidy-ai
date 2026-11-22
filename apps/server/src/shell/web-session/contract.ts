@@ -31,7 +31,9 @@ export const InitialTransactionPage = Schema.Struct({
   to: UtcTimestamp,
   page: TransactionListResponse,
 });
+
 export type InitialTransactionPage = typeof InitialTransactionPage.Type;
+
 export const BrowserSessionInitialContext = Schema.Union([
   Schema.Struct({
     ...GrantedProcessingConsent.fields,
@@ -41,11 +43,14 @@ export const BrowserSessionInitialContext = Schema.Union([
   MissingProcessingConsent,
   RevokedProcessingConsent,
 ]);
+
 export type BrowserSessionInitialContext = typeof BrowserSessionInitialContext.Type;
+
 export const BrowserSessionBinding = Schema.Struct({
   binding: Schema.NullOr(WebSessionId),
   initial: Schema.OptionFromOptionalKey(BrowserSessionInitialContext),
 });
+
 export const BrowserSessionGroup = HttpApiGroup.make("browserSession").add(
   HttpApiEndpoint.get("binding", browserSessionBindingPath, {
     query: Schema.Struct({

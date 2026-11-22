@@ -13,6 +13,7 @@ import {
 
 const SignupReference = (): JSX.Element => {
   const [accepted, setAccepted] = useState(false);
+
   return (
     <div data-access-principal="" data-access-signup="" className="mx-auto max-w-md p-6">
       <h2 data-access-heading="">Crea tu cuenta</h2>
@@ -37,6 +38,7 @@ const SignupReference = (): JSX.Element => {
 
 export const AccessReference = ({ dark }: Readonly<{ dark: boolean }>): JSX.Element => {
   const [method, setMethod] = useState<AccessMethod>("email");
+
   return (
     <section
       id="access"

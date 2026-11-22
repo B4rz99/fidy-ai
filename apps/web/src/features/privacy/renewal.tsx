@@ -3,7 +3,7 @@ import { PendingRead } from "@/ui/components/pending-read";
 import { Disclosure } from "@/ui/components/disclosure";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link } from "@tanstack/react-router";
-import { Effect, Option } from "effect";
+import { Effect, Option, Predicate } from "effect";
 import { type Atom, Reactivity } from "effect/reactivity";
 import { type JSX, useState } from "react";
 import type { ProcessingAuthorization, WebAuthClient } from "@/transport/client";
@@ -17,11 +17,12 @@ type RenewalInput = Readonly<{
   withdrawalReference: string;
   authorization: NonNullable<ProcessingAuthorization["authorization"]>;
 }>;
+
 const makeRenewal = ({
   client,
   withdrawalReference,
   authorization,
-}: RenewalInput): Atom.AtomResultFn<void, boolean, never> =>
+}: RenewalInput): Atom.AtomResultFn<void, void, unknown> =>
   client.runtime.fn<void>()(() =>
     client.pipe(
       Effect.flatMap((api) =>
@@ -34,9 +35,7 @@ const makeRenewal = ({
           },
         })
       ),
-      Effect.tap(() => Reactivity.invalidate(["processing-consent"])),
-      Effect.as(true),
-      Effect.catchCause(() => Effect.succeed(false))
+      Effect.flatMap(() => Reactivity.invalidate(["processing-consent"]))
     )
   );
 
@@ -73,6 +72,7 @@ const RenewalChoice = ({
   const [operation] = useState(() => makeRenewal({ client, withdrawalReference, authorization }));
   const result = useAtomValue(operation);
   const submit = useAtomSet(operation);
+
   return (
     <section aria-label="Renovar autorización" className="flex flex-col gap-4 border-t pt-6">
       <h2 className="text-xl font-semibold">Volver a autorizar</h2>
@@ -101,7 +101,7 @@ const RenewalChoice = ({
           {result.waiting ? "Registrando autorización…" : "Renovar autorización"}
         </Button>
       </div>
-      {result._tag === "Success" && !result.value ? (
+      {Predicate.isTagged(result, "Failure") ? (
         <Alert variant="destructive" role="alert">
           <AlertTitle>No pudimos confirmar la renovación</AlertTitle>
           <AlertDescription>
@@ -126,11 +126,16 @@ export const ConsentRenewal = ({
       reactivityKeys: ["processing-consent"],
     })
   );
+
   const queryResult = useAtomValue(query);
   const status = presentCanonicalQuery(queryResult);
   const refresh = useAtomRefresh(query);
-  if (status._tag === "Initial") return <PendingRead label="Consultando aviso para renovar" />;
-  if (status._tag === "Failure" || Option.isSome(status.refreshFailure)) {
+
+  if (Predicate.isTagged(status, "Initial")) {
+    return <PendingRead label="Consultando aviso para renovar" />;
+  }
+
+  if (Predicate.isTagged(status, "Failure") || Option.isSome(status.refreshFailure)) {
     return (
       <div>
         <p>No pudimos consultar el aviso.</p>
@@ -140,9 +145,11 @@ export const ConsentRenewal = ({
       </div>
     );
   }
+
   if (status.value.authorization === null) {
     return <p>No hay una autorización guardada para renovar.</p>;
   }
+
   return (
     <RenewalChoice
       key={withdrawalReference}

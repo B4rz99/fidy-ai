@@ -33,6 +33,7 @@ export const DashboardCard = ({
 export const DashboardCurrency = ({ children }: Readonly<{ children: ReactNode }>): JSX.Element => (
   <span className="dashboard-currency">{children}</span>
 );
+
 export const DashboardPeriod = ({ children }: Readonly<{ children: ReactNode }>): JSX.Element => (
   <p className="dashboard-period">{children}</p>
 );
@@ -113,10 +114,13 @@ type RecentRow = Readonly<{
   money: string;
   currency: string;
 }>;
+
 export type DashboardRecentGroup = Readonly<{ date: string; rows: ReadonlyArray<RecentRow> }>;
+
 const RecentDirection = ({ inflow }: Readonly<{ inflow: boolean }>): JSX.Element => (
   <DirectionIndicator inflow={inflow} />
 );
+
 const RecentRow = ({ row }: Readonly<{ row: RecentRow }>): JSX.Element =>
   row.renderLink({
     className: "dashboard-recent-row rounded-md focus-visible:outline-2 focus-visible:outline-ring",
@@ -150,6 +154,7 @@ const RecentRow = ({ row }: Readonly<{ row: RecentRow }>): JSX.Element =>
       </>
     ),
   });
+
 export const DashboardRecentList = ({
   groups,
 }: Readonly<{ groups: ReadonlyArray<DashboardRecentGroup> }>): JSX.Element => (

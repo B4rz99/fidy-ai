@@ -12,16 +12,21 @@ const indicators = {
 } as const;
 
 type SummaryGroup = Workspace["summary"][number];
+
 const percentageScale = 100;
+
 const progress = (group: SummaryGroup): number => {
   const total = BigDecimal.sum(group.completed.amount, group.remaining.amount);
+
   if (BigDecimal.isZero(total)) return 0;
+
   return Math.min(
     percentageScale,
     BigDecimal.toNumberUnsafe(BigDecimal.divideUnsafe(group.completed.amount, total)) *
       percentageScale
   );
 };
+
 const SummaryAmounts = ({
   group,
   label,
@@ -53,6 +58,7 @@ const SummaryAmounts = ({
     </div>
   </div>
 );
+
 export const Summary = ({
   view,
   filtered,

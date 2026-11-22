@@ -7,11 +7,17 @@ import { expect } from "vitest";
 import { type ErasureContinuation, continueAdmittedErasure } from "./native-erasure-continuation";
 
 const original = ["a".repeat(64), "b".repeat(64), "c".repeat(64)];
+
 const target = "d".repeat(64);
+
 const revision = "1".repeat(40);
+
 const userNamespace = "2".repeat(32);
+
 const reference = "00000000-0000-4000-8000-900000000001";
+
 const baseline = new Bun.CryptoHasher("sha256").update(original.join("\n")).digest("hex");
+
 const admitted = {
   revision,
   userNamespace,
@@ -24,7 +30,9 @@ const admitted = {
     { stage: "waiting-physical-erasure", observations: 1, listed: 4, populated: 4 },
   ],
 };
+
 const survivors = new Bun.CryptoHasher("sha256").update("one\ntwo").digest("hex");
+
 const retained = new Map(original.map((id) => [id, true] as const));
 
 it.effect("continues the original admitted evidence without a signup or erasure operation", () =>
@@ -41,6 +49,7 @@ it.effect("continues the original admitted evidence without a signup or erasure 
       record: () => Effect.void,
       refused: () => Effect.succeed("invalid"),
     });
+
     expect(proof).toMatchObject({
       reference,
       physicalObject: target,
@@ -70,6 +79,7 @@ it.effect(
         record: () => Effect.void,
         refused: () => Effect.succeed("invalid"),
       };
+
       const substitutions: Array<Partial<ErasureContinuation>> = [
         { revision: "9".repeat(40) },
         { userNamespace: "9".repeat(32) },
@@ -80,17 +90,23 @@ it.effect(
         { logins: () => Effect.succeed(["one", "one"]) },
         { refused: () => Effect.fail(Error("Login approved")) },
       ];
-      for (const changed of substitutions) {
-        expect(yield* Effect.isFailure(continueAdmittedErasure({ ...options, ...changed }))).toBe(
-          true
-        );
-      }
+
+      yield* Effect.forEach(
+        substitutions,
+        Effect.fnUntraced(function* (changed) {
+          expect(yield* Effect.isFailure(continueAdmittedErasure({ ...options, ...changed }))).toBe(
+            true
+          );
+        }),
+        { discard: true }
+      );
     })
 );
 
 it.effect("retains completed physical and survivor checks when the new login fails", () =>
   Effect.gen(function* () {
     const stages: Array<string> = [];
+
     const failed = yield* Effect.isFailure(
       continueAdmittedErasure({
         checkpoint: admitted,
@@ -108,6 +124,7 @@ it.effect("retains completed physical and survivor checks when the new login fai
         refused: () => Effect.fail(Error("No authenticated completion observation")),
       })
     );
+
     expect(failed).toBe(true);
     expect(stages).toEqual(["physical-absent", "survivors-matched"]);
   })
@@ -123,6 +140,7 @@ const redemptionReply = Effect.fn(function* (scenario: string, expiresAt: string
       }
     );
   }
+
   return (yield* Clock.currentTimeMillis) < Date.parse(expiresAt)
     ? Response.json(
         { status: "pending_approval", expiresAt, pollingIntervalSeconds: 5 },
@@ -142,14 +160,21 @@ const redemptionReply = Effect.fn(function* (scenario: string, expiresAt: string
 it.effect("observes pending and expired redemption for the verified erased subject", () =>
   Effect.gen(function* () {
     const origins = installedOrigins.acceptance;
+
+    type ContinuationVerification = {
+      driver: ReturnType<typeof admittedErasureLogins>;
+      paths: Array<string>;
+    };
+
     const verify = (
       status: number,
       body: string,
       scenario = "verified"
-    ): { driver: ReturnType<typeof admittedErasureLogins>; paths: Array<string> } => {
+    ): ContinuationVerification => {
       const paths: Array<string> = [];
       const providerStatus = scenario === "pending" ? "pending" : "verified";
       const expiresAt = "1970-01-01T00:10:00.000Z";
+
       const driver = admittedErasureLogins({
         revision,
         origins,
@@ -157,6 +182,7 @@ it.effect("observes pending and expired redemption for the verified erased subje
         send: Effect.fn(function* (request) {
           const url = new URL(request.url);
           paths.push(url.pathname);
+
           switch (url.pathname) {
             case "/web/pairings":
               return Response.json({
@@ -169,14 +195,17 @@ it.effect("observes pending and expired redemption for the verified erased subje
                 pairingId: "test-pairing",
                 privateVerifier: "test-verifier",
               });
+
               return yield* redemptionReply(scenario, expiresAt);
             }
+
             case "/web/providers/google/start": {
               expect(yield* Effect.tryPromise(() => request.json())).toMatchObject({
                 intent: "login",
               });
               const auth = new URL("https://accounts.google.com/o/oauth2/v2/auth");
               auth.searchParams.set("redirect_uri", origins.api + "/providers/google/callback");
+
               return Response.json(
                 { authorizationUrl: auth.toString() },
                 {
@@ -187,10 +216,12 @@ it.effect("observes pending and expired redemption for the verified erased subje
                 }
               );
             }
+
             case "/providers/google/callback":
               expect(url.searchParams.get("code")?.split(".")[2]).toBe(
                 "fidy-acceptance-" + revision + "-erasure-1"
               );
+
               return new Response(null, { status: 303 });
             case "/web/providers/google/status":
               return Response.json({ status: providerStatus });
@@ -201,53 +232,71 @@ it.effect("observes pending and expired redemption for the verified erased subje
           }
         }),
       });
+
       return { driver, paths };
     };
+
     const accepted = verify(400, "invalid");
     const pending = verify(503, "unavailable");
-    for (const [scenario, outcome] of [
-      [accepted, "invalid"],
-      [pending, "unavailable"],
-    ] as const) {
-      yield* TestClock.setTime(0);
-      const ready = yield* Deferred.make<void>();
-      const states: Array<string> = [];
-      const run = yield* scenario.driver
-        .refused((stage) => {
-          states.push(stage);
-          return stage === "pairing-pending"
-            ? Deferred.succeed(ready, undefined).pipe(Effect.asVoid)
-            : Effect.void;
-        })
-        .pipe(Effect.forkChild);
-      yield* Deferred.await(ready);
-      yield* TestClock.adjust("11 minutes");
-      expect(yield* Fiber.join(run)).toBe(outcome);
-      expect(states).toEqual([
-        "erased-provider-verified",
-        "completion-" + outcome,
-        "pairing-pending",
-        "pairing-expired",
-      ]);
-    }
+
+    yield* Effect.forEach(
+      [
+        [accepted, "invalid"],
+        [pending, "unavailable"],
+      ] as const,
+      Effect.fnUntraced(function* ([scenario, outcome]) {
+        yield* TestClock.setTime(0);
+        const ready = yield* Deferred.make<void>();
+        const states: Array<string> = [];
+
+        const run = yield* scenario.driver
+          .refused((stage) => {
+            states.push(stage);
+
+            return stage === "pairing-pending"
+              ? Deferred.succeed(ready, undefined).pipe(Effect.asVoid)
+              : Effect.void;
+          })
+          .pipe(Effect.forkChild);
+
+        yield* Deferred.await(ready);
+        yield* TestClock.adjust("11 minutes");
+        expect(yield* Fiber.join(run)).toBe(outcome);
+        expect(states).toEqual([
+          "erased-provider-verified",
+          "completion-" + outcome,
+          "pairing-pending",
+          "pairing-expired",
+        ]);
+      }),
+      { discard: true }
+    );
+
     expect(accepted.paths.slice(-2)).toEqual(["/web/pairings/redeem", "/web/pairings/redeem"]);
-    for (const result of [
-      verify(503, "unavailable", "issued"),
-      verify(401, "invalid"),
-      verify(200, "approved"),
-      verify(400, "invalid", "pending"),
-    ]) {
-      expect(yield* Effect.isFailure(result.driver.refused(() => Effect.void))).toBe(true);
-    }
+
+    yield* Effect.forEach(
+      [
+        verify(503, "unavailable", "issued"),
+        verify(401, "invalid"),
+        verify(200, "approved"),
+        verify(400, "invalid", "pending"),
+      ],
+      Effect.fnUntraced(function* (result) {
+        expect(yield* Effect.isFailure(result.driver.refused(() => Effect.void))).toBe(true);
+      }),
+      { discard: true }
+    );
   })
 );
 
 it.effect("retries safe lease renewal and rechecks erasure after authenticating survivors", () =>
   Effect.gen(function* () {
     const stored = new Map<string, boolean>([...retained, [target, true]]);
+
     let leases = 0,
       reads = 0,
       logins = 0;
+
     const runner = yield* continueAdmittedErasure({
       checkpoint: admitted,
       revision,
@@ -262,11 +311,13 @@ it.effect("retries safe lease renewal and rechecks erasure after authenticating 
       logins: () =>
         Effect.sync(() => {
           logins++;
+
           return ["two", "one"];
         }),
       record: () => Effect.void,
       refused: () => Effect.succeed("invalid"),
     }).pipe(Effect.isFailure, Effect.forkChild);
+
     yield* TestClock.adjust("1 minute");
     expect(yield* Fiber.join(runner)).toBe(true);
     expect(leases).toBe(3);

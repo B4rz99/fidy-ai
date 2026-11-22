@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { BunServices } from "@effect/platform-bun";
+import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { Clock, Config, Data, Effect, Path, Schema } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
@@ -13,12 +13,19 @@ import { parseDeployment, parseNativeSmoke } from "./contracts";
 import { proveScopedCorrection } from "./scoped-correction.mjs";
 
 type Smoke = ReturnType<typeof parseNativeSmoke>;
+
 type Send = (request: string | Request, init: RequestInit) => Promise<Response>;
+
 const origins = installedOrigins.acceptance;
+
 const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
+
 const requestTimeoutMs = 30_000;
+
 const success = 200;
+
 const mutationIntervalMs = 750;
+
 const allowedAsset = /^\/assets\/[a-zA-Z0-9_./-]+$/u;
 
 class NativeSmokeFailure extends Data.TaggedError("NativeSmokeFailure") {}
@@ -32,9 +39,11 @@ const scopeOpen = Effect.fnUntraced(function* (deadline: number) {
 
 const exposedResponse = (reply: Response): Response => {
   const headers = new Headers(reply.headers);
+
   for (const name of ["content-encoding", "content-length", acceptanceProofHeader]) {
     headers.delete(name);
   }
+
   return new Response(reply.body, { status: reply.status, headers });
 };
 
@@ -59,6 +68,7 @@ const signedRequest = Effect.fnUntraced(function* (
       deadline: Math.min(config.deadline, (yield* Clock.currentTimeMillis) + acceptanceLifetimeMs),
     })
   );
+
   return request;
 });
 
@@ -72,32 +82,41 @@ type Transport = {
 const nativeTransport = (config: Smoke, send: Send, proof: string): Transport => {
   const remaining = new Map(Object.entries(config.allowed));
   let preflights = 0;
+
   const forward = Effect.fnUntraced(function* (incoming: Request) {
     yield* scopeOpen(config.deadline);
     const url = new URL(incoming.url);
     assert.equal(url.origin, origins.api);
     assert.equal(incoming.headers.get("origin"), origins.browser);
     const preflight = incoming.method === "OPTIONS";
+
     const method = preflight
       ? incoming.headers.get("access-control-request-method")
       : incoming.method;
+
     const route = method + " " + url.pathname + url.search;
     const available = remaining.get(route) ?? 0;
     assert.ok(available > 0, "Unreserved native smoke request");
+
     if (preflight) {
       assert.equal(method, "GET");
       assert.ok(++preflights <= config.maximumPreflights, "Native preflight reservation exhausted");
     } else {
       assert.equal(incoming.headers.get("cookie"), config.native.session.cookie);
+
       if (url.pathname !== "/web/session/binding") {
         assert.equal(incoming.headers.get("fidy-session-binding"), config.native.session.binding);
       }
+
       remaining.set(route, available - 1);
     }
+
     const request = yield* signedRequest(config, incoming, proof);
     yield* scopeOpen(config.deadline);
+
     return exposedResponse(yield* requestDeployed(send, request));
   });
+
   return {
     forward,
     verifyReservation: (): void => assert.ok([...remaining.values()].every((count) => count === 0)),
@@ -119,6 +138,7 @@ const deployedWeb = Effect.fnUntraced(function* (config: Smoke, request: Request
   yield* scopeOpen(config.deadline);
   const url = new URL(request.url);
   assert.equal(url.origin, origins.browser);
+
   if (
     url.pathname !== "/app/transactions" &&
     url.pathname !== "/favicon.ico" &&
@@ -126,6 +146,7 @@ const deployedWeb = Effect.fnUntraced(function* (config: Smoke, request: Request
   ) {
     return new Response(null, { status: 404 });
   }
+
   return exposedResponse(yield* requestDeployed(send, request.url));
 });
 
@@ -154,27 +175,33 @@ export const runNativeSmoke = Effect.fnUntraced(function* (config: Smoke) {
       forwardWeb: (request) => run(deployedWeb(config, request, send)),
     })
   );
+
   const correct = Effect.fnUntraced(function* (method: string, path: string, body: unknown) {
     yield* Effect.sleep(mutationIntervalMs);
-    return yield* transport.forward(
-      new Request(origins.api + path, {
-        method,
-        headers: {
-          cookie: config.native.session.cookie,
-          origin: origins.browser,
-          "fidy-session-binding": config.native.session.binding,
-          "content-type": "application/json",
-        },
-        ...(body === undefined ? {} : { body: yield* encodeJson(body) }),
-      })
-    );
+
+    const init: RequestInit = {
+      method,
+      headers: {
+        cookie: config.native.session.cookie,
+        origin: origins.browser,
+        "fidy-session-binding": config.native.session.binding,
+        "content-type": "application/json",
+      },
+    };
+
+    if (body !== undefined) init.body = yield* encodeJson(body);
+
+    return yield* transport.forward(new Request(origins.api + path, init));
   });
+
   const mutation = yield* fromBrowser(() =>
     proveScopedCorrection(config.expected.history, (method, path, body) =>
       run(correct(method, path, body))
     )
   );
+
   transport.verifyReservation();
+
   return { freshVisibleTransactions: true, nativeWebRevision: deployed.gitRevision, mutation };
 });
 
@@ -188,10 +215,16 @@ if (import.meta.main) {
     const evidence = yield* encodeJson(result);
     yield* fromBrowser(() => Bun.write(path.join(directory, "smoke.json"), evidence));
   });
-  try {
-    await Effect.runPromise(run.pipe(Effect.provide(BunServices.layer)));
-  } catch {
-    process.stderr.write("Protected native Transactions correctness smoke failed\n");
-    process.exitCode = 1;
-  }
+
+  BunRuntime.runMain(
+    run.pipe(
+      Effect.catchCause(() =>
+        Effect.sync(() => {
+          process.stderr.write("Protected native Transactions correctness smoke failed\n");
+          process.exitCode = 1;
+        })
+      ),
+      Effect.provide(BunServices.layer)
+    )
+  );
 }

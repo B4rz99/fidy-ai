@@ -4,7 +4,9 @@ import { makePublicWorker } from "./public-worker";
 import { makeWorkerTelemetry } from "./runtime/telemetry/operations";
 
 const origin = "https://app.fidyapp.com";
+
 const refusedStatus = 403;
+
 const cases = [
   { path: "/internal/support/billing-refunds", method: "POST" },
   {
@@ -19,6 +21,7 @@ it.each(cases)(
     Effect.runPromise(
       Effect.gen(function* () {
         let reachedCore = false;
+
         const response = yield* Effect.tryPromise(() =>
           makePublicWorker(makeWorkerTelemetry(() => undefined)).fetch(
             new Request(`https://api.fidyapp.com${path}`, {
@@ -37,12 +40,14 @@ it.each(cases)(
               CORE: {
                 fetch: () => {
                   reachedCore = true;
+
                   return Promise.resolve(new Response(null, { status: refusedStatus }));
                 },
               },
             }
           )
         );
+
         expect(reachedCore).toBe(false);
         expect(response.status).toBe(refusedStatus);
       })

@@ -11,27 +11,32 @@ export const InsightKind = Schema.Literals([
   "weekly-summary",
   "manual-entry-reminder",
 ]);
+
 export type InsightKind = typeof InsightKind.Type;
 
 export const ProactivityThresholds = Schema.Struct({
   askAfter: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
   pauseAfter: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
 });
+
 export type ProactivityThresholds = typeof ProactivityThresholds.Type;
 
 export const InsightEventId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("InsightEventId"))
   .annotate({ identifier: "InsightEventId" });
+
 export type InsightEventId = typeof InsightEventId.Type;
 
 export const ScheduleId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("ScheduleId"))
   .annotate({ identifier: "ScheduleId" });
+
 export type ScheduleId = typeof ScheduleId.Type;
 
 export const ScheduleVersion = Schema.Int.check(Schema.isGreaterThan(0))
   .pipe(Schema.brand("ScheduleVersion"))
   .annotate({ identifier: "ScheduleVersion" });
+
 export type ScheduleVersion = typeof ScheduleVersion.Type;
 
 export const ProactivityMessageRole = Schema.Literals([
@@ -43,9 +48,11 @@ export const ProactivityMessageRole = Schema.Literals([
   "reminder-question",
   "new-recurring-series",
 ]);
+
 export type ProactivityMessageRole = typeof ProactivityMessageRole.Type;
 
 export const InsightLifecycleState = Schema.Literals(["pending", "delivered", "read", "dismissed"]);
+
 export type InsightLifecycleState = typeof InsightLifecycleState.Type;
 
 export const InsightEvent = Schema.Struct({
@@ -60,16 +67,19 @@ export const InsightEvent = Schema.Struct({
   moneyGroups: MoneyGroups,
   lifecycleState: InsightLifecycleState,
 }).annotate({ identifier: "InsightEvent" });
+
 export type InsightEvent = typeof InsightEvent.Type;
 
 export const InsightGenerationInput = InsightEvent.mapFields(
   Struct.omit(["id", "lifecycleState"])
 ).annotate({ identifier: "InsightGenerationInput" });
+
 export type InsightGenerationInput = typeof InsightGenerationInput.Type;
 
 export const DeliveryAttemptId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("DeliveryAttemptId"))
   .annotate({ identifier: "DeliveryAttemptId" });
+
 export type DeliveryAttemptId = typeof DeliveryAttemptId.Type;
 
 export const InsightDeliveryAttempt = Schema.Struct({
@@ -78,11 +88,13 @@ export const InsightDeliveryAttempt = Schema.Struct({
   sentAt: UtcTimestamp,
   ...ProviderMessageEvidence.fields,
 }).annotate({ identifier: "InsightDeliveryAttempt" });
+
 export type InsightDeliveryAttempt = typeof InsightDeliveryAttempt.Type;
 
 export const DeliveryEvidenceInput = InsightDeliveryAttempt.mapFields(
   Struct.omit(["id", "insightEventId"])
 ).annotate({ identifier: "DeliveryEvidenceInput" });
+
 export type DeliveryEvidenceInput = typeof DeliveryEvidenceInput.Type;
 
 export class InsightNotFound extends Data.TaggedError("InsightNotFound")<{
@@ -109,6 +121,7 @@ export const InsightPeriod = Schema.Struct({
     )
   )
   .annotate({ identifier: "InsightPeriod" });
+
 export type InsightPeriod = typeof InsightPeriod.Type;
 
 export const WeeklyPeriods = Schema.Struct({
@@ -123,6 +136,7 @@ export const WeeklyPeriods = Schema.Struct({
     )
   )
   .annotate({ identifier: "WeeklyPeriods" });
+
 export type WeeklyPeriods = typeof WeeklyPeriods.Type;
 
 export const WeeklyTiming = Schema.Struct({
@@ -130,6 +144,7 @@ export const WeeklyTiming = Schema.Struct({
   hour: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 23 })),
   minute: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 59 })),
 }).annotate({ identifier: "WeeklyTiming" });
+
 export type WeeklyTiming = typeof WeeklyTiming.Type;
 
 export const WeeklySchedule = Schema.Struct({
@@ -142,17 +157,20 @@ export const WeeklySchedule = Schema.Struct({
   locale: Locale,
   nextScheduledAt: UtcTimestamp,
 }).annotate({ identifier: "WeeklySchedule" });
+
 export type WeeklySchedule = typeof WeeklySchedule.Type;
 
 export const ReminderAnchorDate = Schema.String.check(
   Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u),
   Schema.makeFilter((value) => {
     const date = DateTime.make(value);
+
     return Option.isSome(date) && DateTime.formatIsoDateUtc(date.value) === value
       ? undefined
       : "Expected a real local calendar date";
   })
 ).annotate({ identifier: "ReminderAnchorDate" });
+
 export type ReminderAnchorDate = typeof ReminderAnchorDate.Type;
 
 export const ConfirmationDay = Schema.Struct({
@@ -164,6 +182,7 @@ export const ConfirmationDay = Schema.Struct({
   .check(
     Schema.makeFilter((day) => {
       const start = DateTime.startOf(DateTime.setZoneNamedUnsafe(day.from, day.timeZone), "day");
+
       return (
         DateTime.formatIsoDate(start) === day.localDate &&
         start.epochMilliseconds === day.from.epochMilliseconds &&
@@ -172,6 +191,7 @@ export const ConfirmationDay = Schema.Struct({
     })
   )
   .annotate({ identifier: "ConfirmationDay" });
+
 export type ConfirmationDay = typeof ConfirmationDay.Type;
 
 export const RecurringDigestItem = Schema.Struct({
@@ -182,16 +202,21 @@ export const RecurringDigestItem = Schema.Struct({
   cadence: RecurringSeriesConfirmed.fields.cadence,
   confirmedAt: RecurringSeriesConfirmed.fields.confirmedAt,
 }).annotate({ identifier: "RecurringDigestItem" });
+
 export type RecurringDigestItem = typeof RecurringDigestItem.Type;
 
 type DigestItemView = Omit<RecurringDigestItem, "money"> & Readonly<{ money: ReadonlyMoney }>;
+
 const digestItemPrecedes = (previous: DigestItemView, item: DigestItemView): boolean => {
   if (previous.money.currency !== item.money.currency) {
     return previous.money.currency < item.money.currency;
   }
+
   if (previous.counterparty !== item.counterparty) return previous.counterparty < item.counterparty;
+
   return previous.confirmationId < item.confirmationId;
 };
+
 export const RecurringDigestPayload = Schema.Struct({
   confirmationDay: ConfirmationDay,
   items: Schema.NonEmptyArray(RecurringDigestItem),
@@ -201,9 +226,11 @@ export const RecurringDigestPayload = Schema.Struct({
       Readonly<{ confirmationDay: ConfirmationDay; items: ReadonlyArray<DigestItemView> }>
     >((payload) => {
       const ids = new Set<string>();
+
       return payload.items.every((item: DigestItemView, index) => {
         if (ids.has(item.confirmationId)) return false;
         ids.add(item.confirmationId);
+
         if (
           item.confirmedAt.epochMilliseconds < payload.confirmationDay.from.epochMilliseconds ||
           item.confirmedAt.epochMilliseconds >=
@@ -211,12 +238,15 @@ export const RecurringDigestPayload = Schema.Struct({
         ) {
           return false;
         }
+
         const previous = payload.items[index - 1];
+
         return previous === undefined || digestItemPrecedes(previous, item);
       });
     })
   )
   .annotate({ identifier: "RecurringDigestPayload" });
+
 export type RecurringDigestPayload = typeof RecurringDigestPayload.Type;
 
 export const RecurringDigestReport = Schema.Struct({
@@ -227,6 +257,7 @@ export const RecurringDigestReport = Schema.Struct({
   expiresAt: UtcTimestamp,
   payload: RecurringDigestPayload,
 }).annotate({ identifier: "RecurringDigestReport" });
+
 export type RecurringDigestReport = typeof RecurringDigestReport.Type;
 
 export const ReminderCadence = Schema.Union([
@@ -235,12 +266,14 @@ export const ReminderCadence = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("every-three-days"), anchorDate: ReminderAnchorDate }),
   Schema.Struct({ kind: Schema.Literal("weekly"), weekday: WeeklyTiming.fields.weekday }),
 ]).annotate({ identifier: "ReminderCadence" });
+
 export type ReminderCadence = typeof ReminderCadence.Type;
 
 export const ReminderTiming = Schema.Struct({
   hour: WeeklyTiming.fields.hour,
   minute: WeeklyTiming.fields.minute,
 }).annotate({ identifier: "ReminderTiming" });
+
 export type ReminderTiming = typeof ReminderTiming.Type;
 
 export const ReminderSchedule = Schema.Struct({
@@ -254,6 +287,7 @@ export const ReminderSchedule = Schema.Struct({
   locale: Locale,
   nextScheduledAt: UtcTimestamp,
 }).annotate({ identifier: "ReminderSchedule" });
+
 export type ReminderSchedule = typeof ReminderSchedule.Type;
 
 export const ReminderScheduleEdit = Schema.Struct({
@@ -262,6 +296,7 @@ export const ReminderScheduleEdit = Schema.Struct({
   timing: ReminderTiming,
   timeZone: IanaTimeZone,
 }).annotate({ identifier: "ReminderScheduleEdit" });
+
 export type ReminderScheduleEdit = typeof ReminderScheduleEdit.Type;
 
 const reminderPauseAfter = 5;
@@ -275,6 +310,7 @@ export const ReminderStanding = Schema.Union([
     pausedAt: UtcTimestamp,
   }),
 ]).annotate({ identifier: "ReminderStanding" });
+
 export type ReminderStanding = typeof ReminderStanding.Type;
 
 export const InsightDeliveryDecision = Schema.Union([
@@ -282,6 +318,7 @@ export const InsightDeliveryDecision = Schema.Union([
   Schema.TaggedStruct("Deferred", { nextEligibleAt: UtcTimestamp }),
   Schema.TaggedStruct("Expired", {}),
 ]).annotate({ identifier: "InsightDeliveryDecision" });
+
 export type InsightDeliveryDecision = typeof InsightDeliveryDecision.Type;
 
 export const RecurringDigestReportParams = Schema.Struct({ id: InsightEventId });

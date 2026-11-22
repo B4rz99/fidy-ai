@@ -1,6 +1,8 @@
-import { Data } from "effect";
+import { Data, type Option } from "effect";
 
-export class PATUnavailable extends Data.TaggedError("PATUnavailable") {}
+export class PATUnavailable extends Data.TaggedError("PATUnavailable")<{
+  readonly cause: Option.Option<unknown>;
+}> {}
 
 export const nativePATDirectoryUrl = "https://directory.invalid/credentials/pat";
 

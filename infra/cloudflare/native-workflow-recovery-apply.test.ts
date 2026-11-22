@@ -10,7 +10,9 @@ import {
 } from "./native-workflow-recovery-plan";
 
 const fingerprint = "a".repeat(64);
+
 const account = "b".repeat(32);
+
 const approval = Schema.decodeSync(WorkflowPlanEvidence)({
   verifierRevision: "c".repeat(40),
   candidateRevision: interruptedRevision,
@@ -36,6 +38,7 @@ it("rejects a changed verifier, dependency state, or tracked Workflow instance b
   expect(() =>
     requireSameWorkflowPlan({ approved: approval, observed: { ...approval } })
   ).not.toThrow();
+
   for (const change of [
     { verifierRevision: "d".repeat(40) },
     { stateProof: "e".repeat(64) },
@@ -49,6 +52,7 @@ it("rejects a changed verifier, dependency state, or tracked Workflow instance b
 
 it("requires the original instance to own the persisted Workflow for the exact private Smoke host", () => {
   const id = "c".repeat(32);
+
   const raw = {
     status: "created",
     fqn: workflowId,
@@ -64,9 +68,11 @@ it("requires the original instance to own the persisted Workflow for the exact p
       schedules: [],
     },
   };
+
   expect(confirmAppliedWorkflow({ raw, account, approvedInstance: approval.instanceProof })).toBe(
     id
   );
+
   for (const changed of [
     { ...raw, instanceId: "foreign" },
     { ...raw, status: "creating" },

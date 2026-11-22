@@ -1,4 +1,4 @@
-import { Schema, SchemaAST } from "effect";
+import { Predicate, Schema, SchemaAST } from "effect";
 import { oauthResource } from "~/shell/oauth-agents/contract";
 import { UserId } from "~/core/identity/contract";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
@@ -9,6 +9,7 @@ export const mcpCanonicalMetadata = {
   allowance: "co.fidy/canonicalAllowance",
   retryKey: "co.fidy/retryKey",
 } as const;
+
 const digestLength = 32;
 
 export const OAuthConfirmationAttempt = Schema.Union([
@@ -18,6 +19,7 @@ export const OAuthConfirmationAttempt = Schema.Union([
     response: Schema.Json,
   }),
 ]);
+
 export type OAuthConfirmationAttempt = typeof OAuthConfirmationAttempt.Type;
 
 export const OAuthCanonicalAdmission = Schema.Struct({
@@ -35,9 +37,11 @@ export const OAuthCanonicalAdmission = Schema.Struct({
   confirmation: Schema.optionalKey(OAuthConfirmationAttempt),
   retryKey: Schema.optionalKey(Schema.Json),
 });
+
 export type OAuthCanonicalAdmission = typeof OAuthCanonicalAdmission.Type;
 
 type ProjectAst = (ast: SchemaAST.AST) => SchemaAST.AST;
+
 const projectChildren = (ast: SchemaAST.AST, project: ProjectAst): SchemaAST.AST => {
   if (SchemaAST.isObjects(ast)) {
     return new SchemaAST.Objects(
@@ -54,6 +58,7 @@ const projectChildren = (ast: SchemaAST.AST, project: ProjectAst): SchemaAST.AST
       ast.encodingChecks
     );
   }
+
   if (SchemaAST.isArrays(ast)) {
     return new SchemaAST.Arrays(
       ast.isMutable,
@@ -66,6 +71,7 @@ const projectChildren = (ast: SchemaAST.AST, project: ProjectAst): SchemaAST.AST
       ast.encodingChecks
     );
   }
+
   if (SchemaAST.isSuspend(ast)) {
     return new SchemaAST.Suspend(
       () => project(ast.thunk()),
@@ -75,29 +81,41 @@ const projectChildren = (ast: SchemaAST.AST, project: ProjectAst): SchemaAST.AST
       ast.context
     );
   }
+
   return ast;
 };
+
 type ScopeProjection = Readonly<{ catalog: OperationCatalog; allowedIds: ReadonlySet<string> }>;
+
 const inaccessibleTarget = (ast: SchemaAST.AST, input: ScopeProjection): boolean => {
   if (!SchemaAST.isObjects(ast)) return false;
+
   return ast.propertySignatures.some(
     ({ name, type }) =>
       (name === "tool" || name === "operation") &&
       SchemaAST.isLiteral(type) &&
-      typeof type.literal === "string" &&
+      Predicate.isString(type.literal) &&
       input.catalog.byId.has(type.literal) &&
       !input.allowedIds.has(type.literal)
   );
 };
 
+export type McpSchemas = Readonly<{
+  input: Schema.Codec<Schema.Json>;
+  output: Schema.Codec<Schema.Json>;
+}>;
+
 export const projectMcpSchemas = (
   input: ScopeProjection & Readonly<{ operation: CatalogOperation }>
-): Readonly<{ input: Schema.Codec<Schema.Json>; output: Schema.Codec<Schema.Json> }> => {
+): McpSchemas => {
   const memo = new Map<SchemaAST.AST, SchemaAST.AST>();
+
   const project: ProjectAst = (ast) => {
     const cached = memo.get(ast);
+
     if (cached !== undefined) return cached;
     let value: SchemaAST.AST;
+
     if (inaccessibleTarget(ast, input)) value = SchemaAST.never;
     else if (SchemaAST.isUnion(ast)) {
       value = new SchemaAST.Union(
@@ -111,8 +129,10 @@ export const projectMcpSchemas = (
       );
     } else value = projectChildren(ast, project);
     memo.set(ast, value);
+
     return value;
   };
+
   return {
     input: Schema.make<Schema.Codec<Schema.Json>>(
       project(SchemaAST.toEncoded(input.operation.input.ast))

@@ -33,4 +33,5 @@ export const browserOrigins = {
 } as const;
 
 export const gitRevisionPattern = /^[0-9a-f]{40}$/u;
+
 export const contractDigestPattern = /^[0-9a-f]{64}$/u;

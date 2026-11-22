@@ -7,11 +7,14 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@/ui/compone
 export const PageNotFound = (): JSX.Element => {
   const { authentication } = useSession();
   const { sessionBinding } = useRouter().options.context;
+
   const appRoute = useRouterState({
     select: (state) =>
       state.location.pathname === "/app" || state.location.pathname.startsWith("/app/"),
   });
+
   const returnToDashboard = appRoute && authentication !== "expired" && sessionBinding !== "none";
+
   return (
     <main
       aria-labelledby="missing-page-title"

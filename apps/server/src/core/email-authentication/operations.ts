@@ -1,12 +1,13 @@
 import { DateTime, Effect, Option } from "effect";
 import {
   type EmailReplacementRequestDecision,
-  type ProofAttemptDecision,
+  ProofAttemptDecision,
   type ProofAttemptInput,
   maximumEmailDeliveryGenerations,
 } from "./contract";
 
 export const emailCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" as const;
+
 const maximumWrongProofAttempts = 5;
 
 export const emailWorkflowExpiry = (startedAt: DateTime.Utc): DateTime.Utc =>
@@ -42,13 +43,16 @@ export const decideEmailReplacementRequest = (input: {
         if (DateTime.isGreaterThanOrEqualTo(input.requestedAt, existing.expiresAt)) {
           return "ReplaceExpired";
         }
+
         if (existing.deliveryGeneration >= maximumEmailDeliveryGenerations) return "Reject";
+
         if (
           existing.candidateMatches &&
           DateTime.isGreaterThan(existing.resendAvailableAt, input.requestedAt)
         ) {
           return "Reject";
         }
+
         return "UseExisting";
       },
     })
@@ -91,14 +95,16 @@ const hasProofAttemptExpired = (input: ProofAttemptInput): boolean =>
 
 const wrongProofDecision = (wrongAttempts: number): ProofAttemptDecision =>
   wrongAttempts >= maximumWrongProofAttempts
-    ? { _tag: "Delete" }
-    : { _tag: "Wrong", wrongAttempts };
+    ? ProofAttemptDecision.Delete()
+    : ProofAttemptDecision.Wrong({ wrongAttempts });
 
 const liveProofDecision = (input: ProofAttemptInput): ProofAttemptDecision =>
-  input.digestMatches ? { _tag: "Accept" } : wrongProofDecision(input.wrongAttempts + 1);
+  input.digestMatches ? ProofAttemptDecision.Accept() : wrongProofDecision(input.wrongAttempts + 1);
 
 export const decideProofAttempt = (input: ProofAttemptInput): Effect.Effect<ProofAttemptDecision> =>
-  Effect.succeed(hasProofAttemptExpired(input) ? { _tag: "Expired" } : liveProofDecision(input));
+  Effect.succeed(
+    hasProofAttemptExpired(input) ? ProofAttemptDecision.Expired() : liveProofDecision(input)
+  );
 
 export const maximumOnboardingProofFailures = 4;
 

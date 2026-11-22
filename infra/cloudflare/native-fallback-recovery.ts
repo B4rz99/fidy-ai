@@ -12,6 +12,7 @@ import {
 } from "./release-controller";
 
 const Revision = Schema.String.check(Schema.isPattern(gitRevisionPattern));
+
 export const archivedDormant = {
   revision: "b85bfb06ab573259c250231623b77b0f65e2ae5c",
   publicVersionId: "9937b1c5-bdc2-43eb-9cb4-3e65af4e00ab",
@@ -27,6 +28,7 @@ export const archivedDormant = {
     versionId: "87f4baef-8e77-4093-86d0-cd075cf62601",
   },
 } as const;
+
 const archivedPairing = {
   revision: uploadedPair.revision,
   publicVersionId: uploadedPair.publicVersionId,
@@ -34,8 +36,11 @@ const archivedPairing = {
   publicDeploymentId: uploadedPair.failedStage.publicDeploymentId,
   coreDeploymentId: uploadedPair.failedStage.coreDeploymentId,
 };
+
 const Namespace = Schema.String.check(Schema.isPattern(/^[a-f0-9]{32}$/u));
+
 const Version = SmokeIdentity.fields.workerVersionId;
+
 export const FallbackStage = Schema.Struct({
   revision: Revision,
   stableRevision: Revision,
@@ -51,7 +56,9 @@ export const FallbackStage = Schema.Struct({
   }),
   controlsDigest: SmokeIdentity.fields.contractDigest,
 });
+
 export type FallbackStage = typeof FallbackStage.Type;
+
 export type FallbackRepairPort = ReleasePort &
   Readonly<{
     recentDeployments(name: string): Effect.Effect<ReadonlyArray<Deployment>, Error>;
@@ -73,13 +80,18 @@ const fixedCoordinates = ({
   new Set(Object.values(namespaces)).size === Object.keys(namespaces).length;
 
 type Role = "core" | "public";
+
 type Release = FallbackStage["release"];
+
 type Position = Readonly<{ id: string; serving: boolean }>;
+
 type Pair = Readonly<Record<Role, Position>>;
+
 const hasZeroCandidate = (deployment: Deployment, stable: string, candidate: string): boolean =>
   deployment.versions.length === 2 &&
   deployment.versions.some((row) => row.id === candidate && row.percentage === 0) &&
   deployment.versions.some((row) => row.id === stable && row.percentage === 100);
+
 const matchesStage = (deployment: Deployment, release: Release, role: Role): boolean =>
   deployment.id === release[`${role}DeploymentId`] &&
   hasZeroCandidate(deployment, release.snapshot[role].stableVersionId, release[`${role}VersionId`]);
@@ -107,36 +119,44 @@ export const requireRestoredDormantSource = Effect.fn(function* ({
 }) {
   const { release, promoted } = source.receipt;
   yield* releaseController.requireTrunk(port, snapshot.revision);
-  for (const role of ["core", "public"] as const) {
-    const captured = snapshot[role];
-    const stable = release.snapshot[role];
-    const deployment = `${role}DeploymentId` as const;
-    const version = `${role}VersionId` as const;
-    const history = yield* port.recentDeployments(captured.name);
-    const expected = [
-      soleDeployment(source.restored[deployment], sealed[version]),
-      soleDeployment(promoted[deployment], release[version]),
-      soleDeployment(stable.deploymentId, sealed[version]),
-    ];
-    if (
-      !isDeepStrictEqual(captured, { ...stable, deploymentId: source.restored[deployment] }) ||
-      !isDeepStrictEqual([history[0], history[1], history[3]], expected) ||
-      !Option.exists(EffectArray.get(history, 2), (staged) =>
-        matchesStage(staged, release, role)
-      ) ||
-      !Option.exists(EffectArray.get(history, 4), (staged) => matchesStage(staged, sealed, role))
-    ) {
-      return yield* Effect.fail(
-        Error("Dormant rollback history differs from the protected restoration")
-      );
-    }
-  }
+
+  yield* Effect.forEach(
+    ["core", "public"] as const,
+    Effect.fnUntraced(function* (role) {
+      const captured = snapshot[role];
+      const stable = release.snapshot[role];
+      const deployment = `${role}DeploymentId` as const;
+      const version = `${role}VersionId` as const;
+      const history = yield* port.recentDeployments(captured.name);
+
+      const expected = [
+        soleDeployment(source.restored[deployment], sealed[version]),
+        soleDeployment(promoted[deployment], release[version]),
+        soleDeployment(stable.deploymentId, sealed[version]),
+      ];
+
+      if (
+        !isDeepStrictEqual(captured, { ...stable, deploymentId: source.restored[deployment] }) ||
+        !isDeepStrictEqual([history[0], history[1], history[3]], expected) ||
+        !Option.exists(EffectArray.get(history, 2), (staged) =>
+          matchesStage(staged, release, role)
+        ) ||
+        !Option.exists(EffectArray.get(history, 4), (staged) => matchesStage(staged, sealed, role))
+      ) {
+        return yield* Effect.fail(
+          Error("Dormant rollback history differs from the protected restoration")
+        );
+      }
+    }),
+    { discard: true }
+  );
 });
 
 type PartialRollback = {
   receipt: typeof RollbackReceipt.Type;
   ingressDeploymentId: string;
 };
+
 const requireRestoredIngress = Effect.fn(function* (
   port: FallbackRepairPort,
   { receipt, ingressDeploymentId }: PartialRollback
@@ -144,6 +164,7 @@ const requireRestoredIngress = Effect.fn(function* (
   const { release, promoted } = receipt;
   const ingress = release.snapshot.public;
   const history = yield* port.recentDeployments(ingress.name);
+
   if (
     !isDeepStrictEqual(history[0], soleDeployment(ingressDeploymentId, ingress.stableVersionId)) ||
     !isDeepStrictEqual(
@@ -157,6 +178,7 @@ const requireRestoredIngress = Effect.fn(function* (
     );
   }
 });
+
 const coreRollbackPosition = Effect.fn(function* (
   port: FallbackRepairPort,
   { release, promoted }: typeof RollbackReceipt.Type
@@ -164,13 +186,16 @@ const coreRollbackPosition = Effect.fn(function* (
   const core = release.snapshot.core;
   const history = yield* port.recentDeployments(core.name);
   const promotedCore = soleDeployment(promoted.coreDeploymentId, release.coreVersionId);
+
   const atPromotion = (index: number): boolean =>
     isDeepStrictEqual(history[index], promotedCore) &&
     Option.exists(EffectArray.get(history, index + 1), (staged) =>
       matchesStage(staged, release, "core")
     );
+
   if (atPromotion(0)) return Option.none<Deployment>();
   const [latest] = history;
+
   if (
     latest !== undefined &&
     atPromotion(1) &&
@@ -179,6 +204,7 @@ const coreRollbackPosition = Effect.fn(function* (
   ) {
     return Option.some(latest);
   }
+
   return yield* Effect.fail(Error("Rollback Core history differs from the protected rollout"));
 });
 
@@ -189,23 +215,31 @@ export const resumePairingRollback = Effect.fn(function* (
     port,
     receipt: { release, promoted },
   } = input;
+
   const { core, revision } = release.snapshot;
   yield* releaseController.requireTrunk(port, revision);
   yield* requireRestoredIngress(port, input);
   const before = yield* coreRollbackPosition(port, input.receipt);
+
   if (Option.isSome(before)) return before.value;
+
   if (!(yield* port.deployable(core.name, core.stableVersionId))) {
     return yield* Effect.fail(Error("Sealed Core version is no longer deployable"));
   }
+
   yield* releaseController.requireTrunk(port, revision);
   yield* requireRestoredIngress(port, input);
   const ready = yield* coreRollbackPosition(port, input.receipt);
+
   if (Option.isSome(ready)) return ready.value;
+
   const restored = yield* releaseRollback.routeStable(port, core.name, {
     stableId: core.stableVersionId,
     previous: { id: promoted.coreDeploymentId, version: release.coreVersionId },
   });
+
   yield* requireRestoredIngress(port, input);
+
   if (
     !Option.exists(
       yield* coreRollbackPosition(port, input.receipt),
@@ -214,10 +248,12 @@ export const resumePairingRollback = Effect.fn(function* (
   ) {
     return yield* Effect.fail(Error("Rollback Core restoration could not be confirmed"));
   }
+
   return restored;
 });
 
 type ArchivedPair = typeof archivedPairing;
+
 const matchesArchivedPair = (value: Release, archive: ArchivedPair): boolean =>
   value.snapshot.revision === archive.revision &&
   (["public", "core"] as const).every(
@@ -225,9 +261,12 @@ const matchesArchivedPair = (value: Release, archive: ArchivedPair): boolean =>
       value[`${role}VersionId`] === archive[`${role}VersionId`] &&
       value[`${role}DeploymentId`] === archive[`${role}DeploymentId`]
   );
+
 export const matchesArchivedStage = (value: Release): boolean =>
   matchesArchivedPair(value, archivedDormant);
+
 type StageReader = Pick<FallbackRepairPort, "recentDeployments" | "trunk">;
+
 const matchesOriginalStage = (
   observed: Deployment,
   role: Role,
@@ -244,6 +283,7 @@ const archivedSource = (source: Release["snapshot"]): Option.Option<ArchivedPair
         source[role].stableVersionId === archivedDormant.original[role]
     )
   );
+
 export const fromArchivedStage = (source: Release["snapshot"]): boolean =>
   Option.isSome(archivedSource(source));
 
@@ -255,6 +295,7 @@ export const matchesReplacementPredecessor = ({
   snapshot: Release["snapshot"];
 }): boolean => {
   const archive = archivedSource(snapshot);
+
   return (
     Option.isSome(archive) &&
     matchesArchivedPair(prior, archive.value) &&
@@ -273,18 +314,25 @@ export const requireDormantReplacementSource = Effect.fn(function* (
 ) {
   yield* releaseController.requireTrunk(port, snapshot.revision);
   const archive = archivedSource(snapshot);
+
   if (Option.isNone(archive)) {
     return yield* Effect.fail(Error("Closed replacement source is not an archived pair"));
   }
-  for (const role of ["core", "public"] as const) {
-    const captured = snapshot[role];
-    const [active] = yield* port.recentDeployments(captured.name);
-    if (active === undefined || !matchesOriginalStage(active, role, archive.value)) {
-      return yield* Effect.fail(
-        Error("Closed replacement source differs from the archived deployment")
-      );
-    }
-  }
+
+  yield* Effect.forEach(
+    ["core", "public"] as const,
+    Effect.fnUntraced(function* (role) {
+      const captured = snapshot[role];
+      const [active] = yield* port.recentDeployments(captured.name);
+
+      if (active === undefined || !matchesOriginalStage(active, role, archive.value)) {
+        return yield* Effect.fail(
+          Error("Closed replacement source differs from the archived deployment")
+        );
+      }
+    }),
+    { discard: true }
+  );
 });
 
 const uploadedPosition = Effect.fn(function* (
@@ -294,9 +342,11 @@ const uploadedPosition = Effect.fn(function* (
 ) {
   const captured = snapshot[role];
   const [active, previous] = yield* port.recentDeployments(captured.name);
+
   if (active !== undefined && matchesOriginalStage(active, role)) {
     return { id: active.id, staged: false };
   }
+
   if (
     active === undefined ||
     previous === undefined ||
@@ -306,8 +356,10 @@ const uploadedPosition = Effect.fn(function* (
   ) {
     return yield* Effect.fail(Error("Interrupted pairing upload has unrelated deployment history"));
   }
+
   return { id: active.id, staged: true };
 });
+
 const uploadedAssignments = Effect.fn(function* (
   port: FallbackRepairPort,
   snapshot: Release["snapshot"]
@@ -315,11 +367,14 @@ const uploadedAssignments = Effect.fn(function* (
   yield* releaseController.requireTrunk(port, snapshot.revision);
   const core = yield* uploadedPosition(port, snapshot, "core");
   const ingress = yield* uploadedPosition(port, snapshot, "public");
+
   if (core.staged && !ingress.staged) {
     return yield* Effect.fail(Error("Unexpected interrupted stage order"));
   }
+
   return { core, public: ingress };
 });
+
 const confirmUploadedAssignment = (
   role: Role,
   observed: Effect.Success<ReturnType<typeof uploadedAssignments>>,
@@ -340,29 +395,41 @@ export const stageUploadedPair = Effect.fn(function* <E, R>(
   ) {
     return yield* Effect.fail(Error("Unexpected interrupted pairing upload snapshot"));
   }
+
   let positions = yield* uploadedAssignments(port, snapshot);
   yield* verify;
+
   if (!isDeepStrictEqual(positions, yield* uploadedAssignments(port, snapshot))) {
     return yield* Effect.fail(Error("Pair changed during pre-stage qualification"));
   }
-  for (const role of ["public", "core"] as const) {
-    if (positions[role].staged) continue;
-    const other = role === "public" ? "core" : "public";
-    const staged = yield* releaseController.deployExact(port, snapshot[role].name, [
-      { id: snapshot[role].stableVersionId, percentage: 100 },
-      { id: uploadedPair[`${role}VersionId`], percentage: 0 },
-    ]);
-    const observed = yield* uploadedAssignments(port, snapshot);
-    if (
-      !confirmUploadedAssignment(role, observed, {
-        deployment: staged.id,
-        other: positions[other].id,
-      })
-    ) {
-      return yield* Effect.fail(Error("Unexpected traffic after staging uploaded Worker"));
-    }
-    positions = observed;
-  }
+
+  yield* Effect.forEach(
+    ["public", "core"] as const,
+    Effect.fnUntraced(function* (role) {
+      if (positions[role].staged) return;
+      const other = role === "public" ? "core" : "public";
+
+      const staged = yield* releaseController.deployExact(port, snapshot[role].name, [
+        { id: snapshot[role].stableVersionId, percentage: 100 },
+        { id: uploadedPair[`${role}VersionId`], percentage: 0 },
+      ]);
+
+      const observed = yield* uploadedAssignments(port, snapshot);
+
+      if (
+        !confirmUploadedAssignment(role, observed, {
+          deployment: staged.id,
+          other: positions[other].id,
+        })
+      ) {
+        return yield* Effect.fail(Error("Unexpected traffic after staging uploaded Worker"));
+      }
+
+      positions = observed;
+    }),
+    { discard: true }
+  );
+
   return {
     snapshot,
     publicVersionId: uploadedPair.publicVersionId,
@@ -377,50 +444,65 @@ export const requirePromotedDormantSource = Effect.fn(function* (
   snapshot: Release["snapshot"],
   sealed?: Release
 ) {
-  for (const role of ["core", "public"] as const) {
-    const [active, staged] = yield* port.recentDeployments(snapshot[role].name);
-    const version = (sealed ?? archivedDormant)[`${role}VersionId`];
-    const expected = {
-      id: snapshot[role].deploymentId,
-      versions: [{ id: version, percentage: 100 }],
-    };
-    const ownsStage =
-      staged !== undefined &&
-      (sealed !== undefined
-        ? matchesStage(staged, sealed, role)
-        : matchesOriginalStage(staged, role));
-    if (
-      !isDeepStrictEqual(active, expected) ||
-      snapshot[role].stableVersionId !== version ||
-      !ownsStage
-    ) {
-      return yield* Effect.fail(
-        Error("Active source differs from the sealed dormant deployment history")
-      );
-    }
-  }
+  yield* Effect.forEach(
+    ["core", "public"] as const,
+    Effect.fnUntraced(function* (role) {
+      const [active, staged] = yield* port.recentDeployments(snapshot[role].name);
+      const version = (sealed ?? archivedDormant)[`${role}VersionId`];
+
+      const expected = {
+        id: snapshot[role].deploymentId,
+        versions: [{ id: version, percentage: 100 }],
+      };
+
+      const ownsStage =
+        staged !== undefined &&
+        (sealed !== undefined
+          ? matchesStage(staged, sealed, role)
+          : matchesOriginalStage(staged, role));
+
+      if (
+        !isDeepStrictEqual(active, expected) ||
+        snapshot[role].stableVersionId !== version ||
+        !ownsStage
+      ) {
+        return yield* Effect.fail(
+          Error("Active source differs from the sealed dormant deployment history")
+        );
+      }
+    }),
+    { discard: true }
+  );
 });
+
 const requireUnpromotedHistory = Effect.fn(function* (port: StageReader, release: Release) {
   if ((yield* port.trunk()) !== release.snapshot.revision) {
     return yield* Effect.fail(Error("Staged release verifier is no longer protected trunk"));
   }
+
   const archive = archivedSource(release.snapshot);
-  for (const role of ["core", "public"] as const) {
-    const snapshot = release.snapshot[role];
-    const [active, original] = yield* port.recentDeployments(snapshot.name);
-    if (
-      active === undefined ||
-      !matchesStage(active, release, role) ||
-      (Option.isSome(archive)
-        ? original === undefined || !matchesOriginalStage(original, role, archive.value)
-        : !isDeepStrictEqual(original, {
-            id: snapshot.deploymentId,
-            versions: [{ id: snapshot.stableVersionId, percentage: 100 }],
-          }))
-    ) {
-      return yield* Effect.fail(Error("Staged pair or original deployment history differs"));
-    }
-  }
+
+  yield* Effect.forEach(
+    ["core", "public"] as const,
+    Effect.fnUntraced(function* (role) {
+      const snapshot = release.snapshot[role];
+      const [active, original] = yield* port.recentDeployments(snapshot.name);
+
+      if (
+        active === undefined ||
+        !matchesStage(active, release, role) ||
+        (Option.isSome(archive)
+          ? original === undefined || !matchesOriginalStage(original, role, archive.value)
+          : !isDeepStrictEqual(original, {
+              id: snapshot.deploymentId,
+              versions: [{ id: snapshot.stableVersionId, percentage: 100 }],
+            }))
+      ) {
+        return yield* Effect.fail(Error("Staged pair or original deployment history differs"));
+      }
+    }),
+    { discard: true }
+  );
 });
 
 export const verifyUnpromotedFallback = Effect.fn(function* <A, E, R>(input: {
@@ -439,21 +521,27 @@ export const verifyUnpromotedFallback = Effect.fn(function* <A, E, R>(input: {
       Effect.logError("Staged deployment history differs from the archived 100/0 pair.")
     )
   );
+
   return result;
 });
+
 const workerPosition = Effect.fn(function* (
   port: FallbackRepairPort,
   release: Release,
   role: Role
 ) {
   const [active, previous] = yield* port.recentDeployments(release.snapshot[role].name);
+
   if (active === undefined) return yield* Effect.fail(Error("Missing fallback deployment history"));
+
   if (matchesStage(active, release, role)) return { id: active.id, serving: false };
+
   const onlyDormant =
     active.versions.length === 1 &&
     active.versions.some(
       (version) => version.id === release[`${role}VersionId`] && version.percentage === 100
     );
+
   if (
     onlyDormant &&
     previous !== undefined &&
@@ -462,17 +550,22 @@ const workerPosition = Effect.fn(function* (
   ) {
     return { id: active.id, serving: true };
   }
+
   return yield* Effect.fail(Error("Traffic no longer follows the archived dormant stage"));
 });
+
 const positions = Effect.fn(function* (port: FallbackRepairPort, release: Release) {
   yield* releaseController.requireTrunk(port, release.snapshot.revision);
   const core = yield* workerPosition(port, release, "core");
   const ingress = yield* workerPosition(port, release, "public");
+
   if (ingress.serving && !core.serving) {
     return yield* Effect.fail(Error("Dormant Ingress advanced before its Core"));
   }
+
   return { core, public: ingress };
 });
+
 const requireUnchanged = (before: Pair, after: Pair): Effect.Effect<void, Error> =>
   before.core.id === after.core.id && before.public.id === after.public.id
     ? Effect.void
@@ -484,12 +577,16 @@ const advance = Effect.fn(function* (
   input: { role: Role; pair: Pair }
 ) {
   const { role, pair } = input;
+
   if (pair[role].serving) return pair;
   const other = role === "core" ? "public" : "core";
+
   const promoted = yield* releaseController.deployExact(port, release.snapshot[role].name, [
     { id: release[`${role}VersionId`], percentage: 100 },
   ]);
+
   const observed = yield* positions(port, release);
+
   if (
     !observed[role].serving ||
     observed[role].id !== promoted.id ||
@@ -497,6 +594,7 @@ const advance = Effect.fn(function* (
   ) {
     return yield* Effect.fail(Error("Unexpected traffic after dormant promotion"));
   }
+
   return observed;
 });
 
@@ -508,6 +606,7 @@ export const recoverFixtureFallback = Effect.fn(function* (
   if (!fixedCoordinates(stage)) {
     return yield* Effect.fail(Error("Inconsistent dormant fallback stage"));
   }
+
   const { release } = stage;
   const before = yield* positions(port, release);
   yield* verifyDormant(stage, "before");
@@ -517,5 +616,6 @@ export const recoverFixtureFallback = Effect.fn(function* (
   const both = yield* advance(port, release, { role: "public", pair: core });
   yield* verifyDormant(stage, "after");
   yield* requireUnchanged(both, yield* positions(port, release));
+
   return { publicDeploymentId: both.public.id, coreDeploymentId: both.core.id };
 });

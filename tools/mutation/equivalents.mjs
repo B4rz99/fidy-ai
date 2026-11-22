@@ -22,10 +22,13 @@ export const sourceHash = (source) => createHash("sha256").update(source).digest
  */
 export const equivalentReason = (registry, mutant, source) => {
   const fileName = mutant.fileName.replaceAll("\\", "/");
+
   const file = Object.entries(registry.files).find(
     ([name]) => fileName === name || fileName.endsWith(`/${name}`)
   )?.[1];
+
   if (file === undefined || file.sourceSha256 !== sourceHash(source)) return undefined;
+
   const equivalent = file.mutants.find(
     (entry) =>
       entry.mutatorName === mutant.mutatorName &&
@@ -35,6 +38,7 @@ export const equivalentReason = (registry, mutant, source) => {
       entry.location.end.line === mutant.location.end.line &&
       entry.location.end.column === mutant.location.end.column
   );
+
   return equivalent === undefined ? undefined : `Reviewed equivalent: ${equivalent.reason}`;
 };
 
@@ -44,6 +48,7 @@ const position = {
   additionalProperties: false,
   properties: { line: { type: "integer", minimum: 1 }, column: { type: "integer", minimum: 1 } },
 };
+
 /** @type {import("ajv").ValidateFunction<EquivalentRegistry>} */
 const validateRegistry = new Ajv().compile({
   type: "object",
@@ -87,11 +92,13 @@ const validateRegistry = new Ajv().compile({
 export const loadRegistry = () => {
   /** @type {unknown} */
   const registry = JSON.parse(readFileSync(new URL("./equivalents.json", import.meta.url), "utf8"));
+
   if (!validateRegistry(registry)) {
     throw new Error(
       `Invalid equivalent registry: ${new Ajv().errorsText(validateRegistry.errors)}`
     );
   }
+
   return registry;
 };
 
@@ -114,6 +121,7 @@ export class ExactEquivalentIgnorer {
         end: { line: mutant.location.end.line + 1, column: mutant.location.end.column + 1 },
       },
     };
+
     return equivalentReason(this.registry, reportMutant, source);
   }
 }
@@ -131,12 +139,14 @@ const verifyEquivalentCount = (registry, report) => {
     (count, file) => count + file.mutants.length,
     0
   );
+
   const actualCount = Object.values(report.files)
     .flatMap((file) => file.mutants)
     .filter(
       (mutant) =>
         mutant.status === "Ignored" && mutant.statusReason?.startsWith("Reviewed equivalent:")
     ).length;
+
   if (expectedCount !== actualCount) throw new Error("Unexpected reviewed-equivalent count");
 };
 
@@ -148,11 +158,14 @@ const verifyEquivalentCount = (registry, report) => {
  */
 export const verifyEquivalentReport = (registry, report) => {
   verifyEquivalentCount(registry, report);
+
   for (const [name, file] of Object.entries(registry.files)) {
     const actual = report.files[name];
+
     if (!Object.hasOwn(report.files, name) || sourceHash(actual.source) !== file.sourceSha256) {
       throw new Error(`Stale equivalent source: ${name}`);
     }
+
     for (const entry of file.mutants) {
       const matched = actual.mutants.filter(
         (mutant) =>
@@ -166,6 +179,7 @@ export const verifyEquivalentReport = (registry, report) => {
           mutant.location.end.line === entry.location.end.line &&
           mutant.location.end.column === entry.location.end.column
       );
+
       if (matched.length !== 1 || matched[0]?.status !== "Ignored") {
         throw new Error(
           `Stale equivalent mutant: ${name}:${entry.location.start.line} ${entry.replacement}`
@@ -177,10 +191,13 @@ export const verifyEquivalentReport = (registry, report) => {
 
 /** @type {import("ajv").ValidateFunction<import("mutation-testing-report-schema/api").MutationTestResult>} */
 const validateReport = new Ajv({ formats: { uri: true } }).compile(mutationReportSchema);
+
 /** @param {string} path - Fresh report file to validate and read. */
 export const loadMutationReport = (path) => {
   /** @type {unknown} */
   const report = JSON.parse(readFileSync(path, "utf8"));
+
   if (!validateReport(report)) throw new Error("Invalid mutation report");
+
   return report;
 };

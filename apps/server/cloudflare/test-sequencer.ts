@@ -10,13 +10,17 @@ export class CloudflareTestSequencer {
 
   shard(files: TestSpecification[]): Promise<TestSpecification[]> {
     const shard = this.context.config.shard;
+
     if (shard === undefined) return Promise.resolve(files);
+
     const shards = cloudflareTestShards({
       files: files.map((file) => file.moduleId),
       cloudflareRoot: new URL("./", import.meta.url).pathname,
       count: shard.count,
     });
+
     const selected = new Set(shards[shard.index - 1]);
+
     return Promise.resolve(files.filter((file) => selected.has(file.moduleId)));
   }
 
@@ -26,7 +30,9 @@ export class CloudflareTestSequencer {
       cloudflareRoot: new URL("./", import.meta.url).pathname,
       count: 1,
     }).flat();
+
     const rank = new Map(ordered.map((moduleId, index) => [moduleId, index]));
+
     return Promise.resolve(
       [...files].sort(
         (left, right) => (rank.get(left.moduleId) ?? 0) - (rank.get(right.moduleId) ?? 0)

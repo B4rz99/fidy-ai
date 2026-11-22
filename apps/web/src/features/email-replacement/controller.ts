@@ -1,5 +1,5 @@
-import type { EmailReplacementViewState } from "./view";
-import { type ReplacementActions, makeReplacement } from "./commands";
+import { EmailReplacementViewState } from "./view-state";
+import { type ReplacementActions, createReplacement } from "./commands";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Atom } from "effect/reactivity";
@@ -12,11 +12,15 @@ export const useEmailReplacement = (): ReplacementActions &
   const { apiClient, webAuthClient, sessionBinding: binding } = useRouter().options.context;
   const uncertain = useAtomValue(incompleteReplacement);
   const onUncertain = useAtomSet(incompleteReplacement);
+
   const [state, setState] = useState<EmailReplacementViewState>(
-    uncertain ? { _tag: "Uncertain" } : { _tag: "Editing", feedback: "none" }
+    uncertain
+      ? EmailReplacementViewState.Uncertain()
+      : EmailReplacementViewState.Editing({ feedback: "none", draftEmail: "" })
   );
+
   const [interaction] = useState(() =>
-    makeReplacement({
+    createReplacement({
       apiClient,
       webAuthClient,
       publish: setState,
@@ -25,13 +29,19 @@ export const useEmailReplacement = (): ReplacementActions &
       binding,
     })
   );
+
   const dispatch = useAtomSet(interaction.atom);
+
   const lifecycleRef = useCallback<RefCallback<HTMLElement>>(
     (node) => {
-      if (node === null) return;
+      if (node === null) {
+        return;
+      }
+
       return interaction.mount(dispatch);
     },
     [interaction, dispatch]
   );
+
   return { state, lifecycleRef, ...interaction.actions(dispatch) };
 };

@@ -1,4 +1,5 @@
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
+import { OutboundHttpRequest } from "../../../src/shell/outbound-http/contract";
 import {
   Config,
   Context,
@@ -24,7 +25,9 @@ import {
 } from "../../../src/shell/outbound-http/operations";
 
 const successfulStatusMinimum = 200;
+
 const successfulStatusMaximumExclusive = 300;
+
 const TransactionResponse = Schema.Struct({
   data: Schema.Struct({
     id: WompiTransactionId,
@@ -36,12 +39,17 @@ const TransactionResponse = Schema.Struct({
     finalized_at: Schema.OptionFromNullOr(Schema.DateTimeUtcFromString),
   }),
 });
+
 const decodeJson = Schema.decodeUnknownResult(UnknownJsonString);
+
 const decodeTransaction = Schema.decodeUnknownResult(TransactionResponse);
 
 const badRequestStatus = 400;
+
 const unauthorizedStatus = 401;
+
 const forbiddenStatus = 403;
+
 const unprocessableEntityStatus = 422;
 
 const definitiveRefusalStatuses: ReadonlySet<number> = new Set([
@@ -64,6 +72,7 @@ export type WompiTransaction = Readonly<{
 export class WompiTransactionCreationFailed extends Data.TaggedError(
   "WompiTransactionCreationFailed"
 )<{ readonly certainty: "rejected" | "ambiguous" }> {}
+
 export class WompiTransactionLookupFailed extends Data.TaggedError(
   "WompiTransactionLookupFailed"
 )<{}> {}
@@ -85,10 +94,13 @@ export type WompiBillingClientService = Readonly<{
 
 const parseTransaction = Effect.fn(function* (body: Uint8Array) {
   const json = decodeJson(new TextDecoder().decode(body));
+
   if (Result.isFailure(json)) return yield* Effect.fail("malformed" as const);
   const transaction = decodeTransaction(json.success);
+
   if (Result.isFailure(transaction)) return yield* Effect.fail("malformed" as const);
   const data = transaction.success.data;
+
   return {
     transactionId: data.id,
     reference: data.reference,
@@ -106,18 +118,20 @@ const makeCreateTransaction = (
   Effect.fn("Wompi.createTransaction")(
     function* (input) {
       const response = yield* outboundHttp
-        .execute({
-          _tag: "WompiCreateTransaction",
-          body: {
-            amountInCents: input.amountInCents,
-            currency: input.currency,
-            billingEmail: input.billingEmail,
-            sourceId: input.sourceId,
-            reference: input.reference,
-            method: input.method,
-          },
-        })
+        .execute(
+          OutboundHttpRequest.WompiCreateTransaction({
+            body: {
+              amountInCents: input.amountInCents,
+              currency: input.currency,
+              billingEmail: input.billingEmail,
+              sourceId: input.sourceId,
+              reference: input.reference,
+              method: input.method,
+            },
+          })
+        )
         .pipe(Effect.timeout("14 seconds"));
+
       if (
         response.status < successfulStatusMinimum ||
         response.status >= successfulStatusMaximumExclusive
@@ -128,6 +142,7 @@ const makeCreateTransaction = (
             : ("ambiguous" as const)
         );
       }
+
       return yield* parseTransaction(response.body);
     },
     Effect.mapError(
@@ -145,19 +160,19 @@ const makeFindTransaction = (
   Effect.fn("Wompi.findTransaction")(
     function* (transactionId) {
       const response = yield* outboundHttp
-        .execute({
-          _tag: "WompiFindTransaction",
-          transactionId,
-        })
+        .execute(OutboundHttpRequest.WompiFindTransaction({ transactionId }))
         .pipe(Effect.timeout("14 seconds"));
+
       if (
         response.status < successfulStatusMinimum ||
         response.status >= successfulStatusMaximumExclusive
       ) {
         return yield* Effect.fail("provider-status" as const);
       }
+
       return yield* parseTransaction(response.body);
     },
+    Effect.tapError(Effect.logDebug),
     Effect.mapError(() => new WompiTransactionLookupFailed())
   );
 
@@ -173,6 +188,7 @@ export const makeWompiBillingClient = (
 const loadBillingAdapter = Effect.gen(function* () {
   const outboundHttp = yield* OutboundHttp;
   const environment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
+
   return makeWompiBillingClient({ outboundHttp, environment });
 });
 
@@ -180,5 +196,9 @@ export class WompiBillingClient extends Context.Service<
   WompiBillingClient,
   WompiBillingClientService
 >()("@fidy/server/cloudflare/subscription/internal/wompi-billing-client/WompiBillingClient") {
-  static readonly layer = Layer.effect(WompiBillingClient, loadBillingAdapter);
+  static readonly make = loadBillingAdapter;
+
+  static readonly layer = Layer.effect(this, this.make);
+
+  static readonly fromOutboundHttp = makeWompiBillingClient;
 }

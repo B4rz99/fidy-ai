@@ -13,14 +13,21 @@ import { KeywordRuleResponse, ListKeywordRulesResponse } from "../../src/shell/c
 import { CreateTransactionResponse } from "../../src/shell/transactions/contract";
 
 const userA = alice.user;
+
 const domicilios = "10000000-0000-4000-8000-000000000002";
+
 const mercado = "10000000-0000-4000-8000-000000000003";
+
 const transporte = "10000000-0000-4000-8000-000000000004";
+
 const ingresos = "10000000-0000-4000-8000-000000000015";
+
 const otros = "10000000-0000-4000-8000-000000000016";
+
 const foreignCategory = "90000000-0000-4000-8000-000000000009";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure")<{ cause: unknown }> {}
+
 const awaitPromise = <A>(
   promise: PromiseLike<A> | A
 ): Effect.Effect<Awaited<A>, TestPromiseFailure> =>
@@ -35,9 +42,12 @@ const decodeJson = <A>(
 ): Effect.Effect<A, TestPromiseFailure | Schema.SchemaError> =>
   Effect.gen(function* () {
     const body: unknown = yield* awaitPromise(response.json());
+
     return yield* Schema.decodeUnknownEffect(schema)(body);
   });
+
 const clock = (): number => Effect.runSync(Clock.currentTimeMillis);
+
 const StoredRule = Schema.Struct({
   id: Schema.String,
   keyword: Schema.String,
@@ -45,16 +55,21 @@ const StoredRule = Schema.Struct({
   createdAt: Schema.String,
   updatedAt: Schema.String,
 });
+
 const RuleEnvelope = Schema.Struct({ data: StoredRule, next: Schema.Array(Schema.Unknown) });
+
 const RuleListEnvelope = Schema.Struct({
   data: Schema.Array(StoredRule),
   next: Schema.Array(Schema.Unknown),
 });
+
 const RemovedEnvelope = Schema.Struct({ data: Schema.String, next: Schema.Array(Schema.Unknown) });
+
 const TransactionEnvelope = Schema.Struct({
   data: Schema.Struct({ id: Schema.String, categoryId: Schema.String }),
   next: Schema.Array(Schema.Unknown),
 });
+
 const FailedBody = Schema.Struct({
   error: Schema.Struct({ code: Schema.String, message: Schema.String }),
   next: Schema.Array(Schema.Unknown),
@@ -72,9 +87,11 @@ type Send = Readonly<{ path: string; method: "GET" | "POST" | "PUT" | "DELETE" }
   >;
 
 type Journey = Effect.Success<typeof nativeTransactionJourney>;
+
 const setup = Effect.gen(function* () {
   const db = yield* nativeTransactionJourney;
   const sessions = [alice.bearer, bob.bearer] as const;
+
   const send = ({
     path,
     method,
@@ -85,24 +102,32 @@ const setup = Effect.gen(function* () {
     originless,
   }: Send): Promise<Response> => {
     const headers = new Headers();
+
     if (originless !== true) headers.set("origin", origin ?? "https://app.fidyapp.com");
+
     if (payload !== undefined) headers.set("content-type", "application/json");
+
     if (bearer !== undefined) headers.set("authorization", "Bearer " + bearer);
+
     if (session !== undefined) {
       headers.set("cookie", "__Host-fidy_session=" + session);
       headers.set("Fidy-Session-Binding", session === alice.bearer ? alice.session : bob.session);
     }
+
     return db.send(
       new Request("https://api.fidyapp.com" + path, {
         method,
         headers,
-        ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+        body: payload === undefined ? null : JSON.stringify(payload),
       })
     );
   };
+
   return { db, send, sessions };
 });
+
 type SendFn = (input: Send) => Promise<Response>;
+
 type RuleRequest = Readonly<{
   send: SendFn;
   session: string;
@@ -114,6 +139,7 @@ const createRule = (
   request: Partial<RuleRequest> & Pick<RuleRequest, "send" | "session" | "keyword">
 ): Promise<Response> => {
   const { send, session, keyword, categoryId = domicilios } = request;
+
   return send({
     path: "/category-keyword-rules",
     method: "POST",
@@ -134,17 +160,20 @@ const capture = (
   request: Partial<CaptureRequest> & Pick<CaptureRequest, "send" | "session">
 ): Promise<Response> => {
   const { send, session, direction = "outflow", counterparty, categoryId } = request;
+
+  const movement = {
+    money: { amount: "25000.00", currency: "COP" },
+    direction,
+    occurredAt: DateTime.formatIso(DateTime.makeUnsafe(clock() - 60_000)),
+  };
+
+  const described = counterparty === undefined ? movement : { ...movement, counterparty };
+
   return send({
     path: "/transactions",
     method: "POST",
     session,
-    payload: {
-      money: { amount: "25000.00", currency: "COP" },
-      direction,
-      occurredAt: DateTime.formatIso(DateTime.makeUnsafe(clock() - 60_000)),
-      ...(counterparty === undefined ? {} : { counterparty }),
-      ...(categoryId === undefined ? {} : { categoryId }),
-    },
+    payload: categoryId === undefined ? described : { ...described, categoryId },
   });
 };
 
@@ -165,12 +194,15 @@ const issuePAT = Effect.fn(function* ({
     scopes,
     current: yield* Clock.currentTimeMillis,
   });
+
   return { bearer };
 });
+
 const ruleCount = (db: Journey, userId: string): Effect.Effect<unknown> =>
   native(() =>
     db.owner(userId).exec("SELECT count(*) AS total FROM keyword_rules WHERE user_id=?", userId)
   ).pipe(Effect.map((rows) => rows[0]?.total));
+
 const storedCategory = (
   db: Journey,
   userId: string,
@@ -181,15 +213,18 @@ const storedCategory = (
       .owner(userId)
       .exec("SELECT category_id FROM transactions WHERE user_id=? AND id=?", userId, id)
   ).pipe(Effect.map((rows) => Option.fromUndefinedOr(rows[0]?.category_id)));
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("applies a replaced keyword and Category only to future matching captures", () =>
     Effect.gen(function* () {
       const { send, sessions } = yield* setup;
       const session = sessions[0];
+
       const original = (yield* decodeJson(
         Schema.toCodecJson(KeywordRuleResponse),
         yield* awaitPromise(createRule({ send, session, keyword: "Rappi" }))
       )).data;
+
       const updated = yield* awaitPromise(
         send({
           path: `/category-keyword-rules/${original.id}`,
@@ -198,6 +233,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           payload: { keyword: "Éxito", categoryId: mercado },
         })
       );
+
       expect(updated.status).toBe(200);
       expect(
         (yield* decodeJson(Schema.toCodecJson(KeywordRuleResponse), updated)).data
@@ -207,36 +243,44 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         categoryId: mercado,
         createdAt: original.createdAt,
       });
+
       const matched = yield* decodeJson(
         Schema.toCodecJson(CreateTransactionResponse),
         yield* awaitPromise(capture({ send, session, counterparty: "EXITO supermercado" }))
       );
+
       expect(matched.data.categoryId).toBe(mercado);
+
       const retired = yield* decodeJson(
         Schema.toCodecJson(CreateTransactionResponse),
         yield* awaitPromise(capture({ send, session, counterparty: "Rappi" }))
       );
+
       expect(retired.data.categoryId).toBe(otros);
     })
   );
 
   test.effect(
     "preserves a rule and its capture behavior when replacement conflicts or names an unknown Category",
-    () =>
-      Effect.gen(function* () {
-        const { send, sessions } = yield* setup;
-        const session = sessions[0];
-        const original = (yield* decodeJson(
-          Schema.toCodecJson(KeywordRuleResponse),
-          yield* awaitPromise(createRule({ send, session, keyword: "Rappi" }))
-        )).data;
-        expect((yield* awaitPromise(createRule({ send, session, keyword: "Éxito" }))).status).toBe(
-          201
-        );
-        for (const replacement of [
+    Effect.fnUntraced(function* () {
+      const { send, sessions } = yield* setup;
+      const session = sessions[0];
+
+      const original = (yield* decodeJson(
+        Schema.toCodecJson(KeywordRuleResponse),
+        yield* awaitPromise(createRule({ send, session, keyword: "Rappi" }))
+      )).data;
+
+      expect((yield* awaitPromise(createRule({ send, session, keyword: "Éxito" }))).status).toBe(
+        201
+      );
+
+      yield* Effect.forEach(
+        [
           { keyword: "EXITO", categoryId: mercado, status: 400 },
           { keyword: "Farmacia", categoryId: foreignCategory, status: 404 },
-        ]) {
+        ],
+        Effect.fnUntraced(function* (replacement) {
           const refused = yield* awaitPromise(
             send({
               path: `/category-keyword-rules/${original.id}`,
@@ -245,46 +289,60 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               payload: { keyword: replacement.keyword, categoryId: replacement.categoryId },
             })
           );
+
           expect(refused.status).toBe(replacement.status);
+
           const retained = yield* decodeJson(
             Schema.toCodecJson(ListKeywordRulesResponse),
             yield* awaitPromise(send({ path: "/category-keyword-rules", method: "GET", session }))
           );
+
           expect(retained.data.find((rule) => rule.id === original.id)).toEqual(original);
-        }
-        const captured = yield* decodeJson(
-          Schema.toCodecJson(CreateTransactionResponse),
-          yield* awaitPromise(capture({ send, session, counterparty: "Rappi" }))
-        );
-        expect(captured.data.categoryId).toBe(domicilios);
-      })
+        }),
+        { discard: true }
+      );
+
+      const captured = yield* decodeJson(
+        Schema.toCodecJson(CreateTransactionResponse),
+        yield* awaitPromise(capture({ send, session, counterparty: "Rappi" }))
+      );
+
+      expect(captured.data.categoryId).toBe(domicilios);
+    })
   );
 
   test.effect("retains exactly one normalized keyword when concurrent creates compete", () =>
     Effect.gen(function* () {
       const { send, sessions } = yield* setup;
       const session = sessions[0];
+
       const responses = yield* awaitPromise(
         Promise.all([
           createRule({ send, session, keyword: "Éxito", categoryId: mercado }),
           createRule({ send, session, keyword: "EXITO", categoryId: transporte }),
         ])
       );
+
       expect(
         responses.map((response) => response.status).sort((left, right) => left - right)
       ).toEqual([201, 400]);
       const accepted = responses.find((response) => response.status === 201);
+
       if (accepted === undefined) throw new Error("No accepted keyword rule");
       const winner = (yield* decodeJson(Schema.toCodecJson(KeywordRuleResponse), accepted)).data;
+
       const retained = yield* decodeJson(
         Schema.toCodecJson(ListKeywordRulesResponse),
         yield* awaitPromise(send({ path: "/category-keyword-rules", method: "GET", session }))
       );
+
       expect(retained.data).toEqual([winner]);
+
       const captured = yield* decodeJson(
         Schema.toCodecJson(CreateTransactionResponse),
         yield* awaitPromise(capture({ send, session, counterparty: "Exito" }))
       );
+
       expect(captured.data.categoryId).toBe(winner.categoryId);
     })
   );
@@ -294,9 +352,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const { send, sessions } = yield* setup;
+
         const created = yield* awaitPromise(
           createRule({ send, session: sessions[0], keyword: "RÁPPI Turbo", categoryId: domicilios })
         );
+
         expect(created.status).toBe(201);
         const rule = (yield* decodeJson(RuleEnvelope, created)).data;
         expect(rule.keyword).toBe("rappi turbo");
@@ -305,6 +365,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const listed = yield* awaitPromise(
           send({ path: "/category-keyword-rules", method: "GET", session: sessions[0] })
         );
+
         expect(listed.status).toBe(200);
         const own = (yield* decodeJson(RuleListEnvelope, listed)).data;
         expect(own).toEqual([rule]);
@@ -312,6 +373,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const other = yield* awaitPromise(
           send({ path: "/category-keyword-rules", method: "GET", session: sessions[1] })
         );
+
         expect(other.status).toBe(200);
         expect((yield* decodeJson(RuleListEnvelope, other)).data).toEqual([]);
       })
@@ -323,9 +385,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       expect(
         (yield* awaitPromise(createRule({ send, session: sessions[0], keyword: "Rappi" }))).status
       ).toBe(201);
+
       const duplicate = yield* awaitPromise(
         createRule({ send, session: sessions[0], keyword: "RÁPPI", categoryId: mercado })
       );
+
       expect(duplicate.status).toBe(400);
       const body = yield* decodeJson(FailedBody, duplicate);
       expect(body.error.code).toBe("validation_failed");
@@ -349,11 +413,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             })
           )).status
         ).toBe(404);
-        for (const keyword of ["x".repeat(81), "각".repeat(80), "\u0301 café", "\u0301"]) {
-          expect(
-            (yield* awaitPromise(createRule({ send, session: sessions[0], keyword }))).status
-          ).toBe(400);
-        }
+
+        yield* Effect.forEach(
+          ["x".repeat(81), "각".repeat(80), "\u0301 café", "\u0301"],
+          Effect.fnUntraced(function* (keyword) {
+            expect(
+              (yield* awaitPromise(createRule({ send, session: sessions[0], keyword }))).status
+            ).toBe(400);
+          }),
+          { discard: true }
+        );
+
         expect(
           (yield* awaitPromise(
             send({
@@ -382,10 +452,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         yield* native(() =>
           db.exec("INSERT INTO categories VALUES (?,'Domicilios',22)", domicilios)
         );
-        for (let index = 0; index < 100; index++) {
-          yield* awaitPromise(
-            db
-              .exec(
+
+        yield* Effect.forEach(
+          Array.from({ length: 100 }, (_, index) => index),
+          Effect.fnUntraced(function* (index) {
+            yield* awaitPromise(
+              db.exec(
                 `INSERT INTO keyword_rules (id,user_id,keyword,category_id,category_revision,created_at_ms,updated_at_ms)
                VALUES (?,?,?,?,'co-1',?,?)`,
                 `80000000-0000-4000-8000-${index.toString().padStart(12, "0")}`,
@@ -395,22 +467,29 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
                 current,
                 current
               )
-              .then((rows) => rows[0])
-          );
-        }
+            );
+          }),
+          { discard: true }
+        );
+
         const refused = yield* awaitPromise(
           createRule({ send, session: sessions[0], keyword: "demasiada" })
         );
+
         expect(refused.status).toBe(400);
+
         const retained = (yield* decodeJson(
           Schema.toCodecJson(ListKeywordRulesResponse),
           yield* awaitPromise(
             send({ path: "/category-keyword-rules", method: "GET", session: sessions[0] })
           )
         )).data;
+
         expect(retained).toHaveLength(100);
         const first = retained[0];
+
         if (first === undefined) throw new Error("Missing retained keyword rule");
+
         const replaced = yield* awaitPromise(
           send({
             path: `/category-keyword-rules/${first.id}`,
@@ -419,6 +498,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             payload: { keyword: "reemplazada", categoryId: mercado },
           })
         );
+
         expect(replaced.status).toBe(200);
         expect(
           (yield* decodeJson(Schema.toCodecJson(KeywordRuleResponse), replaced)).data
@@ -439,12 +519,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(
           (yield* awaitPromise(createRule({ send, session: sessions[0], keyword: "nueva" }))).status
         ).toBe(201);
+
         const afterReuse = (yield* decodeJson(
           Schema.toCodecJson(ListKeywordRulesResponse),
           yield* awaitPromise(
             send({ path: "/category-keyword-rules", method: "GET", session: sessions[0] })
           )
         )).data;
+
         expect(afterReuse).toHaveLength(100);
         expect(afterReuse.some((rule) => rule.id === first.id)).toBe(false);
         expect(afterReuse.some((rule) => rule.keyword === "nueva")).toBe(true);
@@ -454,6 +536,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("updates and deletes only the caller's own rule", () =>
     Effect.gen(function* () {
       const { db, send, sessions } = yield* setup;
+
       const created = (yield* decodeJson(
         RuleEnvelope,
         yield* awaitPromise(
@@ -469,7 +552,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           payload: { keyword: "Ajeno", categoryId: mercado },
         })
       );
+
       expect(foreignUpdate.status).toBe(404);
+
       const foreignDelete = yield* awaitPromise(
         send({
           path: `/category-keyword-rules/${created.id}`,
@@ -477,6 +562,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           session: sessions[1],
         })
       );
+
       expect(foreignDelete.status).toBe(404);
 
       const untouched = yield* awaitPromise(
@@ -484,6 +570,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           .exec("SELECT keyword, category_id, user_id FROM keyword_rules WHERE id = ?", created.id)
           .then((rows) => rows[0])
       );
+
       expect(untouched).toEqual({ keyword: "rappi", category_id: domicilios, user_id: userA });
 
       const updated = yield* awaitPromise(
@@ -494,6 +581,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           payload: { keyword: "Rappi Turbo", categoryId: mercado },
         })
       );
+
       expect(updated.status).toBe(200);
       expect((yield* decodeJson(RuleEnvelope, updated)).data).toMatchObject({
         id: created.id,
@@ -508,6 +596,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           session: sessions[0],
         })
       );
+
       expect(removed.status).toBe(200);
       expect((yield* decodeJson(RemovedEnvelope, removed)).data).toBe(created.id);
       expect(yield* ruleCount(db, userA)).toBe(0);
@@ -519,6 +608,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const { send, sessions } = yield* setup;
+
         const malformedUpdate = yield* awaitPromise(
           send({
             path: "/category-keyword-rules/not-a-rule-id",
@@ -527,7 +617,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             payload: { keyword: "Malformado", categoryId: mercado },
           })
         );
+
         expect(malformedUpdate.status).toBe(404);
+
         const malformedDelete = yield* awaitPromise(
           send({
             path: "/category-keyword-rules/not-a-rule-id",
@@ -535,6 +627,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             session: sessions[0],
           })
         );
+
         expect(malformedDelete.status).toBe(404);
       })
   );
@@ -555,12 +648,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             capture({ send, session: sessions[0], counterparty: "RAPPI TURBO Bogotá" })
           )
         )).data;
+
         expect(specific.categoryId).toBe(mercado);
 
         const general = (yield* decodeJson(
           TransactionEnvelope,
           yield* awaitPromise(capture({ send, session: sessions[0], counterparty: "Rappi" }))
         )).data;
+
         expect(general.categoryId).toBe(domicilios);
 
         const explicit = (yield* decodeJson(
@@ -569,12 +664,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             capture({ send, session: sessions[0], counterparty: "Rappi", categoryId: transporte })
           )
         )).data;
+
         expect(explicit.categoryId).toBe(transporte);
 
         const fallback = (yield* decodeJson(
           TransactionEnvelope,
           yield* awaitPromise(capture({ send, session: sessions[0] }))
         )).data;
+
         expect(fallback.categoryId).toBe(otros);
         expect(yield* storedCategory(db, userA, fallback.id)).toEqual(Option.some(otros));
         expect(yield* storedCategory(db, userA, specific.id)).toEqual(Option.some(mercado));
@@ -584,6 +681,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           TransactionEnvelope,
           yield* awaitPromise(capture({ send, session: sessions[0], direction: "inflow" }))
         )).data;
+
         expect(inflow.categoryId).toBe(ingresos);
       })
   );
@@ -593,16 +691,19 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const { db, send, sessions } = yield* setup;
+
         const created = (yield* decodeJson(
           RuleEnvelope,
           yield* awaitPromise(
             createRule({ send, session: sessions[0], keyword: "Rappi", categoryId: domicilios })
           )
         )).data;
+
         const captured = (yield* decodeJson(
           TransactionEnvelope,
           yield* awaitPromise(capture({ send, session: sessions[0], counterparty: "Rappi" }))
         )).data;
+
         expect(captured.categoryId).toBe(domicilios);
 
         expect(
@@ -627,10 +728,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           )).status
         ).toBe(200);
         expect(yield* storedCategory(db, userA, captured.id)).toEqual(Option.some(domicilios));
+
         const afterDelete = (yield* decodeJson(
           TransactionEnvelope,
           yield* awaitPromise(capture({ send, session: sessions[0], counterparty: "Rappi" }))
         )).data;
+
         expect(afterDelete.categoryId).toBe(otros);
       })
   );
@@ -639,14 +742,18 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     Effect.gen(function* () {
       const { send, sessions } = yield* setup;
       yield* awaitPromise(createRule({ send, session: sessions[0], keyword: "Rappi" }));
+
       const captured = (yield* decodeJson(
         TransactionEnvelope,
         yield* awaitPromise(capture({ send, session: sessions[1], counterparty: "Rappi" }))
       )).data;
+
       expect(captured.categoryId).toBe(otros);
+
       const listed = yield* awaitPromise(
         send({ path: "/category-keyword-rules", method: "GET", session: sessions[1] })
       );
+
       expect((yield* decodeJson(RuleListEnvelope, listed)).data).toEqual([]);
     })
   );
@@ -658,9 +765,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         db.exec(`CREATE TRIGGER refuse_keyword_rule_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='session_call' AND NEW.operation = 'categories.createKeywordRule' AND NEW.outcome = 'success'
     BEGIN SELECT RAISE(IGNORE); END`)
       );
+
       const refused = yield* awaitPromise(
         createRule({ send, session: sessions[0], keyword: "Sin evidencia" })
       );
+
       expect(refused.status).toBe(503);
       expect(yield* awaitPromise(refused.json())).toMatchObject({ error: { code: "unavailable" } });
       expect(yield* ruleCount(db, userA)).toBe(0);
@@ -687,6 +796,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           payload: { keyword: "Agente", categoryId: domicilios },
         })
       );
+
       expect(refused.status).toBe(403);
       expect(yield* ruleCount(db, userA)).toBe(0);
 
@@ -698,12 +808,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           payload: { keyword: "Agente", categoryId: mercado },
         })
       );
+
       expect(created.status).toBe(201);
       const rule = (yield* decodeJson(RuleEnvelope, created)).data;
 
       const listed = yield* awaitPromise(
         send({ path: "/category-keyword-rules", method: "GET", bearer: reader })
       );
+
       expect(listed.status).toBe(200);
       expect((yield* decodeJson(RuleListEnvelope, listed)).data).toMatchObject([
         { id: rule.id, keyword: "agente", categoryId: mercado },
@@ -712,6 +824,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const refusedDelete = yield* awaitPromise(
         send({ path: `/category-keyword-rules/${rule.id}`, method: "DELETE", bearer: reader })
       );
+
       expect(refusedDelete.status).toBe(403);
 
       const audited = yield* awaitPromise(
@@ -722,6 +835,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           )
           .then((rows) => rows[0])
       );
+
       expect(audited).toMatchObject({ operation: "categories.createKeywordRule" });
     })
   );
@@ -734,9 +848,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           .exec("UPDATE web_sessions SET revoked_at_ms = ? WHERE user_id = ?", clock(), userA)
           .then((rows) => rows[0])
       );
+
       const refused = yield* awaitPromise(
         createRule({ send, session: sessions[0], keyword: "Revocada" })
       );
+
       expect(refused.status).toBe(401);
       expect(yield* ruleCount(db, userA)).toBe(0);
     })
@@ -745,10 +861,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("refuses cookie-admitted keyword-rule work without the matching browser Origin", () =>
     Effect.gen(function* () {
       const { db, send, sessions } = yield* setup;
+
       const created = (yield* decodeJson(
         RuleEnvelope,
         yield* awaitPromise(createRule({ send, session: sessions[0], keyword: "Rappi" }))
       )).data;
+
       const refusedRequests: ReadonlyArray<Send> = [
         { path: "/category-keyword-rules", method: "GET" },
         {
@@ -763,23 +881,35 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         },
         { path: `/category-keyword-rules/${created.id}`, method: "DELETE" },
       ];
-      for (const request of refusedRequests) {
-        const originless = yield* awaitPromise(
-          send({ ...request, session: sessions[0], originless: true })
-        );
-        expect(originless.status).toBe(403);
-        const foreignOrigin = yield* awaitPromise(
-          send({ ...request, session: sessions[0], origin: "https://evil.example" })
-        );
-        expect(foreignOrigin.status).toBe(403);
-      }
+
+      yield* Effect.forEach(
+        refusedRequests,
+        Effect.fnUntraced(function* (request) {
+          const originless = yield* awaitPromise(
+            send({ ...request, session: sessions[0], originless: true })
+          );
+
+          expect(originless.status).toBe(403);
+
+          const foreignOrigin = yield* awaitPromise(
+            send({ ...request, session: sessions[0], origin: "https://evil.example" })
+          );
+
+          expect(foreignOrigin.status).toBe(403);
+        }),
+        { discard: true }
+      );
+
       expect(yield* ruleCount(db, userA)).toBe(1);
+
       const untouched = yield* awaitPromise(
         db
           .exec("SELECT keyword, category_id FROM keyword_rules WHERE id = ?", created.id)
           .then((rows) => rows[0])
       );
+
       expect(untouched).toEqual({ keyword: "rappi", category_id: domicilios });
+
       const audits = yield* awaitPromise(
         db
           .exec(
@@ -788,9 +918,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           )
           .then((rows) => rows[0])
       );
+
       expect(audits?.total).toBe(1);
 
       const machine = yield* issuePAT({ db, scopes: ["write"], index: 9 });
+
       const machineCreate = yield* awaitPromise(
         send({
           path: "/category-keyword-rules",
@@ -800,6 +932,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           payload: { keyword: "Sin origen", categoryId: domicilios },
         })
       );
+
       expect(machineCreate.status).toBe(201);
     })
   );

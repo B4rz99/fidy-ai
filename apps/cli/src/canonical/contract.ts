@@ -29,6 +29,7 @@ export type CanonicalClient = Readonly<
     >
   >
 >;
+
 export type CanonicalClientFactory = (
   options: Readonly<{
     httpClient: HttpClient.HttpClient;

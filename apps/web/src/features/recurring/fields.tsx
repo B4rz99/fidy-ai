@@ -14,9 +14,11 @@ type ChoiceProps = Readonly<{
   options: ReadonlyArray<Readonly<{ value: string; label: string }>>;
   onChange: (value: string) => void;
 }>;
+
 export const ChoiceField = ({ name, onChange, ...props }: ChoiceProps): JSX.Element => {
   const aria = usePlanFieldAria(name);
   const edited = usePlanFieldEdited();
+
   return (
     <>
       <input type="hidden" name={name} value={props.value} />
@@ -36,13 +38,16 @@ export const ChoiceField = ({ name, onChange, ...props }: ChoiceProps): JSX.Elem
     </>
   );
 };
+
 export const DefaultChoiceField = ({
   initial,
   ...props
 }: Omit<ChoiceProps, "value" | "onChange"> & Readonly<{ initial: string }>): JSX.Element => {
   const [value, setValue] = useState(initial);
+
   return <ChoiceField {...props} value={value} onChange={setValue} />;
 };
+
 export const RecurringDateField = ({
   name,
   label,
@@ -61,6 +66,7 @@ export const RecurringDateField = ({
   const [value, setValue] = useState(initial);
   const aria = usePlanFieldAria(name);
   const edited = usePlanFieldEdited();
+
   return (
     <>
       <input type="hidden" name={name} value={value} />
@@ -84,8 +90,10 @@ export const RecurringDateField = ({
     </>
   );
 };
+
 export const CurrencyField = ({ initial }: Readonly<{ initial: string }>): JSX.Element => {
   const [value, setValue] = useState(initial);
+
   return (
     <>
       <input type="hidden" name="currency" value={value} />

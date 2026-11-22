@@ -1,4 +1,4 @@
-import { type DateTime, Option } from "effect";
+import { Data, type DateTime, Option } from "effect";
 
 import type { User } from "../../../src/core/identity/contract";
 import type { TranscriptEntry } from "../../../src/core/agent/contract";
@@ -19,21 +19,23 @@ export type HostedContextSectionInput = Readonly<{
   readonly proactiveReply: Option.Option<ProactiveReplyContext>;
 }>;
 
+const Section = Data.taggedEnum<HostedContextSection>();
+
 export const hostedContextSections = (
   input: HostedContextSectionInput
 ): ReadonlyArray<HostedContextSection> => [
-  { _tag: "AssistantPolicy", user: input.user, channel: input.channel },
-  { _tag: "TurnStarted", startedAt: input.startedAt, timeZone: input.user.timeZone },
-  { _tag: "ContinuityBoundary", boundary: "open" },
-  ...input.memories.map(({ text }) => ({ _tag: "Memory" as const, text })),
+  Section.AssistantPolicy({ user: input.user, channel: input.channel }),
+  Section.TurnStarted({ startedAt: input.startedAt, timeZone: input.user.timeZone }),
+  Section.ContinuityBoundary({ boundary: "open" }),
+  ...input.memories.map(({ text }) => Section.Memory({ text })),
   ...Option.match(input.compactedConversation, {
     onNone: () => [],
-    onSome: ({ text }) => [{ _tag: "CompactedConversation" as const, text }],
+    onSome: ({ text }) => [Section.CompactedConversation({ text })],
   }),
-  ...input.transcript.map((entry) => ({ _tag: "Transcript" as const, entry })),
+  ...input.transcript.map((entry) => Section.Transcript({ entry })),
   ...Option.match(input.proactiveReply, {
     onNone: () => [],
-    onSome: ({ entry }) => [{ _tag: "ProactiveReply" as const, entry }],
+    onSome: ({ entry }) => [Section.ProactiveReply({ entry })],
   }),
-  { _tag: "ContinuityBoundary", boundary: "close" },
+  Section.ContinuityBoundary({ boundary: "close" }),
 ];

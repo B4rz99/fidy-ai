@@ -2,8 +2,11 @@ import { Option } from "effect";
 import { afterEach, expect, it } from "vitest";
 
 const repositoryRoot = process.cwd();
+
 const checkScript = `${repositoryRoot}/scripts/check-effect-family.ts`;
+
 const temporaryRoots: Array<string> = [];
+
 let fixtureSequence = 0;
 
 type CommandResult = Readonly<{
@@ -13,8 +16,10 @@ type CommandResult = Readonly<{
 }>;
 
 const decode = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
+
 const run = (command: ReadonlyArray<string>): CommandResult => {
   const result = Bun.spawnSync([...command], { stdout: "pipe", stderr: "pipe" });
+
   return {
     exitCode: result.exitCode,
     stdout: Option.getOrElse(Option.fromUndefinedOr(result.stdout), () => new Uint8Array()),
@@ -53,29 +58,36 @@ const makeFixture = (overrides: Partial<EffectFixture> = {}): string => {
   fixtureSequence += 1;
   const root = `${Bun.env.TMPDIR ?? "/tmp"}/fidy-effect-family-${process.pid}-${fixtureSequence}`;
   const effectVersion = versionOr(Option.fromUndefinedOr(overrides.effectVersion), "4.0.0-beta.98");
+
   const platformVersion = versionOr(
     Option.fromUndefinedOr(overrides.platformVersion),
     effectVersion
   );
+
   const transitiveVersion = versionOr(
     Option.fromUndefinedOr(overrides.transitiveVersion),
     effectVersion
   );
+
   const overrideVersion = versionOr(
     Option.fromUndefinedOr(overrides.overrideVersion),
     effectVersion
   );
+
   const aiVersion = versionOr(Option.fromUndefinedOr(overrides.aiVersion), effectVersion);
   const sqlVersion = versionOr(Option.fromUndefinedOr(overrides.sqlVersion), effectVersion);
   const vitestVersion = versionOr(Option.fromUndefinedOr(overrides.vitestVersion), effectVersion);
+
   const atomReactVersion = versionOr(
     Option.fromUndefinedOr(overrides.atomReactVersion),
     effectVersion
   );
+
   const includeOverride = Option.getOrElse(
     Option.fromUndefinedOr(overrides.includeOverride),
     () => true
   );
+
   const packageJson = {
     name: "fixture",
     version: "0.0.0",
@@ -88,11 +100,11 @@ const makeFixture = (overrides: Partial<EffectFixture> = {}): string => {
       "@effect/atom-react": atomReactVersion,
     },
     devDependencies: { "@effect/vitest": vitestVersion },
-    overrides: {
-      ...(includeOverride ? { "@effect/platform-shared": overrideVersion } : {}),
-      ...overrides.extraOverrides,
-    },
+    overrides: includeOverride
+      ? { "@effect/platform-shared": overrideVersion, ...overrides.extraOverrides }
+      : { ...overrides.extraOverrides },
   };
+
   const lockfile = {
     lockfileVersion: 1,
     configVersion: 1,
@@ -137,6 +149,7 @@ const makeFixture = (overrides: Partial<EffectFixture> = {}): string => {
     `${root}/bun.lock`,
   ]);
   temporaryRoots.push(root);
+
   return root;
 };
 
@@ -273,6 +286,7 @@ it("accepts Bun's qualified override objects without ignoring a conflicting fami
       },
     })
   );
+
   expect(accepted.exitCode).toBe(0);
 
   const rejected = checkFixture(
@@ -281,6 +295,7 @@ it("accepts Bun's qualified override objects without ignoring a conflicting fami
       lockedOverrides: { "@effect/sql-sqlite-do@^4.0.0": { ".": "4.0.0-rc.115" } },
     })
   );
+
   expect(rejected.exitCode).toBe(1);
   expect(decode(rejected.stderr)).toContain(
     "@effect/sql-sqlite-do@^4.0.0 override: 4.0.0-rc.115 (bun.lock overrides)"

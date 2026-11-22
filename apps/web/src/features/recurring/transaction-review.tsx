@@ -17,15 +17,18 @@ import {
 import { transactionDate } from "./transaction-filters";
 
 type Transaction = CanonicalSuccess<"transactions.listTransactions">["data"][number];
+
 type Props = Readonly<{
   item: Occurrence;
   transaction: Transaction;
   disabled: boolean;
   save: Save;
 }>;
+
 export const TransactionReview = ({ item, transaction, disabled, save }: Props): JSX.Element => {
   const [association, setAssociation] = useState(() => defaultAssociation(item));
   const linked = item.fulfillments.some((mark) => mark.transactionId === transaction.id);
+
   return (
     <>
       <CandidateDetails transaction={transaction} timeZone={item.plan.timeZone} />
@@ -41,6 +44,7 @@ export const TransactionReview = ({ item, transaction, disabled, save }: Props):
     </>
   );
 };
+
 const AssociationForm = ({
   item,
   association,
@@ -80,6 +84,7 @@ const AssociationForm = ({
     </p>
   </fieldset>
 );
+
 const LinkAction = ({
   item,
   transaction,
@@ -91,8 +96,11 @@ const LinkAction = ({
   const compatible =
     transaction.money.currency === item.plan.currency &&
     transaction.direction === (item.plan.kind === "income" ? "inflow" : "outflow");
+
   const blocked = associationBlocked({ item, replaces: association.replaces });
+
   if (linked) return <output>Transacción vinculada.</output>;
+
   return (
     <>
       {!compatible ? (
@@ -116,6 +124,7 @@ const LinkAction = ({
     </>
   );
 };
+
 const CandidateDetails = ({
   transaction,
   timeZone,

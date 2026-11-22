@@ -9,6 +9,7 @@ import serverConfig from "../../apps/server/.dependency-cruiser.mjs";
 import webConfig from "../../apps/web/.dependency-cruiser.mjs";
 
 const toolsRoot = dirname(fileURLToPath(import.meta.url));
+
 /** @param {string} application - Fixture application. @param {Record<string, string>} files - Fixture sources. @param {{entrypoint?: string, exclude?: string, publication?: boolean}} [options] - CLI and coverage fault. */
 const inspect = (
   application,
@@ -18,28 +19,33 @@ const inspect = (
   const temporary = mkdtempSync(join(tmpdir(), "fidy-architecture-"));
   const root = join(temporary, "apps", application);
   const config = application === "server" ? serverConfig : webConfig;
+  const options = { ...config.options, tsConfig: { fileName: "tsconfig.json" } };
+
+  if (exclude !== undefined) options.exclude = { path: exclude };
+
   const fixtureFiles = {
     "schema.d.ts": "declare const placeholder: string;",
     ...files,
-    ".dependency-cruiser.mjs": `export default ${JSON.stringify({ ...config, options: { ...config.options, tsConfig: { fileName: "tsconfig.json" }, ...(exclude === undefined ? {} : { exclude: { path: exclude } }) } })};`,
+    ".dependency-cruiser.mjs": `export default ${JSON.stringify({ ...config, options })};`,
     "tsconfig.json": JSON.stringify({
       compilerOptions: { paths: { "~/*": ["./src/*"], "@/*": ["./src/*"] } },
     }),
   };
+
   try {
     for (const [path, source] of Object.entries(fixtureFiles)) {
       const target = join(root, path);
       mkdirSync(dirname(target), { recursive: true });
       writeFileSync(target, source);
     }
-    const result = spawnSync(
-      "bun",
-      [join(toolsRoot, entrypoint), root, "src", ...(publication ? ["--publication"] : [])],
-      {
-        encoding: "utf8",
-      }
-    );
+
+    const commandArguments = [join(toolsRoot, entrypoint), root, "src"];
+
+    if (publication) commandArguments.push("--publication");
+    const result = spawnSync("bun", commandArguments, { encoding: "utf8" });
+
     assert.equal(result.error, undefined);
+
     return { status: result.status, output: result.stdout + result.stderr };
   } finally {
     rmSync(temporary, { recursive: true, force: true });
@@ -52,6 +58,7 @@ await test("resolved aliases and type-only imports obey Core to Shell direction"
       'import type { Value } from "~/shell/example/contract"; export type Result = Value;',
     "src/shell/example/contract.ts": "export type Value = string;",
   });
+
   assert.equal(result.status, 1);
   assert.match(result.output, /core-imports-platform: src\/core\/example\/contract.ts/);
 });
@@ -64,12 +71,15 @@ await test("published imports pass while foreign private imports fail", () => {
       'import { value } from "~/core/target/internal/value"; export const read = () => value;',
     "src/core/target/internal/value.ts": "export const value = 1;",
   };
+
   assert.equal(inspect("server", files).status, 0);
+
   const rejected = inspect("server", {
     ...files,
     "src/core/source/operations.ts":
       'import { value } from "~/core/target/internal/value"; export const read = () => value;',
   });
+
   assert.equal(rejected.status, 1);
   assert.match(rejected.output, /published-only: src\/core\/source\/operations.ts/);
 });
@@ -80,6 +90,7 @@ await test("publication is checked separately from legal owner-private imports",
       'import { read } from "~/core/example/internal/read"; export const exposed = read;',
     "src/core/example/internal/read.ts": "export const read = () => 1;",
   };
+
   assert.equal(inspect("server", files).status, 0);
   const rejected = inspect("server", files, { entrypoint: "check-publication.mjs" });
   assert.equal(rejected.status, 1);
@@ -119,6 +130,7 @@ await test("empty, incomplete and unresolved graphs cannot pass either command",
         /unresolved-dependency/,
       ],
     ];
+
     for (const [files, exclude, diagnostic] of cases) {
       const result = inspect("server", files, { entrypoint, exclude });
       assert.equal(result.status, 1);
@@ -134,7 +146,9 @@ await test("the web command enforces feature privacy and permits feature publica
     "src/features/example/feature.tsx": "export const value = 1;",
     "src/features/example/internal/value.ts": "export const value = 1;",
   };
+
   assert.equal(inspect("web", files).status, 0);
+
   const prepared = inspect("web", {
     ...files,
     "src/app/routes.tsx":
@@ -142,12 +156,15 @@ await test("the web command enforces feature privacy and permits feature publica
     "src/features/example/code.ts":
       'export const prepare = () => import("@/features/example/internal/value");',
   });
+
   assert.equal(prepared.status, 0, prepared.output);
+
   const rejected = inspect("web", {
     ...files,
     "src/app/routes.tsx":
       'import { value } from "@/features/example/internal/value"; export const route = value;',
   });
+
   assert.equal(rejected.status, 1);
   assert.match(rejected.output, /application-imports-feature-private/);
 });
@@ -165,6 +182,7 @@ await test("ordinary provider files cannot bypass transport or inference through
     "src/shell/memory/internal/summary.ts":
       'import { model } from "effect/ai/LanguageModel"; export const inference = model;',
   });
+
   assert.equal(result.status, 1);
   assert.match(
     result.output,

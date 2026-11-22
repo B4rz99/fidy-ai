@@ -3,9 +3,11 @@ import { DateTime, Option, Schema } from "effect";
 export const ServiceMarket = Schema.Literal("CO").annotate({
   identifier: "ServiceMarket",
 });
+
 export type ServiceMarket = typeof ServiceMarket.Type;
 
 export const Locale = Schema.Literal("es-CO").annotate({ identifier: "Locale" });
+
 export type Locale = typeof Locale.Type;
 
 export const IanaTimeZone = Schema.String.check(
@@ -19,4 +21,5 @@ export const IanaTimeZone = Schema.String.check(
 )
   .pipe(Schema.brand("IanaTimeZone"))
   .annotate({ identifier: "IanaTimeZone" });
+
 export type IanaTimeZone = typeof IanaTimeZone.Type;

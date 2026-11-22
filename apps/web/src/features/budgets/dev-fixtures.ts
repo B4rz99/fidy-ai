@@ -9,14 +9,21 @@ import type { WorkspaceProps } from "./model";
 import type { BudgetReport, BudgetStatus, Category } from "./presentation";
 
 export type PreviewDataset = "demo" | "worst" | "empty" | "one" | "full" | "many";
+
 const uuidSuffixLength = 12;
+
 const worstRowCount = 8;
+
 const manyRowCount = 1000;
+
 const fixtureCount = (dataset: PreviewDataset, total: number): number => {
   if (dataset === "one") return 1;
+
   return dataset === "worst" ? worstRowCount : total;
 };
+
 const groupLimitName = "Mantenimiento y administración de propiedades familiares rurales";
+
 const labels = [
   "Restaurantes y celebraciones familiares con invitados internacionales y catering",
   "SeguroResponsabilidadCivilProfesionalInternacionalRenovaciónAnual",
@@ -27,6 +34,7 @@ const labels = [
   "Servicios",
   "Créditos & seguros <anuales>",
 ];
+
 const amountCases = [
   ["9876543210.99", "10000000000.01"],
   ["123456789.90", "0"],
@@ -45,17 +53,21 @@ const fixtureCategory = (category: Category, index: number, worst: boolean): Cat
 
 const fixtureCurrency = (index: number): Currency => {
   if (index === 2) return Currency.make("JPY");
+
   if (index === 4) return Currency.make("KWD");
+
   if (index < 2 || index % 3 === 0) return Currency.make("COP");
+
   return Currency.make(index % 3 === 1 ? "USD" : "EUR");
 };
-const fixtureAmounts = (
-  index: number,
-  worst: boolean
-): Readonly<{ cap: BudgetStatus["budget"]["cap"]; spent: BudgetStatus["spent"] }> => {
+
+type FixtureAmounts = Pick<BudgetStatus, "spent"> & Pick<BudgetStatus["budget"], "cap">;
+
+const fixtureAmounts = (index: number, worst: boolean): FixtureAmounts => {
   const selected = amountCases[index % amountCases.length] ?? ["100", "0"];
   const amounts = index === 2 ? ["1", "1"] : selected;
   const currency = fixtureCurrency(index);
+
   return {
     cap: {
       currency,
@@ -64,6 +76,7 @@ const fixtureAmounts = (
     spent: { currency, amount: BigDecimal.fromStringUnsafe(worst ? (amounts[1] ?? "0") : "50000") },
   };
 };
+
 const fixtureStatus = ({
   period,
   category,
@@ -78,37 +91,46 @@ const fixtureStatus = ({
   const { cap, spent } = fixtureAmounts(index, worst);
   const currency = cap.currency;
   const difference = BigDecimal.subtract(cap.amount, spent.amount);
+
+  const budget = {
+    createdAt: period.from,
+    updatedAt: period.from,
+    id: BudgetSchema.fields.id.make(
+      `24000000-0000-4000-8000-${String(index + 1).padStart(uuidSuffixLength, "0")}`
+    ),
+    categoryId: category.id,
+    cap,
+  };
+
   const common = {
     period,
-    budget: {
-      createdAt: period.from,
-      updatedAt: period.from,
-      id: BudgetSchema.fields.id.make(
-        `24000000-0000-4000-8000-${String(index + 1).padStart(uuidSuffixLength, "0")}`
-      ),
-      categoryId: category.id,
-      cap,
-      ...(worst && index === worstRowCount - 1
-        ? {}
-        : { groupName: worst && index < 2 ? groupLimitName : `Grupo ${index + 1}` }),
-    },
+    budget:
+      worst && index === worstRowCount - 1
+        ? budget
+        : { ...budget, groupName: worst && index < 2 ? groupLimitName : `Grupo ${index + 1}` },
     spent,
   };
+
   if (BigDecimal.isNegative(difference)) {
     return { ...common, type: "over", overBy: { currency, amount: BigDecimal.negate(difference) } };
   }
+
   if (BigDecimal.isZero(difference)) return { ...common, type: "reached" };
+
   return { ...common, type: "under", remaining: { currency, amount: difference } };
 };
 
 const manyStatuses = (props: WorkspaceProps): ReadonlyArray<BudgetStatus> =>
   Array.from({ length: manyRowCount }, (_, index) => {
     const category = props.categories[index % props.categories.length];
+
     if (category === undefined) throw new Error("Stress fixture requires the canonical taxonomy");
     const status = fixtureStatus({ period: props.report.period, category, index, worst: false });
+
     const currency = Currency.make(
       Currency.literals[Math.floor(index / props.categories.length)] ?? "COP"
     );
+
     return {
       ...status,
       type: "under",
@@ -121,6 +143,7 @@ const manyStatuses = (props: WorkspaceProps): ReadonlyArray<BudgetStatus> =>
       remaining: { currency, amount: BigDecimal.fromStringUnsafe("50000") },
     };
   });
+
 const cashFlowExpenses = (
   statuses: ReadonlyArray<BudgetStatus>
 ): BudgetReport["cashFlow"]["expenses"] =>
@@ -132,24 +155,30 @@ const cashFlowExpenses = (
       )
     ),
   }));
+
 export const previewProps = ({
   props,
   dataset,
 }: Readonly<{ props: WorkspaceProps; dataset: PreviewDataset }>): WorkspaceProps => {
   if (dataset === "demo") return props;
+
   const categories =
     dataset === "empty"
       ? []
       : (dataset === "one" ? props.categories.slice(0, 1) : props.categories).map(
           (category, index) => fixtureCategory(category, index, dataset === "worst")
         );
+
   const count = fixtureCount(dataset, categories.length);
+
   const standardStatuses = categories
     .slice(0, count)
     .map((category, index) =>
       fixtureStatus({ period: props.report.period, category, index, worst: dataset === "worst" })
     );
+
   const statuses = dataset === "many" ? manyStatuses(props) : standardStatuses;
+
   const report: BudgetReport = BudgetStatusReport.make({
     ...props.report,
     statuses,
@@ -169,6 +198,7 @@ export const previewProps = ({
       expenses: cashFlowExpenses(statuses),
     },
   });
+
   return {
     ...props,
     categories,

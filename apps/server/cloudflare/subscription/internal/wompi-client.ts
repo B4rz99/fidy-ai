@@ -2,6 +2,7 @@ import { Digest } from "effect/crypto";
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
 import { UnknownJsonString, jsonStringSchema } from "../../../src/shell/schema-codecs/contract";
 import {
+  type Cause,
   Config,
   Context,
   Data,
@@ -9,6 +10,7 @@ import {
   Effect,
   Layer,
   Option,
+  Predicate,
   Redacted,
   Result,
   Schema,
@@ -24,6 +26,7 @@ import {
 import { WompiSourceId } from "./wompi-model";
 import {
   type OutboundHttpFailure,
+  OutboundHttpRequest,
   type OutboundHttpResponse,
 } from "../../../src/shell/outbound-http/contract";
 import {
@@ -33,36 +36,46 @@ import {
 import { wompiCredentialPrefixes } from "../../../src/shell/secret-material/operations";
 
 const successfulStatusMinimum = 200;
+
 const successfulStatusMaximumExclusive = 300;
+
 const providerServerErrorStatusMinimum = 500;
+
 const maximumAcceptanceTokenCharacters = 4096;
 
 const PublicKey = Schema.String.check(Schema.isPattern(/^pub_(?:test|prod)_[A-Za-z0-9_-]{8,}$/u));
+
 const AcceptanceToken = Schema.String.check(
   Schema.isNonEmpty(),
   Schema.isMaxLength(maximumAcceptanceTokenCharacters)
 );
+
 const PresignedAcceptance = Schema.Struct({
   acceptance_token: AcceptanceToken,
   permalink: Schema.URLFromString,
 });
+
 const MerchantResponse = Schema.Struct({
   data: Schema.Struct({
     presigned_acceptance: PresignedAcceptance,
     presigned_personal_data_auth: PresignedAcceptance,
   }),
 });
+
 const AcceptanceClaims = Schema.Struct({
   permalink: Schema.URLFromString,
   file_hash: Schema.String.check(Schema.isPattern(/^[0-9a-f]{32,128}$/u)),
 });
+
 const decodeAcceptanceClaims = Schema.decodeUnknownResult(jsonStringSchema(AcceptanceClaims));
+
 const SourceResponse = Schema.Struct({
   data: Schema.Struct({
     id: WompiSourceId,
     status: Schema.Literals(["AVAILABLE", "DECLINED", "ERROR", "PENDING"]),
   }),
 });
+
 const SourceLookupResponse = Schema.Struct({
   data: Schema.Struct({
     id: WompiSourceId,
@@ -71,9 +84,13 @@ const SourceLookupResponse = Schema.Struct({
     customer_email: BillingEmail,
   }),
 });
+
 const decodeMerchant = Schema.decodeUnknownResult(MerchantResponse);
+
 const decodeSource = Schema.decodeUnknownResult(SourceResponse);
+
 const decodeSourceLookup = Schema.decodeUnknownResult(SourceLookupResponse);
+
 const decodeJson = Schema.decodeUnknownResult(UnknownJsonString);
 
 export type WompiContracts = Readonly<{
@@ -96,10 +113,13 @@ export type WompiVerifiedSource = Readonly<{
   billingEmail: BillingEmail;
 }>;
 
-export type WompiSourceResult =
-  | Readonly<{ _tag: "Available"; sourceId: WompiSourceId }>
-  | Readonly<{ _tag: "Verifying"; sourceId: WompiSourceId }>
-  | Readonly<{ _tag: "Refused" }>;
+export type WompiSourceResult = Data.TaggedEnum<{
+  Available: { readonly sourceId: WompiSourceId };
+  Verifying: { readonly sourceId: WompiSourceId };
+  Refused: {};
+}>;
+
+export const WompiSourceResult = Data.taggedEnum<WompiSourceResult>();
 
 export type WompiEnrollmentClientService = Readonly<{
   publicKey: string;
@@ -124,6 +144,7 @@ export type WompiEnrollmentClientService = Readonly<{
 
 const responseJson = Effect.fn(function* (response: OutboundHttpResponse) {
   const decoded = decodeJson(new TextDecoder().decode(response.body));
+
   return Result.isSuccess(decoded)
     ? decoded.success
     : yield* Effect.fail("response-malformed" as const);
@@ -131,9 +152,11 @@ const responseJson = Effect.fn(function* (response: OutboundHttpResponse) {
 
 const digestText = Effect.fn(function* (text: string) {
   const hashing = yield* Digest.Digest;
+
   const digest = yield* hashing
     .digest(Digest.sha256, new TextEncoder().encode(text))
     .pipe(Effect.orDie);
+
   return Hex.encode(digest);
 });
 
@@ -142,13 +165,17 @@ const acceptanceProviderContentHash = Effect.fn(function* (
   permalink: URL
 ) {
   const encodedClaims = acceptanceToken.split(".")[1];
+
   if (encodedClaims === undefined) return yield* Effect.fail("acceptance-claims" as const);
   const claimsText = Base64Url.decodeString(encodedClaims);
+
   if (Result.isFailure(claimsText)) return yield* Effect.fail("acceptance-claims" as const);
   const claims = decodeAcceptanceClaims(claimsText.success);
+
   if (Result.isFailure(claims) || claims.success.permalink.href !== permalink.href) {
     return yield* Effect.fail("acceptance-claims" as const);
   }
+
   return claims.success.file_hash;
 });
 
@@ -185,29 +212,26 @@ const SourceRequest = Schema.Struct({
   acceptance_token: Schema.String,
   accept_personal_auth: Schema.String,
 });
+
 const encodeSourceRequest = Schema.encodeSync(jsonStringSchema(SourceRequest));
 
 const parseSourceResult = (
   body: unknown
 ): Effect.Effect<WompiSourceResult, WompiSourceCreationFailed> => {
   const decoded = decodeSource(body);
+
   if (Result.isFailure(decoded)) {
     return Effect.fail(new WompiSourceCreationFailed({ certainty: "ambiguous" }));
   }
+
   switch (decoded.success.data.status) {
     case "AVAILABLE":
-      return Effect.succeed<WompiSourceResult>({
-        _tag: "Available",
-        sourceId: decoded.success.data.id,
-      });
+      return Effect.succeed(WompiSourceResult.Available({ sourceId: decoded.success.data.id }));
     case "DECLINED":
     case "ERROR":
-      return Effect.succeed<WompiSourceResult>({ _tag: "Refused" });
+      return Effect.succeed(WompiSourceResult.Refused());
     case "PENDING":
-      return Effect.succeed<WompiSourceResult>({
-        _tag: "Verifying",
-        sourceId: decoded.success.data.id,
-      });
+      return Effect.succeed(WompiSourceResult.Verifying({ sourceId: decoded.success.data.id }));
   }
 };
 
@@ -257,7 +281,7 @@ const makeContracts =
     publicKey: string;
   }>): WompiEnrollmentClientService["contracts"] =>
   (observedAt) =>
-    outboundHttp.execute({ _tag: "WompiMerchant" }).pipe(
+    outboundHttp.execute(OutboundHttpRequest.WompiMerchant()).pipe(
       Effect.timeout("10 seconds"),
       Effect.filterOrFail(
         (response) =>
@@ -273,6 +297,7 @@ const makeContracts =
         })
       ),
       Effect.flatMap((merchant) => contractsFromMerchant(merchant, publicKey, observedAt)),
+      Effect.tapError(Effect.logDebug),
       Effect.mapError(() => new WompiContractsUnavailable()),
       Effect.provideService(Digest.Digest, digest),
       Effect.withSpan("Wompi.contracts", { attributes: { provider: "wompi" } })
@@ -287,6 +312,7 @@ const WalletApprovalResponse = Schema.Struct({
     status: Schema.Literals(["PENDING", "APPROVED", "DECLINED", "ERROR"]),
   }),
 });
+
 const makeVerifyWalletApproval =
   (
     outboundHttp: OutboundHttpService,
@@ -294,10 +320,11 @@ const makeVerifyWalletApproval =
   ): WompiEnrollmentClientService["verifyNequiApproval"] =>
   (token) =>
     outboundHttp
-      .execute({
-        _tag: method === "nequi" ? "WompiNequiApproval" : "WompiDaviplataApproval",
-        token,
-      })
+      .execute(
+        method === "nequi"
+          ? OutboundHttpRequest.WompiNequiApproval({ token })
+          : OutboundHttpRequest.WompiDaviplataApproval({ token })
+      )
       .pipe(
         Effect.timeout("10 seconds"),
         Effect.filterOrFail(
@@ -313,6 +340,7 @@ const makeVerifyWalletApproval =
           () => "token-mismatch" as const
         ),
         Effect.map((response) => response.data.status === "APPROVED"),
+        Effect.tapError(Effect.logDebug),
         Effect.mapError(() => new WompiSourceLookupFailed()),
         Effect.withSpan("Wompi.walletApproval", { attributes: { provider: "wompi", method } })
       );
@@ -320,7 +348,7 @@ const makeVerifyWalletApproval =
 const makeVerifyPaymentSource =
   (outboundHttp: OutboundHttpService): WompiEnrollmentClientService["verifyPaymentSource"] =>
   (sourceId, method) =>
-    outboundHttp.execute({ _tag: "WompiVerifyPaymentSource", sourceId }).pipe(
+    outboundHttp.execute(OutboundHttpRequest.WompiVerifyPaymentSource({ sourceId })).pipe(
       Effect.timeout("10 seconds"),
       Effect.filterOrFail(
         (response) =>
@@ -338,16 +366,17 @@ const makeVerifyPaymentSource =
               : Effect.fail("provider-source-mismatch" as const),
         })
       ),
+      Effect.tapError(Effect.logDebug),
       Effect.mapError(() => new WompiSourceLookupFailed()),
       Effect.withSpan("Wompi.verifyPaymentSource", { attributes: { provider: "wompi" } })
     );
 
 const sourceCreationTransportFailure = (
-  failure: OutboundHttpFailure | { readonly _tag: "TimeoutError" }
+  failure: OutboundHttpFailure | Cause.TimeoutError
 ): WompiSourceCreationFailed =>
   new WompiSourceCreationFailed({
     certainty:
-      failure._tag === "OutboundHttpFailure" &&
+      Predicate.isTagged(failure, "OutboundHttpFailure") &&
       Option.exists(
         failure.responseStatus,
         (status) =>
@@ -362,16 +391,17 @@ const makeCreatePaymentSource =
   (outboundHttp: OutboundHttpService): WompiEnrollmentClientService["createPaymentSource"] =>
   (input) =>
     outboundHttp
-      .execute({
-        _tag: "WompiCreatePaymentSource",
-        body: encodeSourceRequest({
-          type: providerSourceTypes[input.method],
-          token: Redacted.value(input.token),
-          customer_email: input.billingEmail,
-          acceptance_token: Redacted.value(input.contracts.endUserAcceptance),
-          accept_personal_auth: Redacted.value(input.contracts.personalDataAcceptance),
-        }),
-      })
+      .execute(
+        OutboundHttpRequest.WompiCreatePaymentSource({
+          body: encodeSourceRequest({
+            type: providerSourceTypes[input.method],
+            token: Redacted.value(input.token),
+            customer_email: input.billingEmail,
+            acceptance_token: Redacted.value(input.contracts.endUserAcceptance),
+            accept_personal_auth: Redacted.value(input.contracts.personalDataAcceptance),
+          }),
+        })
+      )
       .pipe(
         Effect.timeout("14 seconds"),
         Effect.mapError(sourceCreationTransportFailure),
@@ -379,11 +409,14 @@ const makeCreatePaymentSource =
           const successful =
             response.status >= successfulStatusMinimum &&
             response.status < successfulStatusMaximumExclusive;
+
           if (successful) {
             return responseJson(response).pipe(
+              Effect.tapError(Effect.logDebug),
               Effect.mapError(() => new WompiSourceCreationFailed({ certainty: "ambiguous" }))
             );
           }
+
           return Effect.fail(
             new WompiSourceCreationFailed({
               certainty:
@@ -414,25 +447,21 @@ export class WompiEnrollmentClient extends Context.Service<
   WompiEnrollmentClient,
   WompiEnrollmentClientService
 >()("@fidy/server/cloudflare/subscription/internal/wompi-client/WompiEnrollmentClient") {
-  static readonly layer = Layer.effect(
-    WompiEnrollmentClient,
-    Effect.gen(function* () {
-      const outboundHttp = yield* OutboundHttp;
-      const hashing = yield* Digest.Digest;
-      const environment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
-      const prefixes = wompiCredentialPrefixes(environment);
-      const publicKey = yield* Config.schema(
-        PublicKey.check(Schema.isStartingWith(prefixes.publicKey)),
-        "WOMPI_PUBLIC_KEY"
-      );
-      return WompiEnrollmentClient.of({
-        publicKey,
-        verifyNequiApproval: makeVerifyWalletApproval(outboundHttp, "nequi"),
-        verifyDaviplataApproval: makeVerifyWalletApproval(outboundHttp, "daviplata"),
-        contracts: makeContracts({ outboundHttp, digest: hashing, publicKey }),
-        createPaymentSource: makeCreatePaymentSource(outboundHttp),
-        verifyPaymentSource: makeVerifyPaymentSource(outboundHttp),
-      });
-    })
-  );
+  static readonly make = Effect.gen(function* () {
+    const outboundHttp = yield* OutboundHttp;
+    const digest = yield* Digest.Digest;
+    const environment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
+    const prefixes = wompiCredentialPrefixes(environment);
+
+    const publicKey = yield* Config.schema(
+      PublicKey.check(Schema.isStartingWith(prefixes.publicKey)),
+      "WOMPI_PUBLIC_KEY"
+    );
+
+    return WompiEnrollmentClient.of(makeWompiEnrollmentClient({ outboundHttp, digest, publicKey }));
+  });
+
+  static readonly layer = Layer.effect(this, this.make);
+
+  static readonly fromOutboundHttp = makeWompiEnrollmentClient;
 }

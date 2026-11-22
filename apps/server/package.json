@@ -305,16 +305,17 @@
     "contracts:digest": "bun tools/contracts/digest-artifacts.ts contracts/openapi.json contracts/operation-policy.json",
     "test:contracts": "bun --bun vitest run --config tools/contracts/vitest.config.ts",
     "test": "bun --bun vitest run --config vitest.config.ts",
-    "test:hosted-inference": "bun --bun vitest run src/shell/hosted-inference/conformance.test.ts src/shell/hosted-inference/operations.test.ts src/shell/hosted-inference/openai.test.ts --coverage.enabled=false",
+    "test:hosted-inference": "bun --bun vitest run test/shell/hosted-inference/conformance.test.ts test/shell/hosted-inference/operations.test.ts test/shell/hosted-inference/openai.test.ts --coverage.enabled=false",
     "test:core": "bun --bun vitest run --config vitest.core.config.ts",
     "test:whatsapp": "bun --bun vitest run --config vitest.whatsapp.config.ts",
     "test:cloudflare": "bun --bun vitest run --config cloudflare/vitest.config.ts",
+    "test:cloudflare:watchdog-measure": "FIDY_MEASURE_WATCHDOG=1 bun --bun vitest run --config cloudflare/vitest.config.ts --testTimeout=65000 --coverage.enabled=false cloudflare/maintenance/watchdog-traversal.test.ts",
     "test:email-interpretation": "bun --bun vitest run --config vitest.email-interpretation.config.ts",
     "test:mutation": "node ../../tools/mutation/run.mjs",
     "check:browser-client": "bun scripts/check-browser-client.ts",
-    "lint:deps": "bun scripts/check-module-layout.ts && bun ../../tools/depcruise/run.mjs . src scripts tools cloudflare --publication",
+    "lint:deps": "bun scripts/check-module-layout.ts && bun ../../tools/depcruise/run.mjs . src test scripts tools cloudflare --publication",
     "check:lint-guards": "bun scripts/check-lint-guards.ts",
-    "test:memory": "bun --bun vitest run --config vitest.config.ts src/shell/memory --coverage.enabled=false"
+    "test:memory": "bun --bun vitest run --config vitest.config.ts test/shell/memory --coverage.enabled=false"
   },
   "dependencies": {
     "@effect/sql-sqlite-do": "4.1.4",
@@ -329,7 +330,7 @@
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20261114.1",
+    "@cloudflare/workers-types": "5.20261115.1",
     "@effect/platform-bun": "4.1.4",
     "@effect/platform-node": "4.1.4",
     "@effect/vitest": "4.1.4",

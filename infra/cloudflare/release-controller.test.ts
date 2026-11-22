@@ -17,24 +17,30 @@ const advanceReleaseClock = <A, E, R>(
   Effect.gen(function* () {
     const pending = yield* Effect.forkScoped(work);
     yield* TestClock.adjust("30 seconds");
+
     return yield* Fiber.join(pending);
   });
 
 const publicName = "fidy-ingress";
+
 const coreName = "fidy-core";
+
 const versions = {
   publicStable: "11111111-1111-4111-8111-111111111111",
   coreStable: "22222222-2222-4222-8222-222222222222",
   publicCandidate: "33333333-3333-4333-8333-333333333333",
   coreCandidate: "44444444-4444-4444-8444-444444444444",
 };
+
 const revision = "a".repeat(40);
+
 type Harness = Readonly<{
   port: ReleasePort;
   changes: string[];
   supersede: () => void;
   fail: (step: string) => void;
 }>;
+
 const harness = (): Harness => {
   const deployments = new Map<string, Deployment>([
     [
@@ -52,30 +58,39 @@ const harness = (): Harness => {
       },
     ],
   ]);
+
   const changes: string[] = [];
   let trunk = revision;
   let failOn = Option.none<string>();
+
   const port: ReleasePort = {
     trunk: () => Effect.sync(() => trunk),
     current: (name) =>
       Effect.gen(function* () {
         const deployment = deployments.get(name);
+
         if (deployment === undefined) return yield* Effect.fail(Error("missing deployment"));
+
         return structuredClone(deployment);
       }),
     deploy: (name, entries) =>
       Effect.gen(function* () {
         const step = `${name}:${entries.map((version) => version.percentage).join("/")}`;
         changes.push(step);
+
         if (Option.contains(failOn, step)) return yield* Effect.fail(Error("provider refused"));
+
         const result: Deployment = {
           id: `${String(changes.length).padStart(8, "0")}-cccc-4ccc-8ccc-cccccccccccc`,
           versions: [...entries],
         };
+
         deployments.set(name, result);
+
         return result;
       }),
   };
+
   return {
     port,
     changes,
@@ -87,10 +102,12 @@ const harness = (): Harness => {
     },
   };
 };
+
 const candidates = {
   publicVersionId: versions.publicCandidate,
   coreVersionId: versions.coreCandidate,
 };
+
 const captured = (port: ReleasePort): Effect.Effect<ReleaseSnapshot, Error> =>
   releaseController.captureRelease(port, {
     revision,
@@ -103,18 +120,23 @@ const captured = (port: ReleasePort): Effect.Effect<ReleaseSnapshot, Error> =>
 it.effect("finishes only Ingress when the exact Core promotion already committed", () =>
   Effect.gen(function* () {
     const fixture = harness();
+
     const release = yield* releaseController.stageRelease(
       fixture.port,
       yield* captured(fixture.port),
       candidates
     );
+
     const core = yield* fixture.port.deploy(coreName, [
       { id: versions.coreCandidate, percentage: 100 },
     ]);
+
     const before = [...fixture.changes];
+
     const stale = yield* Effect.exit(
       releaseController.finishIngressPromotion(fixture.port, release, release.coreDeploymentId)
     );
+
     expect(Exit.isFailure(stale)).toBe(true);
     expect(fixture.changes).toEqual(before);
 
@@ -134,40 +156,50 @@ it.effect("permits resource retirement only while the promoted pair still owns e
     const fixture = harness();
     const snapshot = yield* captured(fixture.port);
     const release = yield* releaseController.stageRelease(fixture.port, snapshot, candidates);
+
     const promoted = yield* releaseController.promoteRelease(fixture.port, release, {
       exactPairPassed: true,
       middlePairPassed: true,
       rollbackEligible: true,
     });
+
     const beforeVerification = [...fixture.changes];
     yield* releaseController.verifyRetirement(fixture.port, { release, promoted });
     expect(fixture.changes).toEqual(beforeVerification);
     yield* fixture.port.deploy(coreName, [{ id: versions.coreStable, percentage: 100 }]);
+
     const changed = yield* Effect.exit(
       releaseController.verifyRetirement(fixture.port, { release, promoted })
     );
+
     expect(Exit.isFailure(changed)).toBe(true);
   })
 );
 
 it.effect("refuses retirement for superseded, unreadable, or replaced deployment receipts", () =>
-  Effect.gen(function* () {
-    for (const scenario of ["superseded", publicName, coreName, "new-receipt"]) {
+  Effect.forEach(
+    ["superseded", publicName, coreName, "new-receipt"],
+    Effect.fnUntraced(function* (scenario) {
       const fixture = harness();
       const snapshot = yield* captured(fixture.port);
       const release = yield* releaseController.stageRelease(fixture.port, snapshot, candidates);
+
       const promoted = yield* releaseController.promoteRelease(fixture.port, release, {
         exactPairPassed: true,
         middlePairPassed: true,
         rollbackEligible: true,
       });
+
       if (scenario === "superseded") {
         fixture.supersede();
       }
+
       if (scenario === "new-receipt") {
         yield* fixture.port.deploy(publicName, [{ id: versions.publicCandidate, percentage: 100 }]);
       }
+
       const beforeVerification = [...fixture.changes];
+
       const port: ReleasePort = {
         ...fixture.port,
         current: (name) =>
@@ -175,14 +207,16 @@ it.effect("refuses retirement for superseded, unreadable, or replaced deployment
             ? Effect.fail(Error("unreadable deployment"))
             : fixture.port.current(name),
       };
+
       expect(
         Exit.isFailure(
           yield* Effect.exit(releaseController.verifyRetirement(port, { release, promoted }))
         )
       ).toBe(true);
       expect(fixture.changes).toEqual(beforeVerification);
-    }
-  })
+    }),
+    { discard: true }
+  )
 );
 
 const isolationOrdering =
@@ -203,11 +237,13 @@ describe("deleted-resource isolation", () => {
     Effect.gen(function* () {
       const fixture = harness();
       const snapshot = yield* captured(fixture.port);
+
       const result = yield* releaseController.isolateRelease(fixture.port, snapshot, {
         candidate: candidates,
         expected: { publicVersionId: versions.publicStable, coreVersionId: versions.coreStable },
         proveIsolation: isolationOrdering(fixture),
       });
+
       expect(fixture.changes).toEqual([`${publicName}:100`, `${coreName}:100`]);
       expect(result.coreVersionId).toBe(versions.coreCandidate);
     })
@@ -217,6 +253,7 @@ describe("deleted-resource isolation", () => {
     Effect.gen(function* () {
       const fixture = harness();
       const snapshot = yield* captured(fixture.port);
+
       const exit = yield* releaseController
         .isolateRelease(fixture.port, snapshot, {
           candidate: candidates,
@@ -224,6 +261,7 @@ describe("deleted-resource isolation", () => {
           proveIsolation: () => Effect.fail(Error("Admission is not isolated")),
         })
         .pipe(Effect.exit);
+
       expect(Exit.isFailure(exit)).toBe(true);
       expect(fixture.changes).toEqual([`${publicName}:100`]);
       expect((yield* fixture.port.current(coreName)).versions).toEqual([
@@ -238,7 +276,9 @@ describe("deleted-resource isolation", () => {
       Effect.gen(function* () {
         const fixture = harness();
         const snapshot = yield* captured(fixture.port);
+
         if (changed === "revision") fixture.supersede();
+
         const exit = yield* releaseController
           .isolateRelease(fixture.port, snapshot, {
             candidate: candidates,
@@ -250,15 +290,18 @@ describe("deleted-resource isolation", () => {
             proveIsolation: () => Effect.void,
           })
           .pipe(Effect.exit);
+
         expect(Exit.isFailure(exit)).toBe(true);
         expect(fixture.changes).toEqual([]);
       })
   );
 });
+
 const staged = (port: ReleasePort): Effect.Effect<StagedRelease, Error> =>
   Effect.gen(function* () {
     return yield* releaseController.stageRelease(port, yield* captured(port), candidates);
   });
+
 const failure = (effect: Effect.Effect<unknown, Error>, message: string): Effect.Effect<void> =>
   effect.pipe(
     Effect.match({
@@ -304,10 +347,12 @@ describe("zero-traffic Worker release", () => {
   it.effect("refuses a changed captured deployment before replacing a stranded candidate", () =>
     Effect.gen(function* () {
       const fixture = harness();
+
       const baseline = [
         { id: versions.coreStable, percentage: 100 },
         { id: "55555555-5555-4555-8555-555555555555", percentage: 0 },
       ];
+
       yield* fixture.port.deploy(coreName, baseline);
       const snapshot = yield* captured(fixture.port);
       yield* fixture.port.deploy(coreName, baseline);
@@ -325,21 +370,27 @@ describe("zero-traffic Worker release", () => {
     Effect.gen(function* () {
       const fixture = harness();
       const abandoned = "55555555-5555-4555-8555-555555555555";
+
       const baseline = yield* fixture.port.deploy(coreName, [
         { id: versions.coreStable, percentage: 100 },
         { id: abandoned, percentage: 0 },
       ]);
+
       const writes: Deployment["versions"][] = [];
+
       const port: ReleasePort = {
         ...fixture.port,
         deploy: (name, entries) => {
           writes.push(entries);
+
           if (name === coreName && entries.length === 1 && entries[0]?.id === versions.coreStable) {
             return Effect.fail(Error("Cloudflare deployment rejected (HTTP 400; code 10220)"));
           }
+
           return fixture.port.deploy(name, entries);
         },
       };
+
       const snapshot = yield* captured(port);
       expect(snapshot.core.deploymentId).toBe(baseline.id);
       expect(snapshot.core.stableVersionId).toBe(versions.coreStable);
@@ -366,16 +417,20 @@ describe("zero-traffic Worker release", () => {
         const fixture = harness();
         const bothStarted = yield* Deferred.make<void>();
         const names = new Set<string>();
+
         const port: ReleasePort = {
           ...fixture.port,
           current: (name) =>
             Effect.gen(function* () {
               names.add(name);
+
               if (names.size === 2) yield* Deferred.succeed(bothStarted, undefined);
               yield* Deferred.await(bothStarted);
+
               return yield* fixture.port.current(name);
             }),
         };
+
         const snapshot = yield* captured(port).pipe(Effect.timeout("1 second"));
         expect(snapshot.public.stableVersionId).toBe(versions.publicStable);
         expect(snapshot.core.stableVersionId).toBe(versions.coreStable);
@@ -390,6 +445,7 @@ describe("zero-traffic Worker release", () => {
       advanceReleaseClock(
         Effect.gen(function* () {
           const fixture = harness();
+
           const port: ReleasePort = {
             ...fixture.port,
             current: (worker) =>
@@ -397,6 +453,7 @@ describe("zero-traffic Worker release", () => {
                 ? Effect.fail(Error("read unavailable"))
                 : fixture.port.current(worker),
           };
+
           yield* failure(captured(port), "read unavailable");
           expect(fixture.changes).toEqual([]);
         })
@@ -444,22 +501,27 @@ describe("zero-traffic Worker release", () => {
           const release = yield* staged(fixture.port);
           const oldPublic = yield* fixture.port.current(publicName);
           let stale = false;
+
           const port: ReleasePort = {
             ...fixture.port,
             deploy: (name, entries) =>
               Effect.gen(function* () {
                 const result = yield* fixture.port.deploy(name, entries);
                 stale = name === publicName;
+
                 return result;
               }),
             current: (name) => {
               if (name === publicName && stale) {
                 stale = false;
+
                 return Effect.succeed(oldPublic);
               }
+
               return fixture.port.current(name);
             },
           };
+
           yield* releaseCleanup.cleanRelease(port, release.snapshot, candidates);
           expect(fixture.changes).toEqual([
             `${publicName}:100/0`,
@@ -481,6 +543,7 @@ describe("zero-traffic Worker release", () => {
         Effect.gen(function* () {
           const fixture = harness();
           const release = yield* staged(fixture.port);
+
           const ambiguous: ReleasePort = {
             ...fixture.port,
             deploy: (name, entries) =>
@@ -491,6 +554,7 @@ describe("zero-traffic Worker release", () => {
                 )
               ),
           };
+
           yield* releaseCleanup.cleanRelease(ambiguous, release.snapshot, candidates);
           expect(fixture.changes).toEqual([
             `${publicName}:100/0`,
@@ -607,6 +671,7 @@ describe("zero-traffic Worker release", () => {
         const release = yield* staged(fixture.port);
         const priorCore = yield* fixture.port.current(coreName);
         let staleRead = false;
+
         const delayed: ReleasePort = {
           ...fixture.port,
           deploy: (name, entries) =>
@@ -616,17 +681,21 @@ describe("zero-traffic Worker release", () => {
                 name === coreName &&
                 entries[0]?.id === versions.coreCandidate &&
                 entries.length === 1;
+
               return result;
             }),
           current: (name) =>
             Effect.gen(function* () {
               if (name === coreName && staleRead) {
                 staleRead = false;
+
                 return priorCore;
               }
+
               return yield* fixture.port.current(name);
             }),
         };
+
         yield* releaseController.promoteRelease(delayed, release, {
           exactPairPassed: true,
           middlePairPassed: true,
@@ -649,6 +718,7 @@ describe("zero-traffic Worker release", () => {
         Effect.gen(function* () {
           const fixture = harness();
           const release = yield* staged(fixture.port);
+
           const ambiguous: ReleasePort = {
             ...fixture.port,
             deploy: (name, entries) =>
@@ -662,6 +732,7 @@ describe("zero-traffic Worker release", () => {
                 )
               ),
           };
+
           yield* releaseController.promoteRelease(ambiguous, release, {
             exactPairPassed: true,
             middlePairPassed: true,
@@ -689,6 +760,7 @@ describe("zero-traffic Worker release", () => {
       advanceReleaseClock(
         Effect.gen(function* () {
           const fixture = harness();
+
           const unknown: ReleasePort = {
             ...fixture.port,
             deploy: (name) =>
@@ -696,6 +768,7 @@ describe("zero-traffic Worker release", () => {
                 .deploy(name, [{ id: versions.coreCandidate, percentage: 100 }])
                 .pipe(Effect.andThen(Effect.fail(Error("response lost")))),
           };
+
           yield* failure(
             releaseController.deployExact(unknown, publicName, [
               { id: versions.publicCandidate, percentage: 100 },
@@ -714,14 +787,17 @@ describe("zero-traffic Worker release", () => {
         Effect.gen(function* () {
           const fixture = harness();
           const previous = yield* fixture.port.current(publicName);
+
           const stale: ReleasePort = {
             ...fixture.port,
             deploy: (name, entries) => fixture.port.deploy(name, entries).pipe(Effect.as(previous)),
           };
+
           const result = yield* releaseController.deployExact(stale, publicName, [
             { id: versions.publicStable, percentage: 100 },
             { id: versions.publicCandidate, percentage: 0 },
           ]);
+
           expect(result.id).not.toBe(previous.id);
           expect(result.versions).toEqual([
             { id: versions.publicStable, percentage: 100 },
@@ -799,6 +875,7 @@ describe("zero-traffic Worker release", () => {
           const fixture = harness();
           const release = yield* staged(fixture.port);
           const original = fixture.port;
+
           const ambiguous: ReleasePort = {
             ...original,
             deploy: (name, entries) =>
@@ -809,6 +886,7 @@ describe("zero-traffic Worker release", () => {
                 )
               ),
           };
+
           yield* releaseController.promoteRelease(ambiguous, release, {
             exactPairPassed: true,
             middlePairPassed: true,
@@ -835,6 +913,7 @@ describe("zero-traffic Worker release", () => {
       Effect.gen(function* () {
         const fixture = harness();
         const release = yield* staged(fixture.port);
+
         const defective: ReleasePort = {
           ...fixture.port,
           deploy: (name, entries) =>
@@ -842,6 +921,7 @@ describe("zero-traffic Worker release", () => {
               ? Effect.die(Error("unexpected adapter failure"))
               : fixture.port.deploy(name, entries),
         };
+
         yield* failure(
           releaseController.promoteRelease(defective, release, {
             exactPairPassed: true,
@@ -862,6 +942,7 @@ describe("zero-traffic Worker release", () => {
       Effect.gen(function* () {
         const fixture = harness();
         const release = yield* staged(fixture.port);
+
         const interrupted: ReleasePort = {
           ...fixture.port,
           deploy: (name, entries) =>
@@ -869,6 +950,7 @@ describe("zero-traffic Worker release", () => {
               ? Effect.interrupt
               : fixture.port.deploy(name, entries),
         };
+
         const exit = yield* Effect.exit(
           releaseController.promoteRelease(interrupted, release, {
             exactPairPassed: true,
@@ -876,6 +958,7 @@ describe("zero-traffic Worker release", () => {
             rollbackEligible: true,
           })
         );
+
         expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
         expect(fixture.changes).toEqual([
           `${publicName}:100/0`,
@@ -942,6 +1025,7 @@ describe("zero-traffic Worker release", () => {
           const fixture = harness();
           const release = yield* staged(fixture.port);
           fixture.fail(`${publicName}:100`);
+
           const port: ReleasePort = {
             ...fixture.port,
             restoreStable: Effect.fn(function* ({ target, companion }) {
@@ -956,11 +1040,13 @@ describe("zero-traffic Worker release", () => {
                 { id: versions.publicStable, percentage: 100 },
                 { id: versions.publicCandidate, percentage: 0 },
               ]);
+
               return yield* fixture.port.deploy(target.name, [
                 { id: target.stableVersionId, percentage: 100 },
               ]);
             }),
           };
+
           yield* failure(
             releaseController.promoteRelease(port, release, {
               exactPairPassed: true,

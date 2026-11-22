@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import type { ReactNode } from "react";
 import type { SubscriptionEnrollmentClient } from "@/transport/client";
 import { SubscriptionEnrollmentContext } from "./subscription-enrollment-context";
+import { reportBrowserDefect } from "@/transport/browser-defects";
 
 type SubscriptionEnrollmentLifetimeProps = Readonly<{
   readonly children: ReactNode;
@@ -14,12 +15,14 @@ export const SubscriptionEnrollmentLifetime = ({
   makeClient,
 }: SubscriptionEnrollmentLifetimeProps): React.JSX.Element => {
   const [client, setClient] = useState<Option.Option<SubscriptionEnrollmentClient>>(Option.none);
+
   const attachLifetime = useCallback(
     (_element: HTMLSpanElement): (() => void) => {
       const current = makeClient();
       setClient(Option.some(current));
+
       return () => {
-        current.dispose().catch(() => undefined);
+        current.dispose().catch(() => reportBrowserDefect("command_failed"));
       };
     },
     [makeClient]

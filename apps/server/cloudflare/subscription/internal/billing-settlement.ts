@@ -8,18 +8,21 @@ type PaidPeriod = Readonly<{
   endsAtMs: number;
   renewalAnchorMs: number;
 }>;
+
 export type VerifiedOutcome =
   | Readonly<{ status: "APPROVED"; finalizedAtMs: number; paidPeriod: PaidPeriod }>
   | Readonly<{
       status: Exclude<WompiBillingStatus, "APPROVED">;
       finalizedAtMs: Option.Option<number>;
     }>;
+
 type Settlement = Readonly<{
   attemptId: BillingAttemptId;
   transactionId: WompiTransactionId;
   observedAtMs: number;
   outcome: VerifiedOutcome;
 }>;
+
 const retryOpportunityMs = Duration.toMillis(wompiRetryOpportunity);
 
 type Binder<Statement> = Readonly<{
@@ -27,13 +30,16 @@ type Binder<Statement> = Readonly<{
     bind: (...args: ReadonlyArray<unknown>) => Statement;
   };
 }>;
+
 const evidenceAndOutcome = <Statement>(
   db: Binder<Statement>,
   input: Settlement
 ): ReadonlyArray<Statement> => {
   const { attemptId, transactionId, observedAtMs, outcome } = input;
+
   const negative =
     outcome.status === "DECLINED" || outcome.status === "VOIDED" || outcome.status === "ERROR";
+
   return [
     db
       .prepare(`INSERT INTO billing_provider_transactions
@@ -91,8 +97,10 @@ const standingAndIntent = <Statement>(
   auditTable: "audit_entries" | "billing_transition_audit"
 ): ReadonlyArray<Statement> => {
   const { attemptId, observedAtMs, outcome } = input;
+
   const period =
     outcome.status === "APPROVED" ? Option.some(outcome.paidPeriod) : Option.none<PaidPeriod>();
+
   return [
     db
       .prepare(`UPDATE billing_attempts SET paid_starts_at_ms=?,paid_ends_at_ms=?,paid_renewal_anchor_ms=?
@@ -133,12 +141,14 @@ const standingAndIntent = <Statement>(
 };
 
 type LocalStatement = Readonly<{ text: string; params: ReadonlyArray<unknown> }>;
+
 export const nativeSettlementStatements = (input: Settlement): ReadonlyArray<LocalStatement> => {
   const builder: Binder<LocalStatement> = {
     prepare: (text) => ({
       bind: (...params) => ({ text, params }),
     }),
   };
+
   return [
     ...evidenceAndOutcome(builder, input),
     ...standingAndIntent(builder, input, "billing_transition_audit"),

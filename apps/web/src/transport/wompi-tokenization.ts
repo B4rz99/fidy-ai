@@ -12,8 +12,11 @@ export type CardFields = Readonly<{
 export class CardTokenizationFailed extends Data.TaggedError("CardTokenizationFailed")<{}> {}
 
 const ignoreCancellation = (): void => {};
+
 const maximumTokenCharacters = 4096;
+
 const wompiExpirationYearCharacters = 2;
+
 const WompiCardRequest = Schema.Struct({
   number: Schema.String,
   cvc: Schema.String,
@@ -21,24 +24,31 @@ const WompiCardRequest = Schema.Struct({
   exp_year: Schema.String,
   card_holder: Schema.String,
 });
+
 const encodeCardRequest = Schema.encodeEffect(jsonStringSchema(WompiCardRequest));
+
 const WompiTokenResponse = Schema.Struct({
   data: Schema.Struct({
     id: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(maximumTokenCharacters)),
     brand: Schema.Literals(["VISA", "MASTERCARD"]),
   }),
 });
+
 const decodeTokenResponse = Schema.decodeUnknownResult(WompiTokenResponse);
+
 const decodeJson = Schema.decodeUnknownResult(UnknownJsonString);
+
 const maximumResponseBytes = 16_384;
 
 const decodeChunks = (chunks: ReadonlyArray<Uint8Array>, byteLength: number): string => {
   const bytes = new Uint8Array(byteLength);
   let offset = 0;
+
   for (const chunk of chunks) {
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
+
   return new TextDecoder().decode(bytes);
 };
 
@@ -48,51 +58,66 @@ export const readBoundedWompiResponse = (
   Effect.callback<string, CardTokenizationFailed>((resume) => {
     if (response.body === null) {
       resume(Effect.fail(new CardTokenizationFailed()));
+
       return;
     }
+
     const reader = response.body.getReader();
     const chunks: Array<Uint8Array> = [];
     let total = 0;
     let settled = false;
+
     const releaseReader = (): void => {
       try {
         reader.releaseLock();
       } catch {}
     };
+
     const cancelAndRelease = (): void => {
       reader.cancel().catch(() => undefined);
       releaseReader();
     };
+
     const fail = (): void => {
       if (settled) return;
       settled = true;
       cancelAndRelease();
       resume(Effect.fail(new CardTokenizationFailed()));
     };
+
     const declaredLength = Number(response.headers.get("content-length") ?? 0);
+
     if (declaredLength > maximumResponseBytes) {
       fail();
     } else {
       const readNext = (): void => {
         reader.read().then((next) => {
           if (settled) return;
+
           if (next.done) {
             settled = true;
             releaseReader();
             resume(Effect.succeed(decodeChunks(chunks, total)));
+
             return;
           }
+
           total += next.value.byteLength;
+
           if (total > maximumResponseBytes) {
             fail();
+
             return;
           }
+
           if (next.value.byteLength > 0) chunks.push(next.value);
           readNext();
         }, fail);
       };
+
       readNext();
     }
+
     return Effect.sync(() => {
       settled = true;
       cancelAndRelease();
@@ -105,7 +130,9 @@ export const wompiTokenizationOrigin = (
   if (publicKey.startsWith("pub_test_")) {
     return Effect.succeed("https://sandbox.wompi.co");
   }
+
   if (publicKey.startsWith("pub_prod_")) return Effect.succeed("https://production.wompi.co");
+
   return Effect.fail(new CardTokenizationFailed());
 };
 
@@ -125,6 +152,7 @@ export const tokenizeCardWithWompi: {
   Effect.gen(function* () {
     const origin = yield* wompiTokenizationOrigin(publicKey);
     const signal = yield* Effect.abortSignal;
+
     const body = yield* encodeCardRequest({
       number: card.number.replaceAll(/\s|-/gu, ""),
       cvc: card.cvc,
@@ -132,6 +160,7 @@ export const tokenizeCardWithWompi: {
       exp_year: card.expirationYear.slice(-wompiExpirationYearCharacters),
       card_holder: card.cardholderName,
     });
+
     const response = yield* Effect.tryPromise({
       try: () =>
         fetchImplementation(`${origin}/v1/tokens/cards`, {
@@ -148,21 +177,29 @@ export const tokenizeCardWithWompi: {
         }),
       catch: () => new CardTokenizationFailed(),
     });
+
     if (!response.ok) {
       yield* Effect.sync(() => {
         response.body?.cancel().catch(ignoreCancellation);
       });
+
       return yield* new CardTokenizationFailed();
     }
+
     const text = yield* readBoundedWompiResponse(response);
     const json = decodeJson(text);
+
     if (Result.isFailure(json)) return yield* new CardTokenizationFailed();
     const decoded = decodeTokenResponse(json.success);
+
     if (Result.isFailure(decoded)) return yield* new CardTokenizationFailed();
+
     return decoded.success.data.id;
   }).pipe(
     Effect.scoped,
     Effect.timeout("15 seconds"),
-    Effect.mapError(() => new CardTokenizationFailed())
+    Effect.catchTag(["SchemaError", "TimeoutError"], () =>
+      Effect.fail(new CardTokenizationFailed())
+    )
   )
 );

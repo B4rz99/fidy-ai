@@ -185,6 +185,7 @@ const zeroFractionCurrencies = new Set<(typeof currencyCodes)[number]>([
   "XOF",
   "XPF",
 ]);
+
 const threeFractionCurrencies = new Set<(typeof currencyCodes)[number]>([
   "BHD",
   "IQD",
@@ -200,6 +201,7 @@ export const Currency = Schema.Literals(currencyCodes).annotate({
   description:
     "A recognized monetary ISO 4217 alphabetic code. It determines the maximum fractional precision of Money and does not imply that fidy operates in that currency's markets.",
 });
+
 export type Currency = typeof Currency.Type;
 
 export type CurrencyMetadata = {
@@ -211,9 +213,11 @@ const fractionalDigits = (currency: Currency): CurrencyMetadata["fractionalDigit
   if (zeroFractionCurrencies.has(currency)) {
     return 0;
   }
+
   if (threeFractionCurrencies.has(currency)) {
     return 3;
   }
+
   return currency === "UYW" ? 4 : 2;
 };
 
@@ -223,6 +227,7 @@ export const currencyMetadata = (alphabeticCode: Currency): CurrencyMetadata => 
 });
 
 const plainDecimalPattern = /^(?:0|[1-9]\d*)(?:\.\d+)?$/u;
+
 const zero = BigDecimal.make(0n, 0);
 
 type ReadonlyBigDecimal = Readonly<BigDecimal.BigDecimal>;
@@ -239,11 +244,13 @@ const formatPlainDecimal = (amount: ReadonlyBigDecimal): string => {
   if (normalized.scale <= 0) {
     return digits + "0".repeat(-normalized.scale);
   }
+
   if (normalized.scale >= digits.length) {
     return `0.${"0".repeat(normalized.scale - digits.length)}${digits}`;
   }
 
   const decimalAt = digits.length - normalized.scale;
+
   return `${digits.slice(0, decimalAt)}.${digits.slice(decimalAt)}`;
 };
 
@@ -263,7 +270,7 @@ const MoneyAmount = Schema.String.check(
   )
 );
 
-const MoneyShape = Schema.Struct({
+const UncheckedMoney = Schema.Struct({
   amount: MoneyAmount.pipe(
     Schema.annotateEncoded({
       description:
@@ -276,10 +283,11 @@ const MoneyShape = Schema.Struct({
     "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied.",
 });
 
-export const Money = MoneyShape.check(
+export const Money = UncheckedMoney.check(
   Schema.makeFilter<ReadonlyMoney>((money) => {
     const usedDigits = Math.max(0, BigDecimal.normalize(money.amount).scale);
     const allowedDigits = currencyMetadata(money.currency).fractionalDigits;
+
     return usedDigits <= allowedDigits
       ? undefined
       : {
@@ -288,6 +296,7 @@ export const Money = MoneyShape.check(
         };
   })
 ).annotate({ identifier: "Money" });
+
 export type Money = typeof Money.Type;
 
 export class CurrencyMismatch extends Data.TaggedError("CurrencyMismatch")<{
@@ -330,9 +339,11 @@ const groupCurrenciesMatch = Schema.makeFilter<
   if (group.inflow.currency !== group.currency) {
     return { path: ["inflow", "currency"], issue: "Expected the group Currency" };
   }
+
   if (group.outflow.currency !== group.currency) {
     return { path: ["outflow", "currency"], issue: "Expected the group Currency" };
   }
+
   return BigDecimal.isZero(group.inflow.amount) && BigDecimal.isZero(group.outflow.amount)
     ? "Expected at least one non-zero Money value"
     : undefined;
@@ -345,6 +356,7 @@ export const MoneyGroup = Schema.Struct({
 })
   .check(groupCurrenciesMatch)
   .annotate({ identifier: "MoneyGroup" });
+
 export type MoneyGroup = typeof MoneyGroup.Type;
 
 export type ReadonlyMoneyGroup = {
@@ -358,6 +370,7 @@ const deterministicCurrencyOrder = Schema.makeFilter<
 >((groups) => {
   for (const [index, current] of groups.entries()) {
     const previous = groups[index - 1];
+
     if (previous !== undefined && previous.currency >= current.currency) {
       return {
         path: [index, "currency"],
@@ -365,12 +378,14 @@ const deterministicCurrencyOrder = Schema.makeFilter<
       };
     }
   }
+
   return undefined;
 });
 
 export const MoneyGroups = Schema.Array(MoneyGroup)
   .check(deterministicCurrencyOrder)
   .annotate({ identifier: "MoneyGroups" });
+
 export type MoneyGroups = typeof MoneyGroups.Type;
 
 export const groupMoney = (movements: {
@@ -389,6 +404,7 @@ export const groupMoney = (movements: {
       inflow: BigDecimal.sum(current.inflow, inflow.amount),
     });
   }
+
   for (const outflow of movements.outflows) {
     const current = groups.get(outflow.currency) ?? { inflow: zero, outflow: zero };
     groups.set(outflow.currency, {

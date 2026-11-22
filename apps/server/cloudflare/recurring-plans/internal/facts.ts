@@ -12,16 +12,21 @@ export const planningFact = ({
 }: Readonly<{
   transaction: Transaction;
   timeZone: RecurringPlanInput["timeZone"];
-}>): RecurringMatchFact => ({
-  id: transaction.id,
-  money: transaction.money,
-  direction: transaction.direction,
-  date: DateTime.formatIsoDate(DateTime.makeZonedUnsafe(transaction.occurredAt, { timeZone })),
-  categoryId: transaction.categoryId,
-  ...(Option.isSome(transaction.counterparty)
-    ? { counterparty: transaction.counterparty.value }
-    : {}),
-});
+}>): RecurringMatchFact => {
+  const fact = {
+    id: transaction.id,
+    money: transaction.money,
+    direction: transaction.direction,
+    date: DateTime.formatIsoDate(DateTime.makeZonedUnsafe(transaction.occurredAt, { timeZone })),
+    categoryId: transaction.categoryId,
+  };
+
+  return Option.match(transaction.counterparty, {
+    onNone: () => fact,
+    onSome: (counterparty) => ({ ...fact, counterparty }),
+  });
+};
+
 export const linkedTransactionIds = (
   document: Pick<RecurringDocument, "fulfillments">
 ): ReadonlyArray<string> => [

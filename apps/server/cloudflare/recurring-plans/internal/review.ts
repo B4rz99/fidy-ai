@@ -79,9 +79,7 @@ const seriesText = Effect.fnUntraced(function* (user: UserId, id: string) {
 
   const observed = Option.flatMap(
     Option.flatMap(
-      Option.flatMap(page, (result) =>
-        result.outcome === "success" ? Option.some(result.body) : Option.none<Schema.Json>()
-      ),
+      Option.map(page, (result) => result.body),
       Schema.decodeUnknownOption(Schema.Struct({ data: Schema.toCodecJson(RecurringSeriesPage) }))
     ),
     ({ data }) => Option.fromUndefinedOr(data.series.find((series) => series.id === id))

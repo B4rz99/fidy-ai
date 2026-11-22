@@ -541,6 +541,9 @@ const securityArtifacts = [
     new URL("../../apps/server/cloudflare/recurring-plans/internal/mutation.ts", import.meta.url)
   ).text(),
   await Bun.file(
+    new URL("../../apps/server/cloudflare/recurring-plans/internal/review.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
     new URL("../../apps/server/cloudflare/transactions/internal/planning-read.ts", import.meta.url)
   ).text(),
   await Bun.file(

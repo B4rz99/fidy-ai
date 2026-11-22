@@ -18,6 +18,11 @@ import {
 } from "../../canonical-admission/contract";
 import { resolveLocalCategory, retainLocalCategory } from "../../categories/operations";
 import { newId } from "../../secret-material/operations";
+import {
+  formatWhatsAppCategory,
+  formatWhatsAppDate,
+  formatWhatsAppMoney,
+} from "../../../src/shell/channels/whatsapp/operations";
 import { budgetsFromRows } from "./budget-row";
 
 const maximumBudgets = 128;
@@ -360,16 +365,27 @@ const budgetCategory = Effect.fnUntraced(function* (user: UserId, input: UpdateB
   );
 });
 
+const categoryLabel = (id: string): string =>
+  Option.getOrElse(formatWhatsAppCategory(id), () => id);
+
+const budgetChangeText = (input: UpdateBudgetInput): string => {
+  const members = input.groupCategoryIds ?? [];
+
+  return `Nuevo presupuesto: ${categoryLabel(input.categoryId)}, de ${formatWhatsAppMoney(input.cap)}${input.month === undefined ? "" : ` para ${formatWhatsAppDate(`${input.month}-01`).replace(/^1 de /u, "")}`}${input.groupName === undefined ? "" : `, grupo «${input.groupName}»`}${members.length === 0 ? "" : `. El grupo incluye ${members.map(categoryLabel).join(", ")}`}${input.groupCurrency === undefined ? "" : `. La moneda del grupo será ${input.groupCurrency}; se conservan los importes sin conversión`}`;
+};
+
 const budgetReview = Effect.fn(function* ({
   user,
   id,
   action,
   members,
+  proposed,
 }: {
   user: UserId;
   id: BudgetId;
   action: "Cambiar" | "Eliminar";
   members: ReadonlyArray<string>;
+  proposed: Option.Option<string>;
 }) {
   const sql = yield* SqliteClient;
   const [budget] = (yield* plannedBudgets(user, Option.none(), Option.some(id))).budgets;
@@ -390,7 +406,7 @@ const budgetReview = Effect.fn(function* ({
 
   return {
     revision,
-    effect: `${action} ${members.length === 0 ? "el presupuesto" : "el grupo de " + members.length + " categorías y el presupuesto"} ${id}, categoría ${budget.categoryId}, límite actual ${encodeMoneyAmount(budget.cap.amount)} ${budget.cap.currency}.`,
+    effect: `${action} ${members.length === 0 ? "el presupuesto" : "el grupo de " + members.length + " categorías y el presupuesto"} ${id}, categoría ${categoryLabel(budget.categoryId)}, límite actual ${formatWhatsAppMoney(budget.cap)}.${Option.match(proposed, { onNone: () => "", onSome: (text) => " " + text })}`,
   };
 });
 
@@ -405,6 +421,7 @@ const changeReview = (
           id: id.value,
           action: "Cambiar",
           members: input.groupCategoryIds ?? [],
+          proposed: Option.some(budgetChangeText(input)),
         }),
       }
     : {};
@@ -490,7 +507,7 @@ export const prepareLocalBudgetDeletion = Effect.fn(function* (id: BudgetId, use
 
   const plan = prepareLocalWrite({
     targets: ["budget:" + id],
-    review: budgetReview({ user, id, action: "Eliminar", members: [] }),
+    review: budgetReview({ user, id, action: "Eliminar", members: [], proposed: Option.none() }),
     commit: Effect.gen(function* () {
       const removed =
         yield* sql`DELETE FROM budgets WHERE id=${id} AND user_id=${user} RETURNING id`;

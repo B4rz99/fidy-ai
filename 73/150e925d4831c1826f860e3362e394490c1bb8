@@ -1,0 +1,24 @@
+apps/server/cloudflare/agent/provider.test-fixture.ts
+  h_c6d49c804e0ad2 289
+apps/server/cloudflare/agent/user-store.test.ts
+  h_c6d49c804e0ad2 3,13,286,312,315,323,330-332,339-352,355-357,600-853,936-945
+apps/server/cloudflare/budgets/internal/sqlite-planning.ts
+  h_c6d49c804e0ad2 21-25,368-376,382,388,409,424,510
+apps/server/cloudflare/recurring-plans/internal/review.ts
+  h_c6d49c804e0ad2 1-187
+apps/server/cloudflare/recurring-plans/internal/sqlite-plans.ts
+  h_c6d49c804e0ad2 40,135,139
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 543-545
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "73150e925d4831c1826f860e3362e394490c1bb8",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

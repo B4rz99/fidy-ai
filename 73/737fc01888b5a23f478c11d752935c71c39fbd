@@ -1,0 +1,14 @@
+apps/server/cloudflare/oauth-agents/native-grant.test.ts
+  h_c6d49c804e0ad2 403,416
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "73737fc01888b5a23f478c11d752935c71c39fbd",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

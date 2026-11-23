@@ -30,6 +30,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const store = directory.getByName("directory-v1");
       const ready = yield* native(() => store.fetch(storeReadinessUrl));
       expect(ready.ok).toBe(true);
+      yield* native(() => ready.arrayBuffer());
 
       const storage = yield* native(() =>
         runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
@@ -56,7 +57,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
       yield* fillClients({ storage, created: now - 2 * day, lastUsed: now - 2 * day });
 
-      expect((yield* register()).status).toBe(201);
+      const registered = yield* register();
+      expect(registered.status).toBe(201);
+      yield* native(() => registered.arrayBuffer());
       expect(
         yield* native(() => storage.exec("SELECT count(*) AS n FROM oauth_public_clients"))
       ).toEqual([{ n: 9969 }]);
@@ -64,12 +67,16 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       yield* native(() => storage.exec("DELETE FROM oauth_public_clients"));
       yield* fillClients({ storage, created: now, lastUsed: now });
 
-      expect((yield* register()).status).toBe(503);
+      const full = yield* register();
+      expect(full.status).toBe(503);
+      yield* native(() => full.arrayBuffer());
 
       yield* native(() => storage.exec("DELETE FROM oauth_public_clients"));
       yield* fillClients({ storage, created: now - 40 * day, lastUsed: now - 3_600_000 });
 
-      expect((yield* register()).status).toBe(503);
+      const stale = yield* register();
+      expect(stale.status).toBe(503);
+      yield* native(() => stale.arrayBuffer());
     })
   );
 });

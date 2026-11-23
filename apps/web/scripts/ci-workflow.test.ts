@@ -20,21 +20,21 @@ describe("pull-request checks workflow policy", () => {
       .then((exists) => expect(exists).toBe(false));
   });
 
-  it("keeps the merge gate unconditional and checks skipped jobs against a successful plan", () => {
-    const requiredJob = checksWorkflow.slice(checksWorkflow.indexOf("\n  required-checks:\n"));
-    expect(requiredJob).toContain("name: Required Checks");
-    expect(requiredJob).toContain("- changes");
-    expect(requiredJob).toContain("if: ${{ always() }}");
-    expect(checksWorkflow).toContain("required-script: ${{ steps.results-gate.outputs.script }}");
-    expect(checksWorkflow).toContain("cat scripts/check-ci-results.sh");
-    expect(requiredJob).toContain(
-      "REQUIRED_CHECK_SCRIPT: ${{ needs.changes.outputs.required-script }}"
-    );
-    expect(requiredJob).toContain("${REQUIRED_CHECK_SCRIPT:?Required-check script unavailable}");
-    expect(requiredJob).toContain('bash -c "$REQUIRED_CHECK_SCRIPT"');
-    expect(checksWorkflow).toContain("fetch-depth: 0");
-    expect(checksWorkflow).toContain("run: bun scripts/ci-changes.ts");
-  });
+  it("leaves the required merge context to the default-branch workflow", () =>
+    Bun.file(`${repositoryRoot}/.github/workflows/merge-gate.yml`)
+      .text()
+      .then((mergeGate) => {
+        expect(checksWorkflow).not.toContain("required-checks:");
+        expect(checksWorkflow).not.toContain("check-ci-results.sh");
+        expect(checksWorkflow).not.toContain("REQUIRED_CHECK_SCRIPT");
+        expect(mergeGate).toContain('workflows: ["Checks"]');
+        expect(mergeGate).toContain("types: [completed]");
+        expect(mergeGate).toContain("statuses: write");
+        expect(mergeGate).toContain("run: bun scripts/merge-gate.ts");
+        expect(mergeGate).toContain(
+          "PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}"
+        );
+      }));
 
   it("runs native conformance from a same-run bundle without installing platform workspace dependencies", () => {
     const packageJob = checksWorkflow.slice(
@@ -42,12 +42,7 @@ describe("pull-request checks workflow policy", () => {
       checksWorkflow.indexOf("\n  cli-native:\n")
     );
 
-    const nativeJob = checksWorkflow.slice(
-      checksWorkflow.indexOf("\n  cli-native:\n"),
-      checksWorkflow.indexOf("\n  required-checks:\n")
-    );
-
-    const requiredJob = checksWorkflow.slice(checksWorkflow.indexOf("\n  required-checks:\n"));
+    const nativeJob = checksWorkflow.slice(checksWorkflow.indexOf("\n  cli-native:\n"));
 
     expect(packageJob).toContain("runs-on: ubuntu-latest");
     expect(packageJob).toContain("bun run --cwd apps/cli build:native");
@@ -59,7 +54,6 @@ describe("pull-request checks workflow policy", () => {
     expect(nativeJob).not.toContain("bun-install");
     expect(nativeJob).not.toContain("run-id:");
     expect(nativeJob).not.toContain("repository:");
-    expect(requiredJob).toContain("- cli-native-package");
     expect(checksWorkflow).toContain("cli-native-package: ${{ steps.plan.outputs.cli-native }}");
     expect(checksWorkflow).toContain("cli-native: ${{ steps.plan.outputs.cli-native }}");
   });

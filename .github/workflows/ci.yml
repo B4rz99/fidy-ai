@@ -28,7 +28,6 @@ jobs:
       cloudflare-infra: ${{ steps.plan.outputs.cloudflare-infra }}
       security-sast: ${{ steps.plan.outputs.security-sast }}
       security-sca: ${{ steps.plan.outputs.security-sca }}
-      required-script: ${{ steps.results-gate.outputs.script }}
       source-partitions: ${{ steps.plan.outputs.source-partitions }}
       source-sca-partition: ${{ steps.plan.outputs.source-sca-partition }}
     steps:
@@ -48,15 +47,6 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: bun scripts/ci-changes.ts
-      - name: Export the authoritative required-check script
-        id: results-gate
-        run: |
-          {
-            echo 'script<<FIDY_REQUIRED_CHECK_SCRIPT'
-            cat scripts/check-ci-results.sh
-            echo 'FIDY_REQUIRED_CHECK_SCRIPT'
-          } >> "$GITHUB_OUTPUT"
-
   static:
     name: Workspace Gate
     runs-on: ubuntu-latest
@@ -467,28 +457,3 @@ jobs:
       - name: Native cross-process and Windows local-persistence conformance
         timeout-minutes: 1
         run: bun test-results/cli-native/native-store.js
-
-  required-checks:
-    name: Required Checks
-    runs-on: ubuntu-latest
-    needs:
-      - changes
-      - static
-      - builds
-      - unit
-      - cli-native-package
-      - cli-native
-      - cloudflare-adapters
-      - cloudflare-infra
-      - security-secrets
-      - security-sast
-      - security-sca
-    if: ${{ always() }}
-    steps:
-      - name: Verify required jobs against the change plan
-        env:
-          RESULTS: ${{ toJSON(needs) }}
-          REQUIRED_CHECK_SCRIPT: ${{ needs.changes.outputs.required-script }}
-        run: |
-          : "${REQUIRED_CHECK_SCRIPT:?Required-check script unavailable}"
-          bash -c "$REQUIRED_CHECK_SCRIPT"

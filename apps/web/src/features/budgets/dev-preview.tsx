@@ -22,10 +22,14 @@ const restoreTextSizeOnUnmount = (_element: HTMLElement): (() => void) => {
   };
 };
 
+const isDataset = (value: unknown): value is PreviewDataset =>
+  datasets.some((item) => item.value === value);
+
 export const BudgetDataPreview = (props: WorkspaceProps): JSX.Element => {
   const search = useSearch({ strict: false });
   const navigate = useNavigate();
-  const dataset = "data" in search ? (search.data ?? "demo") : "demo";
+  const raw = "data" in search ? search.data : undefined;
+  const dataset = isDataset(raw) ? raw : "demo";
   const [largeText, setLargeText] = useState(false);
 
   return (

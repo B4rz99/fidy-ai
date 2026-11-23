@@ -1,13 +1,15 @@
 import { type JSX, useState } from "react";
 import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button } from "@/ui/components/button";
-import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/ui/components/popover";
-import { monthLabel, shortMonthLabel } from "./model";
+import { Button } from "./button";
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "./popover";
+import { monthLabel, shortMonthLabel } from "@/ui/month-labels";
 
 const yearOf = (month: string): number => Number(month.slice(0, "2026".length));
 
 const monthNumbers = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
+
+const capitalize = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
 type YearProps = Readonly<{ year: number; setYear: (year: number) => void }>;
 
@@ -59,12 +61,12 @@ const MonthGrid = ({ year, month, today, choose }: GridProps): JSX.Element => (
           size="sm"
           variant="view"
           data-recurring-slot="month-choice"
-          aria-label={monthLabel(value)}
+          aria-label={capitalize(monthLabel(value))}
           aria-pressed={value === month}
           aria-current={today.startsWith(value) ? "date" : undefined}
           onClick={() => choose(value)}
         >
-          {shortMonthLabel(value)}
+          {capitalize(shortMonthLabel(value))}
         </Button>
       );
     })}
@@ -75,9 +77,19 @@ type MonthPickerProps = Readonly<{
   month: string;
   today: string;
   select: (month: string) => void;
+  label: string;
+  disabled: boolean;
+  variant: "ghost" | "outline";
 }>;
 
-export const MonthPicker = ({ month, today, select }: MonthPickerProps): JSX.Element => {
+export const MonthPicker = ({
+  month,
+  today,
+  select,
+  label,
+  disabled,
+  variant,
+}: MonthPickerProps): JSX.Element => {
   const [open, setOpen] = useState(false);
   const [year, setYear] = useState(() => yearOf(month));
 
@@ -99,13 +111,14 @@ export const MonthPicker = ({ month, today, select }: MonthPickerProps): JSX.Ele
           <Button
             contentLayout="wrap"
             focusAppearance="subtle"
-            variant="ghost"
+            variant={variant}
+            disabled={disabled}
             data-recurring-slot="month-picker"
-            aria-label={`Elegir mes, ${monthLabel(month)}`}
+            aria-label={`Elegir mes, ${capitalize(monthLabel(month))}`}
           />
         }
       >
-        <span>{monthLabel(month)}</span>
+        <span>{capitalize(label)}</span>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72 gap-3 p-3">
         <PopoverTitle className="sr-only">Elegir mes</PopoverTitle>

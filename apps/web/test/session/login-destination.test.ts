@@ -27,6 +27,6 @@ describe("login continuation", () => {
     { connectionAttempt: "invalid" },
     { handoff: request },
   ])("cannot turn a link into arbitrary navigation or approval: %o", (search) => {
-    expect(destinationAfterLogin(search)).toBe("/app/transactions");
+    expect(destinationAfterLogin(search)).toBe("/app/dashboard");
   });
 });

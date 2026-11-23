@@ -3,6 +3,7 @@ import { formatMoneyWithCode } from "@/transport/money";
 import { type CaptureHistoryVersion, ManualCaptureContext } from "./manual-capture-context";
 import { TransactionPeriodControls } from "./period-controls";
 import { RefreshButton } from "@/ui/components/refresh-button";
+import { WorkspaceHeader as SharedHeader } from "@/ui/components/workspace-layout";
 import { Toaster, toast } from "sonner";
 import { Suspense, use, useState } from "react";
 import { PendingRead } from "@/ui/components/pending-read";
@@ -154,7 +155,7 @@ const WorkspaceToolbar = ({
       disabled={disabled}
       onChange={(direction) => onFilters({ ...filters, direction })}
       options={[
-        { value: "all", label: "Todas las transacciones" },
+        { value: "all", label: "Todas" },
         { value: "outflow", label: "Gastos" },
         { value: "inflow", label: "Ingresos" },
       ]}
@@ -428,14 +429,13 @@ const WorkspaceHeader = ({
   readOnly: boolean;
   onCapture: () => void;
 }>): JSX.Element => (
-  <header data-transaction-slot="transaction-page-header">
-    <h1>Transacciones</h1>
+  <SharedHeader title="Transacciones" context={null}>
     {readOnly ? null : (
       <Button disabled={disabled} onClick={onCapture}>
         + Registrar
       </Button>
     )}
-  </header>
+  </SharedHeader>
 );
 
 type FilterExpansionProps = Readonly<{
@@ -506,6 +506,13 @@ const TransactionFilters = ({
 }>): JSX.Element => (
   <>
     <div data-transaction-slot="transaction-search-toolbar">
+      {Option.isNone(props.monthFilter) ? null : (
+        <TransactionPeriodControls
+          {...props.monthFilter.value}
+          label={props.period.monthLabel}
+          disabled={disabled}
+        />
+      )}
       <Input
         type="search"
         aria-label="Buscar transacciones"
@@ -893,25 +900,6 @@ const ContinuationControl = (
   );
 };
 
-const WorkspacePeriod = ({
-  props,
-  disabled,
-}: Readonly<{ props: WorkspaceProps; disabled: boolean }>): JSX.Element => (
-  <>
-    {Option.isNone(props.monthFilter) ? null : (
-      <TransactionPeriodControls
-        {...props.monthFilter.value}
-        label={props.period.monthLabel}
-        disabled={disabled}
-      />
-    )}
-    <p className="px-4 py-2 text-sm text-muted-foreground" aria-live="polite">
-      Mostrando transacciones {scopeLabel(props)}. Búsqueda y resumen sobre los registros cargados
-      que coinciden con los filtros.
-    </p>
-  </>
-);
-
 const CaptureNotice = ({
   panel,
   onPanel,
@@ -1127,7 +1115,6 @@ export const TransactionWorkspace = (source: WorkspaceProps): JSX.Element => {
           readOnly={props.readOnly}
           onCapture={() => onPanel(TransactionPanel.Capture({ status: "idle" }))}
         />
-        <WorkspacePeriod props={props} disabled={editing || (!props.editable && !props.readOnly)} />
         {props.queryNotice}
         <CaptureNotice panel={activePanel} onPanel={onPanel} />
         <ContinuationNotice {...props} />

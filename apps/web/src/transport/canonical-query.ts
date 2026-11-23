@@ -43,6 +43,13 @@ const classifyFailure = <A, E>(result: AsyncResult.Failure<A, E>): CanonicalQuer
   });
 };
 
+export const canonicalReady = <A, E>(value: A): CanonicalQueryState<A, E> =>
+  states<A, E>().Ready({
+    value,
+    waiting: false,
+    refreshFailure: Option.none<CanonicalQueryFailure<E>>(),
+  });
+
 export const presentCanonicalQuery = <A, E>(
   result: AsyncResult.AsyncResult<A, E>
 ): CanonicalQueryState<A, E> => {

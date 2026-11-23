@@ -11,31 +11,10 @@
     padding-top: 0;
   }
 }
-.settings-header,
-.settings-workspace > .workspace-page-header {
-  min-height: 112px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 28px 108px 28px 42px;
-  border: 0;
-  border-bottom: 1px solid var(--fidy-border-decorative-divider);
-}
-.settings-header :is(h1, h2),
-.settings-workspace > .workspace-page-header h1 {
-  font-size: 40px;
-  font-weight: 600;
-  line-height: 1.2;
-  letter-spacing: -1.2px;
-}
-.settings-workspace > .workspace-page-header {
-  flex-wrap: nowrap;
-}
-.settings-workspace > .workspace-page-header > div + div {
-  display: flex;
-  flex-shrink: 0;
-  width: auto;
+@media (min-width: 901px) {
+  .settings-workspace > .workspace-page-header {
+    padding-right: 180px;
+  }
 }
 .settings-columns {
   display: grid;
@@ -44,7 +23,7 @@
 }
 .settings-main {
   min-width: 0;
-  padding: 0 32px 40px 42px;
+  padding: 0 32px 40px 20px;
 }
 .settings-panel {
   min-width: 0;
@@ -135,18 +114,15 @@
   align-self: center;
 }
 .settings-workspace [data-slot="button"] {
-  border-radius: 10px;
   min-height: 50px;
   font-size: 16px;
 }
 .settings-workspace [data-slot="input"] {
   min-height: 52px;
-  border-radius: 10px;
   font-size: 16px;
 }
 .settings-token-lifetime [data-slot="dropdown-menu-trigger"] {
   min-height: 52px;
-  border-radius: 10px;
   font-size: 16px;
   font-weight: 400;
 }
@@ -154,10 +130,6 @@
   width: 24px;
   height: 24px;
   flex-shrink: 0;
-}
-.settings-workspace > .workspace-page-header [data-slot="button"] {
-  border-radius: 50%;
-  min-height: 46px;
 }
 .settings-account .settings-main {
   padding-right: 42px;
@@ -232,15 +204,6 @@
 @media (max-width: 900px) {
   .settings-workspace {
     min-height: calc(100svh - 84px);
-  }
-  .settings-header,
-  .settings-workspace > .workspace-page-header {
-    min-height: 88px;
-    padding: 16px 24px 24px;
-  }
-  .settings-header :is(h1, h2),
-  .settings-workspace > .workspace-page-header h1 {
-    font-size: 32px;
   }
   .settings-main,
   .settings-account .settings-main {

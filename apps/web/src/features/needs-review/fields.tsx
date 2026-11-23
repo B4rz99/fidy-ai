@@ -234,9 +234,6 @@ const ReviewOccurrence = (props: Props): JSX.Element => {
           />
         </div>
       </div>
-      <p data-review="zone" className="text-xs text-muted-foreground">
-        Hora de {props.timeZone}.
-      </p>
     </div>
   );
 };

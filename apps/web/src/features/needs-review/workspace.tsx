@@ -21,14 +21,15 @@ import { ReviewToolbar } from "./toolbar";
 import { useAtomValue } from "@effect/atom-react";
 import { Navigate, useRouter, useSearch } from "@tanstack/react-router";
 import { Option, Predicate } from "effect";
-import { type JSX, type ReactNode, type RefCallback, useId, useState } from "react";
+import { type JSX, type ReactNode, type RefCallback, useContext, useId, useState } from "react";
 import { Toaster, toast } from "sonner";
-import { presentCanonicalQuery } from "@/transport/canonical-query";
+import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { ReviewEditor } from "./editor";
 import { Inbox, ReviewPagination } from "./inbox";
 import { type Workspace, sources } from "./model";
+import { WorkspacePreviewContext } from "./fixture-context";
 import { type Filter, ReviewNavigation } from "./view-navigation";
 import { reviewWorkspaceQueries } from "./query";
 
@@ -204,7 +205,7 @@ const ReviewResources = ({
   const decisions = useReviewDecisions({ client: apiClient, query: queries.source });
   const [lifetime] = useState(() => decisionLifetime(decisions));
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
-  const waitingFreshness = state.waiting ? "refreshing" : "current";
+  const preview = useWorkspacePreview(filter);
 
   return (
     <div ref={lifetime} hidden={!active} data-review="panel">
@@ -220,13 +221,13 @@ const ReviewResources = ({
           active={active}
           workspaceQuery={queries.source}
           decisions={decisions}
-          view={state.value.data}
+          view={preview(state.value.data)}
           notice={
             Option.isSome(state.refreshFailure) ? (
               <ReviewReadFailure refresh={decisions.recover} waiting={state.waiting} />
             ) : null
           }
-          freshness={Option.isSome(state.refreshFailure) ? "stale" : waitingFreshness}
+          freshness={reviewFreshness(state)}
           page={page}
           move={move}
           filter={filter}
@@ -237,6 +238,23 @@ const ReviewResources = ({
       )}
     </div>
   );
+};
+
+const reviewFreshness = (
+  state: CanonicalQueryState<Readonly<{ data: Workspace }>, unknown>
+): ReadyInboxProps["freshness"] => {
+  if (Predicate.isTagged(state, "Ready") && Option.isSome(state.refreshFailure)) {
+    return "stale";
+  }
+
+  return state.waiting ? "refreshing" : "current";
+};
+
+const useWorkspacePreview = (filter: Filter): ((view: Workspace) => Workspace) => {
+  const preview = useContext(WorkspacePreviewContext);
+  const scope = filter === "pending" ? "pending" : "history";
+
+  return (view) => preview(view, scope);
 };
 
 const ReviewUnavailable = ({

@@ -16,42 +16,19 @@
 }
 @media (min-width: 901px) {
   .application-workspace [data-recurring-slot="link-header"] > .workspace-page-header {
-    padding: 28px 204px 20px 42px;
+    padding: 28px 204px 20px 20px;
   }
 }
-[data-recurring-slot="workspace"] [data-recurring-slot="page-header"] {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: start;
-  justify-content: space-between;
-  gap: 16px 24px;
-  padding: 34px 106px 0 42px;
-  border-bottom: 1px solid var(--recurring-line);
-  background: var(--fidy-background-canvas);
-  position: relative;
-}
-[data-recurring-slot="workspace"] [data-recurring-slot="title-tabs"] {
-  display: contents;
-}
-[data-recurring-slot="workspace"] [data-recurring-slot="page-header"] h1 {
-  font-size: 30px;
-  font-weight: 600;
-  letter-spacing: -1px;
-  line-height: 46px;
-}
-[data-recurring-slot="workspace"] [data-recurring-slot="header-actions"] {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin-left: auto;
+@media (min-width: 901px) {
+  [data-recurring-slot="workspace"] > .workspace-page-header {
+    padding-right: 180px;
+  }
 }
 [data-recurring-slot="workspace"] [data-recurring-slot="tabs"] {
-  order: 3;
   display: flex;
-  width: 100%;
   gap: 24px;
-  padding-top: 8px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--recurring-line);
 }
 [data-recurring-slot="workspace"] [data-recurring-slot="tabs"] [data-slot="button"] {
   border: 0;
@@ -73,7 +50,7 @@
 }
 [data-recurring-slot="workspace"] [data-recurring-slot="content"] {
   min-width: 0;
-  padding: 22px 42px 40px;
+  padding: 22px 42px 40px 20px;
   display: grid;
   align-content: start;
   gap: 24px;
@@ -427,29 +404,11 @@
   }
 }
 @media (max-width: 900px) {
-  [data-recurring-slot="workspace"] [data-recurring-slot="page-header"] {
-    padding: 12px 24px 0;
-  }
-  [data-recurring-slot="workspace"] [data-recurring-slot="page-header"] h1 {
-    font-size: 26px;
-    line-height: 44px;
-  }
   [data-recurring-slot="workspace"] [data-recurring-slot="content"] {
     padding: 22px 24px 35px;
   }
 }
 @media (max-width: 600px) {
-  [data-recurring-slot="workspace"] [data-recurring-slot="page-header"] {
-    padding-inline: 18px;
-  }
-  [data-recurring-slot="workspace"] [data-recurring-slot="header-actions"] {
-    width: 100%;
-    gap: 8px;
-    margin: 0;
-  }
-  [data-recurring-slot="workspace"] [data-recurring-slot="header-actions"] [data-slot="button"] {
-    font-size: 11px;
-  }
   [data-recurring-slot="workspace"] [data-recurring-slot="content"] {
     padding: 18px;
     gap: 22px;

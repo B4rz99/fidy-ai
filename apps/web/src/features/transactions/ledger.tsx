@@ -343,7 +343,7 @@ const ColumnControls = ({
 );
 
 const sortOptions = [
-  { value: "default", label: "Más recientes primero" },
+  { value: "default", label: "Más recientes" },
   { value: "counterpartyLabel:asc", label: "Contraparte A–Z en cada día" },
   { value: "counterpartyLabel:desc", label: "Contraparte Z–A en cada día" },
   { value: "categoryLabel:asc", label: "Categoría A–Z en cada día" },
@@ -395,19 +395,30 @@ const LedgerControls = ({
   empty: boolean;
   selecting: boolean;
 }>): JSX.Element => (
-  <RecordToolbar>
-    {toolbar}
-    <div className="ledger-actions contents">
-      {readOnly ? null : (
-        <Button variant="outline" disabled={disabled || (empty && !selecting)} onClick={onEdit}>
-          <HugeiconsIcon icon={PencilIcon} size={16} strokeWidth={1.5} aria-hidden="true" />
-          {selecting ? "Cancelar selección" : "Editar varias"}
-        </Button>
-      )}
-      <SortControl sorting={sorting} onSorting={onSorting} disabled={disabled} />
-      <ColumnControls table={table} disabled={disabled} />
-    </div>
-  </RecordToolbar>
+  <div data-transaction-slot="transaction-ledger-topbar">
+    <RecordToolbar>
+      {toolbar}
+      <div className="ledger-actions contents">
+        <SortControl sorting={sorting} onSorting={onSorting} disabled={disabled} />
+        <ColumnControls table={table} disabled={disabled} />
+        {readOnly ? null : (
+          <Button
+            variant="outline"
+            disabled={disabled || (empty && !selecting)}
+            onClick={onEdit}
+            aria-label={selecting ? "Cancelar selección" : "Editar varias"}
+          >
+            <HugeiconsIcon icon={PencilIcon} size={16} strokeWidth={1.5} aria-hidden="true" />
+            {selecting ? (
+              "Cancelar selección"
+            ) : (
+              <span className="max-[600px]:hidden">Editar varias</span>
+            )}
+          </Button>
+        )}
+      </div>
+    </RecordToolbar>
+  </div>
 );
 
 const fallbackInitialRows = 32;
@@ -520,24 +531,19 @@ const LedgerBody = ({
   );
 };
 
-const emptyDescription = (partial: boolean, readOnly: boolean): string => {
-  if (partial) return "Carga más transacciones para buscar en el resto del periodo.";
-
-  return readOnly
-    ? "Prueba otros filtros para consultar tus transacciones guardadas."
-    : "Prueba otros filtros o registra una transacción.";
-};
-
 const EmptyLedger = ({
   partial,
-  readOnly,
   title,
-}: Readonly<{ partial: boolean; readOnly: boolean; title: string }>): JSX.Element => (
+}: Readonly<{ partial: boolean; title: string }>): JSX.Element => (
   <div className="p-8">
     <h2 className="font-medium">
       {partial ? "No hay coincidencias entre las transacciones cargadas" : title}
     </h2>
-    <p className="mt-2 text-sm text-muted-foreground">{emptyDescription(partial, readOnly)}</p>
+    {partial ? (
+      <p className="mt-2 text-sm text-muted-foreground">
+        Carga más transacciones para buscar en el resto del periodo.
+      </p>
+    ) : null}
   </div>
 );
 
@@ -593,11 +599,7 @@ const LedgerContents = ({
     <>
       {rows.length === 0 ? (
         <>
-          <EmptyLedger
-            title={props.emptyTitle}
-            partial={props.continuation !== "complete"}
-            readOnly={props.readOnly}
-          />
+          <EmptyLedger title={props.emptyTitle} partial={props.continuation !== "complete"} />
         </>
       ) : (
         <Table aria-label="Tabla de transacciones">
@@ -636,12 +638,7 @@ export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element 
   });
 
   return (
-    <section
-      aria-label={props.readOnly ? "Transacciones guardadas" : "Transacciones del mes"}
-      className="transaction-ledger min-w-0"
-      data-category-visible={table.getColumn("categoryLabel")?.getIsVisible()}
-      data-type-visible={table.getColumn("transactionTypeLabel")?.getIsVisible()}
-    >
+    <>
       <LedgerControls
         table={table}
         sorting={sorting}
@@ -653,8 +650,15 @@ export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element 
         selecting={props.selection.active}
         readOnly={props.readOnly}
       />
-      <SelectionBar selection={props.selection} disabled={props.disabled} />
-      <LedgerContents {...props} rows={rows} table={table} />
-    </section>
+      <section
+        aria-label={props.readOnly ? "Transacciones guardadas" : "Transacciones del mes"}
+        className="transaction-ledger min-w-0"
+        data-category-visible={table.getColumn("categoryLabel")?.getIsVisible()}
+        data-type-visible={table.getColumn("transactionTypeLabel")?.getIsVisible()}
+      >
+        <SelectionBar selection={props.selection} disabled={props.disabled} />
+        <LedgerContents {...props} rows={rows} table={table} />
+      </section>
+    </>
   );
 };

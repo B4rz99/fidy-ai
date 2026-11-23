@@ -6,27 +6,19 @@
   color: var(--fidy-text-primary);
   background: var(--fidy-background-canvas);
 }
-.subscription-header {
-  min-height: 112px;
-  display: flex;
-  align-items: center;
-  padding: 26px 108px 26px 42px;
-  border-bottom: 1px solid var(--fidy-border-decorative-divider);
-}
-.subscription-header :is(h1, h2) {
-  font-size: 40px;
-  font-weight: 600;
-  letter-spacing: -1.2px;
-  line-height: 1.25;
+@media (min-width: 901px) {
+  .subscription-workspace > .workspace-page-header {
+    padding-right: 180px;
+  }
 }
 .subscription-columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 355px;
-  min-height: calc(100svh - 112px);
+  min-height: calc(100svh - 72px);
 }
 .subscription-main {
   min-width: 0;
-  padding: 0 40px 48px 42px;
+  padding: 0 40px 48px 20px;
 }
 .subscription-summary {
   padding: 36px;
@@ -489,15 +481,6 @@
   .subscription-workspace {
     min-height: calc(100svh - 84px);
   }
-  .subscription-header {
-    min-height: 76px;
-    padding: 18px 22px;
-    border-bottom: 0;
-  }
-  .subscription-header :is(h1, h2) {
-    font-size: 28px;
-    letter-spacing: -1px;
-  }
   .subscription-columns {
     display: block;
     min-height: 0;
@@ -671,7 +654,7 @@
   margin-left: 88px;
 }
 @media (max-width: 900px) {
-  .subscription-workspace:has(.subscription-columns[data-checkout="true"]) .subscription-header {
+  .subscription-workspace:has(.subscription-columns[data-checkout="true"]) .workspace-page-header {
     position: absolute;
     width: 1px;
     height: 1px;

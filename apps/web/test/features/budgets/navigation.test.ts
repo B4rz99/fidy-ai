@@ -128,6 +128,38 @@ const button = (container: HTMLElement, label: string): HTMLButtonElement => {
   return found;
 };
 
+const monthTrigger = (container: HTMLElement): HTMLButtonElement => {
+  const found = container.querySelector<HTMLButtonElement>('[data-recurring-slot="month-picker"]');
+
+  if (found === null) {
+    throw new Error("Missing month picker");
+  }
+
+  return found;
+};
+
+const monthChoice = (label: string): HTMLButtonElement => {
+  const found = document.body.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+
+  if (found === null) {
+    throw new Error(`Missing ${label}`);
+  }
+
+  return found;
+};
+
+const chooseMonth = (container: HTMLElement, label: string): Promise<void> =>
+  work(() => monthTrigger(container).click())
+    .then(() => check(() => monthChoice(label)))
+    .then(() => work(() => monthChoice(label).click()));
+
+const navigate = (container: HTMLElement, control: string): Promise<void> =>
+  control === "Hoy"
+    ? work(() => button(container, "Hoy").focus()).then(() =>
+        work(() => button(container, "Hoy").click())
+      )
+    : work(() => monthTrigger(container).focus()).then(() => chooseMonth(container, control));
+
 const input = (container: HTMLElement): HTMLInputElement => {
   const found = container.querySelector<HTMLInputElement>(
     'input[aria-label="Presupuesto de Restaurantes (COP)"]'
@@ -304,11 +336,11 @@ const setup = (secondCategory = false): Effect.Effect<TestView, Cause.UnknownErr
   });
 
 it.each([
-  ["Mes anterior", "octubre de 2026"],
-  ["Mes siguiente", "diciembre de 2026"],
-  ["Hoy", "diciembre de 2026"],
+  ["Octubre de 2026", "Octubre de 2026"],
+  ["Diciembre de 2026", "Diciembre de 2026"],
+  ["Hoy", "Diciembre de 2026"],
 ])(
-  "one %s click saves the inline Budget in November and opens the requested month",
+  "choosing %s saves the inline Budget in November and opens the requested month",
   (control, destination) =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -329,8 +361,7 @@ it.each([
               field.dispatchEvent(new Event("input", { bubbles: true }));
             })
           );
-          yield* Effect.tryPromise(() => work(() => button(view.container, control).focus()));
-          yield* Effect.tryPromise(() => work(() => button(view.container, control).click()));
+          yield* Effect.tryPromise(() => navigate(view.container, control));
           expect(view.writes).toEqual([
             expect.objectContaining({
               month: "2026-11",
@@ -360,19 +391,15 @@ it.each([false, true])(
             check(() => expect(input(view.container).value).toBe("100000"))
           );
           yield* Effect.tryPromise(() => editAmount(view.container, "190000"));
-          yield* Effect.tryPromise(() =>
-            work(() => button(view.container, "Mes anterior").focus())
-          );
-          yield* Effect.tryPromise(() =>
-            work(() => button(view.container, "Mes anterior").click())
-          );
+          yield* Effect.tryPromise(() => work(() => monthTrigger(view.container).focus()));
+          yield* Effect.tryPromise(() => chooseMonth(view.container, "Octubre de 2026"));
           yield* Effect.tryPromise(() => view.settle("uncertain", committed));
           yield* Effect.tryPromise(() =>
             check(() =>
               expect(view.container.textContent).toContain("No pudimos confirmar el guardado")
             )
           );
-          expect(view.container.textContent).toContain("noviembre de 2026");
+          expect(view.container.textContent).toContain("Noviembre de 2026");
           expect(input(view.container).value).toBe("190000");
           yield* Effect.tryPromise(() => work(() => button(view.container, "Actualizar").click()));
           yield* Effect.tryPromise(() =>
@@ -380,20 +407,18 @@ it.each([false, true])(
           );
           expect(input(view.container).value).toBe("190000");
           expect(view.writes).toHaveLength(1);
-          yield* Effect.tryPromise(() =>
-            work(() => button(view.container, "Mes anterior").click())
-          );
+          yield* Effect.tryPromise(() => chooseMonth(view.container, "Octubre de 2026"));
 
           yield* committed
             ? Effect.void
             : Effect.gen(function* () {
-                expect(view.container.textContent).toContain("noviembre de 2026");
+                expect(view.container.textContent).toContain("Noviembre de 2026");
                 expect(view.writes).toHaveLength(2);
                 yield* Effect.tryPromise(() => view.settle());
               });
 
           yield* Effect.tryPromise(() =>
-            check(() => expect(view.container.textContent).toContain("octubre de 2026"))
+            check(() => expect(view.container.textContent).toContain("Octubre de 2026"))
           );
           expect(view.writes).toHaveLength(committed ? 1 : 2);
         } finally {
@@ -421,20 +446,20 @@ it("a refused inline save keeps its draft and a second month choice retries befo
           check(() => expect(input(view.container).value).toBe("100000"))
         );
         yield* Effect.tryPromise(() => editAmount(view.container, "190000"));
-        yield* Effect.tryPromise(() => work(() => button(view.container, "Mes anterior").focus()));
-        yield* Effect.tryPromise(() => work(() => button(view.container, "Mes anterior").click()));
+        yield* Effect.tryPromise(() => work(() => monthTrigger(view.container).focus()));
+        yield* Effect.tryPromise(() => chooseMonth(view.container, "Octubre de 2026"));
         yield* Effect.tryPromise(() => view.settle("failed"));
         yield* Effect.tryPromise(() =>
           check(() => expect(view.container.textContent).toContain("No se pudo guardar"))
         );
         expect(input(view.container).value).toBe("190000");
-        expect(view.container.textContent).toContain("noviembre de 2026");
-        yield* Effect.tryPromise(() => work(() => button(view.container, "Mes anterior").click()));
-        expect(view.container.textContent).toContain("noviembre de 2026");
+        expect(view.container.textContent).toContain("Noviembre de 2026");
+        yield* Effect.tryPromise(() => chooseMonth(view.container, "Octubre de 2026"));
+        expect(view.container.textContent).toContain("Noviembre de 2026");
         expect(view.writes).toHaveLength(2);
         yield* Effect.tryPromise(() => view.settle());
         yield* Effect.tryPromise(() =>
-          check(() => expect(view.container.textContent).toContain("octubre de 2026"))
+          check(() => expect(view.container.textContent).toContain("Octubre de 2026"))
         );
       } finally {
         yield* Effect.tryPromise(view.close);
@@ -452,9 +477,9 @@ it("an invalid inline amount does not leave a navigation action for a later unre
           check(() => expect(input(view.container).value).toBe("100000"))
         );
         yield* Effect.tryPromise(() => editAmount(view.container, "0"));
-        yield* Effect.tryPromise(() => work(() => button(view.container, "Mes anterior").focus()));
-        yield* Effect.tryPromise(() => work(() => button(view.container, "Mes anterior").click()));
-        expect(view.container.textContent).toContain("noviembre de 2026");
+        yield* Effect.tryPromise(() => work(() => monthTrigger(view.container).focus()));
+        yield* Effect.tryPromise(() => chooseMonth(view.container, "Octubre de 2026"));
+        expect(view.container.textContent).toContain("Noviembre de 2026");
         expect(input(view.container).getAttribute("aria-invalid")).toBe("true");
         expect(view.writes).toHaveLength(0);
         yield* Effect.tryPromise(() => editAmount(view.container, "190000"));
@@ -463,7 +488,7 @@ it("an invalid inline amount does not leave a navigation action for a later unre
         yield* Effect.tryPromise(() =>
           check(() => expect(view.container.textContent).toContain("Presupuesto guardado"))
         );
-        expect(view.container.textContent).toContain("noviembre de 2026");
+        expect(view.container.textContent).toContain("Noviembre de 2026");
       } finally {
         yield* Effect.tryPromise(view.close);
       }
@@ -480,8 +505,8 @@ it("an unresolved inline Budget keeps its draft while other Category edits wait 
           check(() => expect(input(view.container).value).toBe("100000"))
         );
         yield* Effect.tryPromise(() => editAmount(view.container, "190000"));
-        yield* Effect.tryPromise(() => work(() => button(view.container, "Mes anterior").focus()));
-        yield* Effect.tryPromise(() => work(() => button(view.container, "Mes anterior").click()));
+        yield* Effect.tryPromise(() => work(() => monthTrigger(view.container).focus()));
+        yield* Effect.tryPromise(() => chooseMonth(view.container, "Octubre de 2026"));
         yield* Effect.tryPromise(() => view.settle("failed"));
         yield* Effect.tryPromise(() =>
           check(() => expect(view.container.textContent).toContain("No se pudo guardar"))
@@ -510,12 +535,8 @@ it.each(["deleted", "reassigned"] as const)(
             check(() => expect(input(view.container).value).toBe("100000"))
           );
           yield* Effect.tryPromise(() => editAmount(view.container, "190000"));
-          yield* Effect.tryPromise(() =>
-            work(() => button(view.container, "Mes anterior").focus())
-          );
-          yield* Effect.tryPromise(() =>
-            work(() => button(view.container, "Mes anterior").click())
-          );
+          yield* Effect.tryPromise(() => work(() => monthTrigger(view.container).focus()));
+          yield* Effect.tryPromise(() => chooseMonth(view.container, "Octubre de 2026"));
           yield* Effect.tryPromise(() => view.settle("uncertain", false));
           yield* Effect.tryPromise(() =>
             check(() =>
@@ -546,11 +567,9 @@ it.each(["deleted", "reassigned"] as const)(
               ).toBe(false)
             )
           );
+          yield* Effect.tryPromise(() => chooseMonth(view.container, "Octubre de 2026"));
           yield* Effect.tryPromise(() =>
-            work(() => button(view.container, "Mes anterior").click())
-          );
-          yield* Effect.tryPromise(() =>
-            check(() => expect(view.container.textContent).toContain("octubre de 2026"))
+            check(() => expect(view.container.textContent).toContain("Octubre de 2026"))
           );
           expect(view.writes).toHaveLength(1);
         } finally {
@@ -569,7 +588,7 @@ it("names each budget assignment action after the Category it assigns", () =>
         yield* Effect.tryPromise(() =>
           check(() => expect(input(view.container).value).toBe("100000"))
         );
-        yield* Effect.tryPromise(() => work(() => button(view.container, "Mes anterior").click()));
+        yield* Effect.tryPromise(() => chooseMonth(view.container, "Octubre de 2026"));
         yield* Effect.tryPromise(() =>
           check(() =>
             expect(button(view.container, "Asignar presupuesto a Restaurantes").textContent).toBe(

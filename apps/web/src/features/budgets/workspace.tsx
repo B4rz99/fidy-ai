@@ -2,22 +2,16 @@ import { Alert, AlertDescription } from "@/ui/components/alert";
 import { AmountInput } from "@/ui/components/amount-input";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { BudgetWriteFeedback } from "./write-feedback";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
 import "@/ui/components/budget-layout.css";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  ArrowDown01Icon,
-  ArrowLeft01Icon,
-  ArrowRight01Icon,
-  Settings01Icon,
-} from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, Settings01Icon } from "@hugeicons/core-free-icons";
 import { lazyRouteComponent, useNavigate } from "@tanstack/react-router";
 import { Option } from "effect";
 import { type JSX, Suspense, useState } from "react";
 import { PendingRead } from "@/ui/components/pending-read";
 import { Button } from "@/ui/components/button";
 import { Badge } from "@/ui/components/badge";
-import { WorkspaceColumns, WorkspaceHeader } from "@/ui/components/workspace-layout";
+import { RecordToolbar, WorkspaceColumns, WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { WorkspacePanel } from "@/ui/components/workspace-panel";
 import { BudgetBalance } from "@/ui/components/budget-meter";
 import { type BudgetStatus, budgetFigures, defaultBudgetGroup } from "./presentation";
@@ -31,9 +25,9 @@ import {
   categoryFor,
   currentBudgetMonth,
   groupFor,
-  monthShift,
-  monthTitle,
 } from "./model";
+import { MonthPicker } from "@/ui/components/month-picker";
+import { monthLabel } from "@/ui/month-labels";
 
 const BudgetEditor = lazyRouteComponent(() => import("./editor"), "BudgetEditor");
 
@@ -54,32 +48,15 @@ const BudgetToolbar = ({ props, controller }: ViewProps): JSX.Element => {
   };
 
   return (
-    <WorkspaceHeader
-      title="Presupuestos"
-      context={
-        <p className="mt-1 text-sm capitalize text-muted-foreground">
-          {monthTitle({ month: props.month, user: props.user })}
-        </p>
-      }
-    >
-      <Button
-        variant="outline"
-        size="icon"
-        aria-label="Mes anterior"
+    <RecordToolbar>
+      <MonthPicker
+        month={props.month}
+        today={currentBudgetMonth(props.user)}
+        select={move}
+        label={monthLabel(props.month)}
         disabled={controller.navigationDisabled}
-        onClick={() => move(monthShift({ month: props.month, offset: -1 }))}
-      >
-        <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={1.5} />
-      </Button>
-      <Button
         variant="outline"
-        size="icon"
-        aria-label="Mes siguiente"
-        disabled={controller.navigationDisabled}
-        onClick={() => move(monthShift({ month: props.month, offset: 1 }))}
-      >
-        <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={1.5} />
-      </Button>
+      />
       <Button
         variant="outline"
         disabled={controller.navigationDisabled || props.month === currentBudgetMonth(props.user)}
@@ -93,7 +70,7 @@ const BudgetToolbar = ({ props, controller }: ViewProps): JSX.Element => {
         onClick={controller.refresh}
         label="Actualizar"
       />
-    </WorkspaceHeader>
+    </RecordToolbar>
   );
 };
 
@@ -404,14 +381,17 @@ export const BudgetWorkspace = (props: WorkspaceProps): JSX.Element => {
   const groups = workspaceGroups(props);
 
   return (
-    <>
-      <BudgetToolbar props={props} controller={controller} />
+    <main className="budget-workspace">
+      <WorkspaceHeader title="Presupuestos" context={null}>
+        {null}
+      </WorkspaceHeader>
       <BudgetFeedback props={props} controller={controller} />
       <div>
         <WorkspaceColumns
           variant="container"
           panel={<BudgetPanel props={props} controller={controller} groups={groups} />}
         >
+          <BudgetToolbar props={props} controller={controller} />
           <div className="budget-table-container">
             <div className="budget-table gap-4">
               <p className="col-span-full text-sm text-muted-foreground">
@@ -419,16 +399,6 @@ export const BudgetWorkspace = (props: WorkspaceProps): JSX.Element => {
                 del mes incluye también los gastos sin presupuesto.
               </p>
               <BudgetHead />
-              {props.report.statuses.length === 0 ? (
-                <Empty className="col-span-full">
-                  <EmptyHeader>
-                    <EmptyTitle>Aún no tienes presupuestos.</EmptyTitle>
-                    <EmptyDescription>
-                      Elige una categoría para planificar tus gastos.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              ) : null}
               {groups.map((group) => (
                 <BudgetGroup key={group} group={group} props={props} controller={controller} />
               ))}
@@ -440,7 +410,7 @@ export const BudgetWorkspace = (props: WorkspaceProps): JSX.Element => {
           </div>
         </WorkspaceColumns>
       </div>
-    </>
+    </main>
   );
 };
 

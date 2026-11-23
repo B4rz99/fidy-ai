@@ -245,6 +245,8 @@ export { ManualPATReauthenticationRequired, User } from "@fidy/server/client";
 
 export { Budget, Category, BudgetStatusReport } from "@fidy/server/client";
 
+export { Transaction, currencyMetadata } from "@fidy/server/client";
+
 export type {
   BrowserSessionBinding,
   ProcessingConsentStatus,

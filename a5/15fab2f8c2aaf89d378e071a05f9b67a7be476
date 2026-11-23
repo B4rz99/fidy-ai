@@ -1,0 +1,19 @@
+infra/cloudflare/verify-edge-policy.ts
+  s_370e136601c9b6::t_c7df09bd16a754 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a515fab2f8c2aaf89d378e071a05f9b67a7be476",
+  "prompts": {},
+  "sessions": {
+    "s_370e136601c9b6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "tabby-puppet",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

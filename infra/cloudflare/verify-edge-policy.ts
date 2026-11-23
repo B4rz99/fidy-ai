@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "83ef902d0965935d95aab2336602f149fb79ed348481a0530473fcd2c8e8dfdc";
+const expectedEdgePolicyDigest = "61c4736cda6665a7b49ab3bf06edc24da70b030820c309dd30f8c58d473f9ddf";
 
 const securityArtifacts = [
   ...(await Promise.all(
@@ -851,6 +851,42 @@ const securityArtifacts = [
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/subscription/internal/pricing-object.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/subscription/internal/refund-support.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/subscription/internal/refund-acceptance.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/subscription/internal/native-refund.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/subscription/internal/refund-workflow.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/subscription/internal/native-refund-work.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/subscription/internal/refund-http-response.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/subscription/internal/wompi-refund-client.ts",
+      import.meta.url
+    )
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/erasure/contract.ts", import.meta.url)

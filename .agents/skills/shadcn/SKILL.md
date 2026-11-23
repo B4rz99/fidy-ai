@@ -2,12 +2,12 @@
 name: shadcn
 description: "Add, update, or compose shadcn/ui components, or configure shadcn registries and presets."
 user-invocable: false
-allowed-tools: Bash(npx shadcn@latest *), Bash(pnpm dlx shadcn@latest *), Bash(bunx --bun shadcn@latest *)
+allowed-tools: Bash(bun run --cwd apps/web shadcn *), Bash(npx shadcn@4.23.0 *), Bash(pnpm dlx shadcn@4.23.0 *), Bash(bunx --bun shadcn@4.23.0 *)
 ---
 
 # shadcn/ui
 
-Use the project's existing components and design tokens. Inspect `components.json` and the components being changed; use `shadcn info --json` when resolved paths, base, preset, or icon-library details are needed. Run the CLI with the project's package runner (`npx shadcn@latest`, `pnpm dlx shadcn@latest`, or `bunx --bun shadcn@latest`).
+Use the project's existing components and design tokens. Inspect `components.json` and the components being changed; use `shadcn info --json` when resolved paths, base, preset, or icon-library details are needed. In this repository, run the pinned workspace CLI with `bun run --cwd apps/web shadcn`. In another project, use its package runner with the exact `4.23.0` version (`npx shadcn@4.23.0`, `pnpm dlx shadcn@4.23.0`, or `bunx --bun shadcn@4.23.0`); do not use `@latest`.
 
 Prefer installed components and built-in variants. Preserve aliases, primitive library, icon library, and local customization. Check component APIs against their installed source; use `shadcn docs <component>` and fetch the returned documentation when adding a component or resolving uncertain usage.
 

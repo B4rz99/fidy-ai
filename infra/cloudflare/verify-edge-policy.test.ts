@@ -54,6 +54,28 @@ layer(BunFileSystem.layer, { excludeTestServices: true })(
       })
     );
 
+    it.effect("binds every refund enforcement module in the reviewed manifest", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+
+        const source = yield* fs.readFileString(
+          `${workspaceRoot}infra/cloudflare/verify-edge-policy.ts`
+        );
+
+        for (const module of [
+          "refund-support.ts",
+          "refund-acceptance.ts",
+          "native-refund.ts",
+          "refund-workflow.ts",
+          "native-refund-work.ts",
+          "refund-http-response.ts",
+          "wompi-refund-client.ts",
+        ]) {
+          expect(source).toContain(module);
+        }
+      })
+    );
+
     it.effect.each([
       "worker-observability.ts",
       "../../scripts/pro/runtime.ts",

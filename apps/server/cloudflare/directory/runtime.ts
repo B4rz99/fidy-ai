@@ -385,6 +385,17 @@ const evidenceResponse = Effect.fn(function* (request: Request) {
   return evidence === null ? new Response(null, { status: 404 }) : Response.json(evidence);
 });
 
+const patPairingRequest = Effect.fn(function* (
+  request: Request,
+  environment: DirectoryEnvironment
+) {
+  const refusal = yield* admitBootstrap(request, "x-pat-source");
+
+  if (Option.isSome(refusal)) return refusal.value;
+
+  return yield* nativePATPairing({ request, users: environment.USER_STORE });
+});
+
 const pairRequest = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {
   const refusal = yield* admitBootstrap(request);
 
@@ -494,7 +505,7 @@ const directoryRequest = Effect.fn(function* (request: Request, environment: Dir
   }
 
   if (["/pat-pairings", "/pat-pairings/claim"].includes(path)) {
-    return yield* nativePATPairing({ request, users: environment.USER_STORE });
+    return yield* patPairingRequest(request, environment);
   }
 
   if (["/web/pairings", "/web/pairings/redeem"].includes(path)) {

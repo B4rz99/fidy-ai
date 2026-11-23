@@ -1294,6 +1294,24 @@ export const userStoreHistory: StoreHistory = {
       id: "connection-erasure-suppression-repair",
       statements: connectionGrantCleanupSchema(),
     },
+    {
+      version: 42,
+      id: "login-email-delivery-custody",
+      statements: [
+        "ALTER TABLE login_email_proofs ADD COLUMN delivery_key TEXT",
+        "UPDATE login_email_proofs SET delivery_key=work_id WHERE selector IS NOT NULL OR state IN ('sending','awaiting_proof','approved','ambiguous')",
+        "DROP VIEW erasure_mail_scope",
+        "CREATE VIEW erasure_mail_scope AS SELECT work_id,requested_at_ms FROM erasure_expired_mail UNION ALL SELECT work_id,requested_at_ms FROM login_email_proofs WHERE delivery_key IS NOT NULL OR selector IS NOT NULL UNION ALL SELECT work_id,created_at_ms FROM email_replacements WHERE public_code IS NOT NULL",
+        "DROP TRIGGER preserve_login_mail_scope",
+        "CREATE TRIGGER preserve_login_mail_scope BEFORE DELETE ON login_email_proofs WHEN (OLD.delivery_key IS NOT NULL OR OLD.selector IS NOT NULL) AND EXISTS(SELECT 1 FROM erasure_requests) BEGIN INSERT OR IGNORE INTO erasure_expired_mail VALUES(OLD.work_id,OLD.requested_at_ms); END",
+        "CREATE TRIGGER preserve_login_mail_replacement BEFORE UPDATE OF work_id ON login_email_proofs WHEN OLD.delivery_key IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests) BEGIN INSERT OR IGNORE INTO erasure_expired_mail VALUES(OLD.work_id,OLD.requested_at_ms); END",
+        "DROP VIEW local_erasure_custody",
+        `CREATE VIEW local_erasure_custody AS SELECT
+         EXISTS(SELECT 1 FROM whatsapp_deliveries WHERE started_ms IS NOT NULL) OR EXISTS(SELECT 1 FROM hosted_whatsapp_inbound) OR EXISTS(SELECT 1 FROM users WHERE whatsapp_bsuid IS NOT NULL) AS whatsapp,
+         EXISTS(SELECT 1 FROM login_email_proofs WHERE delivery_key IS NOT NULL OR selector IS NOT NULL) OR EXISTS(SELECT 1 FROM email_replacements WHERE public_code IS NOT NULL) AS resend,
+         EXISTS(SELECT 1 FROM billing_attempts WHERE collection_sent_at_ms IS NOT NULL) OR EXISTS(SELECT 1 FROM payment_enrollments WHERE source_creation IS NOT NULL OR state IN ('creating','verifying','available')) OR EXISTS(SELECT 1 FROM payment_sources) AS wompi`,
+      ],
+    },
   ],
 };
 

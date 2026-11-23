@@ -51,6 +51,7 @@ type ManualPATInput = Readonly<{
   patId: string;
   shortId: string;
   bearerDigest: Uint8Array;
+  createdAt: number;
   current: number;
   expires: number;
 }>;
@@ -71,7 +72,7 @@ export const issueManualPAT = ({
         input.grant.recipientLabel,
         JSON.stringify(input.grant.scopes),
         input.grant.lifetimeDays,
-        input.current,
+        input.createdAt,
         input.current,
         input.expires,
         input.requestId,

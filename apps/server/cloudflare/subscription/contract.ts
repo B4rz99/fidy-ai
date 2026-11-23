@@ -55,6 +55,9 @@ export type RefundSupportEnvironment = Readonly<{
     Readonly<{
       BILLING_SUPPORT_AUDIENCE: string;
       BETA_PRO_AUDIENCE: string;
+      ERASURE_SUPPORT_AUDIENCE: string;
+      PRICING_PUBLISH_AUDIENCE: string;
+      SAMPLE_REVIEW_AUDIENCE: string;
       USER_STORE: {
         getByName: (name: string) => Pick<Fetcher, "fetch">;
       };
@@ -149,6 +152,7 @@ export type PricingEnvironment = Readonly<{
       BILLING_SUPPORT_AUDIENCE: string;
       BETA_PRO_AUDIENCE: string;
       PRICING_PUBLISH_AUDIENCE: string;
+      SAMPLE_REVIEW_AUDIENCE: string;
       PRICING: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
     }>
   >;

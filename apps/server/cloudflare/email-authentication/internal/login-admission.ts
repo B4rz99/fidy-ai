@@ -88,7 +88,7 @@ const accept = Effect.fn(function* (input: Input, storage: DurableObjectStorage)
   if (charged.length !== 1) return pending();
 
   const work =
-    yield* sql`INSERT INTO login_email_proofs(pairing_id,work_id,address,revision,generation,requested_at_ms,expires_at_ms,offer_at_ms,state) VALUES(${input.handoff.pairing_id},${newId()},${input.address},${input.revision},1,${now},${input.handoff.expires_at_ms},${now},'awaiting_delivery') ON CONFLICT(pairing_id) DO UPDATE SET work_id=excluded.work_id,address=excluded.address,revision=excluded.revision,generation=generation+1,requested_at_ms=excluded.requested_at_ms,offer_at_ms=excluded.offer_at_ms,state=excluded.state,selector=NULL,digest=NULL,wrong_attempts=0 RETURNING 1`;
+    yield* sql`INSERT INTO login_email_proofs(pairing_id,work_id,address,revision,generation,requested_at_ms,expires_at_ms,offer_at_ms,state) VALUES(${input.handoff.pairing_id},${newId()},${input.address},${input.revision},1,${now},${input.handoff.expires_at_ms},${now},'awaiting_delivery') ON CONFLICT(pairing_id) DO UPDATE SET work_id=excluded.work_id,address=excluded.address,revision=excluded.revision,generation=generation+1,requested_at_ms=excluded.requested_at_ms,offer_at_ms=excluded.offer_at_ms,state=excluded.state,selector=NULL,digest=NULL,delivery_key=NULL,wrong_attempts=0 RETURNING 1`;
 
   if (work.length !== 1) return yield* new MailboxWriteUnavailable();
   yield* preserveStoreAlarm(storage, now).pipe(Effect.ignore);

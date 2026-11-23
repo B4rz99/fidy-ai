@@ -69,11 +69,14 @@ const signingKeys = (issuer: string, http: OutboundHttpService, signal: AbortSig
   });
 };
 
-const validSupportConfiguration = (environment: RefundSupportEnvironment): boolean =>
+export const validSupportConfiguration = (environment: RefundSupportEnvironment): boolean =>
   /^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/u.test(environment.CLOUDFLARE_ACCESS_ISSUER) &&
   (environment.BILLING_SUPPORT_AUDIENCE ?? "").length > 0 &&
   environment.BILLING_SUPPORT_AUDIENCE !== environment.BETA_PRO_AUDIENCE &&
-  environment.BILLING_SUPPORT_AUDIENCE !== environment.CLOUDFLARE_ACCESS_AUDIENCE;
+  environment.BILLING_SUPPORT_AUDIENCE !== environment.CLOUDFLARE_ACCESS_AUDIENCE &&
+  environment.BILLING_SUPPORT_AUDIENCE !== environment.ERASURE_SUPPORT_AUDIENCE &&
+  environment.BILLING_SUPPORT_AUDIENCE !== environment.PRICING_PUBLISH_AUDIENCE &&
+  environment.BILLING_SUPPORT_AUDIENCE !== environment.SAMPLE_REVIEW_AUDIENCE;
 
 const userPathPosition = -2;
 

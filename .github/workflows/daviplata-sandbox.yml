@@ -21,9 +21,7 @@ jobs:
         with:
           ref: fb53d9e755c14393048dc945fc0b7f117730d872
           persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: "1.4.1"
+      - uses: ./.github/actions/bun-runtime
       - run: bun install --frozen-lockfile
       - name: Verify OTP, matching settlement and source cancellation
         env:

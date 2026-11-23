@@ -287,13 +287,95 @@ type ManualInput = {
   session: Session;
 };
 
+const recordManualIssuance = Effect.fn(function* ({
+  session,
+  input,
+  patId,
+  expires,
+  current,
+}: {
+  session: Session;
+  input: ManualInput["input"];
+  patId: string;
+  expires: number;
+  current: number;
+}) {
+  const { requestId, grant } = input;
+
+  yield* execute(
+    grantManualPATConsent({
+      session,
+      input: {
+        id: newId(),
+        requestId,
+        disclosure: buildPATDisclosure({ grant, expiresAt: DateTime.makeUnsafe(expires) }),
+        current,
+      },
+    })
+  );
+  yield* recordGrant(session, current, {
+    operation: "pats.createManualPAT",
+    patId: Option.some(patId),
+  });
+});
+
+const commitManual = Effect.fn(function* ({
+  session,
+  input,
+  patId,
+  shortId,
+  expires,
+  current,
+}: {
+  session: Session;
+  input: ManualInput["input"];
+  patId: string;
+  shortId: string;
+  expires: number;
+  current: number;
+}) {
+  const sql = yield* SqliteClient;
+  const { requestId, grant } = input;
+  const bearer = newBearer(shortId);
+  const bearerDigest = yield* Effect.tryPromise(() => digest(bearer));
+  const createdAt = expires - grant.lifetimeDays * dayMilliseconds;
+
+  const command = issueManualPAT({
+    session,
+    input: {
+      grant,
+      requestId,
+      patId,
+      shortId,
+      bearerDigest,
+      createdAt,
+      current: createdAt,
+      expires,
+    },
+  });
+
+  if ((yield* sql.unsafe(command.sql + " RETURNING id", command.params)).length === 0) {
+    return yield* issuanceLimitRejection();
+  }
+
+  yield* recordManualIssuance({ session, input, patId, expires, current });
+
+  return yield* issuedResult({
+    input,
+    session,
+    current: createdAt,
+    expires,
+    shortId,
+    patId,
+    bearer,
+  });
+});
+
 const prepareManual = Effect.fn(function* ({ reservation, input, session }: ManualInput) {
   const { requestId, grant } = input,
     sql = yield* SqliteClient;
 
   const { short_id: shortId, pat_id: patId, expires_at_ms: expires } = reservation;
-  const bearer = newBearer(shortId);
-  const bearerDigest = yield* Effect.tryPromise(() => digest(bearer));
 
   return {
     targets: ["manual-pat:" + requestId],
@@ -318,39 +400,13 @@ const prepareManual = Effect.fn(function* ({ reservation, input, session }: Manu
 
       if (Option.isNone(expiryFor({ grant, current }))) return yield* expiredReviewRejection();
 
-      const command = issueManualPAT({
+      return yield* commitManual({
         session,
-        input: { grant, requestId, patId, shortId, bearerDigest, current, expires },
-      });
-
-      if ((yield* sql.unsafe(command.sql + " RETURNING id", command.params)).length === 0) {
-        return yield* issuanceLimitRejection();
-      }
-
-      yield* execute(
-        grantManualPATConsent({
-          session,
-          input: {
-            id: newId(),
-            requestId,
-            disclosure: buildPATDisclosure({ grant, expiresAt: DateTime.makeUnsafe(expires) }),
-            current,
-          },
-        })
-      );
-      yield* recordGrant(session, current, {
-        operation: "pats.createManualPAT",
-        patId: Option.some(patId),
-      });
-
-      return yield* issuedResult({
         input,
-        session,
-        current,
-        expires,
-        shortId,
         patId,
-        bearer,
+        shortId,
+        expires,
+        current,
       });
     }, Effect.mapError(patFailure)),
   } satisfies StagedPAT;

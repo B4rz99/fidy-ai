@@ -63,6 +63,26 @@ export type Directory = Pick<DurableObjectNamespace, "getByName">;
 
 const absentRecord = 404;
 
+const maximumOutstandingPATReservations = 12;
+
+const withinReservationBound = Effect.fn(function* (
+  user: UserId,
+  operation: string,
+  current: number
+) {
+  const sql = yield* SqliteClient;
+
+  const prior =
+    yield* sql`SELECT 1 FROM pat_routes WHERE user_id=${user} AND reservation_id=${operation} AND expires_at_ms>${current}`;
+
+  if (prior.length > 0) return true;
+
+  const [outstanding] =
+    yield* sql`SELECT count(*) AS n FROM pat_routes WHERE user_id=${user} AND expires_at_ms>${current}`;
+
+  return Number(outstanding?.n ?? 0) < maximumOutstandingPATReservations;
+});
+
 export const directoryEvidence = Effect.fn(function* <A, Encoded>(
   directory: Directory,
   input: Command,
@@ -89,6 +109,33 @@ export const directoryEvidence = Effect.fn(function* <A, Encoded>(
   );
 });
 
+const reservePATRoute = Effect.fn(function* (
+  request: Request,
+  input: typeof Reserve.Type,
+  current: number
+) {
+  if (input.expires <= current || !currentRouteReservation({ request, now: current })) {
+    return new Response(null, { status: absentRecord });
+  }
+
+  if (!(yield* withinReservationBound(input.user, input.operation, current))) {
+    return new Response(null, { status: absentRecord });
+  }
+
+  const sql = yield* SqliteClient;
+
+  const shortId = newShortId(),
+    patId = newId();
+
+  yield* sql`INSERT INTO pat_routes(short_id,user_id,pat_id,reservation_id,expires_at_ms) VALUES(${shortId},${input.user},${patId},${input.operation},${input.expires}) ON CONFLICT DO NOTHING`;
+  yield* sql`INSERT INTO pat_reservation_context(short_id,context) SELECT short_id,${input.context} FROM pat_routes WHERE short_id=${shortId} AND pat_id=${patId} AND user_id=${input.user} AND reservation_id=${input.operation} ON CONFLICT DO NOTHING`;
+
+  const [row] =
+    yield* sql`SELECT r.short_id,r.pat_id,r.expires_at_ms FROM pat_routes r JOIN pat_reservation_context c USING(short_id) WHERE r.user_id=${input.user} AND r.reservation_id=${input.operation} AND c.context=${input.context} AND r.expires_at_ms>${current}`;
+
+  return row === undefined ? new Response(null, { status: absentRecord }) : Response.json(row);
+});
+
 export const directoryPATCommand = Effect.fn(function* (request: Request) {
   const input = yield* Schema.decodeUnknownEffect(Schema.Union([Lookup, Bind, Reserve]))(
     yield* Effect.tryPromise(() => request.json())
@@ -100,20 +147,7 @@ export const directoryPATCommand = Effect.fn(function* (request: Request) {
     const current = yield* Clock.currentTimeMillis;
 
     if (input.kind === "reserve") {
-      if (input.expires <= current || !currentRouteReservation({ request, now: current })) {
-        return new Response(null, { status: 404 });
-      }
-
-      const shortId = newShortId(),
-        patId = newId();
-
-      yield* sql`INSERT INTO pat_routes(short_id,user_id,pat_id,reservation_id,expires_at_ms) VALUES(${shortId},${input.user},${patId},${input.operation},${input.expires}) ON CONFLICT DO NOTHING`;
-      yield* sql`INSERT INTO pat_reservation_context(short_id,context) SELECT short_id,${input.context} FROM pat_routes WHERE short_id=${shortId} AND pat_id=${patId} AND user_id=${input.user} AND reservation_id=${input.operation} ON CONFLICT DO NOTHING`;
-
-      const [row] =
-        yield* sql`SELECT r.short_id,r.pat_id,r.expires_at_ms FROM pat_routes r JOIN pat_reservation_context c USING(short_id) WHERE r.user_id=${input.user} AND r.reservation_id=${input.operation} AND c.context=${input.context} AND r.expires_at_ms>${current}`;
-
-      return row === undefined ? new Response(null, { status: 404 }) : Response.json(row);
+      return yield* reservePATRoute(request, input, current);
     }
 
     if (input.kind === "bind") {

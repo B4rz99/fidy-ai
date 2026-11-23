@@ -677,6 +677,14 @@ const forwardCandidateVersionOverride = (
   if (override !== null) headers.set(smokeVersionHeader, override);
 };
 
+const patSourcePath = (path: string): boolean =>
+  path === "/pat-pairings" || path === "/pat-pairings/claim";
+
+const anonymousSourcePath = (path: string): boolean => patSourcePath(path) || oauthPath(path);
+
+const anonymousSourceHeader = (path: string): string =>
+  oauthPath(path) ? "x-oauth-source" : "x-pat-source";
+
 const needsProviderSource = (path: string): boolean =>
   [
     "/web/pairings",
@@ -710,9 +718,9 @@ const coreRequest = (
       );
     }
 
-    if (path === "/pat-pairings" || oauthPath(path)) {
+    if (anonymousSourcePath(path)) {
       headers.set(
-        oauthPath(path) ? "x-oauth-source" : "x-pat-source",
+        anonymousSourceHeader(path),
         yield* deriveAnonymousSource({
           request,
           browserOrigin: environment.BROWSER_ORIGIN,

@@ -29,6 +29,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const store = directory.getByName("directory-v1");
       const ready = yield* native(() => store.fetch(storeReadinessUrl));
       expect(ready.ok).toBe(true);
+      yield* native(() => ready.arrayBuffer());
 
       const storage = yield* native(() =>
         runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
@@ -59,8 +60,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
       yield* saturate({ storage, now, scope: "oauth/global/bootstrap", limit: 300 });
 
-      expect((yield* refresh()).status).not.toBe(429);
-      expect((yield* authorize()).status).toBe(429);
+      const admitted = yield* refresh();
+      expect(admitted.status).not.toBe(429);
+      yield* native(() => admitted.arrayBuffer());
+      const anonymous = yield* authorize();
+      expect(anonymous.status).toBe(429);
+      yield* native(() => anonymous.arrayBuffer());
 
       yield* saturate({ storage, now, scope: "oauth/global/credentialed", limit: 300 });
 
@@ -70,7 +75,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
       yield* native(() => storage.exec("DELETE FROM bootstrap_admissions"));
 
-      expect((yield* refresh()).status).not.toBe(429);
+      const recovered = yield* refresh();
+      expect(recovered.status).not.toBe(429);
+      yield* native(() => recovered.arrayBuffer());
     })
   );
 });

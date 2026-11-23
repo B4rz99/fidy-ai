@@ -13,18 +13,12 @@ const seedLeases = (
   expiresAt: number,
   source: string
 ): Effect.Effect<void> =>
-  Effect.forEach(
-    Array.from({ length: 8 }, (_, index) => index),
-    (index) =>
-      native(() =>
-        storage.exec(
-          "INSERT INTO oauth_leases(id,expires_at_ms,source) VALUES(?,?,?)",
-          "lease-" + index,
-          expiresAt,
-          source
-        )
-      ),
-    { discard: true }
+  native(() =>
+    storage.exec(
+      "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<7) INSERT INTO oauth_leases(id,expires_at_ms,source) SELECT 'lease-'||i,?,? FROM n",
+      expiresAt,
+      source
+    )
   );
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
@@ -36,6 +30,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const store = directory.getByName("directory-v1");
       const ready = yield* native(() => store.fetch(storeReadinessUrl));
       expect(ready.ok).toBe(true);
+      yield* native(() => ready.arrayBuffer());
       const capped = "a".repeat(64);
       const other = "b".repeat(64);
 

@@ -3,8 +3,6 @@ import type { CanonicalInput, CanonicalSuccess } from "@/transport/client";
 import { formatMoneyWithCode } from "@/transport/money";
 import { monthLabel } from "@/ui/month-labels";
 
-export { monthLabel, shortMonthLabel } from "@/ui/month-labels";
-
 export type WorkspaceReadState = "current" | "refreshing" | "stale";
 
 export type Workspace = CanonicalSuccess<"recurringPlans.getRecurringWorkspace">["data"];

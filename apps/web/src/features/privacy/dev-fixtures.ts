@@ -22,7 +22,7 @@ export const fixtureConsent = ({
           occurredAtMs: 1764000000000,
         },
       };
-    default:
+    case "demo":
       return status;
   }
 };

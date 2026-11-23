@@ -88,7 +88,7 @@ export const MonthPicker = ({
   select,
   label,
   disabled,
-  variant = "ghost",
+  variant,
 }: MonthPickerProps): JSX.Element => {
   const [open, setOpen] = useState(false);
   const [year, setYear] = useState(() => yearOf(month));

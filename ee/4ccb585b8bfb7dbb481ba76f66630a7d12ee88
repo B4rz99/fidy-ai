@@ -1,0 +1,18 @@
+apps/server/package.json
+  h_c6d49c804e0ad2 333
+bun.lock
+  h_c6d49c804e0ad2 92,179,267,269,271,273,423,817,819,821,823,825,827,829,831,857,859,861,863,865,867,869,871,1033,1035,1037,1039,1041,1043,2621
+infra/cloudflare/package.json
+  h_c6d49c804e0ad2 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ee4ccb585b8bfb7dbb481ba76f66630a7d12ee88",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

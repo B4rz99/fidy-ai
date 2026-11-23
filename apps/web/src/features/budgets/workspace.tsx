@@ -26,8 +26,8 @@ import {
   currentBudgetMonth,
   groupFor,
 } from "./model";
-import { MonthPicker } from "@/features/recurring/month-picker";
-import { monthLabel } from "@/features/recurring/model";
+import { MonthPicker } from "@/ui/components/month-picker";
+import { monthLabel } from "@/ui/month-labels";
 
 const BudgetEditor = lazyRouteComponent(() => import("./editor"), "BudgetEditor");
 

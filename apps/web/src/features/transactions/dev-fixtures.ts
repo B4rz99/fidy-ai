@@ -1,6 +1,10 @@
 import { Option, Schema } from "effect";
-import { Category as CategorySchema, Currency } from "@/transport/client";
-import { Transaction as TransactionSchema, currencyMetadata } from "@fidy/server/client";
+import {
+  Category as CategorySchema,
+  Currency,
+  Transaction as TransactionSchema,
+  currencyMetadata,
+} from "@/transport/client";
 import type { ComponentProps } from "react";
 import type { Transaction } from "./presentation";
 import type { TransactionWorkspace } from "./workspace-component";

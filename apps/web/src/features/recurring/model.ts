@@ -1,6 +1,9 @@
 import { DateTime, Option } from "effect";
 import type { CanonicalInput, CanonicalSuccess } from "@/transport/client";
 import { formatMoneyWithCode } from "@/transport/money";
+import { monthLabel } from "@/ui/month-labels";
+
+export { monthLabel, shortMonthLabel } from "@/ui/month-labels";
 
 export type WorkspaceReadState = "current" | "refreshing" | "stale";
 
@@ -109,14 +112,6 @@ export const expectedAmount = (item: Occurrence): string => {
   return `${money(item.plan.money)}${item.plan.amountMode === "estimated" ? " · Estimado" : ""}`;
 };
 
-export const monthLabel = (month: string): string =>
-  DateTime.format(DateTime.makeUnsafe(`${month}-01`), {
-    locale: "es-CO",
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-
 export const dayLabel = (date: string): string =>
   DateTime.format(DateTime.makeUnsafe(date), {
     locale: "es-CO",
@@ -125,13 +120,6 @@ export const dayLabel = (date: string): string =>
     year: "numeric",
     timeZone: "UTC",
   });
-
-export const shortMonthLabel = (month: string): string =>
-  DateTime.format(DateTime.makeUnsafe(`${month}-01`), {
-    locale: "es-CO",
-    month: "short",
-    timeZone: "UTC",
-  }).replace(".", "");
 
 export const shiftMonth = ({ month, step }: Readonly<{ month: string; step: number }>): string =>
   DateTime.formatIsoDateUtc(

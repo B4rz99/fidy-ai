@@ -1,7 +1,7 @@
 import { DateTime } from "effect";
 import { type ComponentProps, type JSX } from "react";
 import { cn } from "@/ui/class-names";
-import { MonthPicker } from "@/features/recurring/month-picker";
+import { MonthPicker } from "@/ui/components/month-picker";
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   year: "numeric",

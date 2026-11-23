@@ -692,7 +692,10 @@ aside[data-transaction-slot~="transaction-context-panel"] > div:focus-visible {
   [data-transaction-slot~="transaction-ledger-topbar"] .ledger-actions {
     gap: 5px;
   }
-  [data-transaction-slot~="transaction-workspace"] .transaction-ledger-topbar .ledger-actions button {
+  [data-transaction-slot~="transaction-workspace"]
+    .transaction-ledger-topbar
+    .ledger-actions
+    button {
     font-size: 12px;
     padding: 8px;
   }

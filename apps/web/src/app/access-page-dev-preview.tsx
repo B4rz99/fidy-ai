@@ -2,10 +2,11 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Option } from "effect";
 import { type JSX } from "react";
 import { DevStressControls } from "@/ui/components/dev-stress-controls";
-import { fixturePATs } from "@/features/pats/dev-fixtures";
-import { PATListPreviewContext } from "@/features/pats/fixture-context";
-import { fixtureConnections } from "@/features/oauth-connections/dev-fixtures";
-import { ConnectionListPreviewContext } from "@/features/oauth-connections/fixture-context";
+import { PATListPreviewContext, fixturePATs } from "@/features/pats/code";
+import {
+  ConnectionListPreviewContext,
+  fixtureConnections,
+} from "@/features/oauth-connections/code";
 import { AccessManagementPage } from "./access-page";
 
 type PreviewDataset = "demo" | "worst" | "empty" | "one" | "many";

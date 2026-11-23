@@ -6,6 +6,8 @@ import { BudgetRoute, RecurringRoute } from "./destination-components";
 import { retainPreparedWorkspaceMetadata } from "@/transport/workspace-query";
 import { RecurringWorkspace, ReviewWorkspace } from "./workspace-components";
 import { NeedsReviewRoute } from "@/features/needs-review/feature";
+import { PrivacyRoute } from "@/features/privacy/code";
+import { SubscriptionOffersRoute } from "@/features/subscription/code";
 import { LoginSearch } from "@/session/login-destination";
 import type { WebRouterContext } from "./router-context";
 import {
@@ -60,10 +62,9 @@ const AccessManagementPage = lazyRouteComponent(
   "AccessManagementPage"
 );
 
-const SubscriptionOffersFeature = lazyRouteComponent(
-  () => import("@/features/subscription/feature"),
-  "SubscriptionOffersFeature"
-);
+const SubscriptionOffersComponent = SubscriptionOffersRoute;
+
+const PrivacyComponent = PrivacyRoute;
 
 const TransactionListFeature = lazyRouteComponent(
   () => import("./transactions-page"),
@@ -263,17 +264,6 @@ const cliConnectionRoute = createRoute({
 const AccessManagementComponent = import.meta.env.DEV
   ? lazyRouteComponent(() => import("./access-page-dev-preview"), "AccessDataPreview")
   : AccessManagementPage;
-
-const PrivacyComponent = import.meta.env.DEV
-  ? lazyRouteComponent(() => import("@/features/privacy/dev-preview"), "PrivacyDataPreview")
-  : lazyRouteComponent(() => import("@/features/privacy/feature"), "PrivacyFeature");
-
-const SubscriptionOffersComponent = import.meta.env.DEV
-  ? lazyRouteComponent(
-      () => import("@/features/subscription/dev-preview"),
-      "SubscriptionDataPreview"
-    )
-  : SubscriptionOffersFeature;
 
 const accessManagementRoute = createRoute({
   getParentRoute: () => authenticatedRoute,

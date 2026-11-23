@@ -1,9 +1,9 @@
 import { type JSX, useState } from "react";
 import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button } from "@/ui/components/button";
-import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/ui/components/popover";
-import { monthLabel, shortMonthLabel } from "./model";
+import { Button } from "./button";
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "./popover";
+import { monthLabel, shortMonthLabel } from "@/ui/month-labels";
 
 const yearOf = (month: string): number => Number(month.slice(0, "2026".length));
 

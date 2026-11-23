@@ -10,8 +10,9 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@/ui/components/button";
 import { WorkspaceHeader as SharedHeader } from "@/ui/components/workspace-layout";
 import { Summary } from "./summary";
-import { MonthPicker } from "./month-picker";
-import { type Workspace, monthLabel } from "./model";
+import { MonthPicker } from "@/ui/components/month-picker";
+import { monthLabel } from "@/ui/month-labels";
+import { type Workspace } from "./model";
 
 type ToolbarProps = Readonly<{
   tab: string;

@@ -1,0 +1,26 @@
+apps/web/test/app/review-recovery.test.ts
+  s_370e136601c9b6::t_366744b955151c 331-332
+  s_370e136601c9b6::t_164997739dea36 310-311
+apps/web/test/features/budgets/navigation.test.ts
+  s_370e136601c9b6::t_f51325fe6c53be 156-162
+  s_370e136601c9b6::t_46898928c4e960 131-155
+  s_370e136601c9b6::t_4d809d21f0426b 364
+apps/web/test/app/transaction-entry.test.ts
+  s_370e136601c9b6::t_96338ef84e2e01 526,529
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4ae2b96e7b3af7610250f6749e422c457a546967",
+  "prompts": {},
+  "sessions": {
+    "s_370e136601c9b6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "tabby-puppet",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

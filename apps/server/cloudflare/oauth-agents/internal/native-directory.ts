@@ -2,9 +2,9 @@ import { forwardAccess } from "./native-access";
 import { forwardToken } from "./native-token";
 
 import type { UserStoreBindings } from "../../directory/contract";
-import { BootstrapUnavailable, oauthClientIdleMs } from "../contract";
+import { BootstrapUnavailable, oauthClientIdleMs, oauthClientUnusedMs } from "../contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Predicate, Schema } from "effect";
 import {
   OAuthAuthorization,
   OAuthRegistration,
@@ -150,6 +150,18 @@ const authorize = Effect.fn(function* (request: Request, source: string, browser
   }).pipe(withStoreCapacity("growth"));
 });
 
+const clientEvictionPage = 32;
+
+const evictAbandonedClients = Effect.fn(function* (current: number) {
+  const sql = yield* SqliteClient;
+
+  yield* sql`DELETE FROM oauth_public_clients WHERE id IN(
+    SELECT id FROM oauth_public_clients
+    WHERE last_used_at_ms<=${current - oauthClientIdleMs}
+      OR (last_used_at_ms=created_at_ms AND created_at_ms<=${current - oauthClientUnusedMs})
+    ORDER BY last_used_at_ms LIMIT ${clientEvictionPage})`;
+});
+
 const registerPublic = Effect.fn(function* (request: Request) {
   const sql = yield* SqliteClient;
   const current = yield* Clock.currentTimeMillis;
@@ -158,14 +170,24 @@ const registerPublic = Effect.fn(function* (request: Request) {
     request,
     current,
     persist: (id, encoded) =>
-      sql`INSERT INTO oauth_public_clients VALUES(${id},${encoded},${current},${current}) RETURNING id`.pipe(
-        Effect.flatMap((rows) =>
-          rows.length === 1
-            ? Effect.void
-            : Effect.fail(new BootstrapUnavailable({ cause: Option.none() }))
-        ),
+      Effect.gen(function* () {
+        yield* evictAbandonedClients(current);
+
+        return yield* sql`INSERT INTO oauth_public_clients VALUES(${id},${encoded},${current},${current}) RETURNING id`.pipe(
+          Effect.flatMap((rows) =>
+            rows.length === 1
+              ? Effect.void
+              : Effect.fail(new BootstrapUnavailable({ cause: Option.none() }))
+          ),
+          Effect.mapError((cause) => new BootstrapUnavailable({ cause: Option.some(cause) }))
+        );
+      }).pipe(
         withStoreCapacity("growth"),
-        Effect.mapError((cause) => new BootstrapUnavailable({ cause: Option.some(cause) }))
+        Effect.mapError((cause) =>
+          Predicate.isTagged(cause, "BootstrapUnavailable")
+            ? cause
+            : new BootstrapUnavailable({ cause: Option.some(cause) })
+        )
       ),
   });
 });

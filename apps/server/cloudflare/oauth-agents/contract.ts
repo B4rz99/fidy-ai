@@ -29,3 +29,5 @@ export const oauthRouteCommandUrl = "https://directory.invalid/credentials/oauth
 export const oauthTokenDestinationUrl = "https://user.invalid/credentials/oauth/token";
 
 export const oauthClientIdleMs = 2_592_000_000;
+
+export const oauthClientUnusedMs = 86_400_000;

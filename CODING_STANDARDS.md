@@ -163,7 +163,7 @@ is the composition half of the same rule the table above states for state.
 
 ## Errors and absence
 
-Two decisions require review:
+These decisions require review:
 
 - **`orDie` is for defects only.** A dead connection, yes. "Budget not found", no — that is a typed
   error that must reach the API response.
@@ -171,6 +171,17 @@ Two decisions require review:
   a 404, an upsert, or simply an empty answer. Use `findOneOption` for `SELECT … WHERE`; `findOne`
   only where absence is genuinely impossible, such as `INSERT … RETURNING`, where it is a defect and
   dying is right.
+- **Failures travel in the error channel.** Never report a failed operation as success: no
+  `{ ok: false }`, `error` or `errors` field, `Either`, `Result`, `Exit`, `Error` instance, or
+  `null`, `undefined`, or `Option.none()` meaning "it failed". Absence that is a normal domain
+  outcome, local `Effect.result` branching that re-fails or handles each case, aggregates that
+  deliberately collect per-item outcomes, and protocol encoders that serialize an error onto the
+  wire are not this.
+- **Recovery that discards a failure captures it.** Turning a failure into `void`, a default, or a
+  fallback — `catchTag`, `catch`, `catchCause`, `orElseSucceed`, `ignore`, or similar — logs or
+  reports that error in the handler or in an earlier `tapError` of the same pipeline. Recovering
+  from an expected domain outcome such as not-found or a validation failure, or failing again with
+  another error, is not swallowing.
 
 ---
 
@@ -185,6 +196,32 @@ Interruption and rejection are separate decisions. Pass the supplied `AbortSigna
 accept it. When an API owns a reader, process, socket, or other resource that does not observe that
 signal, attach scoped cleanup and test interruption; stopping the fiber from waiting is not the same
 as stopping the underlying work.
+
+---
+
+## Effect workflows
+
+- **Retries are bounded and selective.** Every retry policy bounds attempts or elapsed time, and
+  retries only retryable failures — through a `while`/`until` predicate or an error channel already
+  narrowed to them. A bare `Schedule.exponential` or `Schedule.spaced` is unbounded. Repeating a
+  successful pass is not a retry.
+- **Fan-out over runtime-sized collections is bounded.** `Effect.forEach`, `Effect.all`,
+  `Stream.mapEffect`, and similar operators over a collection whose size is known only at runtime,
+  where each item does I/O, use a fixed numeric concurrency — never `"unbounded"` or a value derived
+  from the collection's length. Fixed literal tuples or records, and omitted concurrency (sequential),
+  are fine.
+- **Transactions contain only storage work.** A transaction body makes no HTTP, SDK, or
+  model-provider call, publishes or sends nothing, and never sleeps or backs off. External work
+  happens before the transaction starts or after it commits.
+- **Writes that depend on a read are atomic.** Reading a row's state or existence, then
+  conditionally inserting or updating that row in a separate statement, is a race. Guard the write on
+  the expected prior state, use an upsert or on-conflict clause, or claim uniquely and check the
+  affected-row count. Reads used only for the response, when the write does not depend on them, are
+  unaffected.
+- **Caches are built once.** Construct `Cache.make`, `Effect.cached`, or a memo `Map` while
+  building a layer, a service, or a module-level value, never inside an operation that runs on every
+  call. Do not hand-build a TTL or in-flight cache from a `Map` plus timestamps, timers, or stored
+  promises.
 
 ---
 
@@ -210,7 +247,9 @@ signal because it may be absent or dishonest. Overflow, stream failure, and inte
 release the owned body. Adapters must not receive raw responses or use direct `text`, `json`,
 `arrayBuffer`, form-data, or unbounded stream collection. A provider library may receive a
 reconstructed response only after its bytes have crossed Outbound HTTP's bound. Incremental
-providers require a separate interface with explicit per-chunk and aggregate budgets.
+providers require a separate interface with explicit per-chunk and aggregate budgets. Classify the
+response status before decoding a success schema or parsing JSON, decode an error schema only for
+non-success statuses, and read each response body once.
 
 ---
 
@@ -225,6 +264,11 @@ snapshots, CSS-class inventories, and assertions tied to component structure. Te
 
 What review looks for:
 
+- **Every test can fail.** A test that would still pass with the behaviour in its title broken or
+  removed is rejected: no assertions; assertions only on values the test itself built; a mock or
+  fake asserted to return what the test configured; facts the type system already guarantees; or
+  assertions only inside a loop over a possibly empty list. Assertions must observe the output,
+  error, or end state the code under test produced.
 - **Descriptions are behaviour sentences**, not method names: _"rejects exponent notation before
   storing Money"_ or _"rejects more fractional digits than the Currency permits"_, not
   _"Money validation"_.

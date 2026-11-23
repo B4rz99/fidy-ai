@@ -48,7 +48,6 @@ const graphSources = (packageRoot, roots) => {
       ":(top,exclude).repos/**",
       ":(top,exclude).agents/skills/install-anti-slop/**",
       ":(top,exclude)tools/oxlint/anti-slop/**",
-      ":(top,exclude)tools/oxlint/oxlint-plugin-jev/**",
     ],
     { cwd: packageRoot, encoding: "utf8" }
   )

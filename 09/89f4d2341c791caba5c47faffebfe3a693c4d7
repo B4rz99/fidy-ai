@@ -1,0 +1,51 @@
+apps/web/src/transport/client.ts
+  s_370e136601c9b6::t_919b8376077c57 248-249
+apps/web/src/features/recurring/model.ts
+  s_370e136601c9b6::t_3a3606ffdeaeca 4-6
+apps/web/src/features/recurring/controls.tsx
+  s_370e136601c9b6::t_31af6b5bd99e91 13-15
+apps/web/src/ui/components/month-picker.tsx
+  s_370e136601c9b6::t_274f5cd9316473 4-5
+  s_370e136601c9b6::t_053842200cba64 6
+apps/web/src/features/transactions/dev-fixtures.ts
+  s_370e136601c9b6::t_7a73527a2c0114 2-7
+apps/web/src/features/transactions/period-controls.tsx
+  s_370e136601c9b6::t_cfc17c065f0baa 4
+apps/web/src/app/access-page-dev-preview.tsx
+  s_370e136601c9b6::t_6dee9d49bb7d70 5-6
+  s_370e136601c9b6::t_6b01b888325e2e 7-9
+apps/web/src/ui/month-labels.ts
+  s_370e136601c9b6::t_64966a2c50b81b 1-16
+apps/web/src/app/routes.ts
+  s_370e136601c9b6::t_fb4b4c407f0e50 9-10
+  s_370e136601c9b6::t_2e9ff1a77f5eb3 65,67
+  s_370e136601c9b6::t_74c60fd5bf1981 66
+apps/web/src/features/budgets/workspace.tsx
+  s_370e136601c9b6::t_a13cbcf2819760 29-30
+apps/web/src/features/oauth-connections/code.ts
+  s_370e136601c9b6::t_d15b54eb6ad2dd 1-3
+apps/web/src/features/pats/code.ts
+  s_370e136601c9b6::t_03eba795780d13 1-3
+apps/web/src/features/privacy/code.ts
+  s_370e136601c9b6::t_9633382d17d710 1-7
+apps/web/src/features/subscription/code.ts
+  s_370e136601c9b6::t_2111bee8102d1b 1-16
+apps/web/src/ui/components/transactions.css
+  s_370e136601c9b6::t_d8688b780de6a8 695-698
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0989f4d2341c791caba5c47faffebfe3a693c4d7",
+  "prompts": {},
+  "sessions": {
+    "s_370e136601c9b6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "tabby-puppet",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

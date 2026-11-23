@@ -1,0 +1,57 @@
+apps/server/cloudflare/canonical-admission/internal/local-batch-plans.ts
+  h_c6d49c804e0ad2 10,197
+apps/server/cloudflare/canonical-admission/internal/local-mutation.ts
+  h_c6d49c804e0ad2 195,695-698,700-705,707,709-714,717,719-720,723-734,755-758,762
+apps/server/cloudflare/agent/internal/local-tool.ts
+  h_c6d49c804e0ad2 85-93,98-101,104,106
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+apps/server/cloudflare/ingestion/internal/local-review-material.ts
+  h_c6d49c804e0ad2 7-8,75-77,80,83,90
+apps/server/cloudflare/canonical-admission/contract.ts
+  h_c6d49c804e0ad2 337-342
+apps/server/cloudflare/canonical-operations/operations.ts
+  h_c6d49c804e0ad2 222-226,228-242
+  h_c6d49c804e0ad2 217,220-221
+apps/server/cloudflare/tokens/internal/pat-pairing.ts
+  h_c6d49c804e0ad2 2-7,13-21
+apps/server/cloudflare/ingestion/internal/local-statement-decision.ts
+  h_c6d49c804e0ad2 148,152-153,171-172
+apps/server/cloudflare/budgets/internal/sqlite-planning.ts
+  h_c6d49c804e0ad2 364
+apps/server/cloudflare/tokens/internal/request-body.ts
+  h_c6d49c804e0ad2 1-33
+apps/server/cloudflare/budgets/internal/sqlite-dispatch.ts
+  h_c6d49c804e0ad2 46-57,71-75,77-81
+apps/server/cloudflare/tokens/internal/native-claim.ts
+  h_c6d49c804e0ad2 12-13,215
+apps/server/cloudflare/categories/internal/sqlite-keyword.ts
+  h_c6d49c804e0ad2 136
+apps/server/cloudflare/tokens/internal/native-pairing.ts
+  h_c6d49c804e0ad2 24,47,169
+apps/server/cloudflare/agent/provider.test-fixture.ts
+  h_c6d49c804e0ad2 2,26-29,209,213,222-224,253-254,257,284
+apps/server/cloudflare/ingestion/internal/local-review.ts
+  h_c6d49c804e0ad2 169-175
+apps/server/cloudflare/transactions/operations.ts
+  h_c6d49c804e0ad2 122-133,143-147,149-153,155-159
+apps/server/cloudflare/transactions/internal/sqlite-history.ts
+  h_c6d49c804e0ad2 8,68,96-98,101,108
+apps/server/cloudflare/canonical-admission/operations.ts
+  h_c6d49c804e0ad2 63
+apps/server/cloudflare/tokens/internal/pat-shared.ts
+  h_c6d49c804e0ad2 13-17,135
+apps/server/cloudflare/tokens/internal/native-grants.ts
+  h_c6d49c804e0ad2 48,51,69,73,436
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "112b30ac534544f86ff11de2e1fff52160a8cb36",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

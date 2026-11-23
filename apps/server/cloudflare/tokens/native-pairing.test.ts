@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { DateTime, Effect, Schema } from "effect";
+import { Clock, DateTime, Effect, Schema } from "effect";
 import type { Miniflare } from "miniflare";
 import { expect } from "vitest";
 import { alice, bob, seed } from "../financial-user-store.test-fixture";
@@ -446,6 +446,67 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const replay = yield* post([issue]);
       expect(replay.status).toBe(400);
       expect(yield* native(() => replay.text())).not.toContain("fin_");
+    })
+  );
+  test.effect("does not write the pairing row when a refused poll cannot change the interval", () =>
+    Effect.gen(function* () {
+      const create = yield* nativeUserPlatform;
+      const runtime = yield* create();
+
+      const post: Post = (path, payload) =>
+        native(() =>
+          runtime.dispatchFetch("https://api.fidyapp.com" + path, {
+            method: "POST",
+            headers: { "content-type": "application/json", "cf-connecting-ip": "192.0.2.35" },
+            body: JSON.stringify(payload),
+          })
+        );
+
+      const started = yield* post("/pat-pairings", {
+        recipientLabel: "CLI",
+        scopes: ["read"],
+        lifetimeDays: 7,
+      });
+
+      expect(started.status).toBe(200);
+
+      const proof = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ pairingId: Schema.String, privateDeviceCode: Schema.String })
+      )(yield* native(() => started.json()));
+
+      expect((yield* post("/pat-pairings/claim", proof)).status).toBe(202);
+
+      const directory = yield* native(() =>
+        runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
+      );
+
+      const now = yield* Clock.currentTimeMillis;
+
+      yield* native(() =>
+        directory.exec(
+          "UPDATE pat_bootstrap SET minimum_poll_seconds=60,last_poll_at_ms=? WHERE id=?",
+          now,
+          proof.pairingId
+        )
+      );
+      yield* native(() =>
+        directory.exec(
+          "CREATE TRIGGER poll_write BEFORE UPDATE ON pat_bootstrap BEGIN SELECT RAISE(ABORT,'poll_write'); END"
+        )
+      );
+
+      const refused = yield* post("/pat-pairings/claim", proof);
+
+      expect(refused.status).toBe(429);
+      yield* native(() => refused.text());
+      expect(
+        yield* native(() =>
+          directory.exec(
+            "SELECT minimum_poll_seconds,last_poll_at_ms FROM pat_bootstrap WHERE id=?",
+            proof.pairingId
+          )
+        )
+      ).toEqual([{ minimum_poll_seconds: 60, last_poll_at_ms: now }]);
     })
   );
 });

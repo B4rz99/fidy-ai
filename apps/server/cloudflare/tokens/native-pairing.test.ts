@@ -509,4 +509,58 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       ).toEqual([{ minimum_poll_seconds: 60, last_poll_at_ms: now }]);
     })
   );
+  test.effect("refuses new pairings when the shared live or admission window is full", () =>
+    Effect.gen(function* () {
+      const create = yield* nativeUserPlatform;
+      const runtime = yield* create();
+
+      const post = (path: string, payload: unknown, ip = "192.0.2.35"): TransportResult =>
+        native(() =>
+          runtime.dispatchFetch("https://api.fidyapp.com" + path, {
+            method: "POST",
+            headers: { "content-type": "application/json", "cf-connecting-ip": ip },
+            body: JSON.stringify(payload),
+          })
+        );
+
+      const payload = { recipientLabel: "CLI", scopes: ["read"], lifetimeDays: 7 };
+
+      const directory = yield* native(() =>
+        runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
+      );
+
+      const now = yield* Clock.currentTimeMillis;
+
+      yield* native(() =>
+        directory.exec(
+          "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<4000) INSERT INTO pat_bootstrap(id,public_code,proof_digest,recipient_label,scopes_json,lifetime_days,expires_at_ms) SELECT printf('pair-%05d',i),printf('code-%05d',i),printf('%064d',i),'CLI','[]',7,? FROM n",
+          now + 600000
+        )
+      );
+
+      const full = yield* post("/pat-pairings", payload, "192.0.2.40");
+      expect(full.status).toBe(429);
+      yield* native(() => full.text());
+
+      yield* native(() =>
+        directory.exec("UPDATE pat_bootstrap SET expires_at_ms=? WHERE id='pair-00001'", now - 1000)
+      );
+
+      const freed = yield* post("/pat-pairings", payload, "192.0.2.41");
+      expect(freed.status).toBe(200);
+      yield* native(() => freed.text());
+
+      yield* native(() => directory.exec("DELETE FROM pat_bootstrap"));
+      yield* native(() =>
+        directory.exec(
+          "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<600) INSERT INTO bootstrap_admissions(scope,expires_at_ms) SELECT 'pat-pairing:global',? FROM n",
+          now + 60000
+        )
+      );
+
+      const limited = yield* post("/pat-pairings", payload, "192.0.2.42");
+      expect(limited.status).toBe(429);
+      yield* native(() => limited.text());
+    })
+  );
 });

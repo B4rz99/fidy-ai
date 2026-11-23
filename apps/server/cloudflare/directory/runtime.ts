@@ -67,7 +67,7 @@ import { channelApprovalEvidence } from "./internal/channel";
 import { externalEventRequest } from "./internal/external-events";
 import { rejectInvitationSend, whatsappBootstrap, whatsappOwner } from "./internal/whatsapp";
 
-import { admitBootstrap } from "./internal/admission";
+import { admitBootstrap, admitPATPairingStart } from "./internal/admission";
 import {
   cancelProviderHandoff,
   registerBrowserSession,
@@ -360,6 +360,19 @@ const credentialLookup = Effect.fn(function* (request: Request) {
   );
 });
 
+const pairingRequest = Effect.fn(function* (
+  request: Request,
+  users: DirectoryEnvironment["USER_STORE"]
+) {
+  if (new URL(request.url).pathname === "/pat-pairings") {
+    const refusal = yield* admitPATPairingStart(request);
+
+    if (Option.isSome(refusal)) return refusal.value;
+  }
+
+  return yield* nativePATPairing({ request, users });
+});
+
 const nativeProvider = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {
   const refusal = yield* admitBootstrap(request);
 
@@ -494,7 +507,7 @@ const directoryRequest = Effect.fn(function* (request: Request, environment: Dir
   }
 
   if (["/pat-pairings", "/pat-pairings/claim"].includes(path)) {
-    return yield* nativePATPairing({ request, users: environment.USER_STORE });
+    return yield* pairingRequest(request, environment.USER_STORE);
   }
 
   if (["/web/pairings", "/web/pairings/redeem"].includes(path)) {

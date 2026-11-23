@@ -5,6 +5,8 @@ import { unavailable } from "../../browser-login/operations";
 
 const minute = 60000;
 
+const pairingStartDuration = 600_000;
+
 const limitReply = (): Response =>
   Response.json(
     { status: "limited" },
@@ -64,5 +66,16 @@ export const admitBootstrap = Effect.fn(function* (request: Request) {
     { scope: "source:" + source, limit: 120, duration: minute },
     { scope: "global", limit: 1200, duration: minute },
     ...exchangeWindows,
+  ]);
+});
+
+export const admitPATPairingStart = Effect.fn(function* (request: Request) {
+  const source = request.headers.get("x-pat-source") ?? "";
+
+  if (!/^[a-f0-9]{64}$/u.test(source)) return Option.some(unavailable());
+
+  return yield* chargeBootstrapWindows([
+    { scope: "pat-pairing:source:" + source, limit: 20, duration: pairingStartDuration },
+    { scope: "pat-pairing:global", limit: 600, duration: minute },
   ]);
 });

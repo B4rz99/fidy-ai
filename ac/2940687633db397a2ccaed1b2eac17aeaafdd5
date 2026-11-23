@@ -1,0 +1,14 @@
+apps/web/scripts/ci-workflow.test.ts
+  h_c6d49c804e0ad2 23-37,45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ac2940687633db397a2ccaed1b2eac17aeaafdd5",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

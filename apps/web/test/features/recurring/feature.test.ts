@@ -330,15 +330,15 @@ const checkMonthPicker = (container: HTMLElement, location: () => string): Works
       throw Error("Missing month picker");
     }
 
-    expect(trigger.getAttribute("aria-label")).toBe("Elegir mes, octubre de 2026");
+    expect(trigger.getAttribute("aria-label")).toBe("Elegir mes, Octubre de 2026");
     expect(trigger.closest("h2")).not.toBeNull();
 
     yield* Effect.tryPromise(() => reactWork(() => trigger.click()));
     yield* Effect.tryPromise(() =>
       reactAssertion(() => {
-        expect(monthChoice("octubre de 2026").getAttribute("aria-pressed")).toBe("true");
-        expect(monthChoice("octubre de 2026").getAttribute("aria-current")).toBe("date");
-        expect(monthChoice("octubre de 2026").textContent).toBe("oct");
+        expect(monthChoice("Octubre de 2026").getAttribute("aria-pressed")).toBe("true");
+        expect(monthChoice("Octubre de 2026").getAttribute("aria-current")).toBe("date");
+        expect(monthChoice("Octubre de 2026").textContent).toBe("Oct");
       })
     );
 
@@ -347,16 +347,16 @@ const checkMonthPicker = (container: HTMLElement, location: () => string): Works
     yield* Effect.tryPromise(() => reactWork(() => monthChoice("Año anterior").click()));
     yield* Effect.tryPromise(() =>
       reactAssertion(() => {
-        expect(monthChoice("marzo de 2027").getAttribute("aria-pressed")).toBe("false");
-        expect(monthChoice("marzo de 2027").hasAttribute("aria-current")).toBe(false);
+        expect(monthChoice("Marzo de 2027").getAttribute("aria-pressed")).toBe("false");
+        expect(monthChoice("Marzo de 2027").hasAttribute("aria-current")).toBe(false);
       })
     );
 
-    yield* Effect.tryPromise(() => reactWork(() => monthChoice("marzo de 2027").click()));
+    yield* Effect.tryPromise(() => reactWork(() => monthChoice("Marzo de 2027").click()));
     yield* Effect.tryPromise(() =>
       reactAssertion(() => {
         expect(location()).toBe("?month=2027-03");
-        expect(document.body.querySelector('button[aria-label="marzo de 2027"]')).toBeNull();
+        expect(document.body.querySelector('button[aria-label="Marzo de 2027"]')).toBeNull();
       })
     );
   });

@@ -523,10 +523,10 @@ it.live(
           })
         );
 
-        expect(trigger?.textContent).toBe("Más recientes primero");
+        expect(trigger?.textContent).toBe("Más recientes");
         yield* work(() => trigger?.click());
         expect(sortChoices().map((item) => item.textContent.trim())).toEqual([
-          "Más recientes primero",
+          "Más recientes",
           "Contraparte A–Z en cada día",
           "Contraparte Z–A en cada día",
           "Categoría A–Z en cada día",

@@ -307,8 +307,8 @@ it("names the history view's ordering, search and empty results after history ra
           vi.waitFor(() => {
             expect(reviewLabels(page.container)).toEqual({
               heading: "Por fecha límite, las más antiguas primero",
-              placeholder: "Buscar en el historial de esta página",
-              name: "Buscar en el historial de esta página",
+              placeholder: "Buscar en el historial",
+              name: "Buscar en el historial",
               empty: "",
             });
           })
@@ -328,8 +328,8 @@ it("names the history view's ordering, search and empty results after history ra
           vi.waitFor(() => {
             expect(reviewLabels(page.container)).toEqual({
               heading: "Vencen primero",
-              placeholder: "Buscar pendientes en esta página",
-              name: "Buscar pendientes en esta página",
+              placeholder: "Buscar pendientes",
+              name: "Buscar pendientes",
               empty: "",
             });
           })

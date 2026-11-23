@@ -140,7 +140,9 @@ const pollingDestination = Effect.fn(function* (id: string, proofDigest: string)
     }
 
     if (Predicate.isTagged(decision, "SlowDown")) {
-      yield* sql`UPDATE pat_bootstrap SET minimum_poll_seconds=${Math.min(pollLimit, decision.minimumPollIntervalSeconds)} WHERE id=${id}`;
+      const interval = Math.min(pollLimit, decision.minimumPollIntervalSeconds);
+
+      yield* sql`UPDATE pat_bootstrap SET minimum_poll_seconds=${interval} WHERE id=${id} AND minimum_poll_seconds<>${interval}`;
 
       return response({
         status: tooFast,

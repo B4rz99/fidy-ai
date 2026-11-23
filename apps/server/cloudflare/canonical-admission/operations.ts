@@ -60,8 +60,7 @@ export const attachCanonicalStanding = ({
 }: Readonly<{ response: Response; status: QuotaStatus; current: number }>): Response =>
   attachStanding(response, status, current);
 
-export const runLocalMutation: typeof mutateLocal = (input, pathRejection) =>
-  mutateLocal(input, pathRejection);
+export const runLocalMutation: typeof mutateLocal = (input) => mutateLocal(input);
 
 export const admitLocalRequest: typeof admitLocal = (input) => admitLocal(input);
 

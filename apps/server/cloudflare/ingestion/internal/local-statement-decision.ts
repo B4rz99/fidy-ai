@@ -145,12 +145,12 @@ export const prepareLocalDecision = Effect.fn(function* (
       extraction,
     }),
     commit: Effect.gen(function* () {
-      const response = Option.isSome(capture)
+      const committed = Option.isSome(capture)
         ? Option.some(yield* capture.value.commit)
         : Option.none();
 
-      const tx = Option.isSome(response)
-        ? (yield* Schema.decodeUnknownEffect(capturedId)(response.value.body)).data.id
+      const tx = Option.isSome(committed)
+        ? (yield* Schema.decodeUnknownEffect(capturedId)(committed.value.body)).data.id
         : null;
 
       const changed =
@@ -168,8 +168,8 @@ export const prepareLocalDecision = Effect.fn(function* (
       yield* sql`UPDATE statement_submissions SET clarification_state='completed',clarification_ended_at_ms=${current} WHERE id=${row.id} AND user_id=${user} AND NOT EXISTS(SELECT 1 FROM ingestion_review_items WHERE statement_submission_id=${row.id} AND coalesce(workspace_state,'pending')='pending')`;
       yield* sql`DELETE FROM statement_backfill WHERE user_id=${user} AND submission_id=${row.id} AND consumed_at_ms IS NULL AND EXISTS(SELECT 1 FROM statement_submissions WHERE id=${row.id} AND clarification_state='completed')`;
 
-      return Option.isSome(response)
-        ? { ...response.value, status: 200 }
+      return Option.isSome(committed)
+        ? { ...committed.value, status: 200 }
         : yield* localSubmission(user, row.id);
     }),
     premises: ["statement:" + row.id],

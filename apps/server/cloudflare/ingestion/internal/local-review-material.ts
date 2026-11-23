@@ -4,8 +4,8 @@ import type { UserId } from "../../../src/core/identity/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
 import { localPreparationSubject, runLocalMutation } from "../../canonical-admission/operations";
 import { userPrivateObjectPrefix } from "../../private-objects/operations";
-import { MaterialRow, materialText, unavailable } from "./review-material";
-import { missing, result } from "./local-review-snapshot";
+import { MaterialRow, unavailable as materialNotRetained, materialText } from "./review-material";
+import { result as materialResponse, missing } from "./local-review-snapshot";
 
 const materialIdPosition = -2;
 
@@ -72,20 +72,22 @@ export const localReviewMaterial = Effect.fn(function* (unit: {
           return yield* missing();
         }
 
-        if (after.value.expires <= current) return result({ available: false, reason: "expired" });
-
-        if (!sameRevision(after.value, before.value)) {
-          return result(unavailable);
+        if (after.value.expires <= current) {
+          return materialResponse({ available: false, reason: "expired" });
         }
 
-        return result(
+        if (!sameRevision(after.value, before.value)) {
+          return materialResponse(materialNotRetained);
+        }
+
+        return materialResponse(
           Option.isSome(text)
             ? {
                 available: true,
                 text: text.value.slice(0, cap),
                 truncated: text.value.length > cap,
               }
-            : unavailable
+            : materialNotRetained
         );
       }),
   });

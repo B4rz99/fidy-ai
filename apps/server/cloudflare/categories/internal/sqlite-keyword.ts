@@ -133,6 +133,7 @@ const selectedCategory = Effect.fnUntraced(function* (
     },
   }).pipe(
     Effect.asSome,
+    Effect.tapError(Effect.logDebug),
     Effect.catchTag("CategoryNotFound", () => Effect.succeedNone)
   );
 });

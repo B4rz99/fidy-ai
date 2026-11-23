@@ -214,27 +214,32 @@ export const dispatchLocalBatchRoute = Effect.fn(
 
     if (prepare === undefined) return canonicalAdmissionUnavailable();
 
-    return yield* runLocalMutation(
-      {
-        ...unit,
-        input: localCanonicalArguments(unit.request, unit.operation),
-        work: (input, user, current) =>
-          prepare(input, { user, current, storage: unit.storage }).pipe(
-            Effect.flatMap(commitLocalPlan),
-            Effect.tap((result) =>
-              unit.operation.id === "transactions.updateTransactions" &&
-              result.status === successfulMutationStatus
-                ? preserveStoreAlarm(unit.storage, current + recurringDiscoveryIntervalMs)
-                : Effect.void
-            )
-          ),
-      },
+    const keywordRulePathMissing =
       (unit.operation.id === "categories.updateKeywordRule" ||
         unit.operation.id === "categories.deleteKeywordRule") &&
-        Option.isNone(keywordRuleIdFromPath(unit.request))
-        ? Option.some(() => notFoundRejection("No keyword rule with that id belongs to you."))
-        : Option.none()
+      Option.isNone(keywordRuleIdFromPath(unit.request));
+
+    const input = localCanonicalArguments(unit.request, unit.operation).pipe(
+      Effect.filterOrFail(
+        () => !keywordRulePathMissing,
+        () => notFoundRejection("No keyword rule with that id belongs to you.")
+      )
     );
+
+    return yield* runLocalMutation({
+      ...unit,
+      input,
+      work: (input, user, current) =>
+        prepare(input, { user, current, storage: unit.storage }).pipe(
+          Effect.flatMap(commitLocalPlan),
+          Effect.tap((result) =>
+            unit.operation.id === "transactions.updateTransactions" &&
+            result.status === successfulMutationStatus
+              ? preserveStoreAlarm(unit.storage, current + recurringDiscoveryIntervalMs)
+              : Effect.void
+          )
+        ),
+    });
   },
   Effect.tapCause(() =>
     Effect.logWarning({

@@ -82,17 +82,28 @@ const grantsTier = Effect.fn(function* (turn: LocalTurn, now: number, tier: stri
   return (yield* sql.unsafe("SELECT 1 WHERE " + access.sql, access.params)).length === 1;
 });
 
+const classifyOutcome = (
+  result: CanonicalWireOutcome
+):
+  | Readonly<{ kind: "failed"; body: CanonicalWireOutcome["body"] }>
+  | Readonly<{ kind: "succeeded"; body: CanonicalWireOutcome["body"] }> =>
+  result.status >= firstFailureStatus
+    ? { kind: "failed", body: result.body }
+    : { kind: "succeeded", body: result.body };
+
 const decodedOutcome = Effect.fn(function* (
   result: CanonicalWireOutcome,
   operation: CatalogOperation
 ) {
-  if (result.status >= firstFailureStatus) {
-    return Outcome.CanonicalOperationFailed({ failure: result.body });
+  const classified = classifyOutcome(result);
+
+  if (classified.kind === "failed") {
+    return Outcome.CanonicalOperationFailed({ failure: classified.body });
   }
 
-  yield* Schema.decodeEffect(operation.success)(result.body);
+  yield* Schema.decodeEffect(operation.success)(classified.body);
 
-  return Outcome.Succeeded({ output: result.body });
+  return Outcome.Succeeded({ output: classified.body });
 });
 
 const approve = Effect.fn(function* (

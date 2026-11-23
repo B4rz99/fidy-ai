@@ -10,16 +10,12 @@ import {
   maxIssuancesPerUserWindow,
   pairingMilliseconds,
 } from "../../../src/shell/tokens/operations";
-import { patPairingUnavailableBody } from "../../../src/shell/tokens/contract";
-import { DateTime, Effect, Option, Schema, Struct } from "effect";
+import {
+  patPairingInvalidBody,
+  patPairingUnavailableBody,
+} from "../../../src/shell/tokens/contract";
+import { DateTime, Option, Schema, Struct } from "effect";
 import { Base64Url } from "effect/encoding";
-import { RequestBodyPolicy } from "../../http/contract";
-import { readBoundedRequestBody } from "../../http/operations";
-
-const policy = Schema.decodeSync(RequestBodyPolicy)({
-  maximumBytes: 1024,
-  deadlineMilliseconds: 2_000,
-});
 
 export { pairingMilliseconds };
 
@@ -43,15 +39,6 @@ export const httpUnavailable = 503;
 export const httpRateLimited = 429;
 
 export const pairingRateLimitedSeconds = 60;
-
-export const pairingRateLimitedBody = {
-  error: {
-    code: "rate_limited",
-    message: pairingRejectedMessage,
-    retryAfterSeconds: pairingRateLimitedSeconds,
-  },
-  next: [],
-} as const;
 
 const unbiasedBase36Limit = 252;
 
@@ -115,31 +102,6 @@ export const newShortId = (): string => {
 
 export const newBearer = (shortId: string): string => `${patBearerPrefix}${shortId}_${newProof()}`;
 
-export const decodeBody = <Decoded, Encoded>({
-  request,
-  schema,
-}: Readonly<{
-  request: Request;
-  schema: Schema.Codec<Decoded, Encoded>;
-}>): Effect.Effect<Option.Option<Decoded>> =>
-  Effect.gen(function* () {
-    if (
-      request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !==
-      "application/json"
-    ) {
-      return Option.none<Decoded>();
-    }
-
-    const bytes = yield* readBoundedRequestBody(request, policy);
-    const text = yield* Effect.try(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-    const value = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text);
-
-    return Schema.decodeUnknownOption(schema)(value);
-  }).pipe(
-    Effect.tapError(Effect.logDebug),
-    Effect.orElseSucceed(() => Option.none<Decoded>())
-  );
-
 export const scopesFrom = (text: string): Option.Option<PATScopes> =>
   Schema.decodeOption(Schema.fromJsonString(PATScopes))(text);
 
@@ -170,12 +132,4 @@ export const unavailable = (): Response =>
   response({ body: patPairingUnavailableBody, status: httpUnavailable });
 
 export const invalid = (): Response =>
-  response({
-    body: {
-      error: {
-        code: "pairing_invalid",
-        message: "This PAT pairing is no longer valid. Start a new request.",
-      },
-    },
-    status: httpBadRequest,
-  });
+  response({ body: patPairingInvalidBody, status: httpBadRequest });

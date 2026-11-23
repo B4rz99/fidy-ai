@@ -192,7 +192,7 @@ type Mutation<A, E> = Readonly<{
   storage: DurableObjectStorage;
   operation: CatalogOperation;
   owns: (user: string) => boolean;
-  input: Effect.Effect<Option.Option<A>>;
+  input: Effect.Effect<Option.Option<A>, CanonicalRejection>;
   work: (
     input: A,
     userId: UserId,
@@ -692,28 +692,46 @@ const sessionLookupFor = (operation: string): typeof boundSessionLookup =>
     ? boundSecuritySessionLookup
     : boundSessionLookup;
 
-export const runLocalMutation = Effect.fn(function* <A, E>(
-  { request, storage, operation, owns, input, work }: Mutation<A, E>,
-  pathRejection: Option.Option<() => CanonicalRejection> = Option.none()
+const prepareMutation = Effect.fnUntraced(function* <A>(
+  input: Effect.Effect<Option.Option<A>, CanonicalRejection>,
+  identity: Option.Option<Invocation>,
+  keyValid: boolean
 ) {
-  const resolve = yield* localProof(request, owns, sessionLookupFor(operation.id));
-  const { keyValid, identity } = yield* prepareIdentity(request, operation);
-  const argumentsForOwner = Option.product(yield* input, identity);
+  const evaluated = yield* input.pipe(
+    Effect.map((value) => ({ kind: "input" as const, value })),
+    Effect.catchTag("CanonicalRejection", (rejection) =>
+      Effect.succeed({ kind: "refused" as const, rejection })
+    )
+  );
 
-  const invalidInput = Option.match(pathRejection, {
-    onNone: () => validationRejection("Invalid canonical operation input."),
-    onSome: (rejection) => rejection(),
-  });
+  if (evaluated.kind === "refused") return evaluated;
 
-  const prepared = Option.match(argumentsForOwner, {
-    onNone: () => ({ refusal: invalidInput }) as const,
+  return Option.match(Option.product(evaluated.value, identity), {
+    onNone: () =>
+      ({
+        kind: "refused",
+        rejection: validationRejection("Invalid canonical operation input."),
+      }) as const,
     onSome: ([value, invocation]) =>
       keyValid
-        ? ({ value, invocation } as const)
+        ? ({ kind: "ready", value, invocation } as const)
         : ({
-            refusal: validationRejection("Invalid canonical retry key."),
+            kind: "refused",
+            rejection: validationRejection("Invalid canonical retry key."),
           } as const),
   });
+});
+
+export const runLocalMutation = Effect.fn(function* <A, E>({
+  request,
+  storage,
+  operation,
+  owns,
+  input,
+  work,
+}: Mutation<A, E>) {
+  const resolve = yield* localProof(request, owns, sessionLookupFor(operation.id));
+  const { keyValid, identity } = yield* prepareIdentity(request, operation);
 
   return yield* withStoreAdmission((admitGrowth) =>
     Effect.gen(function* () {
@@ -734,12 +752,14 @@ export const runLocalMutation = Effect.fn(function* <A, E>(
 
       if (Option.isSome(forbidden)) return forbidden.value;
 
-      if (prepared.refusal !== undefined) {
-        yield* audit(call, prepared.refusal.audit.outcome);
+      const prepared = yield* prepareMutation(input, identity, keyValid);
+
+      if (prepared.kind === "refused") {
+        yield* audit(call, prepared.rejection.audit.outcome);
 
         return attachStanding({
           ...call,
-          response: rejectionResponse(prepared.refusal),
+          response: rejectionResponse(prepared.rejection),
         });
       }
 

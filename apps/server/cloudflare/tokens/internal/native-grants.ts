@@ -41,14 +41,14 @@ import { withStoreCapacity } from "../../runtime/sqlite/operations";
 import { type Directory, FrozenPAT, Reservation, directoryEvidence } from "./native-routes";
 import {
   dayMilliseconds,
-  decodeBody,
   digest,
   iso,
   newBearer,
   pairingMilliseconds,
-  pairingRateLimitedBody,
+  pairingRateLimitedSeconds,
   pairingRejectedMessage,
 } from "./pat-shared";
+import { decodeRequestPayload } from "./request-body";
 import { expiryFor, issuedResult } from "./pat-manual";
 import { PATUnavailable } from "../contract";
 
@@ -66,11 +66,11 @@ const rateLimitedRejection = (): CanonicalRejection =>
     status: canonicalRejectionStatus.tooManyRequests,
     outcome: "validation_failed",
     code: "rate_limited",
-    wireMessage: Option.some(pairingRateLimitedBody.error.message),
+    wireMessage: Option.some(pairingRejectedMessage),
     fields: Option.none(),
     detail: Option.some({
       kind: "rate_limited",
-      retryAfterSeconds: pairingRateLimitedBody.error.retryAfterSeconds,
+      retryAfterSeconds: pairingRateLimitedSeconds,
     }),
     next: [],
   });
@@ -433,7 +433,7 @@ export const dispatchGrant = Effect.fn(function* (unit: {
   directory: Directory;
   storage: DurableObjectStorage;
 }) {
-  const input = yield* decodeBody({
+  const input = yield* decodeRequestPayload({
     request: new Request(unit.request.url, {
       method: unit.request.method,
       headers: unit.request.headers,

@@ -1,0 +1,22 @@
+apps/server/cloudflare/directory/internal/expiry.ts
+  h_c6d49c804e0ad2 1,34
+apps/server/cloudflare/oauth-agents/contract.ts
+  h_c6d49c804e0ad2 32-33
+apps/server/cloudflare/oauth-agents/internal/native-directory.ts
+  h_c6d49c804e0ad2 5,7,153-164,173-184,186-190
+apps/server/cloudflare/oauth-agents/native-registration.test.ts
+  h_c6d49c804e0ad2 1-75
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "00aaf38ba964bdeeb77c71edaca79c121927eaac",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

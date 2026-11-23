@@ -1,0 +1,21 @@
+apps/server/cloudflare/public-worker-erasure.test.ts
+  s_370e136601c9b6::t_383d27299e3a84 31-36
+apps/server/cloudflare/subscription/internal/publish-price.ts
+  s_370e136601c9b6::t_c569db0f854891 20-27,49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b487a898148e725185f97cb60b21d880e0bda351",
+  "prompts": {},
+  "sessions": {
+    "s_370e136601c9b6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "tabby-puppet",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

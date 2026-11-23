@@ -1,0 +1,14 @@
+scripts/merge-gate.ts
+  h_c6d49c804e0ad2 242,278
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e6fa536e15ddf58f8de043a70ce3898830d6d85f",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

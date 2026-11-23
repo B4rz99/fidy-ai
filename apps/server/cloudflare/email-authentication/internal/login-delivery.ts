@@ -91,7 +91,7 @@ export const deliverLoginEmail = Effect.fn(function* (
     const now = yield* Clock.currentTimeMillis;
 
     const [row] =
-      yield* sql`UPDATE login_email_proofs SET state='sending',selector=${selector},digest=${hash} WHERE work_id=${work.id} AND state='awaiting_delivery' AND expires_at_ms>${now} AND EXISTS(SELECT 1 FROM browser_handoffs p JOIN verified_email_credentials v ON v.user_id=p.user_id WHERE p.pairing_id=login_email_proofs.pairing_id AND p.user_id=${work.userId} AND p.state='pending_approval' AND p.outcome='committed' AND p.wrong_attempts<5 AND p.expires_at_ms>${now} AND v.revision=login_email_proofs.revision AND v.normalized_address=login_email_proofs.address) AND NOT EXISTS(SELECT 1 FROM erasure_requests) RETURNING address`;
+      yield* sql`UPDATE login_email_proofs SET state='sending',selector=${selector},digest=${hash},delivery_key=${work.id} WHERE work_id=${work.id} AND state='awaiting_delivery' AND expires_at_ms>${now} AND EXISTS(SELECT 1 FROM browser_handoffs p JOIN verified_email_credentials v ON v.user_id=p.user_id WHERE p.pairing_id=login_email_proofs.pairing_id AND p.user_id=${work.userId} AND p.state='pending_approval' AND p.outcome='committed' AND p.wrong_attempts<5 AND p.expires_at_ms>${now} AND v.revision=login_email_proofs.revision AND v.normalized_address=login_email_proofs.address) AND NOT EXISTS(SELECT 1 FROM erasure_requests) RETURNING address`;
 
     if (row === undefined) {
       yield* sql`UPDATE login_email_proofs SET state='rejected' WHERE work_id=${work.id} AND state='awaiting_delivery'`;

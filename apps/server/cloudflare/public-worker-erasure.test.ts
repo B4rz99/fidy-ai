@@ -28,6 +28,12 @@ const cases = [
     origin: "https://app.fidyapp.com",
     forwarded: false,
   },
+  {
+    path: "/internal/titular-erasure",
+    assertion: "untrusted",
+    origin: "",
+    forwarded: true,
+  },
 ];
 
 it.each(cases)(

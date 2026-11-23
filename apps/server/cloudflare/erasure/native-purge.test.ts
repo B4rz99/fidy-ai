@@ -27,6 +27,30 @@ const repeatPurge = Effect.fn(function* (
 
 type SeededUser = Effect.Success<ReturnType<typeof seed>>;
 
+const seedDeliveredProof = Effect.fnUntraced(function* (
+  owner: SeededUser,
+  [work, state, ordinal]: readonly [string, "approved" | "ambiguous", number]
+) {
+  yield* owner.exec(
+    "INSERT INTO browser_handoffs(id,pairing_id,user_id,ordinal,verifier_digest,expires_at_ms,wrong_attempts,minimum_poll_seconds,outcome,state,email_login) VALUES(?,?,?,?, 'synthetic',?,0,1,'committed','pending_approval',1)",
+    work,
+    work,
+    alice.user,
+    ordinal,
+    owner.now + 60000
+  );
+  yield* owner.exec(
+    "INSERT INTO login_email_proofs(pairing_id,work_id,address,revision,generation,requested_at_ms,expires_at_ms,offer_at_ms,state,selector,delivery_key) VALUES(?,?,'proof@synthetic.test',1,1,?,?,?,?,NULL,?)",
+    work,
+    work,
+    owner.now,
+    owner.now + 60000,
+    owner.now,
+    state,
+    work
+  );
+});
+
 type PhaseHarness = Readonly<{
   runtime: Miniflare;
   driver: Effect.Success<ReturnType<typeof caseDriver>>;
@@ -467,5 +491,49 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       expect(yield* receivedStatus(history(runtime))).toBe(401);
       expect(yield* first.exec("SELECT name FROM sqlite_schema WHERE name='users'")).toEqual([]);
     })
+  );
+  test.effect(
+    "preserves Resend custody after approved and ambiguous proofs clear the selector",
+    () =>
+      Effect.gen(function* () {
+        const runtime = yield* (yield* nativeBillingPlatform)();
+        const owner = yield* seed(runtime, alice);
+        const approved = "22510000-0000-4000-8000-000000000095";
+        const ambiguous = "22510000-0000-4000-8000-000000000096";
+
+        yield* Effect.forEach(
+          [
+            [approved, "approved", 501],
+            [ambiguous, "ambiguous", 502],
+          ] as const,
+          ([work, state, ordinal]) => seedDeliveredProof(owner, [work, state, ordinal]),
+          { discard: true }
+        );
+
+        expect((yield* admitPurge(runtime)).status).toBe(202);
+        expect(yield* owner.exec("SELECT resend FROM local_erasure_custody")).toEqual([
+          { resend: 1 },
+        ]);
+        expect(
+          yield* owner.exec(
+            "SELECT work_id FROM erasure_mail_scope WHERE work_id IN (?,?) ORDER BY work_id",
+            approved,
+            ambiguous
+          )
+        ).toEqual([{ work_id: approved }, { work_id: ambiguous }]);
+
+        yield* owner.exec(
+          "DELETE FROM login_email_proofs WHERE work_id IN (?,?)",
+          approved,
+          ambiguous
+        );
+        expect(
+          yield* owner.exec(
+            "SELECT work_id FROM erasure_expired_mail WHERE work_id IN (?,?) ORDER BY work_id",
+            approved,
+            ambiguous
+          )
+        ).toEqual([{ work_id: approved }, { work_id: ambiguous }]);
+      })
   );
 });

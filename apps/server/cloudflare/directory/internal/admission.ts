@@ -44,8 +44,11 @@ export const chargeBootstrapWindows = Effect.fn(function* (windows: ReadonlyArra
   }).pipe(withStoreCapacity("growth"));
 });
 
-export const admitBootstrap = Effect.fn(function* (request: Request) {
-  const source = request.headers.get("x-provider-source") ?? "";
+export const admitBootstrap = Effect.fn(function* (
+  request: Request,
+  sourceHeader: string = "x-provider-source"
+) {
+  const source = request.headers.get(sourceHeader) ?? "";
 
   if (!/^[a-f0-9]{64}$/u.test(source)) return Option.some(unavailable());
   const path = new URL(request.url).pathname;

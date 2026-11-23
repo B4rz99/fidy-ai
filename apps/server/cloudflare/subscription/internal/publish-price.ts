@@ -17,6 +17,14 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
 
 class PricingOwnerUnbound extends Data.TaggedError("PricingOwnerUnbound") {}
 
+export const pricingPeerAudiences = (environment: PricingEnvironment): ReadonlyArray<string> => [
+  Option.getOrElse(Option.fromNullishOr(environment.BETA_PRO_AUDIENCE), () => ""),
+  environment.CLOUDFLARE_ACCESS_AUDIENCE,
+  environment.BILLING_SUPPORT_AUDIENCE ?? "",
+  environment.ERASURE_SUPPORT_AUDIENCE ?? "",
+  environment.SAMPLE_REVIEW_AUDIENCE ?? "",
+];
+
 const validRequest = (request: Request): boolean =>
   request.method === "POST" && !request.headers.has("origin") && new URL(request.url).search === "";
 
@@ -38,12 +46,7 @@ export const publishPrice = (
         issuer,
         requiredEmail: Option.none(),
         audience: environment.PRICING_PUBLISH_AUDIENCE ?? "",
-        otherAudiences: [
-          Option.getOrElse(Option.fromNullishOr(environment.BETA_PRO_AUDIENCE), () => ""),
-          environment.CLOUDFLARE_ACCESS_AUDIENCE,
-          environment.BILLING_SUPPORT_AUDIENCE ?? "",
-          environment.ERASURE_SUPPORT_AUDIENCE ?? "",
-        ],
+        otherAudiences: pricingPeerAudiences(environment),
       },
       http: input.http,
     });

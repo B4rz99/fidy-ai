@@ -263,11 +263,14 @@ const childCaller = Effect.fn(function* ({ subject, current }: Pick<Call, "subje
   });
 });
 
-const childAccess = Effect.fn(function* (call: Call, children: ReadonlyArray<Child>) {
+const childAccess = Effect.fn(function* (
+  call: Call,
+  children: ReadonlyArray<Pick<Child, "operation" | "index">>
+) {
   const { status } = call;
   const caller = yield* childCaller(call);
 
-  const entitled = (child: Child): boolean =>
+  const entitled = (child: Pick<Child, "operation" | "index">): boolean =>
     grantsRequiredTier({
       requiredTier: child.operation.policy.requiredTier,
       callerTier: status.accessTier,
@@ -343,16 +346,39 @@ const batchConfirmation = Effect.fn(function* (call: Call) {
     : { paid: false, consume: Effect.void };
 });
 
-const commitAuthorizedBatch = Effect.fn(function* (
+const resolveBatchChildren = <E, R>(
+  children: ReadonlyArray<SelectedChild<Prepare | ReservedOwner<E, R>>>
+): Effect.Effect<ReadonlyArray<Child>, E, R> =>
+  Effect.forEach(children, (child) =>
+    Predicate.isFunction(child.prepare)
+      ? Effect.succeed({
+          callId: child.callId,
+          operation: child.operation,
+          input: child.input,
+          index: child.index,
+          prepare: child.prepare,
+        })
+      : Effect.map(child.prepare.reserve(child.input), (prepare) => ({
+          callId: child.callId,
+          operation: child.operation,
+          input: child.input,
+          index: child.index,
+          prepare,
+        }))
+  );
+
+const commitAuthorizedBatch = Effect.fn(function* <E, R, ReserveE, ReserveR>(
   call: Call,
   {
     children,
     invocation,
     admitGrowth,
+    reserve,
   }: {
-    children: ReadonlyArray<Child>;
+    children: ReadonlyArray<SelectedChild<Prepare | ReservedOwner<E, R>>>;
     invocation: Invocation;
     admitGrowth: Effect.Effect<void, StoreCapacityUnavailable>;
+    reserve: Effect.Effect<void, ReserveE, ReserveR>;
   }
 ) {
   const denied = yield* childAccess(call, children);
@@ -370,7 +396,9 @@ const commitAuthorizedBatch = Effect.fn(function* (
   if (Option.isSome(refused)) return refused.value;
 
   if (children.some((child) => requiresGrowthAdmission(child.operation.id))) yield* admitGrowth;
-  const outcome = yield* catchRejection(applyChildren(call, children));
+  yield* reserve;
+  const resolved = yield* resolveBatchChildren(children);
+  const outcome = yield* catchRejection(applyChildren(call, resolved));
 
   if (outcome.status < firstFailureStatus) yield* confirmation.consume;
 
@@ -382,8 +410,7 @@ const commitAuthorizedBatch = Effect.fn(function* (
 
 const reserveRoutes = Effect.fn(function* (
   unit: Unit,
-  children: Option.Option<Selection<unknown>>,
-  resolve: Effect.Success<ReturnType<typeof localProof>>
+  children: Option.Option<Selection<unknown>>
 ) {
   if (Option.isSome(children) && "children" in children.value) {
     const selected = children.value.children.find(
@@ -392,6 +419,7 @@ const reserveRoutes = Effect.fn(function* (
 
     if (selected !== undefined) {
       const current = yield* Clock.currentTimeMillis;
+      const resolve = yield* localProof(unit.request, unit.owns);
       const preliminary = yield* resolve(current);
 
       if (Predicate.isString(preliminary)) return;
@@ -449,20 +477,7 @@ const prepareBatch = Effect.fn(function* <E, R>(
     ? selectChildren({ calls: validInput.value.calls, owners, allowed: () => true })
     : ({ invalid: true } as const);
 
-  yield* reserveRoutes(unit, Option.some(selected), yield* localProof(unit.request, unit.owns));
-
-  const resolved =
-    "children" in selected
-      ? yield* Effect.forEach(selected.children, (child) =>
-          Effect.gen(function* () {
-            const prepare = Predicate.isFunction(child.prepare)
-              ? child.prepare
-              : yield* child.prepare.reserve(child.input);
-
-            return { ...child, prepare };
-          })
-        )
-      : [];
+  const resolved = "children" in selected ? selected.children : [];
 
   return { validInput, selected, resolved, inputHash, digest };
 });
@@ -514,6 +529,7 @@ export const runLocalBatch = Effect.fn(
           children: resolved,
           invocation: { inputHash, digest },
           admitGrowth,
+          reserve: reserveRoutes(unit, Option.some(selected)),
         });
       })
     );

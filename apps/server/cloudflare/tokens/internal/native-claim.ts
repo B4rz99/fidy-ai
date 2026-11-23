@@ -93,7 +93,11 @@ const applyDecision = Effect.fn(function* ({
   }
 
   if (Predicate.isTagged(decision, "SlowDown")) {
-    yield* sql`UPDATE pat_pairings SET minimum_poll_seconds=${Math.min(maximumPollSeconds, decision.minimumPollIntervalSeconds)} WHERE id=${id} AND minimum_poll_seconds=${pairing.minimum_poll_seconds}`;
+    const next = Math.min(maximumPollSeconds, decision.minimumPollIntervalSeconds);
+
+    if (next > pairing.minimum_poll_seconds) {
+      yield* sql`UPDATE pat_pairings SET minimum_poll_seconds=${next} WHERE id=${id} AND minimum_poll_seconds=${pairing.minimum_poll_seconds}`;
+    }
 
     return response({
       status: 429,

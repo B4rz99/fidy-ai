@@ -11,6 +11,25 @@ type TransportResult = Effect.Effect<Awaited<ReturnType<Miniflare["dispatchFetch
 
 type Post = (path: string, payload: unknown) => TransportResult;
 
+type DirectoryStorage = Awaited<ReturnType<Miniflare["unsafeGetDurableObjectStorage"]>>;
+
+const seedRoute = Effect.fnUntraced(function* (
+  storage: DirectoryStorage,
+  now: number,
+  index: number
+) {
+  yield* native(() =>
+    storage.exec(
+      "INSERT INTO pat_routes(short_id,user_id,pat_id,reservation_id,expires_at_ms) VALUES(?,?,?,?,?)",
+      String(index).padStart(8, "0"),
+      alice.user,
+      "816551ab-a25e-4167-b87c-f7cc6889" + String(index).padStart(4, "0"),
+      "bound:" + index,
+      now + 86400000
+    )
+  );
+});
+
 const refusedWrongProof = (post: Post, pairingId: string): Effect.Effect<void> =>
   Effect.gen(function* () {
     const wrong = yield* post("/pat-pairings/claim", {
@@ -507,6 +526,171 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           )
         )
       ).toEqual([{ minimum_poll_seconds: 60, last_poll_at_ms: now }]);
+    })
+  );
+
+  test.effect("does not reserve PAT routes before admitting the batch caller", () =>
+    Effect.gen(function* () {
+      const runtime = yield* (yield* nativeUserPlatform)();
+
+      const storage = yield* native(() =>
+        runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
+      );
+
+      const now = yield* Clock.currentTimeMillis;
+
+      const response = yield* native(() =>
+        runtime.dispatchFetch("https://api.fidyapp.com/operations/atomic-batch", {
+          method: "POST",
+          headers: {
+            origin: browserOrigins.production,
+            "content-type": "application/json",
+            "cf-connecting-ip": "192.0.2.41",
+          },
+          body: JSON.stringify({
+            calls: [
+              {
+                callId: "816551ab-a25e-4167-b87c-f7cc68890163",
+                operation: "pats.createManualPAT",
+                input: {
+                  payload: {
+                    requestId: "816551ab-a25e-4167-b87c-f7cc68890079",
+                    grant: {
+                      recipientLabel: "CLI",
+                      scopes: ["read"],
+                      lifetimeDays: 7,
+                      reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(now + 604800000)),
+                    },
+                  },
+                },
+              },
+            ],
+          }),
+        })
+      );
+
+      expect(response.status).toBe(401);
+      expect(yield* native(() => storage.exec("SELECT count(*) AS n FROM pat_routes"))).toEqual([
+        { n: 0 },
+      ]);
+    })
+  );
+
+  test.effect("bounds PAT pairing admission and skips a no-op slowdown write", () =>
+    Effect.gen(function* () {
+      const runtime = yield* (yield* nativeUserPlatform)();
+
+      const storage = yield* native(() =>
+        runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
+      );
+
+      const post = (path: string, payload: unknown): TransportResult =>
+        native(() =>
+          runtime.dispatchFetch("https://api.fidyapp.com" + path, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "cf-connecting-ip": "192.0.2.42",
+            },
+            body: JSON.stringify(payload),
+          })
+        );
+
+      const started = yield* post("/pat-pairings", {
+        recipientLabel: "CLI",
+        scopes: ["read"],
+        lifetimeDays: 7,
+      });
+
+      const pairing = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          pairingId: Schema.String,
+          privateDeviceCode: Schema.String,
+        })
+      )(yield* native(() => started.json()));
+
+      expect(
+        (yield* native(() =>
+          storage.exec(
+            "SELECT count(*) AS n FROM bootstrap_admissions WHERE scope LIKE 'source:%' OR scope='global'"
+          )
+        ))[0]?.n
+      ).toBeGreaterThan(0);
+
+      const claim = {
+        pairingId: pairing.pairingId,
+        privateDeviceCode: pairing.privateDeviceCode,
+      };
+
+      expect((yield* post("/pat-pairings/claim", claim)).status).toBe(202);
+      yield* native(() =>
+        storage.exec(
+          "UPDATE pat_bootstrap SET minimum_poll_seconds=60 WHERE id=?",
+          pairing.pairingId
+        )
+      );
+      yield* native(() =>
+        storage.exec(
+          "CREATE TRIGGER no_op_poll BEFORE UPDATE OF minimum_poll_seconds ON pat_bootstrap WHEN NEW.minimum_poll_seconds=OLD.minimum_poll_seconds BEGIN SELECT RAISE(ABORT,'no-op'); END"
+        )
+      );
+
+      expect((yield* post("/pat-pairings/claim", claim)).status).toBe(429);
+    })
+  );
+  test.effect("refuses a manual PAT reservation beyond the per-user outstanding bound", () =>
+    Effect.gen(function* () {
+      const runtime = yield* (yield* nativeUserPlatform)();
+      const owner = yield* seed(runtime, alice);
+
+      const storage = yield* native(() =>
+        runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
+      );
+
+      yield* Effect.forEach(
+        Array.from({ length: 12 }, (_, index) => index),
+        (index) => seedRoute(storage, owner.now, index),
+        { discard: true }
+      );
+
+      const response = yield* native(() =>
+        runtime.dispatchFetch("https://api.fidyapp.com/operations/atomic-batch", {
+          method: "POST",
+          headers: {
+            origin: browserOrigins.production,
+            cookie: "__Host-fidy_session=" + alice.bearer,
+            "Fidy-Session-Binding": alice.session,
+            "content-type": "application/json",
+            "cf-connecting-ip": "192.0.2.43",
+          },
+          body: JSON.stringify({
+            calls: [
+              {
+                callId: "816551ab-a25e-4167-b87c-f7cc68890164",
+                operation: "pats.createManualPAT",
+                input: {
+                  payload: {
+                    requestId: "816551ab-a25e-4167-b87c-f7cc68890080",
+                    grant: {
+                      recipientLabel: "CLI",
+                      scopes: ["read"],
+                      lifetimeDays: 7,
+                      reviewExpiresAt: DateTime.formatIso(
+                        DateTime.makeUnsafe(owner.now + 604800000)
+                      ),
+                    },
+                  },
+                },
+              },
+            ],
+          }),
+        })
+      );
+
+      expect(response.status).toBe(400);
+      expect(yield* native(() => storage.exec("SELECT count(*) AS n FROM pat_routes"))).toEqual([
+        { n: 12 },
+      ]);
     })
   );
 });

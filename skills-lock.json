@@ -6,13 +6,13 @@
       "commit": "13b020367525e8c6efe6cede8f387697b2a8d907",
       "sourceType": "github",
       "skillPath": "skills/install-anti-slop/SKILL.md",
-      "computedHash": "ef362dc61db8bc554516e92fb531e905557b7d9bbe0f7f5d1d6ebab11f41a2dc"
+      "computedHash": "85229cb8f99c6a3cc1071d0e31737fd8c588fcc566b8ab0ed21340e61e48a3ff"
     },
     "shadcn": {
       "source": "shadcn/ui",
       "sourceType": "github",
       "skillPath": "skills/shadcn/SKILL.md",
-      "computedHash": ""
+      "computedHash": "7e4b14eb0f9e0b00dfea25e26f8c4b17dbdaca0fd34eccb4c070219e3b3391f7"
     }
   }
 }

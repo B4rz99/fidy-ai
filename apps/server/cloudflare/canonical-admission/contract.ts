@@ -334,6 +334,12 @@ export type LocalMutationResult = Readonly<{
   body: Schema.Json;
 }>;
 
+export const committedResult = (data: Schema.Json): LocalMutationResult => ({
+  status: 200,
+  outcome: "success",
+  body: { data, next: [] },
+});
+
 export type CanonicalWireOutcome = Readonly<{
   status: number;
   outcome: CanonicalOutcome;

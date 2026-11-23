@@ -432,11 +432,14 @@ const callbackHeaders = (request: Request): Headers =>
     ["x-idempotency-key", request.headers.get("x-idempotency-key") ?? ""],
   ]);
 
-const wompiEventHeaders = (request: Request): Headers =>
-  new Headers({
-    "content-type": request.headers.get("content-type") ?? "",
-    "x-event-checksum": request.headers.get("x-event-checksum") ?? "",
-  });
+const wompiEventHeaders = (request: Request): Headers => {
+  const headers = new Headers({ "content-type": request.headers.get("content-type") ?? "" });
+  const checksum = request.headers.get("x-event-checksum");
+
+  if (checksum !== null) headers.set("x-event-checksum", checksum);
+
+  return headers;
+};
 
 const providerHeaders = (request: Request, path: string): Headers =>
   path === callbackPath ? callbackHeaders(request) : wompiEventHeaders(request);
@@ -665,12 +668,7 @@ const forwardCandidateVersionOverride = (
 ): void => {
   headers.delete(smokeVersionHeader);
 
-  const operatorRoute =
-    new URL(request.url).pathname === erasureSupportPath &&
-    request.method === "POST" &&
-    (request.headers.get("cf-access-jwt-assertion") ?? "") !== "";
-
-  if (!operatorRoute && !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) {
+  if (!smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) {
     return;
   }
 

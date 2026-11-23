@@ -256,19 +256,6 @@ tester.run(
 
 const workspaceRoot = fileURLToPath(new URL("../..", import.meta.url));
 
-const jevVariables = new Set([
-  "CI",
-  "TYPESAFE_API_KEY",
-  "TYPESAFE_AI_API_KEY",
-  "FACTORY_API_KEY",
-  "AI_GATEWAY_API_KEY",
-  "VERCEL_OIDC_TOKEN",
-]);
-
-const lintEnvironment = Object.fromEntries(
-  Object.entries(process.env).filter(([name]) => !jevVariables.has(name))
-);
-
 const testProbe = join(workspaceRoot, `apps/web/src/.lint-test-probe-${process.pid}.test.tsx`);
 
 try {
@@ -280,7 +267,7 @@ try {
   const result = spawnSync(
     "./node_modules/.bin/oxlint",
     ["--config", ".oxlintrc.json", testProbe],
-    { cwd: workspaceRoot, encoding: "utf8", env: lintEnvironment }
+    { cwd: workspaceRoot, encoding: "utf8" }
   );
 
   const report = `${result.stdout}\n${result.stderr}`;
@@ -305,7 +292,7 @@ try {
   const result = spawnSync(
     "./node_modules/.bin/oxlint",
     ["--config", ".oxlintrc.json", probeFile],
-    { cwd: workspaceRoot, encoding: "utf8", env: lintEnvironment }
+    { cwd: workspaceRoot, encoding: "utf8" }
   );
 
   assert.match(`${result.stdout}\n${result.stderr}`, /effect-guards\(no-ordinary-interface\)/u);
@@ -367,7 +354,7 @@ try {
     const result = spawnSync(
       "./node_modules/.bin/oxlint",
       ["--config", ".oxlintrc.json", designProbe],
-      { cwd: workspaceRoot, encoding: "utf8", env: lintEnvironment }
+      { cwd: workspaceRoot, encoding: "utf8" }
     );
 
     const report = `${result.stdout}\n${result.stderr}`;

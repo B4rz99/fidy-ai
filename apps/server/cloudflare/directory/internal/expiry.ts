@@ -1,4 +1,4 @@
-import { oauthClientIdleMs } from "../../oauth-agents/contract";
+import { oauthClientIdleMs, oauthClientUnusedMs } from "../../oauth-agents/contract";
 import { Effect, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 
@@ -31,7 +31,7 @@ export const drainBootstrapExpiry = Effect.fn(function* (now: number) {
     `DELETE FROM whatsapp_invitations WHERE id IN(SELECT id FROM (${settledInvitations}) WHERE expires_at_ms<=? ORDER BY expires_at_ms LIMIT ?)`,
     [now - retentionAfterExpiryMs, pageSize]
   );
-  yield* sql`DELETE FROM oauth_public_clients WHERE id IN(SELECT id FROM oauth_public_clients WHERE last_used_at_ms<=${now - oauthClientIdleMs} ORDER BY last_used_at_ms LIMIT ${pageSize})`;
+  yield* sql`DELETE FROM oauth_public_clients WHERE id IN(SELECT id FROM oauth_public_clients WHERE last_used_at_ms<=${now - oauthClientIdleMs} OR (last_used_at_ms=created_at_ms AND created_at_ms<=${now - oauthClientUnusedMs}) ORDER BY last_used_at_ms LIMIT ${pageSize})`;
   yield* sql`DELETE FROM oauth_review_requests WHERE id IN(SELECT id FROM oauth_review_requests WHERE expires_at_ms<=${now} ORDER BY expires_at_ms LIMIT ${pageSize})`;
   yield* sql`DELETE FROM oauth_routes WHERE rowid IN(SELECT rowid FROM oauth_routes WHERE expires_at_ms<=${now} ORDER BY expires_at_ms LIMIT ${pageSize})`;
   yield* sql`DELETE FROM oauth_leases WHERE expires_at_ms<=${now}`;

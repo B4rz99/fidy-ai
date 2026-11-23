@@ -1,5 +1,5 @@
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
-import { Data, Deferred, Effect, Option, Schema } from "effect";
+import { Data, Deferred, Effect, Schema } from "effect";
 
 type Environment = { CONTROL: DurableObjectNamespace; INGRESS: Fetcher };
 
@@ -22,6 +22,10 @@ const completion = (content: string): Response =>
   });
 
 type FixtureTool = Readonly<{ name: string; arguments: string }>;
+
+type BrowserReply =
+  | Readonly<{ kind: "browser"; response: Promise<Response> }>
+  | Readonly<{ kind: "other" }>;
 
 const fixtureTool = (mode: string): FixtureTool => {
   const id = "22460000-0000-4000-8000-000000000020";
@@ -202,11 +206,11 @@ export class HostedProviderControl extends DurableObject<Environment> {
 
     return completion("Listo.");
   }
-  private browserRequest(request: Request): Option.Option<Promise<Response>> {
+  private browserRequest(request: Request): BrowserReply {
     if (request.url === "https://fixture.invalid/disconnect-browser") {
       this.browserClient.abort();
 
-      return Option.some(Promise.resolve(new Response(null, { status: 204 })));
+      return { kind: "browser", response: Promise.resolve(new Response(null, { status: 204 })) };
     }
 
     if (
@@ -215,8 +219,9 @@ export class HostedProviderControl extends DurableObject<Environment> {
     ) {
       const path = request.url.endsWith("admission") ? "" : "/progress";
 
-      return Option.some(
-        Effect.runPromise(
+      return {
+        kind: "browser",
+        response: Effect.runPromise(
           Effect.tryPromise({
             try: () =>
               request.text().then((body) =>
@@ -245,11 +250,11 @@ export class HostedProviderControl extends DurableObject<Environment> {
               }).pipe(Effect.as(new Response(null, { status: 499 })))
             )
           )
-        )
-      );
+        ),
+      };
     }
 
-    return Option.none();
+    return { kind: "other" };
   }
   private readonly templateSend = Effect.fn({ self: this }, function* (request: Request) {
     const body = yield* Schema.decodeUnknownEffect(
@@ -276,7 +281,7 @@ export class HostedProviderControl extends DurableObject<Environment> {
 
     const browser = this.browserRequest(request);
 
-    if (Option.isSome(browser)) return browser.value;
+    if (browser.kind === "browser") return browser.response;
 
     if (new URL(request.url).pathname === "/tools") {
       if (request.method !== "POST") return Promise.resolve(Response.json(this.available));

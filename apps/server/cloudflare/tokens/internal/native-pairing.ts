@@ -13,7 +13,6 @@ import { maxPairingsPerWindow } from "../../../src/shell/tokens/operations";
 import { newId } from "../../secret-material/operations";
 import { withStoreCapacity } from "../../runtime/sqlite/operations";
 import {
-  decodeBody,
   digest,
   invalid,
   iso,
@@ -22,6 +21,7 @@ import {
   response,
   unavailable,
 } from "./pat-shared";
+import { decodeRequestPayload } from "./request-body";
 import { publicCode, rateLimited } from "./pat-pairing";
 
 const isResponse = Schema.is(Schema.instanceOf(Response));
@@ -44,7 +44,7 @@ const proofSchema = Schema.Struct({
 });
 
 const start = Effect.fn(function* (request: Request) {
-  const payload = yield* decodeBody({ request, schema: StartPATPairingPayload });
+  const payload = yield* decodeRequestPayload({ request, schema: StartPATPairingPayload });
 
   if (Option.isNone(payload)) return invalid();
   const source = request.headers.get("x-pat-source") ?? "";
@@ -140,7 +140,9 @@ const pollingDestination = Effect.fn(function* (id: string, proofDigest: string)
     }
 
     if (Predicate.isTagged(decision, "SlowDown")) {
-      yield* sql`UPDATE pat_bootstrap SET minimum_poll_seconds=${Math.min(pollLimit, decision.minimumPollIntervalSeconds)} WHERE id=${id}`;
+      const interval = Math.min(pollLimit, decision.minimumPollIntervalSeconds);
+
+      yield* sql`UPDATE pat_bootstrap SET minimum_poll_seconds=${interval} WHERE id=${id} AND minimum_poll_seconds<>${interval}`;
 
       return response({
         status: tooFast,
@@ -166,7 +168,7 @@ const poll = Effect.fn(function* (
   request: Request,
   users: Pick<DurableObjectNamespace, "getByName">
 ) {
-  const proof = yield* decodeBody({ request, schema: proofSchema });
+  const proof = yield* decodeRequestPayload({ request, schema: proofSchema });
 
   if (Option.isNone(proof)) return invalid();
   const id = proof.value.pairingId;

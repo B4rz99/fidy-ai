@@ -43,7 +43,18 @@ const dispatch = Effect.fn(function* (unit: Unit) {
   const { request, operation } = unit;
   const url = new URL(request.url);
   const id = Schema.decodeOption(BudgetId)(url.pathname.split("/").at(-1) ?? "");
-  const invalidTarget = Option.isNone(id) ? Option.some(() => missingBudget()) : Option.none();
+  const target = Effect.fromOption(id, () => missingBudget());
+
+  const update = (
+    target: BudgetId
+  ): Effect.Effect<Option.Option<{ id: Option.Option<BudgetId>; input: UpdateBudgetInput }>> =>
+    boundedJsonBody({
+      request,
+      policy,
+      schema: Schema.toCodecJson(UpdateBudgetInput),
+    }).pipe(
+      Effect.map((input) => Option.map(input, (input) => ({ id: Option.some(target), input })))
+    );
 
   switch (operation.id) {
     case "budgets.createBudget":
@@ -57,27 +68,17 @@ const dispatch = Effect.fn(function* (unit: Unit) {
         work: saveLocalBudget,
       });
     case "budgets.updateBudget":
-      return yield* runLocalMutation(
-        {
-          ...unit,
-          input: boundedJsonBody({
-            request,
-            policy,
-            schema: Schema.toCodecJson(UpdateBudgetInput),
-          }).pipe(
-            Effect.map(
-              Option.flatMap((input) => Option.map(id, (id) => ({ id: Option.some(id), input })))
-            )
-          ),
-          work: saveLocalBudget,
-        },
-        invalidTarget
-      );
+      return yield* runLocalMutation({
+        ...unit,
+        input: target.pipe(Effect.flatMap(update)),
+        work: saveLocalBudget,
+      });
     case "budgets.deleteBudget":
-      return yield* runLocalMutation(
-        { ...unit, input: Effect.succeed(id), work: deleteLocalBudget },
-        invalidTarget
-      );
+      return yield* runLocalMutation({
+        ...unit,
+        input: target.pipe(Effect.asSome),
+        work: deleteLocalBudget,
+      });
     default:
       return yield* runLocalMutation({
         ...unit,

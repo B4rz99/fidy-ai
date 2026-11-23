@@ -361,6 +361,7 @@ const budgetCategory = Effect.fnUntraced(function* (user: UserId, input: UpdateB
     },
   }).pipe(
     Effect.asSome,
+    Effect.tapError(Effect.logDebug),
     Effect.catchTag("CategoryNotFound", () => Effect.succeedNone)
   );
 });

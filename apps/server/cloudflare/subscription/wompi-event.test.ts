@@ -30,6 +30,13 @@ const request = (body: unknown, header = checksum): Request =>
     body: JSON.stringify(body),
   });
 
+const requestWithoutChecksum = (body: unknown): Request =>
+  new Request("https://example.test/providers/wompi/billing-events", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
 const verify = (
   body: unknown,
   header = checksum
@@ -50,6 +57,26 @@ it("authenticates an independently calculated ordered-property Wompi event vecto
           signedStatus: event.data.transaction.status,
         })
       );
+    })
+  ));
+
+it("accepts a body-signed event when the checksum header is absent and rejects an empty header", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      expect(
+        yield* verifiedWompiEventHint({
+          request: requestWithoutChecksum(event),
+          secret,
+          environment: "production",
+        })
+      ).toEqual(
+        Option.some({
+          transactionId: event.data.transaction.id,
+          signedAt: event.timestamp,
+          signedStatus: event.data.transaction.status,
+        })
+      );
+      expect(yield* Effect.tryPromise(() => verify(event, ""))).toEqual(Option.none());
     })
   ));
 

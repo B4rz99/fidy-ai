@@ -9,16 +9,8 @@ import { recordClaimedPAT } from "../../../src/shell/audit/operations";
 import { withStoreCapacity } from "../../runtime/sqlite/operations";
 import { newId } from "../../secret-material/operations";
 import { type Directory, Reservation, directoryEvidence } from "./native-routes";
-import {
-  decodeBody,
-  digest,
-  invalid,
-  iso,
-  newBearer,
-  patFrom,
-  response,
-  unavailable,
-} from "./pat-shared";
+import { digest, invalid, iso, newBearer, patFrom, response, unavailable } from "./pat-shared";
+import { decodeRequestPayload } from "./request-body";
 import { PATUnavailable } from "../contract";
 
 const isResponse = Schema.is(Schema.instanceOf(Response));
@@ -220,7 +212,7 @@ const issueClaim = Effect.fn(function* ({
 
 export const localClaim = Effect.fn(
   function* (request: Request, directory: Directory, owns: (user: string) => boolean) {
-    const requestProof = yield* decodeBody({ request, schema: Claim });
+    const requestProof = yield* decodeRequestPayload({ request, schema: Claim });
 
     if (Option.isNone(requestProof)) return invalid();
     const input = requestProof.value;

@@ -1,0 +1,21 @@
+apps/web/src/features/privacy/dev-fixtures.ts
+  s_370e136601c9b6::t_36b5812b12e3f8 25
+apps/web/src/features/recurring/month-picker.tsx
+  s_370e136601c9b6::t_d445a9933b8f17 91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "628a9a1e80b92915c7708fe9f0cfc9d2d75edd9f",
+  "prompts": {},
+  "sessions": {
+    "s_370e136601c9b6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "tabby-puppet",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+apps/server/cloudflare/tokens/internal/native-pairing.ts
+  h_c6d49c804e0ad2 143-145
+apps/server/cloudflare/tokens/native-pairing.test.ts
+  h_c6d49c804e0ad2 3,451-511
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8b463138adcb52faae2c25457de236c69a2305c7",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -6,8 +6,8 @@ import {
   type CanonicalRejection,
   type CanonicalRejectionOutcome,
   type LocalMutationPlan,
-  type LocalMutationResult,
   childRejectionMessage,
+  committedResult,
   childRejection as rejectChild,
 } from "../contract";
 import { recurringDiscoveryIntervalMs } from "../../recurring/contract";
@@ -194,11 +194,7 @@ export const commitChildren = Effect.fn(function* (
           );
         }
 
-        return {
-          status: 200,
-          outcome: "success" as const,
-          body: { data: { results }, next: [] },
-        } satisfies LocalMutationResult;
+        return committedResult({ results });
       })
     )
     .pipe(Effect.catchTag("ChildRefused", (failure) => refuseChild(failure, audit)));

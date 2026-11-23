@@ -78,13 +78,6 @@ export const isLocalTransactionOperation = (id: string): boolean =>
     "transactions.unlinkTransactions",
   ].includes(id);
 
-const invalidTransactionTarget = (
-  id: string
-): Option.Option<() => ReturnType<typeof missingLocalTransaction>> =>
-  Option.isNone(Schema.decodeOption(TransactionId)(id))
-    ? Option.some(() => missingLocalTransaction())
-    : Option.none();
-
 type LocalTransactionRequest = Readonly<{
   storage: DurableObjectStorage;
   request: Request;
@@ -126,7 +119,18 @@ const wakeForFacts = <A, E>(
 const dispatchTransaction = Effect.fn(function* (unit: LocalTransactionRequest) {
   const { request, operation } = unit;
   const id = rawPathId({ request });
-  const invalidTarget = invalidTransactionTarget(id);
+
+  const target = Effect.fromOption(
+    Option.map(Schema.decodeOption(TransactionId)(id), () => id),
+    () => missingLocalTransaction()
+  );
+
+  const update = (
+    target: string
+  ): Effect.Effect<Option.Option<Parameters<typeof correctLocalTransaction>[0]>> =>
+    correctionInput(request).pipe(
+      Effect.map((input) => Option.map(input, (input) => ({ id: target, input })))
+    );
 
   switch (operation.id) {
     case "transactions.createTransaction":
@@ -136,28 +140,23 @@ const dispatchTransaction = Effect.fn(function* (unit: LocalTransactionRequest) 
         work: wakeForFacts(unit.storage, captureLocalTransaction),
       });
     case "transactions.updateTransaction":
-      return yield* runLocalMutation(
-        {
-          ...unit,
-          input: correctionInput(request).pipe(Effect.map(Option.map((input) => ({ id, input })))),
-          work: wakeForFacts(unit.storage, correctLocalTransaction),
-        },
-        invalidTarget
-      );
+      return yield* runLocalMutation({
+        ...unit,
+        input: target.pipe(Effect.flatMap(update)),
+        work: wakeForFacts(unit.storage, correctLocalTransaction),
+      });
     case "transactions.deleteTransaction":
-      return yield* runLocalMutation(
-        {
-          ...unit,
-          input: Effect.succeedSome(id),
-          work: wakeForFacts(unit.storage, deleteLocalTransaction),
-        },
-        invalidTarget
-      );
+      return yield* runLocalMutation({
+        ...unit,
+        input: target.pipe(Effect.asSome),
+        work: wakeForFacts(unit.storage, deleteLocalTransaction),
+      });
     case "transactions.getTransaction":
-      return yield* runLocalMutation(
-        { ...unit, input: Effect.succeedSome(id), work: inspectLocalTransaction },
-        invalidTarget
-      );
+      return yield* runLocalMutation({
+        ...unit,
+        input: target.pipe(Effect.asSome),
+        work: inspectLocalTransaction,
+      });
     case "transactions.linkTransactions":
     case "transactions.unlinkTransactions": {
       const link = operation.id === "transactions.linkTransactions";

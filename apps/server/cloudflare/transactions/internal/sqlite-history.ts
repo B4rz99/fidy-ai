@@ -5,7 +5,7 @@ import { withStoreCapacity } from "../../runtime/sqlite/operations";
 import { CategoryReference } from "../../../src/core/categories/contract";
 import { currentCategoryRelease, interpretCategory } from "../../../src/core/categories/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Data, Effect, Option, Schema } from "effect";
+import { Clock, Data, Effect, Option, Result, Schema } from "effect";
 import { recordAuthorizedCall } from "../../../src/shell/audit/operations";
 import type { LocalMutationResult } from "../../canonical-admission/contract";
 import {
@@ -53,13 +53,6 @@ const presentRetainedHistory = (input: Parameters<typeof presentHistory>[0]): Re
 
 class HistoryUnavailable extends Data.TaggedError("HistoryUnavailable") {}
 
-const parsedHistoryQuery = Effect.fn(function* (request: Request, search: boolean) {
-  return yield* parseQuery({ request, search, id: Option.none<string>() }).pipe(
-    Effect.map((query) => ({ kind: "valid" as const, query })),
-    Effect.catchTag("InvalidTransactionQuery", () => Effect.succeed({ kind: "invalid" as const }))
-  );
-});
-
 export const readUserHistory = Effect.fn(function* (
   request: Request,
   owns: (userId: string) => boolean
@@ -72,7 +65,7 @@ export const readUserHistory = Effect.fn(function* (
   const search = new URL(request.url).pathname === "/transactions/search";
   const operation = search ? "transactions.searchTransactions" : "transactions.listTransactions";
   const selection = { request, search, id: Option.none<string>() } as const;
-  const parsed = yield* parsedHistoryQuery(request, search);
+  const parsed = yield* Effect.result(parseQuery({ request, search, id: Option.none<string>() }));
 
   return yield* Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
@@ -100,17 +93,19 @@ export const readUserHistory = Effect.fn(function* (
 
     let response = invalid();
 
-    if (parsed.kind === "valid") {
+    if (Result.isSuccess(parsed)) {
+      const query = parsed.success;
+
       const page = selectedHistoryPage({
         authority,
-        query: parsed.query,
+        query,
         userSelection: users,
       });
 
       const rows = yield* sql.unsafe(page.sql, page.bindings);
       response = presentRetainedHistory({
         rows: { results: rows },
-        query: parsed.query,
+        query,
         selection,
       });
 

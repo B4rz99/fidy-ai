@@ -166,18 +166,13 @@ export const dispatchLocalReview = Effect.fn(
     if (unit.operation.id === "ingestion.getStatementSubmission") {
       const id = new URL(unit.request.url).pathname.split("/").at(-1) ?? "";
 
-      const invalid = Option.isNone(Schema.decodeOption(StatementSubmissionId)(id))
-        ? Option.some(() => missing())
-        : Option.none();
+      const valid = Option.isSome(Schema.decodeOption(StatementSubmissionId)(id));
 
-      return yield* runLocalMutation(
-        {
-          ...unit,
-          input: Effect.succeedSome(id),
-          work: (target, user) => localSubmission(user, target),
-        },
-        invalid
-      );
+      return yield* runLocalMutation({
+        ...unit,
+        input: valid ? Effect.succeedSome(id) : Effect.fail(missing()),
+        work: (target, user) => localSubmission(user, target),
+      });
     }
 
     if (unit.operation.id === "ingestion.getReviewItem") {

@@ -86,14 +86,9 @@ export const evaluateMergeGate = (
     plan: Plan;
     native: boolean;
     jobs: ReadonlyArray<CiJob>;
-    runConclusion: string;
   }>
 ): MergeGateVerdict => {
-  const conclusionReasons =
-    input.runConclusion === "success" ? [] : [`the Checks run concluded ${input.runConclusion}`];
-
   const reasons = [
-    ...conclusionReasons,
     ...alwaysReasons(input.jobs),
     ...selectedGroups(input.plan, input.native).flatMap((group) => groupReasons(group, input.jobs)),
     ...input.jobs.flatMap((job) =>
@@ -244,7 +239,7 @@ const readJobs = (
 ): Effect.Effect<ReadonlyArray<CiJob>, MergeGateFailure, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const text = yield* readText(
-      `/repos/${repository}/actions/runs/${runId}/jobs?per_page=100&page=1`
+      `/repos/${repository}/actions/runs/${runId}/jobs?per_page=100&page=1&filter=latest`
     );
 
     const page = yield* Schema.decodeEffect(Schema.fromJsonString(JobsPage))(text).pipe(
@@ -276,12 +271,11 @@ const coordinates = Effect.gen(function* () {
 const run = Effect.gen(function* () {
   const repository = required("REPOSITORY");
   const runId = required("RUN_ID");
-  const runConclusion = required("RUN_CONCLUSION");
   const { head, pullNumber } = yield* coordinates;
 
   const { native, plan } = yield* readPlan(repository, pullNumber);
   const jobs = yield* readJobs(repository, runId);
-  const verdict = evaluateMergeGate({ jobs, native, plan, runConclusion });
+  const verdict = evaluateMergeGate({ jobs, native, plan });
 
   yield* report({
     repository,

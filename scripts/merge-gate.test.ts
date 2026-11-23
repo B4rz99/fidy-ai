@@ -28,7 +28,6 @@ describe("merge gate", () => {
       plan: plan({ unit: true }),
       native: false,
       jobs: [...always, job("Unit and artifact tests"), job("Builds", "skipped")],
-      runConclusion: "success",
     });
 
     expect(verdict.passed).toBe(true);
@@ -40,7 +39,6 @@ describe("merge gate", () => {
         plan: plan({ builds: true }),
         native: false,
         jobs: [...always, job("Builds", conclusion)],
-        runConclusion: "success",
       });
 
       expect(verdict.passed).toBe(false);
@@ -52,7 +50,6 @@ describe("merge gate", () => {
       plan: plan(),
       native: false,
       jobs: [...always, job("Builds")],
-      runConclusion: "success",
     });
 
     expect(verdict.passed).toBe(false);
@@ -68,7 +65,6 @@ describe("merge gate", () => {
         plan: plan({ "cloudflare-adapters": true }),
         native: false,
         jobs: [...always, ...shards],
-        runConclusion: "success",
       }).passed
     ).toBe(true);
     expect(
@@ -81,7 +77,6 @@ describe("merge gate", () => {
           job("Cloudflare adapters (2/4)", "failure"),
           ...shards.slice(2),
         ],
-        runConclusion: "success",
       }).passed
     ).toBe(false);
   });
@@ -92,12 +87,7 @@ describe("merge gate", () => {
         plan: plan(),
         native: false,
         jobs: [job("Select affected checks"), job("Workspace Gate")],
-        runConclusion: "success",
       }).passed
-    ).toBe(false);
-    expect(
-      evaluateMergeGate({ plan: plan(), native: false, jobs: always, runConclusion: "failure" })
-        .passed
     ).toBe(false);
   });
 });

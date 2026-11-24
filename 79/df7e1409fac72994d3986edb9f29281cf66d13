@@ -1,0 +1,16 @@
+.github/workflows/native-storage-release.yml
+  h_c6d49c804e0ad2 4-15,138-139,162,202,215,220,250,256,263,270,275,280,285,290,303,309,313,317,321,327,333,339,346,355,362,366,381,387,408,412,416,423,430,434,441,450,457,464,466,525,532,539,550,554,558,565,574,581,587
+scripts/repo-hygiene.test.ts
+  h_c6d49c804e0ad2 65-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "79df7e1409fac72994d3986edb9f29281cf66d13",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

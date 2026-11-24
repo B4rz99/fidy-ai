@@ -1,0 +1,115 @@
+infra/cloudflare/tsconfig.json
+  s_0a1387c8ccf49e::t_afccd187685358 11,16
+apps/server/cloudflare/core-worker.ts
+  s_0a1387c8ccf49e::t_88de8dd63e0b07 97
+infra/cloudflare/scripts/check-kapso-launch.test.ts
+  s_0a1387c8ccf49e::t_de941b480b1fb4 65
+apps/server/cloudflare/subscription/runtime.ts
+  s_0a1387c8ccf49e::t_0ccd94d252c787 193,227,306-310
+apps/server/cloudflare/erasure-store/runtime.ts
+  s_0a1387c8ccf49e::t_5a59d61aca8aeb 31-37
+infra/cloudflare/native-application-resources.ts
+  s_0a1387c8ccf49e::t_e0bbb1f0559516 20-32,35
+apps/server/cloudflare/user-store/runtime.ts
+  s_0a1387c8ccf49e::t_e0253d4d710ae8 255,257,516-518,551,620,666,930,958,973,982,1002,1198,1228,1292
+infra/cloudflare/package.json
+  s_0a1387c8ccf49e::t_ee94e9d431434c 9-11
+.github/workflows/alchemy-stack.yml
+  s_0a1387c8ccf49e::t_fbc5733b95ec74 1,4-13,19-20,23,25-27,37-59,63,65,67-68,71,75,77-111
+infra/cloudflare/edge-security.ts
+  s_0a1387c8ccf49e::t_dd0327b2bae5b8 1,34
+apps/web/test/transport/origin.test.ts
+  s_0a1387c8ccf49e::t_c8549418c96b00 10,19
+apps/server/.dependency-cruiser.mjs
+  s_0a1387c8ccf49e::t_1285f02c69acae 25
+infra/cloudflare/native-application-plan.test.ts
+  s_0a1387c8ccf49e::t_4e7bb68e90b17b 35-57,60-66,68-69,71,73-78,80-84,86-87,90-110,112-113,115,117-118,120-121,123-124,126,128-135
+apps/server/cloudflare/core-http/contract.ts
+  s_0a1387c8ccf49e::t_3923295d97cfc9 4,24,27-29
+scripts/ci-changes.ts
+  s_0a1387c8ccf49e::t_486904456ba4f4 89-122,164-165
+docs/adr/0026-cloudflare-native-production-replatform.md
+  s_0a1387c8ccf49e::t_77d66f0bbe76ce 72-74,96,111
+docs/server-contract-artifacts.md
+  s_0a1387c8ccf49e::t_c086d5a3eaf613 48-49
+infra/cloudflare/native-application-bindings.ts
+  s_0a1387c8ccf49e::t_95bf8b3237ad42 8,15,31,40,99,109-110,116,160,171,216,221,227,230
+.github/workflows/deploy-app.yml
+  s_0a1387c8ccf49e::t_7f51ad24064b99 1,4-17,23,27-32
+apps/server/cloudflare/core-http/runtime.ts
+  s_0a1387c8ccf49e::t_22cc6148bc9d97 1,16,40-41,73,79
+apps/server/cloudflare/user-store/internal/bootstrap.ts
+  s_0a1387c8ccf49e::t_f731f4b0828849 83-86
+.github/workflows/deploy-site.yml
+  s_0a1387c8ccf49e::t_193f8ae260cef5 1,4-17,23,27-32
+apps/server/cloudflare/maintenance/core-schedule.test.ts
+  s_0a1387c8ccf49e::t_9c9cae96717534 10
+infra/cloudflare/workers.test.ts
+  s_0a1387c8ccf49e::t_addf080a5f10ed 21,145,160,199,231,254
+docs/runbooks/billing-corrections.md
+  s_0a1387c8ccf49e::t_475265cfc20453 9
+.github/workflows/ci.yml
+  s_0a1387c8ccf49e::t_7ea04898edd39d 33-35,372-401
+scripts/repo-hygiene.test.ts
+  s_0a1387c8ccf49e::t_d2f6c2b3204861 66-68,70-72
+scripts/ci-changes.test.ts
+  s_0a1387c8ccf49e::t_b94e5d3a805389 2,215-236
+.oxlintrc.json
+  s_0a1387c8ccf49e::t_326ac6cd4b9c5b 453
+apps/server/cloudflare/public-worker-browser-entry.test.ts
+  s_0a1387c8ccf49e::t_b44706d9012f69 78,80,92,96
+.patterns/alchemy.md
+  s_0a1387c8ccf49e::t_00c8c73188f0b5 154-155,164-165,167-168
+package.json
+  s_0a1387c8ccf49e::t_1046c6e3771afc 47
+apps/server/cloudflare/maintenance/runtime.ts
+  s_0a1387c8ccf49e::t_9579081de5d768 13
+scripts/comment-baseline.txt
+  s_0a1387c8ccf49e::t_1ab0126fccbcad 25
+apps/web/scripts/check-browser-bundle.test.ts
+  s_0a1387c8ccf49e::t_ab4be546cc69f9 134-135
+apps/server/cloudflare/directory/runtime.ts
+  s_0a1387c8ccf49e::t_98e5e5fce4a74b 108,292
+apps/server/cloudflare/core-http/internal/http.ts
+  s_0a1387c8ccf49e::t_d9078676ae54ff 339,434
+infra/cloudflare/alchemy.site.ts
+  s_0a1387c8ccf49e::t_40d4ae8975c81d 4,7-45,57
+docs/operations/security-response.md
+  s_0a1387c8ccf49e::t_47453f544bc6d0 80
+apps/server/cloudflare/outbound-http/runtime.ts
+  s_0a1387c8ccf49e::t_fc4c7246366d8c 96,105
+apps/server/cloudflare/user-store/operations.ts
+  s_0a1387c8ccf49e::t_64985ca1e48a5b 16,1361
+docs/operations/production-launch.md
+  s_0a1387c8ccf49e::t_569a1a59d81702 7,10,70-80
+apps/server/cloudflare/public-worker.ts
+  s_0a1387c8ccf49e::t_05d7657f845f1b 39,52,478,822,853,860,892,916,921-922,928
+infra/cloudflare/deployment-configuration.ts
+  s_0a1387c8ccf49e::t_67f84806262336 72
+infra/cloudflare/native-application.ts
+  s_0a1387c8ccf49e::t_c8a9d0d348dbac 7,52-53,97,121,135,143,151,154-155,160,167,169
+docs/operations/production-recovery.md
+  s_0a1387c8ccf49e::t_f6353a9b5f749c 3,5,7,9
+docs/operations/production-releases.md
+  s_0a1387c8ccf49e::t_569a1a59d81702 3,5-10,12,14,16,18,20,22,24,26,28
+apps/server/cloudflare/directory/internal/provider.ts
+  s_0a1387c8ccf49e::t_033c939eb8563a 349
+docs/operations/hosted-mcp-release.md
+  s_0a1387c8ccf49e::t_e926fc3684ebc7 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d792d367aa2214654970c27e09abec5836ffabdc",
+  "prompts": {},
+  "sessions": {
+    "s_0a1387c8ccf49e": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "violet-moonstone",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

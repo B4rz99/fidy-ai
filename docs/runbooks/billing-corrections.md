@@ -6,7 +6,7 @@ accepted or executed by this implementation, even if the operator has refund per
 
 ## Enable protected Sandbox support
 
-- Verify the installed User schema and release identity through the [native release procedure](../operations/production-releases.md).
+- Verify the installed User schema and release identity through the [release procedure](../operations/production-releases.md).
 - Use `WOMPI_ENVIRONMENT=sandbox` and the merchant's `prv_test_…` private key.
 - Configure a **separate Cloudflare Access application** for
   `/internal/support/billing-refunds` and its read subpaths. Its allow policy grants refund permission

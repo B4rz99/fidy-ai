@@ -63,10 +63,11 @@ test("locked skill trees match and the shadcn instructions stay pinned", () => {
   expect(readText(`${directory}/SOURCE.md`)).toContain("a85299a9");
 });
 
-test("trunk pushes deploy the native release", () => {
-  const source = readText(".github/workflows/native-storage-release.yml");
+test("trunk pushes deploy each affected stack without manual operations", () => {
+  for (const workflow of ["deploy-app.yml", "deploy-site.yml", "docs-publication.yml"]) {
+    const source = readText(`.github/workflows/${workflow}`);
 
-  expect(source).toMatch(/on:\s*\n\s*push:/u);
-  expect(source).toContain("branches: [trunk]");
-  expect(source).toContain("RELEASE_OPERATION: ${{ inputs.operation || 'rollout' }}");
+    expect(source).toMatch(/on:\s*\n\s*push:\s*\n\s*branches: \[trunk\]/u);
+    expect(source).not.toContain("workflow_dispatch");
+  }
 });

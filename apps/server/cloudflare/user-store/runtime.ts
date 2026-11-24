@@ -8,12 +8,6 @@ import { HostedPauseNotice } from "../insights/contract";
 import { localProactivityObservations, nativePauseNotice } from "../insights/operations";
 import { BudgetThresholdEvaluation } from "../budgets/contract";
 import {
-  backgroundWorkAllowed,
-  closedHostEnvironment,
-  isPerformanceEvidence,
-} from "../release-isolation/operations";
-import type { AcceptanceWindowBindings } from "../release-isolation/contract";
-import {
   cloudflareWorkerTelemetry,
   observeWorkerExecution,
   workerRelease,
@@ -237,7 +231,6 @@ import { canonicalOperation } from "../routing/operations";
 import {
   dispatchLocalTransaction,
   isLocalTransactionOperation,
-  ownPerformanceEvidence,
   readScopedPrivacyPage,
 } from "../transactions/operations";
 import {
@@ -259,9 +252,9 @@ import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
 
 const uncertainCheckStatus = 503;
 
-type UserStoreEnvironment = AcceptanceWindowBindings & {
+type UserStoreEnvironment = {
   WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
-} & Partial<Readonly<{ SMOKE_PROOF: string; NATIVE_FIXTURE_SIGNING_KEY: string }>> &
+} & Partial<Readonly<{ RELEASE_GIT_SHA: string }>> &
   NativeReminderEnvironment &
   WompiBindings &
   LocalIngestionEnvironment &
@@ -311,9 +304,6 @@ const unavailableOnFailure = <A, E, R>(
   );
 
 export class UserStore extends DurableObject<UserStoreEnvironment> {
-  private browserEnvironment(request: Request): UserStoreEnvironment {
-    return closedHostEnvironment({ request, environment: this.env, boundary: "core" });
-  }
   protected connectionAdapters(): ConnectionAdapters {
     return sandboxConnectionAdapters({ environment: this.env, userId: this.ctx.id.name ?? "" });
   }
@@ -523,15 +513,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   override alarm(): Promise<void> {
     if (this.erased) return Promise.resolve();
 
-    return this.runtime
-      .runPromise(backgroundWorkAllowed(this.env))
-      .then((allowed) =>
-        allowed
-          ? this.registration().then((registration) =>
-              registration === "registered" ? this.checkWork() : undefined
-            )
-          : undefined
-      );
+    return this.registration().then((registration) =>
+      registration === "registered" ? this.checkWork() : undefined
+    );
   }
 
   private patOperation(
@@ -564,7 +548,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   ): Option.Option<ReturnType<typeof dispatchLocalBudget>> {
     const unit = { request, owns, operation, storage: this.ctx.storage };
 
-    const environment = this.browserEnvironment(request),
+    const environment = this.env,
       directory = environment.DIRECTORY;
 
     const pat = this.patOperation(unit);
@@ -633,9 +617,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     this.ctx.id.equals(this.env.USER_STORE.idFromName(userId));
 
   private registration(): Promise<Effect.Success<ReturnType<typeof observeUserRegistration>>> {
-    return this.runtime.runPromise(
-      observeUserRegistration(this.env.MAINTENANCE, this.owns, this.env)
-    );
+    return this.runtime.runPromise(observeUserRegistration(this.env.MAINTENANCE, this.owns));
   }
 
   private erasedResponse(request: Request): Promise<Response> {
@@ -679,20 +661,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       )
     );
   }
-  private scopedErasureCommand(request: Request): Promise<Response> {
-    if (this.env.NATIVE_STORAGE_ADMISSION === "closed" && !this.erased) {
-      return this.registration().then((registration) =>
-        registration === "registered"
-          ? this.erasureCommand(request)
-          : canonicalAdmissionUnavailable()
-      );
-    }
-
-    return this.erasureCommand(request);
-  }
   override fetch(request: Request): Promise<Response> {
     if (request.method === "POST" && [localDrainUrl, localPurgeUrl].includes(request.url)) {
-      return this.scopedErasureCommand(request);
+      return this.erasureCommand(request);
     }
 
     if (this.erased) return this.erasedResponse(request);
@@ -726,8 +697,6 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         if (registration === "unavailable" && request.url === betaUserUrl) {
           return canonicalAdmissionUnavailable();
         }
-
-        if (registration === "isolated") return canonicalAdmissionUnavailable();
 
         if (registration === "unavailable" && ownerCheckRequest(request)) {
           return new Response(null, { status: uncertainCheckStatus });
@@ -958,7 +927,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           handleLocalOAuthManagement({
             request,
             owns,
-            origin: this.browserEnvironment(request).BROWSER_ORIGIN,
+            origin: this.env.BROWSER_ORIGIN,
             retire: this.retireMcp,
           })
         )
@@ -986,7 +955,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
             request,
             directory: this.env.DIRECTORY,
             owns,
-            origin: this.browserEnvironment(request).BROWSER_ORIGIN,
+            origin: this.env.BROWSER_ORIGIN,
           })
         )
       );
@@ -999,25 +968,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     command: string,
     owns: (id: string) => boolean
   ): Option.Option<Promise<Response>> {
-    if (isPerformanceEvidence(request)) {
-      const environment = this.browserEnvironment(request);
-
-      return Option.some(
-        this.runtime.runPromise(
-          ownPerformanceEvidence(
-            request,
-            { ...environment, RELEASE_GIT_SHA: environment.RELEASE_GIT_SHA ?? "" },
-            owns
-          )
-        )
-      );
-    }
-
     if (command === "POST /web/privacy/transactions") {
       return Option.some(
-        this.runtime.runPromise(
-          readScopedPrivacyPage(request, this.browserEnvironment(request).BROWSER_ORIGIN, owns)
-        )
+        this.runtime.runPromise(readScopedPrivacyPage(request, this.env.BROWSER_ORIGIN, owns))
       );
     }
 
@@ -1026,7 +979,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         this.runtime.runPromise(
           requestLocalErasure({
             request,
-            origin: this.browserEnvironment(request).BROWSER_ORIGIN,
+            origin: this.env.BROWSER_ORIGIN,
             storage: this.ctx.storage,
             owns,
           }).pipe(
@@ -1046,11 +999,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     if (Option.isSome(processingConsentTransport(new URL(request.url).pathname))) {
       return Option.some(
         this.runtime.runPromise(
-          handleLocalProcessingConsent(
-            request,
-            this.browserEnvironment(request).BROWSER_ORIGIN,
-            owns
-          )
+          handleLocalProcessingConsent(request, this.env.BROWSER_ORIGIN, owns)
         )
       );
     }
@@ -1246,7 +1195,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       return Option.some(
         this.runtime.runPromise(
           handleLocalHosted(request, owns, {
-            env: this.browserEnvironment(request),
+            env: this.env,
             storage: this.ctx.storage,
           }),
           { signal: request.signal }
@@ -1276,7 +1225,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     const unit = {
       ...input,
       storage: this.ctx.storage,
-      environment: this.browserEnvironment(input.request),
+      environment: this.env,
     };
 
     if (path === connectionCallbackPath || Option.isSome(connectionBrowserTransport(path))) {
@@ -1340,11 +1289,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
 
     if (Option.isSome(paymentEnrollmentTransport(path))) {
       const work = this.runtime.runPromise(
-        handleLocalEnrollment(
-          request,
-          { env: this.browserEnvironment(request), storage: this.ctx.storage },
-          owns
-        ).pipe(
+        handleLocalEnrollment(request, { env: this.env, storage: this.ctx.storage }, owns).pipe(
           Effect.tapCause(Effect.logDebug),
           Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
         )

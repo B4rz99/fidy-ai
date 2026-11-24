@@ -29,10 +29,6 @@ export const browserApiOrigin = ({
   browserOrigin: string;
 }): string => {
   if (configured === "installed") {
-    if (browserOrigin === installedOrigins.acceptance.browser) {
-      return installedOrigins.acceptance.api;
-    }
-
     if (browserOrigin === installedOrigins.production.browser) {
       return installedOrigins.production.api;
     }

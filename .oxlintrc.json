@@ -450,11 +450,7 @@
       }
     },
     {
-      "files": [
-        "apps/server/tools/contracts/vitest.config.ts",
-        "scripts/vitest.config.ts",
-        "scripts/infra-performance/vitest.config.ts"
-      ],
+      "files": ["apps/server/tools/contracts/vitest.config.ts", "scripts/vitest.config.ts"],
       "rules": {
         "import/no-default-export": "off"
       }
@@ -485,15 +481,10 @@
     {
       "files": [
         "infra/cloudflare/alchemy.run.ts",
-        "infra/cloudflare/alchemy.storage.ts",
         "infra/cloudflare/alchemy.site.ts",
         "infra/docs/alchemy.run.ts",
-        "infra/cloudflare/alchemy-drift.run.ts",
         "apps/server/cloudflare/core-worker.ts",
-        "apps/server/cloudflare/fixture-fallback-core.ts",
-        "apps/server/cloudflare/fixture-fallback-ingress.ts",
         "apps/site/cloudflare/worker.ts",
-        "apps/server/cloudflare/release-smoke-worker.ts",
         "apps/server/cloudflare/financial-client.test-fixture.ts",
         "apps/server/cloudflare/login-email-worker.test-fixture.ts",
         "apps/server/cloudflare/agent/provider.test-fixture.ts",
@@ -789,7 +780,6 @@
         "apps/site/scripts/*.ts",
         "apps/web/scripts/*.ts",
         "infra/cloudflare/alchemy*.ts",
-        "infra/cloudflare/verify-edge-policy.ts",
         "infra/cloudflare/scripts/*.ts",
         "scripts/check-*.ts",
         "scripts/ci-changes.ts",

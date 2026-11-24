@@ -1,5 +1,3 @@
-import retainedProvider from "./native-retained-provider.json" with { type: "json" };
-import { fixtureArtifacts } from "./native-fixture-signer";
 import { Hex } from "effect/encoding";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { type Output, map } from "alchemy/Output";
@@ -7,25 +5,15 @@ import { Config, Effect, Option, Redacted, Schema } from "effect";
 import { ApprovedOpenAiModel } from "@fidy/server/hosted-inference-contract";
 import { EmailAddress } from "@fidy/server/email-authentication-contract";
 import { WhatsAppBusinessPhoneNumberId } from "@fidy/server/whatsapp-contract";
+import { installedOrigins } from "@fidy/server/browser-transport";
 import { resolveLocalCanonicalReadBearer } from "../../apps/server/cloudflare/runtime/operations";
 import { browserOrigins, productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 import { resolveDeploymentConfiguration } from "./deployment-configuration";
-import { buildStorageRelease, storageReleaseBinding, storageReleaseCodec } from "./storage-release";
-import { nativeIngressHost } from "./storage-installation";
 
 const origins = {
   local: { browser: browserOrigins.local, api: "http://localhost:8787" },
-  acceptance: { browser: browserOrigins.nativeAcceptance, api: "https://" + nativeIngressHost },
-  staged: {
-    browser: browserOrigins.production,
-    api: "https://" + productionTopology.ingress.hostname,
-  },
+  production: installedOrigins.production,
 };
-
-const pairedOrigin = (
-  closed: boolean,
-  hosts: keyof typeof origins
-): (typeof origins)[keyof typeof origins] => (closed ? origins.acceptance : origins[hosts]);
 
 export const nativeReleaseContext = Effect.fn(function* (development: boolean, stage: string) {
   const config = (name: string): Config.Config<string> =>
@@ -37,62 +25,19 @@ export const nativeReleaseContext = Effect.fn(function* (development: boolean, s
       stage,
       gitRevision: yield* config("RELEASE_GIT_SHA"),
       contractDigest: yield* config("CONTRACT_DIGEST"),
-      releaseAttemptId: yield* config("RELEASE_ATTEMPT_ID"),
     })
   ).pipe(Effect.orDie);
 
-  const admission = development
-    ? "local"
-    : yield* Config.Literals(["closed", "open"], "NATIVE_STORAGE_ADMISSION");
-
-  const hosts = development
-    ? "local"
-    : yield* Config.Literals(["acceptance", "staged"], "NATIVE_STORAGE_HOSTS").pipe(
-        Config.withDefault("acceptance")
-      );
-
-  if (admission === "open" && hosts !== "staged") {
-    return yield* Effect.die(Error("Native opening requires the reviewed staged hosts"));
-  }
-
-  const proof = yield* development
-    ? Config.Redacted("SMOKE_PROOF").pipe(Config.withDefault(Redacted.make("")))
-    : Config.Redacted("SMOKE_PROOF");
-
-  const storage = yield* buildStorageRelease().pipe(
-    Effect.flatMap(Schema.encodeEffect(storageReleaseCodec)),
-    Effect.orDie
-  );
-
-  const closed = admission === "closed",
-    origin = pairedOrigin(closed, hosts);
-
-  const artifacts = yield* fixtureArtifacts(release.gitRevision);
-
-  const fixtureSecret = (
-    name: string,
-    prefix = "",
-    generation = release.gitRevision
-  ): Redacted.Redacted<string> =>
-    Redacted.make(
-      prefix +
-        new Bun.CryptoHasher("sha256", Redacted.value(proof))
-          .update(generation + "/" + name)
-          .digest("hex")
-    );
+  const origin = development ? origins.local : origins.production;
 
   const shared = {
-    RECOVERY_ISOLATION: closed ? "isolated" : "",
-    NATIVE_STORAGE_ADMISSION: development ? "open" : admission,
-    [storageReleaseBinding]: storage,
     BROWSER_ORIGIN: origin.browser,
     RELEASE_GIT_SHA: release.gitRevision,
     CONTRACT_DIGEST: release.contractDigest,
     CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
-    SMOKE_PROOF: proof,
   };
 
-  return { release, development, closed, hosts, origin, shared, fixtureSecret, ...artifacts };
+  return { release, development, origin, shared };
 });
 
 export type NativeRelease = Effect.Success<ReturnType<typeof nativeReleaseContext>>;
@@ -149,46 +94,9 @@ const liveProviders = Effect.fn(function* (development: boolean) {
   });
 });
 
-const fixtureProviders = (
-  secret: NativeRelease["fixtureSecret"]
-): Effect.Success<ReturnType<typeof liveProviders>> => ({
-  OPENAI_API_KEY: secret("openai"),
-  KAPSO_API_KEY: secret("kapso"),
-  KAPSO_WEBHOOK_SECRET: secret("kapso-webhook"),
-  RESEND_API_KEY: secret("resend"),
-  GOOGLE_CLIENT_ID: "fidy-native-google",
-  GOOGLE_CLIENT_SECRET: secret("google"),
-  MICROSOFT_CLIENT_ID: "fidy-native-microsoft",
-  MICROSOFT_CLIENT_SECRET: secret("microsoft"),
-  WOMPI_ENVIRONMENT: "sandbox",
-  WOMPI_PUBLIC_KEY: "pub_test_fidy_native_release",
-  WOMPI_PRIVATE_KEY: secret("wompi", "prv_test_"),
-  WOMPI_INTEGRITY_SECRET: secret("wompi-integrity", "test_integrity_"),
-  WOMPI_EVENT_SECRET: secret("wompi-events", "test_events_"),
-  WOMPI_DAVIPLATA_ACTIVATED: "disabled",
-  WOMPI_DAVIPLATA_OTP_SEND_URL: "",
-  WOMPI_DAVIPLATA_OTP_CONFIRM_URL: "",
-  WHATSAPP_BUSINESS_PORTFOLIO_ID: "123456789012345",
-  WHATSAPP_SANDBOX_PHONE_NUMBER_ID: WhatsAppBusinessPhoneNumberId.make("123456789012345"),
-  BANCOLOMBIA_SANDBOX_CLIENT_ID: "",
-  BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: Redacted.make(""),
-  BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: Redacted.make(""),
-  BANCOLOMBIA_SANDBOX_GRANT_KEY: Redacted.make(""),
-});
-
 export const providerBindings = Effect.fn(function* (release: NativeRelease) {
-  const selected = release.closed
-    ? fixtureProviders((name, prefix) =>
-        release.fixtureSecret(
-          name,
-          prefix,
-          release.retainProvider ? retainedProvider.revision : release.release.gitRevision
-        )
-      )
-    : yield* liveProviders(release.development);
-
   return {
-    ...selected,
+    ...(yield* liveProviders(release.development)),
     HOSTED_AI_MODEL: yield* Config.schema(ApprovedOpenAiModel, "HOSTED_AI_MODEL"),
     GOOGLE_REDIRECT_URI: release.origin.api + "/providers/google/callback",
     MICROSOFT_REDIRECT_URI: release.origin.api + "/providers/microsoft/callback",
@@ -198,20 +106,14 @@ export const providerBindings = Effect.fn(function* (release: NativeRelease) {
 const admissionKeyBytes = 32;
 
 export const ingressBindings = Effect.fn(function* (release: NativeRelease) {
-  let key = release.fixtureSecret("anonymous-admission");
-
-  if (!release.closed) {
-    key = yield* release.development
+  return {
+    PAT_ADMISSION_KEY: yield* release.development
       ? Config.Redacted("PAT_ADMISSION_KEY").pipe(
           Config.withDefault(
             Redacted.make(Hex.encode(crypto.getRandomValues(new Uint8Array(admissionKeyBytes))))
           )
         )
-      : Config.Redacted("PAT_ADMISSION_KEY");
-  }
-
-  return {
-    PAT_ADMISSION_KEY: key,
+      : Config.Redacted("PAT_ADMISSION_KEY"),
     LOCAL_CANONICAL_READ_BEARER: resolveLocalCanonicalReadBearer(release.development),
   };
 });
@@ -255,18 +157,9 @@ const recoveryPin = map(Cloudflare.Access.getIdentityProvider({ type: "onetimepi
 const supportApplication = Effect.fn(function* (
   logicalId: keyof typeof accessRoles,
   member: Option.Option<string>,
-  context: {
-    release: NativeRelease;
-    group: Cloudflare.Access.Group;
-  }
+  group: Cloudflare.Access.Group
 ) {
   const { name, path } = accessRoles[logicalId];
-  const { release, group } = context;
-
-  const hosts =
-    release.hosts === "staged"
-      ? [nativeIngressHost, productionTopology.ingress.hostname]
-      : [nativeIngressHost];
 
   const include = Option.isNone(member)
     ? [{ group: group.groupId }]
@@ -275,7 +168,7 @@ const supportApplication = Effect.fn(function* (
   return yield* Cloudflare.Access.Application(logicalId, {
     type: "self_hosted",
     name,
-    destinations: hosts.map((host) => ({ type: "public", uri: host + path })),
+    destinations: [{ type: "public", uri: productionTopology.ingress.hostname + path }],
     sessionDuration: "15m",
     appLauncherVisible: false,
     allowedIdps: [recoveryPin],
@@ -320,22 +213,21 @@ export const privateAccessBindings = Effect.fn(function* (release: NativeRelease
   });
 
   const betaOperator = yield* Config.Literal("obarboza@fidyapp.com", "BETA_PRO_OPERATOR_EMAIL");
-  const context = { release, group };
-  const recovery = yield* supportApplication("SupportRecoveryAccess", Option.none(), context);
+  const recovery = yield* supportApplication("SupportRecoveryAccess", Option.none(), group);
 
   const erasure = yield* supportApplication(
     "TitularErasureAccess",
     Option.some("obarboza@fidyapp.com"),
-    context
+    group
   );
 
   const sample = yield* supportApplication(
     "IngestSampleReviewAccess",
     Option.some(reviewer),
-    context
+    group
   );
 
-  const beta = yield* supportApplication("BetaProAccess", Option.some(betaOperator), context);
+  const beta = yield* supportApplication("BetaProAccess", Option.some(betaOperator), group);
 
   return {
     BETA_PRO_OPERATOR_EMAIL: betaOperator,

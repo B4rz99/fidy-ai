@@ -151,11 +151,8 @@ verified with the [native placement controls](https://github.com/B4rz99/fidy-ai/
 An upload receipt is not proof of active traffic assignment;
 retain the deployment/version checks at their existing owners.
 
-The protected native release uses the public `Alchemist.Stack.plan` / `Apply.apply` seam in
-`infra/cloudflare/storage-release.ts`. The retained patch supports `deletions: "defer"`, which
-preserves tracked generations and refuses delete-first replacements, and `"only"`, which runs
-native garbage collection after refusing deployment changes. The first install, rollout and
-staged hostname transfer retain native resources and check the selected Worker versions.
+Production deploys use the plain CLI `deploy` and `plan` commands from `infra/cloudflare/package.json`
+and `infra/docs/package.json`; no script drives `Apply.apply` directly.
 
 Local acceptance starts the declared stack and exercises ingress-to-Core service bindings. A fake
 binding proves projection/failure behavior only, not platform parity. Bind validated immutable Git
@@ -164,12 +161,11 @@ objects, topology, Secrets, or raw exceptions.
 
 ## Verification seams
 
-For a topology change, inspect the plan's resource identities and resolved binding graph using the
-existing release tooling. Exercise local ingress-to-Core bindings through
+For a topology change, inspect the plan's resource identities and resolved binding graph in the
+pull request's plan summary. Exercise local ingress-to-Core bindings through
 [`local-emulation.test.ts`](../infra/cloudflare/local-emulation.test.ts); resource-specific behavior
-needs the corresponding Cloudflare adapter tests. Native plan filtering, rollout receipts and placement checks
-have focused tests in [`storage-release.test.ts`](../infra/cloudflare/storage-release.test.ts)
-and [`production-release.test.ts`](../infra/cloudflare/production-release.test.ts). A fake binding
+needs the corresponding Cloudflare adapter tests. The declared production graph has a focused test in
+[`native-application-plan.test.ts`](../infra/cloudflare/native-application-plan.test.ts). A fake binding
 or successful local emulation does not prove remote provider convergence.
 
 Sources above were inspected in the beta.80 tarball verified against `bun.lock` on 2026-10-12;

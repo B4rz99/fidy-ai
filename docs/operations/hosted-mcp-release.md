@@ -2,7 +2,7 @@
 
 Use this procedure to prepare a bounded proving window. Confirm current enablement and operator
 authorization before execution. Follow [Production launch](production-launch.md) and
-[Production releases](production-releases.md). Alchemy/GitHub Production remains the only deployment
+[Production releases](production-releases.md). The trunk deploy workflows remain the only deployment
 path. Do not deploy from a workstation, create a second remote stage, or replace the baseline.
 
 ## Before synthetic Production work

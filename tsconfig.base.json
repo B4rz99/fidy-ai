@@ -186,26 +186,6 @@
             }
           },
           {
-            "include": ["./infra/cloudflare/worker-receipt.test.ts"],
-            "options": {
-              "diagnosticSeverity": {
-                "anyUnknownInErrorContext": "off"
-              }
-            }
-          },
-          {
-            "include": [
-              "./infra/cloudflare/inspect-worker-drift.ts",
-              "./infra/cloudflare/native-storage-resources.ts"
-            ],
-            "options": {
-              "diagnosticSeverity": {
-                "anyUnknownInErrorContext": "off",
-                "strictEffectProvide": "off"
-              }
-            }
-          },
-          {
             "include": ["./infra/cloudflare/alchemy.run.ts"],
             "options": {
               "diagnosticSeverity": {
@@ -215,14 +195,6 @@
           },
           {
             "include": ["./scripts/document-parsing/xlsx-work.ts"],
-            "options": {
-              "diagnosticSeverity": {
-                "strictEffectProvide": "off"
-              }
-            }
-          },
-          {
-            "include": ["./infra/cloudflare/resource-retirement.test.ts"],
             "options": {
               "diagnosticSeverity": {
                 "strictEffectProvide": "off"

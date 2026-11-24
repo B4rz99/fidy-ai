@@ -1,21 +1,10 @@
-import retainedProvider from "./native-retained-provider.json" with { type: "json" };
-import {
-  accountingWorkerMain,
-  fixtureSignerBindings,
-  receiptWorkerMain,
-} from "./native-fixture-signer";
 import { marketingSite } from "./marketing-site";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Config, Effect, Layer, Schema } from "effect";
 import { productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 import { resolveStateBackend } from "./deployment-configuration";
-import {
-  installationNames,
-  nativeIngressHost,
-  nativeWebHost,
-  storageNamespaces,
-} from "./storage-installation";
+import { installationNames, storageNamespaces } from "./storage-installation";
 import { freeTierWorkerObservability } from "./worker-observability";
 import {
   type NativeRelease,
@@ -31,7 +20,6 @@ import {
   installConsumers,
   nativeBuckets,
   nativeQueues,
-  nativeSmokeExecutor,
   nativeWorkflows,
 } from "./native-application-resources";
 
@@ -61,28 +49,8 @@ const apiCompatibility = {
   flags: ["enable_request_signal", "request_signal_passthrough"],
 };
 
-const network = (
-  release: NativeRelease,
-  acceptance: string,
-  ordinary: string
-): Cloudflare.WorkerProps["domain"] =>
-  release.development
-    ? undefined
-    : { name: acceptance, aliases: release.hosts === "staged" ? [ordinary] : [] };
-
-const candidate = (release: NativeRelease): Cloudflare.WorkerProps["version"] =>
-  release.development
-    ? undefined
-    : {
-        traffic: 0,
-        tag: release.release.versionTag,
-        message: release.closed ? "isolated" : "release",
-      };
-
-const releaseWorkerMain = (role: "Core" | "Ingress", release: NativeRelease): string =>
-  release.accountingRollout
-    ? accountingWorkerMain(role)
-    : receiptWorkerMain({ role, fallback: release.fallback });
+const domain = (release: NativeRelease, hostname: string): Cloudflare.WorkerProps["domain"] =>
+  release.development ? undefined : hostname;
 
 const bindSandboxCertificate = Effect.fn(function* (core: Cloudflare.Worker) {
   const certificate = yield* Config.String("BANCOLOMBIA_SANDBOX_CERTIFICATE_ID").pipe(
@@ -109,12 +77,10 @@ const coreWorker = Effect.fn(function* ({
   release,
   queues,
   buckets,
-  executor,
 }: {
   release: NativeRelease;
   queues: NativeQueues;
   buckets: Effect.Success<typeof nativeBuckets>;
-  executor: Effect.Success<ReturnType<typeof nativeSmokeExecutor>>;
 }) {
   const {
     BETA_PRO_AUDIENCE,
@@ -128,8 +94,7 @@ const coreWorker = Effect.fn(function* ({
     ...workerPolicy,
     compatibility: apiCompatibility,
     name: installationNames.Core,
-    main: releaseWorkerMain("Core", release),
-    version: candidate(release),
+    main: "../../apps/server/cloudflare/core-worker.ts",
     crons: ["* * * * *"],
     dev: { host: "127.0.0.1", port: productionTopology.core.localPort, strictPort: true },
     env: {
@@ -141,15 +106,6 @@ const coreWorker = Effect.fn(function* ({
       ...(yield* operatingBindings),
       ...access,
       ...(yield* providerBindings(release)),
-      ...(yield* fixtureSignerBindings(release).pipe(Effect.orDie)),
-      SMOKE_LIMITER: Cloudflare.RateLimit("ReleaseSmokeAdmission", {
-        namespaceId: 2257,
-        simple: { limit: 8, period: 60 },
-      }),
-      RELEASE_FIXTURE: release.retainProvider
-        ? yield* Cloudflare.Worker.ref("ReleaseSmoke-" + retainedProvider.revision)
-        : executor.smoke,
-      SMOKE_WORKFLOW: executor.reference,
     },
   });
 
@@ -158,12 +114,11 @@ const coreWorker = Effect.fn(function* ({
     SAMPLE_REVIEW_AUDIENCE,
     CLOUDFLARE_ACCESS_AUDIENCE,
     ERASURE_SUPPORT_AUDIENCE,
-    SMOKE_QUEUE_NAME: queues.SMOKE_QUEUE.queueName,
     CONNECTION_SYNCHRONIZATION_QUEUE_NAME: queues.CONNECTION_SYNCHRONIZATION_QUEUE.queueName,
     OPERATIONAL_CANARY_QUEUE_NAME: queues.OPERATIONAL_CANARY_QUEUE.queueName,
   });
 
-  if (!release.development && !release.closed) yield* bindSandboxCertificate(core);
+  if (!release.development) yield* bindSandboxCertificate(core);
 
   return core;
 });
@@ -177,7 +132,7 @@ const webApplication = Effect.fn(function* (release: NativeRelease) {
     outdir: "dist",
     env: {
       CONTRACT_DIGEST: release.release.contractDigest,
-      RELEASE_GIT_SHA: release.supportRevision,
+      RELEASE_GIT_SHA: release.release.gitRevision,
     },
     dev: {
       command: `bun run dev -- --host 127.0.0.1 --port ${productionTopology.web.localPort} --strictPort`,
@@ -185,7 +140,7 @@ const webApplication = Effect.fn(function* (release: NativeRelease) {
       env: { VITE_API_ORIGIN: `http://127.0.0.1:${productionTopology.ingress.localPort}` },
     },
     assets: { htmlHandling: "none", notFoundHandling: "single-page-application" },
-    domain: network(release, nativeWebHost, productionTopology.web.hostname),
+    domain: domain(release, productionTopology.web.hostname),
     workersDev: false,
   });
 });
@@ -193,39 +148,29 @@ const webApplication = Effect.fn(function* (release: NativeRelease) {
 export const nativeApplication = Effect.gen(function* () {
   const release = yield* nativeReleaseContext(yield* Alchemy.ALCHEMY_DEV, yield* Alchemy.Stage);
 
-  const queues = yield* nativeQueues(release.resourceRevision),
+  const queues = yield* nativeQueues,
     buckets = yield* nativeBuckets;
 
-  const executor = yield* nativeSmokeExecutor({ release, queues, buckets });
-  const core = yield* coreWorker({ release, queues, buckets, executor });
-  yield* installConsumers({
-    queues,
-    revision: release.resourceRevision,
-    core,
-    smoke: executor.smoke,
-  });
+  const core = yield* coreWorker({ release, queues, buckets });
+  yield* installConsumers({ queues, core });
   yield* Cloudflare.Worker("ForwardedEmail", {
     ...workerPolicy,
     name: installationNames.ForwardedEmail,
     main: "../../apps/server/cloudflare/ingestion/email-worker.ts",
-    env: { RELEASE_GIT_SHA: release.supportRevision },
+    env: { RELEASE_GIT_SHA: release.release.gitRevision },
   });
 
   const ingress = yield* Cloudflare.Worker("Ingress", {
     ...workerPolicy,
     compatibility: apiCompatibility,
     name: installationNames.Ingress,
-    main: releaseWorkerMain("Ingress", release),
-    version: candidate(release),
+    main: "../../apps/server/cloudflare/public-worker.ts",
     dev: { host: "127.0.0.1", port: productionTopology.ingress.localPort, strictPort: true },
-    domain: network(release, nativeIngressHost, productionTopology.ingress.hostname),
+    domain: domain(release, productionTopology.ingress.hostname),
     env: {
       ...release.shared,
       ...(yield* ingressBindings(release)),
       CORE: core,
-      RELEASE_FIXTURE: release.retainProvider
-        ? yield* Cloudflare.Worker.ref("ReleaseSmoke-" + retainedProvider.revision)
-        : executor.smoke,
     },
   });
 

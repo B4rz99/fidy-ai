@@ -1,7 +1,5 @@
 import { betaRegistryUrl } from "../beta-pro/contract";
 import { readBetaRegistry } from "./internal/beta-registry";
-import { runInstalledBackgroundRequest } from "../release-isolation/runtime";
-import type { AcceptanceWindowBindings } from "../release-isolation/contract";
 import { reportWatchdog, runWatchdog } from "./internal/watchdog";
 import type { SharedBindings } from "../storage-bootstrap/contract";
 import { handleLifetimeRegistration, lifetimeRequest, maintenanceStoreHistory } from "./operations";
@@ -12,10 +10,7 @@ import { type StoreReleaseEnvironment, storeReadinessUrl } from "../runtime/sqli
 import { Effect, Option } from "effect";
 import { maintenanceName, watchdogRequest } from "./contract";
 
-type MaintenanceEnvironment = AcceptanceWindowBindings &
-  StoreReleaseEnvironment &
-  SharedBindings &
-  Partial<Readonly<{ RECOVERY_ISOLATION: string }>>;
+type MaintenanceEnvironment = StoreReleaseEnvironment & SharedBindings;
 
 export class Maintenance extends DurableObject<MaintenanceEnvironment> {
   private readonly runtime;
@@ -40,13 +35,6 @@ export class Maintenance extends DurableObject<MaintenanceEnvironment> {
     }
   }
   private watchdog(request: Request): Promise<Response> {
-    return runInstalledBackgroundRequest({
-      runtime: this.runtime,
-      settings: this.env,
-      run: () => this.watchdogTick(request),
-    });
-  }
-  private watchdogTick(request: Request): Promise<Response> {
     const raw = request.headers.get("x-maintenance-scheduled-at");
     const scheduled = Number(raw);
 

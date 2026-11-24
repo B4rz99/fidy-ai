@@ -1,5 +1,4 @@
 import { captureObservedProviderFetch } from "../runtime/telemetry/operations";
-import { fetchForInstalledRelease } from "../release-isolation/runtime";
 import { Effect, Layer, Option, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 
@@ -94,10 +93,7 @@ export const OutboundHttpLive = HttpClient.layerMergedContext(
         const native = yield* FetchHttpClient.Fetch;
 
         return yield* response.pipe(
-          Effect.provideService(
-            FetchHttpClient.Fetch,
-            ownedNativeFetch(fetchForInstalledRelease({ transport: native }))
-          )
+          Effect.provideService(FetchHttpClient.Fetch, ownedNativeFetch(native))
         );
       })
     )
@@ -106,8 +102,4 @@ export const OutboundHttpLive = HttpClient.layerMergedContext(
 
 export const installedProviderFetch = (
   observation: Parameters<typeof captureObservedProviderFetch>[1]
-): Effect.Effect<typeof fetch> =>
-  captureObservedProviderFetch(
-    fetchForInstalledRelease({ transport: globalThis.fetch }),
-    observation
-  );
+): Effect.Effect<typeof fetch> => captureObservedProviderFetch(globalThis.fetch, observation);

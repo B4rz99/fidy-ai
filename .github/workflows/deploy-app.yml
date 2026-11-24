@@ -1,0 +1,73 @@
+name: Deploy app
+
+on:
+  push:
+    branches: [trunk]
+    paths:
+      - apps/server/**
+      - apps/web/**
+      - infra/cloudflare/**
+      - bun.lock
+      - package.json
+      - patches/**
+      - tsconfig*.json
+      - scripts/install-*.sh
+      - .github/actions/**
+      - .github/workflows/deploy-app.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-app
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy app
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      RELEASE_GIT_SHA: ${{ github.sha }}
+      ALCHEMY_PROFILE: ci
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}
+      RECOVERY_OPERATOR_EMAIL: ${{ vars.RECOVERY_OPERATOR_EMAIL }}
+      BETA_PRO_OPERATOR_EMAIL: ${{ vars.BETA_PRO_OPERATOR_EMAIL }}
+      SAMPLE_REVIEWER_EMAIL: ${{ vars.SAMPLE_REVIEWER_EMAIL }}
+      BILLING_SUPPORT_AUDIENCE: ${{ vars.BILLING_SUPPORT_AUDIENCE }}
+      PRICING_PUBLISH_AUDIENCE: ${{ vars.PRICING_PUBLISH_AUDIENCE }}
+      PROACTIVITY_ENABLED: ${{ vars.PROACTIVITY_ENABLED }}
+      PROACTIVITY_TEMPLATE_JSON: ${{ vars.PROACTIVITY_TEMPLATE_JSON }}
+      PAT_ADMISSION_KEY: ${{ secrets.PAT_ADMISSION_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      KAPSO_API_KEY: ${{ secrets.KAPSO_API_KEY }}
+      KAPSO_WEBHOOK_SECRET: ${{ secrets.KAPSO_WEBHOOK_SECRET }}
+      WHATSAPP_BUSINESS_PORTFOLIO_ID: ${{ secrets.WHATSAPP_BUSINESS_PORTFOLIO_ID }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      MICROSOFT_CLIENT_ID: ${{ secrets.MICROSOFT_CLIENT_ID }}
+      MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
+      WOMPI_ENVIRONMENT: ${{ secrets.WOMPI_ENVIRONMENT }}
+      WOMPI_PUBLIC_KEY: ${{ secrets.WOMPI_PUBLIC_KEY }}
+      WOMPI_PRIVATE_KEY: ${{ secrets.WOMPI_PRIVATE_KEY }}
+      WOMPI_INTEGRITY_SECRET: ${{ secrets.WOMPI_INTEGRITY_SECRET }}
+      WOMPI_EVENT_SECRET: ${{ secrets.WOMPI_EVENT_SECRET }}
+      WOMPI_DAVIPLATA_OTP_SEND_URL: ${{ vars.WOMPI_DAVIPLATA_OTP_SEND_URL }}
+      WOMPI_DAVIPLATA_OTP_CONFIRM_URL: ${{ vars.WOMPI_DAVIPLATA_OTP_CONFIRM_URL }}
+      BANCOLOMBIA_SANDBOX_CERTIFICATE_ID: ${{ vars.BANCOLOMBIA_SANDBOX_CERTIFICATE_ID }}
+      BANCOLOMBIA_SANDBOX_CLIENT_ID: ${{ vars.BANCOLOMBIA_SANDBOX_CLIENT_ID }}
+      BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: ${{ secrets.BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM }}
+      BANCOLOMBIA_SANDBOX_GRANT_KEY: ${{ secrets.BANCOLOMBIA_SANDBOX_GRANT_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/alchemy-stack
+        with:
+          stack: app
+          operation: deploy

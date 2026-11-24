@@ -1,5 +1,3 @@
-import { backgroundWorkAllowed, closedHostEnvironment } from "../release-isolation/operations";
-import type { AcceptanceWindowBindings } from "../release-isolation/contract";
 import { scopeDirectoryUrl } from "../erasure/contract";
 import { providerAllowanceUrl } from "../resource-admission/contract";
 import { admitSharedProvider } from "../resource-admission/operations";
@@ -107,8 +105,7 @@ import { Clock, Context, Effect, Layer, Option, Schema } from "effect";
 import { TokenShortId } from "../../src/core/tokens/contract";
 import { canonicalRequestProtection } from "../canonical-admission/contract";
 
-type DirectoryEnvironment = AcceptanceWindowBindings &
-  StoreReleaseEnvironment &
+type DirectoryEnvironment = StoreReleaseEnvironment &
   ProviderConfiguration &
   Readonly<{
     DIRECTORY: DurableObjectNamespace;
@@ -188,11 +185,6 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     );
   }
   override alarm(): Promise<void> {
-    return this.runtime
-      .runPromise(backgroundWorkAllowed(this.env))
-      .then((allowed) => (allowed ? this.recoverAlarm() : undefined));
-  }
-  private recoverAlarm(): Promise<void> {
     return this.runtime.runPromise(
       Effect.andThen(
         Effect.andThen(
@@ -297,10 +289,7 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     return this.runtime.runPromise(
       (request.url === emailCapacityUrl || request.url === mediaCapacityUrl
         ? ingestionCapacityRequest(request, this.ctx.storage)
-        : directoryRequest(
-            request,
-            closedHostEnvironment({ request, environment: this.env, boundary: "core" })
-          )
+        : directoryRequest(request, this.env)
       ).pipe(
         Effect.tapCause(() =>
           Effect.logWarning({

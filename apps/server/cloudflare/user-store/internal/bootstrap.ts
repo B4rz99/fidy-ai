@@ -1,6 +1,3 @@
-import { acceptanceProviderRevision } from "../../release-isolation/contract";
-import { acceptanceSubject } from "../../release-isolation/operations";
-import type { NativeAcceptanceSettings } from "../../release-isolation/contract";
 import { proofPolicy } from "../../browser-login/contract";
 import { Hex } from "effect/encoding";
 import { Clock, Data, Effect, Option, Schema } from "effect";
@@ -83,11 +80,10 @@ type Recovery = Readonly<{
   generation: number;
 }>;
 
-type Environment = NativeAcceptanceSettings &
-  Readonly<{
-    DIRECTORY: Pick<DurableObjectNamespace, "getByName">;
-    MAINTENANCE: Pick<DurableObjectNamespace, "getByName">;
-  }>;
+type Environment = Readonly<{
+  DIRECTORY: Pick<DurableObjectNamespace, "getByName">;
+  MAINTENANCE: Pick<DurableObjectNamespace, "getByName">;
+}>;
 
 const establishUser = Effect.fn(function* (
   handoff: Handoff,
@@ -317,14 +313,6 @@ const completeVerified = Effect.fn(function* (
 const failedLookup = (status: number): Response =>
   status === missingStatus ? invalidProvider() : unavailable();
 
-const admittedHandoff = (handoff: Handoff, env: Environment): boolean =>
-  env.NATIVE_STORAGE_ADMISSION !== "closed" ||
-  acceptanceSubject({
-    revision: acceptanceProviderRevision(env),
-    issuer: handoff.issuer,
-    subject: handoff.subject,
-  });
-
 export const completeLocalBootstrap = Effect.fn(function* (
   request: Request,
   env: Environment,
@@ -358,8 +346,6 @@ export const completeLocalBootstrap = Effect.fn(function* (
   );
 
   if (!owns(handoff.user_id) || handoff.pairing_id !== input.pairingId) return invalidProvider();
-
-  if (!admittedHandoff(handoff, env)) return unavailable();
 
   if (cancel) return yield* cancelHandoff(handoff);
 

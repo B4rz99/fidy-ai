@@ -1,6 +1,4 @@
 import { betaProPath } from "../src/shell/pro-grants/contract";
-import { installedOrigins } from "../src/shell/browser-transport/contract";
-import { isStorageCompatibility, isStorageProbe } from "./storage-bootstrap/contract";
 import {
   browserSessionBindingHeader,
   browserSessionBindingPath,
@@ -38,53 +36,20 @@ import {
   type WorkerTelemetryEnvironment,
   workerInternalTraceHeader,
 } from "./runtime/telemetry/contract";
-import { Cause, Clock, Effect, Option, Schema } from "effect";
+import { Cause, Effect, Option } from "effect";
 import { cloudflareWorkerTelemetry, observeWorkerRequest } from "./runtime/telemetry/operations";
 import { browserOrigins, productionTopology } from "./runtime/contract";
-import {
-  SmokeFailureStage,
-  SmokeIdentity,
-  SmokeIdentityEquality,
-  SmokeResponse,
-  smokeCoreVersionHeader,
-  smokeFailureHeader,
-  smokeIdentityHeader,
-  smokeManifest,
-  smokePath,
-  smokeProofAccepted,
-  smokeProofHeader,
-  smokeVersionHeader,
-} from "./runtime/release-smoke/contract";
 import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./tokens/operations";
 import { canonicalMethods, canonicalOperation, canonicalRoute } from "./routing/operations";
 import { bancolombiaSandboxResponse } from "./bancolombia-sandbox/operations";
 import { connectionCallbackPath } from "./connections/contract";
-import {
-  closedHostEnvironment,
-  isAcceptanceReceipt,
-  isAcceptanceWindow,
-  isPerformanceEvidence,
-  performanceEvidenceAdmitted,
-  releaseAdmission,
-  signAcceptanceRequest,
-} from "./release-isolation/operations";
-import { acceptanceApiHeader, acceptanceProofHeader } from "./release-isolation/contract";
 
 type PublicEnvironment = WorkerTelemetryEnvironment & {
   readonly BROWSER_ORIGIN: string;
   readonly CORE: Pick<Fetcher, "fetch">;
   readonly LOCAL_CANONICAL_READ_BEARER: string;
   readonly PAT_ADMISSION_KEY: string;
-} & Partial<
-    Readonly<{
-      SMOKE_PROOF: string;
-      RECOVERY_ISOLATION: string;
-      NATIVE_STORAGE_ADMISSION: string;
-      SQLITE_STORAGE_RELEASE: string;
-      CONTRACT_DIGEST: string;
-      CF_VERSION_METADATA: { readonly id: string };
-    }>
-  >;
+};
 
 type PublicWorker = Readonly<{
   fetch: (request: Request, environment: PublicEnvironment) => Promise<Response>;
@@ -104,10 +69,6 @@ const resolveBrowserOrigin = (configuredOrigin: string): Option.Option<string> =
   if (configuredOrigin === browserOrigins.local) return Option.some(browserOrigins.local);
 
   if (configuredOrigin === browserOrigins.acceptance) return Option.some(browserOrigins.acceptance);
-
-  if (configuredOrigin === browserOrigins.nativeAcceptance) {
-    return Option.some(browserOrigins.nativeAcceptance);
-  }
 
   if (configuredOrigin === browserOrigins.production) return Option.some(browserOrigins.production);
 
@@ -169,25 +130,6 @@ const serviceUnavailableStatus = 503;
 
 const unavailable = (): Response =>
   Response.json({ status: "unavailable" }, { status: serviceUnavailableStatus });
-
-const smokeUnavailable = (
-  request: Request,
-  environment: PublicEnvironment,
-  stage: SmokeFailureStage
-): Response => {
-  const response = unavailable();
-
-  if (
-    new URL(request.url).pathname !== smokePath ||
-    !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })
-  ) {
-    return response;
-  }
-
-  response.headers.set(smokeFailureHeader, stage);
-
-  return response;
-};
 
 const isAllowedPreflightHeaders = (value: Option.Option<string>): boolean =>
   Option.isNone(value) ||
@@ -318,7 +260,6 @@ const postPaths = new Set<string>([
   ...emailAuthenticationPaths,
   ...pairingPaths,
   statementStagingPath,
-  smokePath,
   ...hostedBrowserPaths,
 ]);
 
@@ -417,8 +358,6 @@ const allowedMethods = (path: string): ReadonlyArray<string> => {
   if (transactionPath(path)) return transactionMethods(path);
 
   if (patRoute(path)) return patMethods(path);
-
-  if (path === smokePath) return ["GET", "POST"];
 
   if (ownedPaths.has(path)) return [postPaths.has(path) ? "POST" : "GET"];
 
@@ -536,10 +475,7 @@ const fallbackHeaders = (request: Request, path: string): Headers => {
     return headers;
   }
 
-  const headers = new Headers(request.headers);
-  headers.delete(smokeProofHeader);
-
-  return headers;
+  return new Headers(request.headers);
 };
 
 const oauthHeaders = (request: Request, path: string): Headers => {
@@ -606,14 +542,6 @@ const forwardedHeaders = (request: Request, path: string): Headers => {
 
   if (Option.isSome(special)) return special.value;
 
-  if (path === smokePath) {
-    return new Headers({
-      [smokeProofHeader]: request.headers.get(smokeProofHeader) ?? "",
-      [smokeVersionHeader]: request.headers.get(smokeVersionHeader) ?? "",
-      "content-type": "application/json",
-    });
-  }
-
   const direct = directHeaders(request, path);
 
   if (Option.isSome(direct)) return direct.value;
@@ -656,26 +584,9 @@ const preservesCoreQuery = (path: string): boolean =>
   path === connectionCallbackPath ||
   transactionPath(path) ||
   canonicalRoute(path) ||
-  path === smokePath ||
   dedicatedBrowserPath(path) ||
   path === providerPaths.callback ||
   path === microsoftProviderPaths.callback;
-
-const forwardCandidateVersionOverride = (
-  request: Request,
-  environment: PublicEnvironment,
-  headers: Headers
-): void => {
-  headers.delete(smokeVersionHeader);
-
-  if (!smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) {
-    return;
-  }
-
-  const override = request.headers.get(smokeVersionHeader);
-
-  if (override !== null) headers.set(smokeVersionHeader, override);
-};
 
 const patSourcePath = (path: string): boolean =>
   path === "/pat-pairings" || path === "/pat-pairings/claim";
@@ -703,7 +614,6 @@ const coreRequest = (
     const binding = request.headers.get(browserSessionBindingHeader);
 
     if (binding !== null) headers.set(browserSessionBindingHeader, binding);
-    forwardCandidateVersionOverride(request, environment, headers);
     yield* canonicalAdmissionHeaders(request, environment, headers);
     headers.delete("x-provider-source");
 
@@ -811,15 +721,6 @@ const requiresBrowserOrigin = (request: Request, path: string): boolean =>
   (cookieAdmittedPath(path) && request.headers.has("cookie")) ||
   patBrowserRoute(path);
 
-const rejectsSmokeIngress = (
-  request: Request,
-  origin: Option.Option<string>,
-  environment: PublicEnvironment
-): boolean =>
-  new URL(request.url).pathname === smokePath &&
-  (Option.isSome(origin) ||
-    !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" }));
-
 const mixedConsentCredentials = (request: Request, path: string): boolean =>
   Option.isSome(processingConsentTransport(path)) &&
   request.headers.has("authorization") &&
@@ -871,10 +772,6 @@ const gateOwnedRequest = (
     return policy(Response.json({}, { status: 404 }));
   }
 
-  if (rejectsSmokeIngress(request, origin, environment)) {
-    return policy(Response.json({}, { status: 404 }));
-  }
-
   if (disallowedSupportOrigin(path, origin)) {
     return Option.some(
       applyApiPolicy(forbiddenOrigin(), environment.BROWSER_ORIGIN, Option.none())
@@ -908,123 +805,21 @@ const gateOwnedRequest = (
   );
 };
 
-const coreSmokeFailure = (
-  request: Request,
-  environment: PublicEnvironment,
-  response: Response
-): Response => {
-  const stage = Schema.decodeUnknownOption(SmokeFailureStage)(
-    response.headers.get(smokeFailureHeader)
-  );
-
-  const unavailableResponse = smokeUnavailable(
-    request,
-    environment,
-    Option.getOrElse(stage, () => "core_response")
-  );
-
-  const equality = Schema.decodeUnknownOption(SmokeIdentityEquality)(
-    response.headers.get(smokeIdentityHeader)
-  );
-
-  if (Option.contains(stage, "identity") && Option.isSome(equality)) {
-    unavailableResponse.headers.set(smokeIdentityHeader, equality.value);
-  }
-
-  const version = Schema.decodeUnknownOption(SmokeIdentity.fields.workerVersionId)(
-    response.headers.get(smokeCoreVersionHeader)
-  );
-
-  if (Option.contains(stage, "identity") && Option.isSome(version)) {
-    unavailableResponse.headers.set(smokeCoreVersionHeader, version.value);
-  }
-
-  return unavailableResponse;
-};
-
-const projectCoreSmokeResponse = (
-  response: Response,
-  request: Request,
-  environment: PublicEnvironment
-): Effect.Effect<Response, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    if (new URL(request.url).pathname !== smokePath) return response;
-
-    if (response.status === serviceUnavailableStatus) {
-      return coreSmokeFailure(request, environment, response);
-    }
-
-    if (!response.ok) return response;
-    const version = environment.CF_VERSION_METADATA?.id;
-
-    if (version === undefined || environment.CONTRACT_DIGEST === undefined) {
-      return smokeUnavailable(request, environment, "configuration");
-    }
-
-    const decoded = yield* Effect.tryPromise(() =>
-      response.json().then(Schema.decodeUnknownOption(SmokeResponse))
-    );
-
-    if (Option.isNone(decoded)) {
-      return smokeUnavailable(request, environment, "public_response");
-    }
-
-    return Response.json(
-      {
-        ...decoded.value,
-        manifest: smokeManifest,
-        public: {
-          workerVersionId: version,
-          gitRevision: environment.RELEASE_GIT_SHA,
-          contractDigest: environment.CONTRACT_DIGEST,
-        },
-      },
-      { status: response.status }
-    );
-  });
-
 const hasMixedQueryCredentials = (request: Request): boolean =>
   request.method === "GET" &&
   request.headers.has("authorization") &&
   request.headers.has("cookie") &&
   canonicalRoute(new URL(request.url).pathname);
 
-const bindCoreAcceptance = Effect.fn(function* (
-  forwarded: Request,
-  environment: PublicEnvironment,
-  deadline: Option.Option<number>
-) {
-  forwarded.headers.delete(acceptanceProofHeader);
-  forwarded.headers.delete(acceptanceApiHeader);
-
-  if (Option.isSome(deadline)) {
-    const pair = Object.values(installedOrigins).find(
-      (item) => item.browser === environment.BROWSER_ORIGIN
-    );
-
-    if (pair !== undefined) forwarded.headers.set(acceptanceApiHeader, pair.api);
-    forwarded.headers.set(
-      acceptanceProofHeader,
-      yield* signAcceptanceRequest({
-        request: forwarded,
-        environment,
-        boundary: "core",
-        deadline: deadline.value,
-      })
-    );
-  }
-});
-
 type OwnedRouting = {
   origin: Option.Option<string>;
   telemetry: TelemetryService;
-  deadline: Option.Option<number>;
 };
 
 const routeOwnedRequest = (
   request: Request,
   environment: PublicEnvironment,
-  { origin, telemetry, deadline }: OwnedRouting
+  { origin, telemetry }: OwnedRouting
 ): Effect.Effect<Response> => {
   if (hasMixedQueryCredentials(request)) {
     return Effect.succeed(applyApiPolicy(unauthenticated(), environment.BROWSER_ORIGIN, origin));
@@ -1048,7 +843,6 @@ const routeOwnedRequest = (
 
   return Effect.gen(function* () {
     const forwarded = yield* coreRequest(request, environment);
-    yield* bindCoreAcceptance(forwarded, environment, deadline);
     forwarded.headers.delete(workerInternalTraceHeader);
     const trace = yield* telemetry.captureDurableContext;
 
@@ -1056,16 +850,14 @@ const routeOwnedRequest = (
       forwarded.headers.set(workerInternalTraceHeader, encodeTraceParent(trace.value));
     }
 
-    const response = yield* Effect.tryPromise({
+    return yield* Effect.tryPromise({
       try: (signal) =>
         environment.CORE.fetch(forwarded, { signal: AbortSignal.any([request.signal, signal]) }),
       catch: () => undefined,
     });
-
-    return yield* projectCoreSmokeResponse(response, request, environment);
   }).pipe(
     Effect.match({
-      onFailure: () => smokeUnavailable(request, environment, "public_forwarding"),
+      onFailure: unavailable,
       onSuccess: (response) => response,
     }),
     Effect.map((response) =>
@@ -1087,110 +879,6 @@ const routeOwnedRequest = (
   );
 };
 
-const annotateSmokeVersion = (
-  response: Response,
-  request: Request,
-  environment: PublicEnvironment
-): Response => {
-  if (!smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) return response;
-  const version = environment.CF_VERSION_METADATA?.id;
-
-  if (version === undefined) return response;
-  const headers = new Headers(response.headers);
-  headers.set("x-fidy-smoke-worker-version", version);
-
-  return new Response(response.body, { status: response.status, headers });
-};
-
-const storageProofAllowed = (request: Request, environment: PublicEnvironment): boolean =>
-  environment.RECOVERY_ISOLATION === "isolated" ||
-  (environment.NATIVE_STORAGE_ADMISSION === "open" &&
-    environment.RECOVERY_ISOLATION === "" &&
-    new URL(request.url).origin === installedOrigins.production.api &&
-    isStorageCompatibility(request));
-
-const forwardStorageProbe = Effect.fn(function* (request: Request, environment: PublicEnvironment) {
-  if (
-    !storageProofAllowed(request, environment) ||
-    !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })
-  ) {
-    return new Response(null, { status: 404 });
-  }
-
-  const admitted = new Headers({ [smokeProofHeader]: environment.SMOKE_PROOF ?? "" });
-  forwardCandidateVersionOverride(request, environment, admitted);
-
-  const result = yield* Effect.tryPromise(() =>
-    environment.CORE.fetch(request.url, {
-      method: request.method,
-      headers: admitted,
-      signal: request.signal,
-    })
-  ).pipe(Effect.orElseSucceed(() => new Response(null, { status: 503 })));
-
-  const headers = new Headers({
-    "cache-control": "no-store",
-    "content-type": "application/json",
-    "x-fidy-smoke-worker-version": environment.CF_VERSION_METADATA?.id ?? "",
-  });
-
-  return new Response(result.body, { status: result.status, headers });
-});
-
-const forwardPerformanceEvidence = Effect.fn(function* (
-  request: Request,
-  environment: PublicEnvironment,
-  deadline: Option.Option<number>
-) {
-  if (
-    Option.isNone(deadline) ||
-    !(yield* performanceEvidenceAdmitted({
-      request,
-      environment,
-      boundary: "ingress",
-      now: yield* Clock.currentTimeMillis,
-    }))
-  ) {
-    return new Response(null, { status: 404 });
-  }
-
-  const headers = new Headers();
-
-  for (const name of ["origin", "cookie", "fidy-session-binding", "content-type"]) {
-    headers.set(name, request.headers.get(name) ?? "");
-  }
-
-  const url = new URL(request.url);
-
-  const forwarded = new Request("https://core.internal" + url.pathname + url.search, {
-    method: "POST",
-    headers,
-    body: request.body,
-    signal: request.signal,
-  });
-
-  yield* bindCoreAcceptance(forwarded, environment, deadline);
-
-  return yield* Effect.tryPromise(() => environment.CORE.fetch(forwarded));
-});
-
-const privateForward = (
-  request: Request,
-  environment: PublicEnvironment,
-  deadline: Option.Option<number>
-): Effect.Effect<Response> =>
-  isPerformanceEvidence(request)
-    ? forwardPerformanceEvidence(request, environment, deadline).pipe(
-        Effect.orElseSucceed(() => new Response(null, { status: 503 }))
-      )
-    : forwardStorageProbe(request, environment);
-
-const privateReleaseRequest = (request: Request): boolean =>
-  isStorageProbe(request) ||
-  isAcceptanceWindow(request) ||
-  isAcceptanceReceipt(request) ||
-  isPerformanceEvidence(request);
-
 const fetchEffect = (
   request: Request,
   environment: PublicEnvironment,
@@ -1201,27 +889,13 @@ const fetchEffect = (
     const browserOrigin = resolveBrowserOrigin(environment.BROWSER_ORIGIN);
 
     if (Option.isNone(browserOrigin)) {
-      return applyApiPolicy(
-        smokeUnavailable(request, environment, "configuration"),
-        browserOrigins.production,
-        Option.none()
-      );
+      return applyApiPolicy(unavailable(), browserOrigins.production, Option.none());
     }
 
     const origin = Option.fromNullishOr(request.headers.get("origin"));
 
     if (Option.exists(origin, (value) => value !== browserOrigin.value)) {
       return applyApiPolicy(forbiddenOrigin(), browserOrigin.value, origin);
-    }
-
-    const admitted = yield* releaseAdmission(request, environment, "ingress");
-
-    if (Option.isSome(admitted.denial)) {
-      return applyApiPolicy(admitted.denial.value, browserOrigin.value, origin);
-    }
-
-    if (privateReleaseRequest(request)) {
-      return yield* privateForward(request, environment, admitted.deadline);
     }
 
     const distributionResponse = yield* cliDistributionResponse(request);
@@ -1239,31 +913,19 @@ const fetchEffect = (
     return yield* routeOwnedRequest(
       request,
       { ...environment, BROWSER_ORIGIN: browserOrigin.value },
-      { origin, telemetry, deadline: admitted.deadline }
+      { origin, telemetry }
     );
   }).pipe(
     Effect.catchCauseIf(
       (cause) => !Cause.hasInterrupts(cause),
-      () =>
-        Effect.succeed(
-          applyApiPolicy(
-            smokeUnavailable(request, environment, "public_forwarding"),
-            browserOrigins.production,
-            Option.none()
-          )
-        )
-    ),
-    Effect.map((response) => annotateSmokeVersion(response, request, environment))
+      () => Effect.succeed(applyApiPolicy(unavailable(), browserOrigins.production, Option.none()))
+    )
   );
 
 export const makePublicWorker = (telemetry: TelemetryService): PublicWorker => ({
   fetch: (request, environment) =>
     Effect.runPromise(
-      fetchEffect(
-        request,
-        closedHostEnvironment({ request, environment, boundary: "ingress" }),
-        telemetry
-      ).pipe(
+      fetchEffect(request, environment, telemetry).pipe(
         Effect.flatMap((response) =>
           Effect.map(telemetry.captureDurableContext, (trace) => {
             const headers = new Headers(response.headers);

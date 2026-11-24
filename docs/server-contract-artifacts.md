@@ -45,6 +45,5 @@ launch, older browser builds and PAT clients are not supported compatibility tar
 build does not protect already-open browser tabs or independently updated clients. Define a support
 window and check all client-facing API surfaces before those clients become supported.
 
-Production deploys one exact-revision Cloudflare stack. The workflow rechecks trunk immediately
-before deployment and verifies the deployed web metadata and API health response against that
-revision and digest. See [the production runbook](operations/production-releases.md).
+Production deploys one exact-revision Cloudflare stack per trunk push. The workflow verifies the
+deployed web metadata and API health response against that revision. See [the production runbook](operations/production-releases.md).

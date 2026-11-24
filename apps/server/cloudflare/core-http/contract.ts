@@ -1,7 +1,7 @@
 import type { SharedBindings } from "../storage-bootstrap/contract";
 import type { UserStoreBindings } from "../directory/contract";
 import type { ProviderConfiguration } from "../provider-authentication/contract";
-import type { SmokeEnvironment } from "../runtime/release-smoke/contract";
+import type { BancolombiaSandboxEnvironment } from "../bancolombia-authentication/contract";
 
 export type CoreHttpEnvironment = ProviderConfiguration &
   Partial<UserStoreBindings> &
@@ -21,12 +21,12 @@ export type CoreHttpEnvironment = ProviderConfiguration &
     WOMPI_PRIVATE_KEY: string;
     WOMPI_INTEGRITY_SECRET: string;
   }> &
-  Partial<SmokeEnvironment> &
+  BancolombiaSandboxEnvironment &
   Partial<
     Readonly<{
-      RECOVERY_ISOLATION: string;
-      NATIVE_STORAGE_ADMISSION: string;
-      SQLITE_STORAGE_RELEASE: string;
+      CF_VERSION_METADATA: { id: string };
+      RESEND_API_KEY: string;
+      WOMPI_EVENT_SECRET: string;
       BETA_PRO_OPERATOR_EMAIL: string;
       BETA_PRO_AUDIENCE: string;
       SAMPLE_REVIEW_AUDIENCE: string;

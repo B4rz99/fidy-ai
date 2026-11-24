@@ -14,7 +14,6 @@ const zeroValuePattern = /^0+$/u;
 export type ReleaseMetadata = {
   readonly contractDigest: string;
   readonly gitRevision: string;
-  readonly versionTag: string;
 };
 
 type TopologyModeInput = {
@@ -25,7 +24,6 @@ type TopologyModeInput = {
 type DeploymentConfigurationInput = TopologyModeInput & {
   readonly contractDigest: string;
   readonly gitRevision: string;
-  readonly releaseAttemptId: string;
 };
 
 export class InvalidDeploymentConfiguration extends Data.TaggedError(
@@ -66,14 +64,12 @@ export const resolveDeploymentConfiguration = (
     return Result.succeed({
       contractDigest: developmentContractDigest,
       gitRevision: developmentGitRevision,
-      versionTag: "development",
     });
   }
 
   if (
     !isReleaseIdentity(input.contractDigest, contractDigestPattern) ||
-    !isReleaseIdentity(input.gitRevision, gitRevisionPattern) ||
-    !/^[1-9][0-9]{0,19}-[1-9][0-9]{0,5}$/u.test(input.releaseAttemptId)
+    !isReleaseIdentity(input.gitRevision, gitRevisionPattern)
   ) {
     return Result.fail(new InvalidDeploymentConfiguration({ reason: "invalid_release_metadata" }));
   }
@@ -81,6 +77,5 @@ export const resolveDeploymentConfiguration = (
   return Result.succeed({
     contractDigest: input.contractDigest,
     gitRevision: input.gitRevision,
-    versionTag: `release-${input.releaseAttemptId}`,
   });
 };

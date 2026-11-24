@@ -18,7 +18,6 @@ const bindingNames = {
 
 const apiOrigins = new Map<string, string>([
   [browserOrigins.production, installedOrigins.production.api],
-  [browserOrigins.nativeAcceptance, installedOrigins.acceptance.api],
   [browserOrigins.acceptance, "https://127.0.0.1:4174"],
   [browserOrigins.local, "http://localhost:8787"],
 ]);

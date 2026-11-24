@@ -7,13 +7,7 @@ describe("browser API origin", () => {
     expect(parseApiOrigin("https://api.fidyapp.com")).toBe("https://api.fidyapp.com");
   });
 
-  it("pairs both installed hostnames and refuses other release origins", () => {
-    expect(
-      browserApiOrigin({
-        configured: "installed",
-        browserOrigin: "https://storage-web-acceptance.fidyapp.com",
-      })
-    ).toBe("https://storage-acceptance.fidyapp.com");
+  it("pairs the installed hostname and refuses other release origins", () => {
     expect(
       browserApiOrigin({ configured: "installed", browserOrigin: "https://app.fidyapp.com" })
     ).toBe("https://api.fidyapp.com");
@@ -22,6 +16,7 @@ describe("browser API origin", () => {
       "http://app.fidyapp.com",
       "https://other.fidyapp.com",
       "https://app.fidyapp.com:444",
+      "https://storage-web-acceptance.fidyapp.com",
     ]) {
       expect(() => browserApiOrigin({ configured: "installed", browserOrigin: origin })).toThrow();
     }

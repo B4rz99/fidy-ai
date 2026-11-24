@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { selectChecks, selectNativeChecks } from "./ci-changes";
+import { selectChecks, selectNativeChecks, selectStackPlans } from "./ci-changes";
 
 const root = process.cwd();
 
@@ -210,6 +210,29 @@ describe("PR check selection", () => {
         expect(plan).toContain("cloudflare-adapters=true\n");
         expect(plan).toContain("security-sca=false\n");
         expect(plan).toContain("cli-native=true\n");
+        expect(plan).toContain('plan-stacks=["app","site"]\n');
       });
+  });
+
+  it("plans only the deployed stacks whose inputs changed", () => {
+    expect(selectStackPlans(["apps/site/src/pages/index.astro"])).toEqual({
+      app: false,
+      site: true,
+      docs: false,
+    });
+    expect(selectStackPlans(["apps/server/src/core/money.ts"])).toEqual({
+      app: true,
+      site: true,
+      docs: false,
+    });
+    expect(selectStackPlans(["apps/docs/src/content/index.md"])).toEqual({
+      app: false,
+      site: false,
+      docs: true,
+    });
+    expect(selectStackPlans(["bun.lock"])).toEqual({ app: true, site: true, docs: true });
+    expect(
+      selectStackPlans(["docs/operations/production-releases.md", "apps/cli/main.ts"])
+    ).toEqual({ app: false, site: false, docs: false });
   });
 });

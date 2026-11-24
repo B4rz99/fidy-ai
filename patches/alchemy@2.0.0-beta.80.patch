@@ -955,3 +955,45 @@ diff --git a/package.json b/package.json
      "@effect/sql-sqlite-do": "^4.0.0",
      "@libsql/client": "^0.17.0",
      "@neon/functions": "0.11.0",
+diff --git a/lib/Cloudflare/Queues/Consumer.js b/lib/Cloudflare/Queues/Consumer.js
+--- a/lib/Cloudflare/Queues/Consumer.js
++++ b/lib/Cloudflare/Queues/Consumer.js
+@@ -395,7 +395,7 @@
+             queueId: output.queueId,
+             consumerId: output.consumerId,
+         })
+-            .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.void));
++            .pipe(Effect.catchTag(["ConsumerNotFound", "QueueNotFound"], () => Effect.void));
+         // Block until Cloudflare's worker subsystem stops claiming
+         // the script as a queue consumer. Without this the
+         // sibling Worker.delete races on `QueueConsumerConflict`
+@@ -407,7 +407,7 @@
+             queueId: output.queueId,
+             consumerId: output.consumerId,
+         })
+-            .pipe(Effect.flatMap(() => Effect.fail("still-attached")), Effect.catchTag("ConsumerNotFound", () => Effect.void), Effect.retry({
++            .pipe(Effect.flatMap(() => Effect.fail("still-attached")), Effect.catchTag(["ConsumerNotFound", "QueueNotFound"], () => Effect.void), Effect.retry({
+             while: (e) => e === "still-attached",
+             schedule: Schedule.max([
+                 Schedule.spaced("1 second"),
+diff --git a/src/Cloudflare/Queues/Consumer.ts b/src/Cloudflare/Queues/Consumer.ts
+--- a/src/Cloudflare/Queues/Consumer.ts
++++ b/src/Cloudflare/Queues/Consumer.ts
+@@ -592,7 +592,7 @@
+           queueId: output.queueId,
+           consumerId: output.consumerId,
+         })
+-        .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.void));
++        .pipe(Effect.catchTag(["ConsumerNotFound", "QueueNotFound"], () => Effect.void));
+ 
+       // Block until Cloudflare's worker subsystem stops claiming
+       // the script as a queue consumer. Without this the
+@@ -607,7 +607,7 @@
+         })
+         .pipe(
+           Effect.flatMap(() => Effect.fail("still-attached" as const)),
+-          Effect.catchTag("ConsumerNotFound", () => Effect.void),
++          Effect.catchTag(["ConsumerNotFound", "QueueNotFound"], () => Effect.void),
+           Effect.retry({
+             while: (e) => e === "still-attached",
+             schedule: Schedule.max([

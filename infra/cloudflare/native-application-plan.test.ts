@@ -65,6 +65,8 @@ const Environment = Schema.Struct({
   }),
 });
 
+const destinationUri = ({ uri }: { readonly uri: string }): string => uri;
+
 const destinationHost = ({ uri }: { readonly uri: string }): string =>
   new URL("https://" + uri).host;
 
@@ -92,9 +94,10 @@ it.effect("plans the production application on its canonical hosts with live pro
         yield* Effect.forEach(
           applications,
           Effect.fnUntraced(function* (application) {
-            const { allowedIdps, destinations } = yield* Schema.decodeUnknownEffect(
+            const { allowedIdps, destinations, domain } = yield* Schema.decodeUnknownEffect(
               Schema.Struct({
                 allowedIdps: Schema.Unknown,
+                domain: Schema.String,
                 destinations: Schema.Array(Schema.Struct({ uri: Schema.String })),
               })
             )(application.Props);
@@ -105,6 +108,7 @@ it.effect("plans the production application on its canonical hosts with live pro
               )
             ).toEqual([pinId]);
             expect(destinations.map(destinationHost)).toEqual(["api.fidyapp.com"]);
+            expect(destinations.map(destinationUri)).toEqual([domain]);
           }),
           { discard: true }
         );

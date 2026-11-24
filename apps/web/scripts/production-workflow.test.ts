@@ -25,7 +25,7 @@ const ordered = (text: string, parts: readonly string[]): void => {
 };
 
 describe("protected native releases", () => {
-  it("requires an explicit protected trunk dispatch, serialized with all production writers", () => {
+  it("deploys protected trunk pushes and explicit dispatches, serialized with all production writers", () => {
     for (const gate of [
       "workflow_dispatch:",
       "github.ref == 'refs/heads/trunk'",
@@ -37,7 +37,8 @@ describe("protected native releases", () => {
       expect(workflow).toContain(gate);
     }
 
-    expect(workflow).not.toContain("  push:");
+    expect(workflow).toContain("  push:\n    branches: [trunk]");
+    expect(workflow).toContain("RELEASE_OPERATION: ${{ inputs.operation || 'rollout' }}");
     expect(workflow).not.toMatch(
       /production-resources.ts|verify-retirement|deferred-d1-quota|SCHEMA_CUTOVER/u
     );
@@ -80,9 +81,9 @@ describe("protected native releases", () => {
   it("reserves physical erasure for first installation and an explicit erasure dispatch", () => {
     ordered(workflow, [
       "id: verify",
-      "if: inputs.operation != 'plan-fixture-fallback' && inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure'",
+      "if: env.RELEASE_OPERATION != 'plan-fixture-fallback' && env.RELEASE_OPERATION != 'plan-first-install' && env.RELEASE_OPERATION != 'first-install' && env.RELEASE_OPERATION != 'verify-erasure'",
       "run: bun native-storage-release.ts verify\n",
-      "if: inputs.operation == 'first-install' || inputs.operation == 'verify-erasure'",
+      "if: env.RELEASE_OPERATION == 'first-install' || env.RELEASE_OPERATION == 'verify-erasure'",
       "run: bun native-storage-release.ts verify-erasure\n",
       "steps.promote.outcome == 'success' && steps.verify.outcome == 'failure'",
     ]);

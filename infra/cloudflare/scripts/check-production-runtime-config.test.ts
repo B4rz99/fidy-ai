@@ -151,12 +151,12 @@ describe("Production runtime configuration gate", () => {
       "Verify the installed application and retained schema markers"
     );
 
-    expect(preview).toContain("if: inputs.operation == 'plan-first-install'");
+    expect(preview).toContain("if: env.RELEASE_OPERATION == 'plan-first-install'");
     expect(preview).toContain("run: bun native-storage-resources.ts plan-first-install");
-    expect(install).toContain("if: inputs.operation == 'first-install'");
-    expect(verify).toContain("inputs.operation != 'plan-fixture-repair'");
+    expect(install).toContain("if: env.RELEASE_OPERATION == 'first-install'");
+    expect(verify).toContain("env.RELEASE_OPERATION != 'plan-fixture-repair'");
     expect(verify).toContain(
-      "if: inputs.operation != 'plan-fixture-fallback' && inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure'"
+      "if: env.RELEASE_OPERATION != 'plan-fixture-fallback' && env.RELEASE_OPERATION != 'plan-first-install' && env.RELEASE_OPERATION != 'first-install' && env.RELEASE_OPERATION != 'verify-erasure'"
     );
   });
 
@@ -166,14 +166,14 @@ describe("Production runtime configuration gate", () => {
     );
 
     for (const operation of ["plan-fixture-repair", "resume-fixture-upload"]) {
-      expect(source).toContain(`inputs.operation == '${operation}'`);
+      expect(source).toContain(`env.RELEASE_OPERATION == '${operation}'`);
     }
 
     const planning = await workflowStep(
       "Read the complete dormant resource plan without applying it"
     );
 
-    expect(planning).toContain("inputs.operation == 'plan-fixture-repair'");
+    expect(planning).toContain("env.RELEASE_OPERATION == 'plan-fixture-repair'");
     expect(planning).not.toContain("resume-fixture-upload");
 
     const mutations = [
@@ -184,7 +184,7 @@ describe("Production runtime configuration gate", () => {
     ];
 
     for (const step of await Promise.all(mutations.map(workflowStep))) {
-      expect(step).toContain("inputs.operation == 'resume-fixture-upload'");
+      expect(step).toContain("env.RELEASE_OPERATION == 'resume-fixture-upload'");
       expect(step).not.toContain("plan-fixture-repair");
     }
 
@@ -207,7 +207,7 @@ describe("Production runtime configuration gate", () => {
         "Seal dormant fallback stage before promotion",
       ].map(workflowStep)
     )) {
-      expect(step).toContain("inputs.operation == 'stage-pairing-repair'");
+      expect(step).toContain("env.RELEASE_OPERATION == 'stage-pairing-repair'");
     }
 
     for (const step of await Promise.all(
@@ -235,7 +235,7 @@ describe("Production runtime configuration gate", () => {
         "Seal dormant fallback stage before promotion",
       ].map(workflowStep)
     )) {
-      expect(step).toContain("inputs.operation == 'resume-pairing-stage'");
+      expect(step).toContain("env.RELEASE_OPERATION == 'resume-pairing-stage'");
       expect(workflow.indexOf(step)).toBeGreaterThan(position);
       position = workflow.indexOf(step);
     }
@@ -251,7 +251,7 @@ describe("Production runtime configuration gate", () => {
         "Stage only canonical Access paths and vacant hostnames on the verified closed release",
       ].map(workflowStep)
     )) {
-      expect(step).not.toContain("inputs.operation == 'resume-pairing-stage'");
+      expect(step).not.toContain("env.RELEASE_OPERATION == 'resume-pairing-stage'");
     }
   });
 
@@ -275,7 +275,7 @@ describe("Production runtime configuration gate", () => {
       step
         .split("\n")
         .find((line) => line.startsWith("        if:"))
-        ?.includes("inputs.operation == 'reseal-fixture-fallback'")
+        ?.includes("env.RELEASE_OPERATION == 'reseal-fixture-fallback'")
     );
 
     expect(admitted.map((step) => step.split("\n")[0])).toEqual([
@@ -289,7 +289,7 @@ describe("Production runtime configuration gate", () => {
       step
         .split("\n")
         .find((line) => line.startsWith("        if:"))
-        ?.includes("inputs.operation == 'diagnose-fixture-pairing'")
+        ?.includes("env.RELEASE_OPERATION == 'diagnose-fixture-pairing'")
     );
 
     expect(diagnosis.map((step) => step.split("\n")[0])).toEqual([
@@ -308,15 +308,15 @@ describe("Production runtime configuration gate", () => {
       "Verify the installed application and retained schema markers"
     );
 
-    expect(installed).toContain("inputs.operation != 'reseal-fixture-fallback'");
-    expect(installed).toContain("inputs.operation != 'diagnose-fixture-pairing'");
+    expect(installed).toContain("env.RELEASE_OPERATION != 'reseal-fixture-fallback'");
+    expect(installed).toContain("env.RELEASE_OPERATION != 'diagnose-fixture-pairing'");
 
     for (const step of steps.filter((item) => item.includes("run: bun native-storage-"))) {
       expect(step).toContain("        if:");
     }
 
     const recover = await workflowStep("Authenticate the interrupted dormant stage");
-    expect(recover).toContain("if: inputs.operation == 'recover-fixture-fallback'");
+    expect(recover).toContain("if: env.RELEASE_OPERATION == 'recover-fixture-fallback'");
     expect(recover).toContain("fallback_stage.py");
     expect(release.indexOf(recover)).toBeLessThan(
       release.indexOf(await workflowStep("Finish only the tested closed forward repair"))

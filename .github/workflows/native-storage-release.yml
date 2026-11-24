@@ -1,6 +1,18 @@
 name: Release native application
 
 on:
+  push:
+    branches: [trunk]
+    paths:
+      - "apps/server/**"
+      - "apps/web/**"
+      - "apps/site/**"
+      - "infra/cloudflare/**"
+      - "scripts/**"
+      - "package.json"
+      - "bun.lock"
+      - "tsconfig*.json"
+      - ".github/workflows/native-storage-release.yml"
   workflow_dispatch:
     inputs:
       installed_revision:
@@ -123,7 +135,8 @@ jobs:
       actions: read
       contents: read
     env:
-      FIXTURE_RELEASE_OPERATION: ${{ inputs.operation }}
+      RELEASE_OPERATION: ${{ inputs.operation || 'rollout' }}
+      FIXTURE_RELEASE_OPERATION: ${{ inputs.operation || 'rollout' }}
       NATIVE_FIXTURE_BUILD: ${{ (inputs.operation == 'plan-fixture-fallback' || (inputs.operation == 'plan-fixture-repair' || inputs.operation == 'plan-pairing-repair' || (inputs.operation == 'stage-pairing-repair' || inputs.operation == 'resume-pairing-stage')) || inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'reseal-fixture-fallback' || inputs.operation == 'diagnose-fixture-pairing' || inputs.operation == 'recover-fixture-fallback' || inputs.operation == 'resume-pairing-rollback') && 'fallback' || 'ordinary' }}
       NATIVE_FIXTURE_SIGNER_SHA256: ${{ inputs.transaction_fixture_signer && vars.NATIVE_FIXTURE_SIGNER_SHA256 || '' }}
       NATIVE_STORAGE_HOSTS: ${{ (inputs.operation == 'open-canonical-signup') && 'staged' || vars.NATIVE_STORAGE_HOSTS || 'acceptance' }}
@@ -146,7 +159,7 @@ jobs:
       - name: Require closed admission in the protected environment
         env:
           EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
-          RELEASE_OPERATION: ${{ inputs.operation }}
+          RELEASE_OPERATION: ${{ inputs.operation || 'rollout' }}
           FIXTURE_SIGNER_REQUESTED: ${{ inputs.transaction_fixture_signer }}
           STAGE_ARTIFACT: ${{ inputs.fallback_artifact }}
           STAGE_SHA256: ${{ inputs.fallback_sha256 }}
@@ -186,7 +199,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - name: Bind the protected verifier to the staged application source
-        if: inputs.transaction_fixture_signer && (inputs.operation == 'reseal-fixture-fallback' || inputs.operation == 'diagnose-fixture-pairing' || inputs.operation == 'recover-fixture-fallback' || inputs.operation == 'resume-pairing-rollback' || inputs.operation == 'rollout' || inputs.operation == 'verify')
+        if: inputs.transaction_fixture_signer && (env.RELEASE_OPERATION == 'reseal-fixture-fallback' || env.RELEASE_OPERATION == 'diagnose-fixture-pairing' || env.RELEASE_OPERATION == 'recover-fixture-fallback' || env.RELEASE_OPERATION == 'resume-pairing-rollback' || env.RELEASE_OPERATION == 'rollout' || env.RELEASE_OPERATION == 'verify')
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
@@ -199,12 +212,12 @@ jobs:
             python3 scripts/infra-performance/canonical-fixture/unsealed_stage.py source
           fi
       - name: Authenticate the interrupted pairing upload and its original controls
-        if: inputs.operation == 'resume-pairing-stage'
+        if: env.RELEASE_OPERATION == 'resume-pairing-stage'
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/infra-performance/canonical-fixture/pairing_stage.py resume-upload
       - name: Authenticate the exact closed active source for canonical host planning
-        if: inputs.operation == 'open-canonical-signup'
+        if: env.RELEASE_OPERATION == 'open-canonical-signup'
         env:
           CANONICAL_TRANSFER_ARTIFACT: ${{ inputs.canonical_transfer_artifact }}
           CANONICAL_TRANSFER_SHA256: ${{ inputs.canonical_transfer_sha256 }}
@@ -234,47 +247,47 @@ jobs:
         working-directory: infra/cloudflare
         run: bun verify-edge-policy.ts
       - name: Build the expected browser artifact for independent verification
-        if: inputs.operation == 'plan-fixture-repair' || inputs.operation == 'verify' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'fleet-pilot' || inputs.operation == 'continue-fleet-cleanup' || inputs.operation == 'ten-hosted' || inputs.operation == 'continue-ten-cleanup' || inputs.operation == 'stage-hosts' || inputs.operation == 'recover-fixture-fallback' || inputs.operation == 'resume-fixture-upload' || (inputs.transaction_fixture_signer && inputs.operation == 'rollout') || inputs.operation == 'plan-pairing-repair' || (inputs.operation == 'stage-pairing-repair' || inputs.operation == 'resume-pairing-stage')
+        if: env.RELEASE_OPERATION == 'plan-fixture-repair' || env.RELEASE_OPERATION == 'verify' || env.RELEASE_OPERATION == 'verify-erasure' || env.RELEASE_OPERATION == 'continue-erasure' || env.RELEASE_OPERATION == 'fleet-pilot' || env.RELEASE_OPERATION == 'continue-fleet-cleanup' || env.RELEASE_OPERATION == 'ten-hosted' || env.RELEASE_OPERATION == 'continue-ten-cleanup' || env.RELEASE_OPERATION == 'stage-hosts' || env.RELEASE_OPERATION == 'recover-fixture-fallback' || env.RELEASE_OPERATION == 'resume-fixture-upload' || (inputs.transaction_fixture_signer && env.RELEASE_OPERATION == 'rollout') || env.RELEASE_OPERATION == 'plan-pairing-repair' || (env.RELEASE_OPERATION == 'stage-pairing-repair' || env.RELEASE_OPERATION == 'resume-pairing-stage')
         env:
           RELEASE_GIT_SHA: ${{ env.FIXTURE_WEB_REVISION || inputs.installed_revision || github.sha }}
         working-directory: apps/web
         run: bun run build:production
       - name: Verify the fresh native plan against the existing state store
-        if: inputs.operation == 'plan-first-install'
+        if: env.RELEASE_OPERATION == 'plan-first-install'
         env:
           NATIVE_FIXTURE_SIGNING_KEY: ${{ inputs.transaction_fixture_signer && secrets.NATIVE_FIXTURE_SIGNING_KEY || '' }}
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-resources.ts plan-first-install
       - name: Install the verified fresh native application
-        if: inputs.operation == 'first-install'
+        if: env.RELEASE_OPERATION == 'first-install'
         env:
           NATIVE_FIXTURE_SIGNING_KEY: ${{ inputs.transaction_fixture_signer && secrets.NATIVE_FIXTURE_SIGNING_KEY || '' }}
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-resources.ts first-install
       - name: Authenticate the original interrupted upload before planning or applying its repair
-        if: inputs.operation == 'plan-fixture-repair' || inputs.operation == 'resume-fixture-upload'
+        if: env.RELEASE_OPERATION == 'plan-fixture-repair' || env.RELEASE_OPERATION == 'resume-fixture-upload'
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/infra-performance/canonical-fixture/interrupted_upload.py
       - name: Authenticate the unsealed zero-traffic pair
-        if: inputs.operation == 'reseal-fixture-fallback' || inputs.operation == 'diagnose-fixture-pairing'
+        if: env.RELEASE_OPERATION == 'reseal-fixture-fallback' || env.RELEASE_OPERATION == 'diagnose-fixture-pairing'
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/infra-performance/canonical-fixture/unsealed_stage.py restore
       - name: Authenticate the predecessor of the pairing repair
-        if: inputs.operation == 'plan-pairing-repair' || inputs.operation == 'stage-pairing-repair'
+        if: env.RELEASE_OPERATION == 'plan-pairing-repair' || env.RELEASE_OPERATION == 'stage-pairing-repair'
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/infra-performance/canonical-fixture/unsealed_stage.py replacement
       - name: Capture the native stable pair
-        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback' || inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'plan-fixture-fallback' || inputs.operation == 'plan-fixture-repair' || inputs.operation == 'plan-pairing-repair' || inputs.operation == 'stage-pairing-repair'
+        if: env.RELEASE_OPERATION == 'rollout' || env.RELEASE_OPERATION == 'rehearse-rollback' || env.RELEASE_OPERATION == 'resume-fixture-upload' || env.RELEASE_OPERATION == 'prepare-fixture-fallback' || env.RELEASE_OPERATION == 'plan-fixture-fallback' || env.RELEASE_OPERATION == 'plan-fixture-repair' || env.RELEASE_OPERATION == 'plan-pairing-repair' || env.RELEASE_OPERATION == 'stage-pairing-repair'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts capture
       - name: Read the complete dormant resource plan without applying it
         id: dormant_plan
-        if: inputs.operation == 'plan-fixture-fallback' || inputs.operation == 'plan-fixture-repair' || inputs.operation == 'plan-pairing-repair'
+        if: env.RELEASE_OPERATION == 'plan-fixture-fallback' || env.RELEASE_OPERATION == 'plan-fixture-repair' || env.RELEASE_OPERATION == 'plan-pairing-repair'
         working-directory: infra/cloudflare
         env:
           NATIVE_FIXTURE_SIGNING_KEY: ${{ secrets.NATIVE_FIXTURE_SIGNING_KEY }}
@@ -287,50 +300,50 @@ jobs:
           path: ${{ runner.temp }}/native-fixture-plan.json
           if-no-files-found: error
       - name: Upload the verified native candidates
-        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback' || inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'stage-pairing-repair'
+        if: env.RELEASE_OPERATION == 'rollout' || env.RELEASE_OPERATION == 'rehearse-rollback' || env.RELEASE_OPERATION == 'resume-fixture-upload' || env.RELEASE_OPERATION == 'prepare-fixture-fallback' || env.RELEASE_OPERATION == 'stage-pairing-repair'
         env:
           NATIVE_FIXTURE_SIGNING_KEY: ${{ inputs.transaction_fixture_signer && secrets.NATIVE_FIXTURE_SIGNING_KEY || '' }}
         working-directory: infra/cloudflare
         run: bun native-storage-resources.ts upload
       - name: Stage the zero-traffic native candidates
-        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback' || inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'stage-pairing-repair'
+        if: env.RELEASE_OPERATION == 'rollout' || env.RELEASE_OPERATION == 'rehearse-rollback' || env.RELEASE_OPERATION == 'resume-fixture-upload' || env.RELEASE_OPERATION == 'prepare-fixture-fallback' || env.RELEASE_OPERATION == 'stage-pairing-repair'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts stage
       - name: Resume the exact uploaded Workers at zero traffic
-        if: inputs.operation == 'resume-pairing-stage'
+        if: env.RELEASE_OPERATION == 'resume-pairing-stage'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts resume-pairing-stage
       - name: Persist and read back private observability on the installed application Workers
-        if: inputs.operation == 'first-install' || inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback' || inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || (inputs.operation == 'stage-pairing-repair' || inputs.operation == 'resume-pairing-stage')
+        if: env.RELEASE_OPERATION == 'first-install' || env.RELEASE_OPERATION == 'rollout' || env.RELEASE_OPERATION == 'rehearse-rollback' || env.RELEASE_OPERATION == 'resume-fixture-upload' || env.RELEASE_OPERATION == 'prepare-fixture-fallback' || (env.RELEASE_OPERATION == 'stage-pairing-repair' || env.RELEASE_OPERATION == 'resume-pairing-stage')
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts prepare-diagnostics
       - name: Qualify the closed recovery artifacts and their retained controls
-        if: inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || (inputs.operation == 'stage-pairing-repair' || inputs.operation == 'resume-pairing-stage')
+        if: env.RELEASE_OPERATION == 'resume-fixture-upload' || env.RELEASE_OPERATION == 'prepare-fixture-fallback' || (env.RELEASE_OPERATION == 'stage-pairing-repair' || env.RELEASE_OPERATION == 'resume-pairing-stage')
         env:
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts seal-fallback
       - name: Requalify the archived zero-traffic pair without moving traffic
-        if: inputs.operation == 'reseal-fixture-fallback'
+        if: env.RELEASE_OPERATION == 'reseal-fixture-fallback'
         env:
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts reseal-fallback
       - name: Compare pairing requests on the archived zero-traffic pair
-        if: inputs.operation == 'diagnose-fixture-pairing'
+        if: env.RELEASE_OPERATION == 'diagnose-fixture-pairing'
         env:
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts diagnose-pairing
       - name: Seal dormant fallback stage before promotion
-        if: inputs.operation == 'reseal-fixture-fallback' || inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || (inputs.operation == 'stage-pairing-repair' || inputs.operation == 'resume-pairing-stage')
+        if: env.RELEASE_OPERATION == 'reseal-fixture-fallback' || env.RELEASE_OPERATION == 'resume-fixture-upload' || env.RELEASE_OPERATION == 'prepare-fixture-fallback' || (env.RELEASE_OPERATION == 'stage-pairing-repair' || env.RELEASE_OPERATION == 'resume-pairing-stage')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-fixture-fallback-${{ github.run_id }}
           path: ${{ runner.temp }}/native-fallback-stage.json
           if-no-files-found: error
       - name: Authenticate the interrupted dormant stage
-        if: inputs.operation == 'recover-fixture-fallback' && !env.FIXTURE_PAIRING_APPLICATION
+        if: env.RELEASE_OPERATION == 'recover-fixture-fallback' && !env.FIXTURE_PAIRING_APPLICATION
         env:
           GH_TOKEN: ${{ github.token }}
           STAGE_ARTIFACT: ${{ inputs.fallback_artifact }}
@@ -339,18 +352,18 @@ jobs:
           python3 scripts/infra-performance/canonical-fixture/fallback_stage.py \
             --artifact-id "$STAGE_ARTIFACT" --sha256 "$STAGE_SHA256" --out "$RUNNER_TEMP/native-fallback-stage.json"
       - name: Finish only the tested closed forward repair
-        if: inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'recover-fixture-fallback'
+        if: env.RELEASE_OPERATION == 'resume-fixture-upload' || env.RELEASE_OPERATION == 'prepare-fixture-fallback' || env.RELEASE_OPERATION == 'recover-fixture-fallback'
         env:
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts forward-fallback
       - name: Verify mixed and candidate versions before promoting closed admission
         id: promote
-        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback'
+        if: env.RELEASE_OPERATION == 'rollout' || env.RELEASE_OPERATION == 'rehearse-rollback'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts promote
       - name: Rebuild the exact retained Web assets without uploading them
-        if: inputs.operation == 'open-canonical-signup'
+        if: env.RELEASE_OPERATION == 'open-canonical-signup'
         run: |
           source="$RUNNER_TEMP/native-canonical-host-source.json"
           web_revision=$(jq -er .website.revision "$source")
@@ -365,13 +378,13 @@ jobs:
           mkdir -p apps/web/dist
           cp -R "$RUNNER_TEMP/canonical-retained-web/apps/web/dist/." apps/web/dist
       - name: Capture exact closed canonical versions and the protected User Store census
-        if: inputs.operation == 'open-canonical-signup'
+        if: env.RELEASE_OPERATION == 'open-canonical-signup'
         env:
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts capture-canonical-signup
       - name: Upload only the compatible exact canonical signup versions
-        if: inputs.operation == 'open-canonical-signup'
+        if: env.RELEASE_OPERATION == 'open-canonical-signup'
         env:
           NATIVE_STORAGE_ADMISSION: open
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -392,40 +405,40 @@ jobs:
         working-directory: infra/cloudflare
         run: bun native-storage-resources.ts upload-canonical-signup
       - name: Stage and verify both canonical signup Workers before opening
-        if: inputs.operation == 'open-canonical-signup'
+        if: env.RELEASE_OPERATION == 'open-canonical-signup'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts stage-canonical-signup
       - name: Open the exact canonical signup pair and verify real provider redirects
-        if: inputs.operation == 'open-canonical-signup'
+        if: env.RELEASE_OPERATION == 'open-canonical-signup'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts promote-canonical-signup
       - name: Retain exact canonical signup deployment and redirect evidence
-        if: inputs.operation == 'open-canonical-signup'
+        if: env.RELEASE_OPERATION == 'open-canonical-signup'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-canonical-signup-open-${{ github.run_id }}
           path: ${{ runner.temp }}/native-verification.json.canonical-open
           if-no-files-found: error
       - name: Authenticate actual canonical signup and live native background evidence
-        if: inputs.operation == 'verify-canonical-activity'
+        if: env.RELEASE_OPERATION == 'verify-canonical-activity'
         env:
           CANONICAL_OPENING_ARTIFACT: ${{ inputs.canonical_opening_artifact }}
           CANONICAL_OPENING_SHA256: ${{ inputs.canonical_opening_sha256 }}
           CANONICAL_SIGNUP_OBSERVED_AT: ${{ inputs.canonical_signup_observed_at }}
         run: python3 scripts/infra-performance/canonical-fixture/canonical_activity.py
       - name: Verify the same canonical routing, one added User Store and accepted recovery
-        if: inputs.operation == 'verify-canonical-activity'
+        if: env.RELEASE_OPERATION == 'verify-canonical-activity'
         working-directory: infra/cloudflare
         run: bun ./native-storage-release.ts verify-canonical-activity
       - name: Retain verified actual native canonical activity
-        if: inputs.operation == 'verify-canonical-activity'
+        if: env.RELEASE_OPERATION == 'verify-canonical-activity'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-canonical-signup-verified-${{ github.run_id }}
           path: ${{ runner.temp }}/native-verification.json.canonical-activity
           if-no-files-found: error
       - name: Stage only canonical Access paths and vacant hostnames on the verified closed release
-        if: inputs.operation == 'stage-hosts'
+        if: env.RELEASE_OPERATION == 'stage-hosts'
         env:
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
@@ -434,23 +447,23 @@ jobs:
           bun native-storage-release.ts attach-hosts
       - name: Verify the installed application and retained schema markers
         id: verify
-        if: inputs.operation != 'plan-fixture-fallback' && inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure' && inputs.operation != 'continue-erasure' && inputs.operation != 'fleet-pilot' && inputs.operation != 'continue-fleet-cleanup' && inputs.operation != 'ten-hosted' && inputs.operation != 'continue-ten-cleanup' && inputs.operation != 'plan-fixture-repair' && inputs.operation != 'reseal-fixture-fallback' && inputs.operation != 'diagnose-fixture-pairing' && inputs.operation != 'plan-pairing-repair' && inputs.operation != 'stage-pairing-repair' && inputs.operation != 'resume-pairing-stage' && inputs.operation != 'resume-pairing-rollback' && inputs.operation != 'open-canonical-signup' && inputs.operation != 'verify-canonical-activity'
+        if: env.RELEASE_OPERATION != 'plan-fixture-fallback' && env.RELEASE_OPERATION != 'plan-first-install' && env.RELEASE_OPERATION != 'first-install' && env.RELEASE_OPERATION != 'verify-erasure' && env.RELEASE_OPERATION != 'continue-erasure' && env.RELEASE_OPERATION != 'fleet-pilot' && env.RELEASE_OPERATION != 'continue-fleet-cleanup' && env.RELEASE_OPERATION != 'ten-hosted' && env.RELEASE_OPERATION != 'continue-ten-cleanup' && env.RELEASE_OPERATION != 'plan-fixture-repair' && env.RELEASE_OPERATION != 'reseal-fixture-fallback' && env.RELEASE_OPERATION != 'diagnose-fixture-pairing' && env.RELEASE_OPERATION != 'plan-pairing-repair' && env.RELEASE_OPERATION != 'stage-pairing-repair' && env.RELEASE_OPERATION != 'resume-pairing-stage' && env.RELEASE_OPERATION != 'resume-pairing-rollback' && env.RELEASE_OPERATION != 'open-canonical-signup' && env.RELEASE_OPERATION != 'verify-canonical-activity'
         env:
           EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts verify
       - name: Verify the installed application and physical erasure of one disposable User
-        if: inputs.operation == 'first-install' || inputs.operation == 'verify-erasure'
+        if: env.RELEASE_OPERATION == 'first-install' || env.RELEASE_OPERATION == 'verify-erasure'
         env:
           EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts verify-erasure
       - name: Authenticate the source protected observation
-        if: inputs.operation == 'continue-erasure' || inputs.operation == 'continue-fleet-cleanup'
+        if: env.RELEASE_OPERATION == 'continue-erasure' || env.RELEASE_OPERATION == 'continue-fleet-cleanup'
         env:
-          RELEASE_OPERATION: ${{ inputs.operation }}
+          RELEASE_OPERATION: ${{ inputs.operation || 'rollout' }}
           ERASURE_EVIDENCE: ${{ vars.ERASURE_CONTINUATION_EVIDENCE }}
           FLEET_EVIDENCE: ${{ vars.FLEET_CONTINUATION_EVIDENCE }}
           GH_TOKEN: ${{ github.token }}
@@ -509,21 +522,21 @@ jobs:
             mv "$zip" "$RUNNER_TEMP/fleet-source.zip"
           fi
       - name: Continue physical verification of the previously admitted User
-        if: inputs.operation == 'continue-erasure'
+        if: env.RELEASE_OPERATION == 'continue-erasure'
         env:
           EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts continue-erasure
       - name: Measure one disposable User on the verified closed release
-        if: inputs.operation == 'fleet-pilot'
+        if: env.RELEASE_OPERATION == 'fleet-pilot'
         env:
           EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts fleet-pilot
       - name: Complete cleanup of the archived single fleet User on the verified release
-        if: inputs.operation == 'continue-fleet-cleanup'
+        if: env.RELEASE_OPERATION == 'continue-fleet-cleanup'
         env:
           EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
@@ -534,22 +547,22 @@ jobs:
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts rollback
       - name: Restore only the remaining Core from the archived rollback
-        if: inputs.operation == 'resume-pairing-rollback'
+        if: env.RELEASE_OPERATION == 'resume-pairing-rollback'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts resume-pairing-rollback
       - name: Exercise the tested code-only rollback
-        if: success() && inputs.operation == 'rehearse-rollback'
+        if: success() && env.RELEASE_OPERATION == 'rehearse-rollback'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts rollback
       - name: Prepare the ten-User fleet admission
-        if: inputs.operation == 'ten-hosted'
+        if: env.RELEASE_OPERATION == 'ten-hosted'
         env:
           EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts ten-prepare
       - name: Seal the protected pre-enrollment baseline and meter
-        if: inputs.operation == 'ten-hosted'
+        if: env.RELEASE_OPERATION == 'ten-hosted'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-ten-admission-${{ github.run_id }}
@@ -558,20 +571,20 @@ jobs:
             ${{ runner.temp }}/native-verification.json.fleet
             ${{ runner.temp }}/native-fleet-meter.jsonl
       - name: Measure ten hosted fleet Users
-        if: inputs.operation == 'ten-hosted'
+        if: env.RELEASE_OPERATION == 'ten-hosted'
         env:
           EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts ten-hosted
       - name: Authenticate the interrupted ten-User trial
-        if: inputs.operation == 'continue-ten-cleanup'
+        if: env.RELEASE_OPERATION == 'continue-ten-cleanup'
         env:
           GH_TOKEN: ${{ github.token }}
           FLEET_SOURCE_RUN: ${{ inputs.fleet_source_run }}
         run: bash scripts/infra-performance/deployed-fleet/ten-source.sh
       - name: Complete the original ten-User cleanup
-        if: inputs.operation == 'continue-ten-cleanup'
+        if: env.RELEASE_OPERATION == 'continue-ten-cleanup'
         env:
           EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
           FLEET_SOURCE_RUN: ${{ inputs.fleet_source_run }}

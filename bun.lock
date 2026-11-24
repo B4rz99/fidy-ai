@@ -33,7 +33,7 @@
         "oxc-parser": "0.159.0",
         "oxfmt": "0.79.0",
         "oxlint": "1.94.0",
-        "oxlint-plugin-effect": "0.32.3",
+        "oxlint-plugin-effect": "0.32.4",
         "oxlint-tsgolint": "7.0.2007",
         "parse5": "8.1.1",
         "sh-syntax": "0.8.7",
@@ -1960,7 +1960,7 @@
 
     "oxlint": ["oxlint@1.94.0", "", { "optionalDependencies": { "@oxlint/binding-android-arm-eabi": "1.94.0", "@oxlint/binding-android-arm64": "1.94.0", "@oxlint/binding-darwin-arm64": "1.94.0", "@oxlint/binding-darwin-x64": "1.94.0", "@oxlint/binding-freebsd-x64": "1.94.0", "@oxlint/binding-linux-arm-gnueabihf": "1.94.0", "@oxlint/binding-linux-arm-musleabihf": "1.94.0", "@oxlint/binding-linux-arm64-gnu": "1.94.0", "@oxlint/binding-linux-arm64-musl": "1.94.0", "@oxlint/binding-linux-ppc64-gnu": "1.94.0", "@oxlint/binding-linux-riscv64-gnu": "1.94.0", "@oxlint/binding-linux-riscv64-musl": "1.94.0", "@oxlint/binding-linux-s390x-gnu": "1.94.0", "@oxlint/binding-linux-x64-gnu": "1.94.0", "@oxlint/binding-linux-x64-musl": "1.94.0", "@oxlint/binding-openharmony-arm64": "1.94.0", "@oxlint/binding-win32-arm64-msvc": "1.94.0", "@oxlint/binding-win32-ia32-msvc": "1.94.0", "@oxlint/binding-win32-x64-msvc": "1.94.0" }, "peerDependencies": { "oxlint-tsgolint": ">=7.0.2007", "vite-plus": "*" }, "optionalPeers": ["oxlint-tsgolint", "vite-plus"], "bin": { "oxlint": "bin/oxlint" } }, "sha512-Fnt+3wSKRhtLmvgRfxgRX0excSPCoyiXRol4eWKZLtXxWMQtwQ3KjKQUYXOw5loyinfnZfGzh4RCYf7opfL0vw=="],
 
-    "oxlint-plugin-effect": ["oxlint-plugin-effect@0.32.3", "", { "dependencies": { "@oxlint/plugins": "^1.64.0" }, "peerDependencies": { "effect": ">=4.1.0 <5" } }, "sha512-NJdNsXwuZQLkGCR2n0sP3PoEM2nLOqjAkWJMdNgexOwvMN23JvghLaGqEbLEzsb1Q/rQrGOQi5fyvKl0pvZDWA=="],
+    "oxlint-plugin-effect": ["oxlint-plugin-effect@0.32.4", "", { "dependencies": { "@oxlint/plugins": "^1.94.0" }, "peerDependencies": { "effect": ">=4.1.0 <5" } }, "sha512-6ftacfODqlRSu+JH5YZoaVN1IwsZu9hHJvf47U9xcyKmqtZAXzw0YXuZ02REh1ZnF91WlVwkNPuAbJjZ/+G2VA=="],
 
     "oxlint-tsgolint": ["oxlint-tsgolint@7.0.2007", "", { "optionalDependencies": { "@oxlint-tsgolint/darwin-arm64": "7.0.2007", "@oxlint-tsgolint/darwin-x64": "7.0.2007", "@oxlint-tsgolint/linux-arm64": "7.0.2007", "@oxlint-tsgolint/linux-x64": "7.0.2007", "@oxlint-tsgolint/win32-arm64": "7.0.2007", "@oxlint-tsgolint/win32-x64": "7.0.2007" }, "bin": { "tsgolint": "./bin/tsgolint.js" } }, "sha512-i8X2qf6VVqFzoNVP34joMKuZpO6T2uXMOgKJaSPFc6p+E3FTnbIGPRbI8K4ZApmtDTMu2CIeGfpzeK1zzGwfnA=="],
 

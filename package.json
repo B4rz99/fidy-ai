@@ -93,7 +93,7 @@
     "oxc-parser": "0.159.0",
     "oxfmt": "0.79.0",
     "oxlint": "1.94.0",
-    "oxlint-plugin-effect": "0.32.3",
+    "oxlint-plugin-effect": "0.32.4",
     "oxlint-tsgolint": "7.0.2007",
     "parse5": "8.1.1",
     "sh-syntax": "0.8.7",

@@ -210,6 +210,7 @@ describe("PR check selection", () => {
         expect(plan).toContain("cloudflare-adapters=true\n");
         expect(plan).toContain("security-sca=false\n");
         expect(plan).toContain("cli-native=true\n");
+        expect(plan).toContain('plan-stacks=["app","site"]\n');
       });
   });
 

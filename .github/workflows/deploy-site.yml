@@ -13,7 +13,6 @@ on:
       - tsconfig*.json
       - scripts/install-*.sh
       - .github/actions/**
-      - .github/workflows/alchemy-stack.yml
       - .github/workflows/deploy-site.yml
 
 permissions:
@@ -25,9 +24,21 @@ concurrency:
 
 jobs:
   deploy:
-    uses: ./.github/workflows/alchemy-stack.yml
-    with:
-      stack: site
-      operation: deploy
-    secrets:
+    name: Deploy site
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      RELEASE_GIT_SHA: ${{ github.sha }}
+      ALCHEMY_PROFILE: ci
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/alchemy-stack
+        with:
+          stack: site
+          operation: deploy

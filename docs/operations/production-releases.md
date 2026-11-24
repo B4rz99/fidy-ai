@@ -13,11 +13,11 @@ Shared inputs (`bun.lock`, `package.json`, `patches/`, `tsconfig*.json`, `.githu
 
 ## Pull requests
 
-**Checks** runs `alchemy plan --stage production` for every stack the PR touches, through `alchemy-stack.yml` in the GitHub `production` environment. The job summary shows the plan. A plan that fails blocks the merge; a plan that replaces or deletes resources does not, so read the summary before merging. Pull requests from forks never receive the production credentials and are not planned.
+**Checks** runs `alchemy plan --stage production` for every stack the PR touches, in the GitHub `production` environment. The job summary shows the plan. A plan that fails blocks the merge; a plan that replaces or deletes resources does not, so read the summary before merging. Pull requests from forks never receive the production credentials and are not planned.
 
 ## Deploy and verify
 
-`alchemy-stack.yml` installs the workspace, derives `HOSTED_AI_MODEL` and `CONTRACT_DIGEST`, and runs a plain `alchemy deploy --stage production`. It then requires `https://api.fidyapp.com/health` and `https://app.fidyapp.com/deployment-metadata.json` (app) or `https://fidyapp.com/deployment-metadata.json` (site) to report the pushed commit.
+The shared `alchemy-stack` action installs the workspace, derives `HOSTED_AI_MODEL` and `CONTRACT_DIGEST`, and runs a plain `alchemy deploy --stage production`. It then requires `https://api.fidyapp.com/health` and `https://app.fidyapp.com/deployment-metadata.json` (app) or `https://fidyapp.com/deployment-metadata.json` (site) to report the pushed commit.
 
 ## Rollback
 

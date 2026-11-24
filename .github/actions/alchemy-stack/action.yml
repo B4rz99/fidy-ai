@@ -1,0 +1,76 @@
+name: Alchemy stack
+description: Plan or deploy one production Alchemy stack at the checked-out revision.
+inputs:
+  stack:
+    description: app, site or docs
+    required: true
+  operation:
+    description: plan or deploy
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: "24"
+    - uses: ./.github/actions/bun-runtime
+    - shell: bash
+      run: bash scripts/install-workspace.sh --ignore-scripts
+    - uses: ./.github/actions/configure-alchemy-cloudflare-profile
+    - name: Derive the release identity
+      shell: bash
+      env:
+        STACK: ${{ inputs.stack }}
+        OPERATION: ${{ inputs.operation }}
+      run: |
+        echo "HOSTED_AI_MODEL=$(bun infra/cloudflare/scripts/print-approved-openai-model.ts)" >> "$GITHUB_ENV"
+        echo "CONTRACT_DIGEST=$(bun run --silent --cwd apps/server contracts:digest)" >> "$GITHUB_ENV"
+    - name: Run the stack operation
+      shell: bash
+      env:
+        STACK: ${{ inputs.stack }}
+        OPERATION: ${{ inputs.operation }}
+      run: |
+        case "$STACK:$OPERATION" in
+          app:plan) target=(--cwd infra/cloudflare plan) ;;
+          app:deploy) target=(--cwd infra/cloudflare deploy) ;;
+          site:plan) target=(--cwd infra/cloudflare plan:site) ;;
+          site:deploy) target=(--cwd infra/cloudflare deploy:site) ;;
+          docs:plan) target=(--cwd infra/docs plan) ;;
+          docs:deploy) target=(--cwd infra/docs publish) ;;
+          *) echo "Unknown stack operation $STACK:$OPERATION" >&2; exit 1 ;;
+        esac
+        set -o pipefail
+        bun run "${target[@]}" 2>&1 | tee "$RUNNER_TEMP/stack.log"
+    - name: Summarize the stack operation
+      if: ${{ !cancelled() }}
+      shell: bash
+      env:
+        STACK: ${{ inputs.stack }}
+        OPERATION: ${{ inputs.operation }}
+      run: |
+        {
+          echo "### $OPERATION $STACK at \`$RELEASE_GIT_SHA\`"
+          echo '```'
+          tail -c 60000 "$RUNNER_TEMP/stack.log" 2>/dev/null || echo "No output"
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+    - name: Verify the deployed revision
+      if: ${{ inputs.operation == 'deploy' }}
+      shell: bash
+      env:
+        STACK: ${{ inputs.stack }}
+        OPERATION: ${{ inputs.operation }}
+      run: |
+        revision() {
+          curl --fail --silent --show-error --max-time 30 --retry 5 --retry-all-errors --retry-delay 10 "$1" | jq -er "$2"
+        }
+        case "$STACK" in
+          app)
+            test "$(revision https://api.fidyapp.com/health .gitRevision)" = "$RELEASE_GIT_SHA"
+            test "$(revision https://app.fidyapp.com/deployment-metadata.json .gitRevision)" = "$RELEASE_GIT_SHA"
+            ;;
+          site)
+            test "$(revision https://fidyapp.com/deployment-metadata.json .gitRevision)" = "$RELEASE_GIT_SHA"
+            ;;
+        esac

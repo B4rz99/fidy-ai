@@ -103,9 +103,7 @@ type DeployedStack = keyof typeof deployedStacks;
 const sharesDeployInput = (path: string): boolean =>
   isDependencyInput(path) ||
   /^tsconfig[^/]*\.json$/u.test(path) ||
-  ["patches/", "scripts/install-", ".github/actions/", ".github/workflows/alchemy-stack.yml"].some(
-    (prefix) => path.startsWith(prefix)
-  );
+  ["patches/", "scripts/install-", ".github/actions/"].some((prefix) => path.startsWith(prefix));
 
 export const selectStackPlans = (
   paths: ReadonlyArray<string>
@@ -161,8 +159,12 @@ if (import.meta.main) {
   const lines = Object.entries(plan).map(([job, selected]) => `${job}=${selected}`);
   const native = selectNativeChecks(paths);
   lines.push(`cli-native=${native}`);
-  const stacks = selectStackPlans(paths);
-  lines.push(`plan-app=${stacks.app}`, `plan-site=${stacks.site}`, `plan-docs=${stacks.docs}`);
+
+  const stacks = Object.entries(selectStackPlans(paths)).flatMap(([stack, planned]) =>
+    planned ? [stack] : []
+  );
+
+  lines.push(`plan-stacks=${JSON.stringify(stacks)}`);
   const source = sourceScanPlan({ native, sca: plan["security-sca"] });
   lines.push(`source-partitions=${source.count}`, `source-sca-partition=${source.sca}`);
   const file = Bun.file(output);

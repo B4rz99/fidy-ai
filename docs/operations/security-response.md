@@ -77,7 +77,7 @@ authorized exercise using synthetic identities and approved spend/contact destin
 - recovery through the existing controller and evidence that unrelated authority remains intact;
 - notification decision, cleanup, retention and unresolved failures.
 
-Use the existing **Test operator alert email** workflow only within that authorized exercise;
+Send any test alert only within that authorized exercise;
 this documentation change does not send an email or perform production fault injection. A tabletop
 walkthrough verifies procedure clarity, not deployed alert delivery. Until actual evidence is retained,
 Web A09 and MCP08 remain partial.

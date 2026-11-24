@@ -86,6 +86,40 @@ export const selectChecks = (paths: ReadonlyArray<string>): CheckPlan => {
   return selected;
 };
 
+const deployedStacks = {
+  app: ["apps/server/", "apps/web/", "infra/cloudflare/", ".github/workflows/deploy-app.yml"],
+  site: ["apps/site/", "apps/server/", "infra/cloudflare/", ".github/workflows/deploy-site.yml"],
+  docs: [
+    "apps/docs/",
+    "infra/docs/",
+    "design/",
+    "tools/astro/",
+    ".github/workflows/docs-publication.yml",
+  ],
+} as const;
+
+type DeployedStack = keyof typeof deployedStacks;
+
+const sharesDeployInput = (path: string): boolean =>
+  isDependencyInput(path) ||
+  /^tsconfig[^/]*\.json$/u.test(path) ||
+  ["patches/", "scripts/install-", ".github/actions/", ".github/workflows/alchemy-stack.yml"].some(
+    (prefix) => path.startsWith(prefix)
+  );
+
+export const selectStackPlans = (
+  paths: ReadonlyArray<string>
+): Readonly<Record<DeployedStack, boolean>> => {
+  const touches = (stack: DeployedStack): boolean =>
+    paths.some(
+      (path) =>
+        !isProse(path) &&
+        (sharesDeployInput(path) || deployedStacks[stack].some((prefix) => path.startsWith(prefix)))
+    );
+
+  return { app: touches("app"), site: touches("site"), docs: touches("docs") };
+};
+
 export const selectNativeChecks = (paths: ReadonlyArray<string>): boolean =>
   paths.some((path) => {
     if (isProse(path)) return false;
@@ -127,6 +161,8 @@ if (import.meta.main) {
   const lines = Object.entries(plan).map(([job, selected]) => `${job}=${selected}`);
   const native = selectNativeChecks(paths);
   lines.push(`cli-native=${native}`);
+  const stacks = selectStackPlans(paths);
+  lines.push(`plan-app=${stacks.app}`, `plan-site=${stacks.site}`, `plan-docs=${stacks.docs}`);
   const source = sourceScanPlan({ native, sca: plan["security-sca"] });
   lines.push(`source-partitions=${source.count}`, `source-sca-partition=${source.sca}`);
   const file = Bun.file(output);

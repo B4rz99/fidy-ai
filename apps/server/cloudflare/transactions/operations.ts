@@ -1,4 +1,3 @@
-import { ownPerformanceEvidence as nativePerformanceEvidence } from "./internal/performance-receipt";
 import { readPrivacyPage } from "./internal/sqlite-privacy";
 import { CurrentOAuthInvocation } from "../oauth-agents/contract";
 import { recurringDiscoveryIntervalMs } from "../recurring/contract";
@@ -282,9 +281,3 @@ export const readAddressedLocalTransaction: typeof inspectLocalTransaction = (..
 
 export const prepareConnectionMovement: typeof prepareBankCapture = (...args) =>
   prepareBankCapture(...args);
-
-export const ownPerformanceEvidence: typeof nativePerformanceEvidence = (
-  request,
-  environment,
-  owns
-) => nativePerformanceEvidence(request, environment, owns);

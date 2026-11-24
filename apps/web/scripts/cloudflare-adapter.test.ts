@@ -19,17 +19,8 @@ describe("Cloudflare static artifact policy", () => {
     Bun.file(`${cloudflareRoot}/production/_headers`)
       .text()
       .then((headers) => {
-        const acceptance = headers
-          .split("https://storage-web-acceptance.fidyapp.com/*\n")[1]
-          ?.split("\n\n")[0];
-
-        expect(acceptance).toContain("connect-src https://storage-acceptance.fidyapp.com;");
-        expect(acceptance).toContain("Link: <https://storage-acceptance.fidyapp.com>");
-        expect(acceptance).not.toContain("wompi.co");
-        expect(acceptance).not.toContain("https://api.fidyapp.com");
         const ordinary = headers.split("https://app.fidyapp.com/*\n")[1]?.split("\n\n")[0];
         expect(ordinary).toContain("connect-src https://api.fidyapp.com");
-        expect(ordinary).not.toContain("storage-acceptance");
         expect(headers.split("\n\n")[0]).toContain("connect-src 'none'");
         expect(headers).toContain("frame-ancestors 'none'");
         expect(headers).toContain("worker-src 'none'");

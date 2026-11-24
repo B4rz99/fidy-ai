@@ -1,5 +1,3 @@
-import { backgroundWorkAllowed } from "./release-isolation/operations";
-import type { AcceptanceWindowBindings } from "./release-isolation/contract";
 import type { SharedBindings } from "./storage-bootstrap/contract";
 import type { CoreHttpEnvironment } from "./core-http/contract";
 import type { CoreQueueEnvironment } from "./queue/contract";
@@ -43,7 +41,6 @@ export { StatementExtractionWorkflowV1 } from "./ingestion/runtime";
 
 type CoreEnvironment = CoreHttpEnvironment &
   CoreQueueEnvironment &
-  AcceptanceWindowBindings &
   WorkerTelemetryEnvironment &
   Parameters<typeof inspectNativeQueues>[0] &
   Partial<
@@ -97,15 +94,9 @@ export const makeCoreWorker = ({
   institutions,
 }: Parameters<typeof coreHttpHandler>[0]): CoreWorker => ({
   fetch: coreHttpHandler({ telemetry, institutions }),
-  queue: (batch, environment) =>
-    Effect.runPromise(backgroundWorkAllowed(environment)).then((allowed) => {
-      if (allowed) return Effect.runPromise(coreQueue(telemetry)(batch, environment));
-
-      return batch.retryAll({ delaySeconds: 60 });
-    }),
+  queue: (batch, environment) => Effect.runPromise(coreQueue(telemetry)(batch, environment)),
   scheduled: (controller, environment) =>
     Effect.gen(function* () {
-      if (!(yield* backgroundWorkAllowed(environment))) return;
       const tick = maintenanceTick(controller.scheduledTime);
 
       const results = yield* Effect.all(

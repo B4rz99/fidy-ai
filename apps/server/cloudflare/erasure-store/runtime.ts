@@ -1,5 +1,3 @@
-import { backgroundWorkAllowed } from "../release-isolation/operations";
-import type { AcceptanceWindowBindings } from "../release-isolation/contract";
 import { confirmCleanup } from "./internal/settlement";
 import { confirmPurge, emptyUserDisposition } from "./internal/local-purge";
 import {
@@ -30,14 +28,13 @@ import {
 import { type StoreReleaseEnvironment, storeReadinessUrl } from "../runtime/sqlite/contract";
 import { erasureStoreHistory } from "./operations";
 
-type ErasureEnvironment = AcceptanceWindowBindings &
-  StoreReleaseEnvironment & {
-    USER_STORE: DurableObjectNamespace;
-    ERASURE: DurableObjectNamespace;
-    DIRECTORY: DurableObjectNamespace;
-    PRICING: DurableObjectNamespace;
-    MAINTENANCE: DurableObjectNamespace;
-  };
+type ErasureEnvironment = StoreReleaseEnvironment & {
+  USER_STORE: DurableObjectNamespace;
+  ERASURE: DurableObjectNamespace;
+  DIRECTORY: DurableObjectNamespace;
+  PRICING: DurableObjectNamespace;
+  MAINTENANCE: DurableObjectNamespace;
+};
 
 export class Erasure extends DurableObject<ErasureEnvironment> {
   private readonly runtime;
@@ -58,11 +55,6 @@ export class Erasure extends DurableObject<ErasureEnvironment> {
     }
   }
   override alarm(): Promise<void> {
-    return this.runtime
-      .runPromise(backgroundWorkAllowed(this.env))
-      .then((allowed) => (allowed ? this.recoverAlarm() : undefined));
-  }
-  private recoverAlarm(): Promise<void> {
     return this.runtime.runPromise(advanceErasureCases(this.ctx.storage, this.env));
   }
   private command(request: Request): Promise<Response> {

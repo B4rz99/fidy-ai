@@ -1,4 +1,4 @@
-import { browserSessionBindingPath, installedOrigins } from "@fidy/server/browser-transport";
+import { browserSessionBindingPath } from "@fidy/server/browser-transport";
 
 import {
   microsoftProviderPaths,
@@ -31,17 +31,13 @@ const freePlanRequestsPerPeriod = 60;
 
 const apiHostname = productionTopology.ingress.hostname;
 
-const nativeIngressHost = new URL(installedOrigins.acceptance.api).hostname;
-
-const apiHosts = `http.host in {"${apiHostname}" "${nativeIngressHost}"}`;
+const apiHosts = `http.host eq "${apiHostname}"`;
 
 const ownedHostnames = [
   productionTopology.docs.hostname,
   productionTopology.site.hostname,
   productionTopology.web.hostname,
   apiHostname,
-  nativeIngressHost,
-  new URL(installedOrigins.acceptance.browser).hostname,
 ];
 
 const ownedHostExpression = ownedHostnames.map((hostname) => `"${hostname}"`).join(" ");

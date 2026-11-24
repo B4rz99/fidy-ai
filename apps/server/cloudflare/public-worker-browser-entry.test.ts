@@ -75,9 +75,9 @@ it.effect("rejects an unapproved browser Origin before forwarding to Core", () =
   })
 );
 
-it.effect("allows the matching native browser preflight and refuses another browser", () =>
+it.effect("allows the matching browser preflight and refuses another browser", () =>
   Effect.gen(function* () {
-    const browser = "https://storage-web-acceptance.fidyapp.com";
+    const browser = "https://app.fidyapp.com";
     const fetch = vi.fn(() => Promise.resolve(new Response(null, { status: 200 })));
 
     const environment = {
@@ -89,11 +89,11 @@ it.effect("allows the matching native browser preflight and refuses another brow
     };
 
     yield* Effect.forEach(
-      [browser, "https://app.fidyapp.com"],
+      [browser, "https://other.fidyapp.com"],
       Effect.fnUntraced(function* (origin) {
         const result = yield* Effect.tryPromise(() =>
           publicWorker.fetch(
-            new Request("https://storage-acceptance.fidyapp.com/transactions", {
+            new Request("https://api.fidyapp.com/transactions", {
               method: "OPTIONS",
               headers: { origin, "access-control-request-method": "GET" },
             }),

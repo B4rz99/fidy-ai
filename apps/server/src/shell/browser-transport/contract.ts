@@ -12,9 +12,5 @@ export const connectionBrowserPaths = {
 } as const;
 
 export const installedOrigins = {
-  acceptance: {
-    browser: "https://storage-web-acceptance.fidyapp.com",
-    api: "https://storage-acceptance.fidyapp.com",
-  },
   production: { browser: "https://app.fidyapp.com", api: "https://api.fidyapp.com" },
 } as const;

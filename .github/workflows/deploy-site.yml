@@ -1,0 +1,32 @@
+name: Deploy site
+
+on:
+  push:
+    branches: [trunk]
+    paths:
+      - apps/site/**
+      - apps/server/**
+      - infra/cloudflare/**
+      - bun.lock
+      - package.json
+      - patches/**
+      - tsconfig*.json
+      - scripts/install-*.sh
+      - .github/actions/**
+      - .github/workflows/alchemy-stack.yml
+      - .github/workflows/deploy-site.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-site
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/alchemy-stack.yml
+    with:
+      stack: site
+      operation: deploy
+    secrets: inherit

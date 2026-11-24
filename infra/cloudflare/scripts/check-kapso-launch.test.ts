@@ -62,7 +62,7 @@ describe("Kapso production launch check", () => {
     expect(check(evidence).code).toBe(1);
 
     const workflow = readFileSync(
-      new URL("../../../.github/workflows/native-storage-release.yml", import.meta.url),
+      new URL("../../../.github/workflows/deploy-app.yml", import.meta.url),
       "utf8"
     );
 

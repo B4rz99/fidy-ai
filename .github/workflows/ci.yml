@@ -30,6 +30,9 @@ jobs:
       security-sca: ${{ steps.plan.outputs.security-sca }}
       source-partitions: ${{ steps.plan.outputs.source-partitions }}
       source-sca-partition: ${{ steps.plan.outputs.source-sca-partition }}
+      plan-app: ${{ steps.plan.outputs.plan-app }}
+      plan-site: ${{ steps.plan.outputs.plan-site }}
+      plan-docs: ${{ steps.plan.outputs.plan-docs }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -365,6 +368,36 @@ jobs:
           docker logs fidy-source-scan
           docker rm fidy-source-scan
           [[ "$result" == 0 ]]
+
+  plan-app:
+    needs: changes
+    if: ${{ needs.changes.outputs.plan-app == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+    name: Plan app
+    uses: ./.github/workflows/alchemy-stack.yml
+    with:
+      stack: app
+      operation: plan
+    secrets: inherit
+
+  plan-site:
+    needs: changes
+    if: ${{ needs.changes.outputs.plan-site == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+    name: Plan site
+    uses: ./.github/workflows/alchemy-stack.yml
+    with:
+      stack: site
+      operation: plan
+    secrets: inherit
+
+  plan-docs:
+    needs: changes
+    if: ${{ needs.changes.outputs.plan-docs == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+    name: Plan docs
+    uses: ./.github/workflows/alchemy-stack.yml
+    with:
+      stack: docs
+      operation: plan
+    secrets: inherit
 
   cli-native-package:
     needs: changes

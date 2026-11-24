@@ -1,7 +1,4 @@
-import { acceptanceProviderRevision } from "../release-isolation/contract";
 import { auditRetentionSchema } from "../audit/contract";
-import { acceptanceSubject } from "../release-isolation/operations";
-import type { NativeAcceptanceSettings } from "../release-isolation/contract";
 import { sampleSchema } from "./internal/sample-schema";
 import { hostedSchema } from "./internal/hosted-schema";
 import { ingestionSchema } from "./internal/ingestion-schema";
@@ -16,7 +13,7 @@ import {
 } from "./internal/credential-schema";
 import { externalEventSchema, issueForwardingAddress } from "./internal/external-event-schema";
 import { registerUserLifetime as registerReservedLifetime } from "./internal/registration";
-import { Effect, Exit, Predicate, Schema } from "effect";
+import { Effect, Exit, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { UserId } from "../../src/core/identity/contract";
 
@@ -1361,30 +1358,9 @@ export const recoverUserWork = <E, R>(
 
 export const observeUserRegistration = Effect.fn(function* (
   maintenance: Pick<DurableObjectNamespace, "getByName">,
-  owns: (id: string) => boolean,
-  settings: NativeAcceptanceSettings
+  owns: (id: string) => boolean
 ) {
   const sql = yield* SqliteClient;
-
-  if (settings.NATIVE_STORAGE_ADMISSION === "closed") {
-    const credentials =
-      yield* sql`SELECT issuer,subject FROM provider_credentials WHERE user_id IN(SELECT id FROM users LIMIT 1)`;
-
-    if (
-      !credentials.some(
-        (credential) =>
-          Predicate.isString(credential.issuer) &&
-          Predicate.isString(credential.subject) &&
-          acceptanceSubject({
-            revision: acceptanceProviderRevision(settings),
-            issuer: credential.issuer,
-            subject: credential.subject,
-          })
-      )
-    ) {
-      return "isolated" as const;
-    }
-  }
 
   const [row] = yield* sql`SELECT id,lifetime_registered FROM users LIMIT 1`;
 

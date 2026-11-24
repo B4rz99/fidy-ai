@@ -22,8 +22,6 @@ import {
   routeSessionRequest,
 } from "../../directory/operations";
 
-import type { BancolombiaAuthenticationFailed } from "../../bancolombia-authentication/contract";
-
 import { sampleReviewPath } from "../../../src/core/ingestion/contract";
 
 import { handleNativeErasureOperator } from "../../erasure/runtime";
@@ -75,14 +73,6 @@ import { canonicalOperation, canonicalRoute } from "../../routing/operations";
 import { type CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
 
 import { contractDigestPattern, gitRevisionPattern } from "../../runtime/contract";
-
-import {
-  smokeFailureHeader,
-  smokePath,
-  smokeProofAccepted,
-} from "../../runtime/release-smoke/contract";
-
-import { handleSmoke, smokeReady } from "../../runtime/release-smoke/operations";
 
 import { statementStagingPath } from "../../../src/shell/ingestion/contract";
 
@@ -191,7 +181,6 @@ const ownedCorePath = (path: string): boolean =>
     sampleReviewPath,
     betaProPath,
     pricePublicationPath,
-    smokePath,
     listCategoriesPath,
     "/providers/kapso/callback",
     "/providers/wompi/billing-events",
@@ -291,50 +280,10 @@ const canonicalOrHealthResponse = (
 };
 
 type RequestExecution = Readonly<{
-  bankAuthentication: Effect.Effect<void, BancolombiaAuthenticationFailed>;
   request: Request;
   environment: CoreHttpEnvironment;
   telemetry: TelemetryService;
 }>;
-
-const smokeResponse = (
-  request: Request,
-  environment: CoreHttpEnvironment,
-  bankAuthentication: RequestExecution["bankAuthentication"]
-): Effect.Effect<Response> =>
-  Effect.tryPromise({
-    try: () =>
-      smokeReady(environment)
-        ? handleSmoke({ request, environment, bankAuthentication: Option.some(bankAuthentication) })
-        : Promise.resolve(
-            smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })
-              ? Response.json(
-                  { status: "unavailable" },
-                  { status: 503, headers: { [smokeFailureHeader]: "configuration" } }
-                )
-              : unavailable()
-          ),
-    catch: () => undefined,
-  }).pipe(
-    Effect.tapError(() =>
-      Effect.logWarning({
-        component: "core-http",
-        operation: "smokeResponse",
-        outcome: "unavailable",
-      })
-    ),
-    Effect.orElseSucceed(() =>
-      Response.json(
-        { status: "unavailable" },
-        {
-          status: 503,
-          headers: smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })
-            ? { [smokeFailureHeader]: "platform" }
-            : {},
-        }
-      )
-    )
-  );
 
 const dedicatedBrowserResponse = (
   request: Request,
@@ -387,11 +336,7 @@ const dedicatedBrowserResponse = (
 };
 
 const reservedCoreResponse = (
-  {
-    request,
-    environment,
-    bankAuthentication,
-  }: Pick<RequestExecution, "request" | "environment" | "bankAuthentication">,
+  { request, environment }: Pick<RequestExecution, "request" | "environment">,
   path: string
 ): Option.Option<Effect.Effect<Response, never, HttpClient.HttpClient>> => {
   if (!ownedCorePath(path)) {
@@ -410,10 +355,6 @@ const reservedCoreResponse = (
     (request.method === "POST" && patDirectRoute(path))
   ) {
     return Option.some(routeBootstrapRequest({ request, environment }));
-  }
-
-  if (path === smokePath) {
-    return Option.some(smokeResponse(request, environment, bankAuthentication));
   }
 
   return supportCoreResponse(request, environment, path);
@@ -475,7 +416,6 @@ const isPairingRequest = (request: Request): boolean =>
   ["/web/pairings", "/web/pairings/redeem"].includes(new URL(request.url).pathname);
 
 const dispatchCoreHttp = ({
-  bankAuthentication,
   request,
   environment,
   telemetry,
@@ -491,7 +431,7 @@ const dispatchCoreHttp = ({
     return request.headers.has("fidy-session-binding") ? bound(work) : work;
   }
 
-  const reserved = reservedCoreResponse({ request, environment, bankAuthentication }, url.pathname);
+  const reserved = reservedCoreResponse({ request, environment }, url.pathname);
 
   if (Option.isSome(reserved)) return reservedBindingResponse(request, environment, reserved.value);
 

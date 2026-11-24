@@ -8,17 +8,12 @@
     "outDir": "../../.tsbuild/cloudflare",
     "tsBuildInfoFile": "../../.tsbuild/cloudflare.tsbuildinfo",
     "lib": ["ESNext", "WebWorker"],
-    "types": ["@cloudflare/workers-types"],
+    "types": ["bun-types", "@cloudflare/workers-types"],
     "paths": {
       "~/*": ["../../apps/server/src/*"]
     }
   },
-  "include": [
-    "*.ts",
-    "native-retained-provider.json",
-    "native-fixture-upload.json",
-    "native-pairing-upload.json"
-  ],
+  "include": ["*.ts"],
   "exclude": ["node_modules"],
   "references": [{ "path": "../../apps/server" }]
 }

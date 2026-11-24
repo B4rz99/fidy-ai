@@ -131,8 +131,8 @@ it.effect.each(["feature.tsx", "feature.test.ts"])(
 );
 
 it.effect.each([
-  { name: "private native types", nativePath: "runtime/release-smoke/internal/protocol" },
-  { name: "published native contracts", nativePath: "runtime/release-smoke/contract" },
+  { name: "private native types", nativePath: "runtime/sqlite/internal/protocol" },
+  { name: "published native contracts", nativePath: "runtime/sqlite/contract" },
 ])("rejects $name imported only as browser transport types", ({ nativePath }) =>
   Effect.acquireUseRelease(
     Effect.tryPromise(() => mkdtemp(join(webRoot, ".bundle-test-"))),

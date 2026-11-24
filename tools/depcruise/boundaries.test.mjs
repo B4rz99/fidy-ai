@@ -40,32 +40,6 @@ await test("a mirrored owner test reaches its owner's internals but no other own
   );
 });
 
-await test("closed fixture recovery entrypoints may reuse only their corresponding production Worker", () => {
-  /** @type {Array<[string, string, string]>} */
-  const paired = [
-    [
-      "cloudflare/fixture-fallback-core.ts",
-      "cloudflare/core-worker.ts",
-      "cloudflare/public-worker.ts",
-    ],
-    [
-      "cloudflare/fixture-fallback-ingress.ts",
-      "cloudflare/public-worker.ts",
-      "cloudflare/core-worker.ts",
-    ],
-  ];
-
-  for (const [from, own, other] of paired) {
-    assert.deepEqual(inspect(from, own), []);
-    assert.ok(inspect(from, other).some((violation) => violation.name === "published-only"));
-    assert.ok(
-      inspect("cloudflare/source/operations.ts", from).some(
-        (violation) => violation.name === "published-only"
-      )
-    );
-  }
-});
-
 await test("portable declarations cannot acquire native virtual platform types", () => {
   for (const layer of ["core", "shell"]) {
     const from = `src/${layer}/example/contract.ts`;

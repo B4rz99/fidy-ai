@@ -1,9 +1,5 @@
 import { openAiTestKey } from "../../apps/server/cloudflare/openai.test-fixture";
 import { browserSessionBindingPath, telemetryTraceHeader } from "@fidy/server/browser-transport";
-import { receiveSmoke } from "../../apps/server/cloudflare/runtime/release-smoke/operations";
-import { nativeUserPlatform } from "../../apps/server/cloudflare/user-store.test-fixture";
-import type { SharedBindings } from "../../apps/server/cloudflare/storage-bootstrap/contract";
-import { NodeFileSystem } from "@effect/platform-node";
 
 import {
   microsoftProviderPaths,
@@ -22,19 +18,8 @@ import coreWorker, {
   makeCoreWorker as composeWorker,
 } from "../../apps/server/cloudflare/core-worker";
 import { registeredConnectionInstitutionIds } from "../../apps/server/src/shell/connections/contract";
-import {
-  type ReleaseMetadata,
-  resolveDeploymentConfiguration,
-  resolveStateBackend,
-} from "./deployment-configuration";
+import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
 import { edgeSecurityPolicy } from "./edge-security";
-import {
-  SyntheticBindings,
-  smokeEnvironment,
-  unavailableBucket,
-  unavailableQueue,
-  unavailableWorkflow,
-} from "./incomplete-platform-fixture";
 import publicWorker, { makePublicWorker } from "../../apps/server/cloudflare/public-worker";
 import { makeWorkerTelemetry } from "../../apps/server/cloudflare/runtime/telemetry/operations";
 import {
@@ -42,21 +27,9 @@ import {
   productionTopology,
 } from "../../apps/server/cloudflare/runtime/contract";
 
-const withMethods = SyntheticBindings.withMethods;
-
 const gitRevision = "0123456789abcdef0123456789abcdef01234567";
 
 const contractDigest = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
-
-const smokeBody = (coreVersion: string): string =>
-  JSON.stringify({
-    protocolVersion: 1,
-    probeId: "b".repeat(32),
-    expectedPublicVersionId: "dc8dcd28-271b-4367-9840-6c244f84cb40",
-    expectedCoreVersionId: coreVersion,
-    expectedGitRevision: gitRevision,
-    expectedContractDigest: contractDigest,
-  });
 
 const privateFailureDetail =
   "SQLITE_ERROR: categories unavailable; private query and topology detail";
@@ -135,204 +108,7 @@ const makePublicEnvironment = (overrides: Partial<PublicEnvironment> = {}): Publ
   ...overrides,
 });
 
-const publishSmokeThroughCore = Effect.fnUntraced(function* () {
-  let work: unknown;
-  let started: unknown;
-  let acked = false;
-  const owners = yield* (yield* nativeUserPlatform)();
-
-  const bindings = yield* Effect.tryPromise(() =>
-    owners.getBindings<Required<SharedBindings>>("core")
-  );
-
-  const marker = new Map<string, string>();
-
-  const environment: Parameters<typeof coreWorker.fetch>[1] = {
-    ...coreEnvironment,
-    USER_STORE: bindings.USER_STORE,
-    DIRECTORY: bindings.DIRECTORY,
-    PRICING: bindings.PRICING,
-    MAINTENANCE: bindings.MAINTENANCE,
-    ERASURE: bindings.ERASURE,
-    SMOKE_LIMITER: smokeEnvironment().SMOKE_LIMITER,
-    SMOKE_PROOF: "a".repeat(64),
-    CF_VERSION_METADATA: { id: "dc8dcd28-271b-4367-9840-6c244f84cb40" },
-    SMOKE_QUEUE_NAME: "SmokeQueue",
-    SMOKE_QUEUE: withMethods(unavailableQueue, {
-      send: (value: unknown): Promise<void> => {
-        work = value;
-
-        return Promise.resolve();
-      },
-    }),
-    SMOKE_BUCKET: withMethods(unavailableBucket, {
-      put: (key: string, value: string): Promise<void> => {
-        marker.set(key, value);
-
-        return Promise.resolve();
-      },
-      get: (key: string): Promise<object> =>
-        Promise.resolve({ text: () => Promise.resolve(marker.get(key)) }),
-    }),
-    SMOKE_WORKFLOW: withMethods(unavailableWorkflow, {
-      create: (value: unknown): Promise<object> => {
-        started = value;
-
-        return Promise.resolve({});
-      },
-    }),
-    KAPSO_API_KEY: "configured",
-    WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
-    KAPSO_WEBHOOK_SECRET: "configured",
-    RESEND_API_KEY: "configured",
-    WOMPI_PRIVATE_KEY: "configured",
-    WOMPI_INTEGRITY_SECRET: "configured",
-    WOMPI_EVENT_SECRET: "configured",
-  };
-
-  const response = yield* Effect.tryPromise(() =>
-    coreWorker.fetch(
-      new Request("https://core.internal/internal/release-smoke", {
-        method: "POST",
-        headers: {
-          "x-fidy-smoke-proof": "a".repeat(64),
-          "content-type": "application/json",
-        },
-        body: smokeBody("dc8dcd28-271b-4367-9840-6c244f84cb40"),
-      }),
-      environment
-    )
-  );
-
-  expect(response.status).toBe(202);
-  expect(work).toMatchObject({
-    protocolVersion: 2,
-    probeId: "b".repeat(32),
-    gitRevision,
-    coreVersionId: "dc8dcd28-271b-4367-9840-6c244f84cb40",
-    contractDigest,
-  });
-  const fixtureMessage = queueBatch({}).messages.at(0);
-
-  if (fixtureMessage === undefined) throw new Error("Missing Queue fixture message");
-  yield* Effect.tryPromise(() =>
-    receiveSmoke({
-      batch: {
-        ...queueBatch(work),
-        queue: "SmokeQueue",
-        messages: [
-          {
-            ...fixtureMessage,
-            body: work,
-            ack: (): void => {
-              acked = true;
-            },
-          },
-        ],
-      },
-      environment: smokeEnvironment(environment),
-    })
-  );
-  expect(acked).toBe(true);
-  expect(started).toEqual({
-    id: `smoke-v2-dc8dcd28-271b-4367-9840-6c244f84cb40-${"b".repeat(32)}`,
-    params: work,
-    retention: { successRetention: "1 day", errorRetention: "1 day" },
-  });
-});
-
-describe("Core smoke adapter", () => {
-  it.effect("routes the reserved endpoint and dedicated Queue without touching User work", () =>
-    Effect.gen(function* () {
-      const proof = "a".repeat(64);
-
-      const environment: Parameters<typeof coreWorker.fetch>[1] = {
-        ...coreEnvironment,
-        SMOKE_LIMITER: smokeEnvironment().SMOKE_LIMITER,
-        SMOKE_PROOF: proof,
-        CF_VERSION_METADATA: { id: "dc8dcd28-271b-4367-9840-6c244f84cb40" },
-        SMOKE_QUEUE_NAME: "SmokeQueue",
-        SMOKE_QUEUE: withMethods(unavailableQueue, { send: failPrivateOperation }),
-        SMOKE_BUCKET: withMethods(unavailableBucket, { put: failPrivateOperation }),
-        SMOKE_WORKFLOW: withMethods(unavailableWorkflow, { create: failPrivateOperation }),
-      };
-
-      const response = yield* Effect.tryPromise(() =>
-        coreWorker.fetch(
-          new Request("https://core.internal/internal/release-smoke", {
-            method: "POST",
-            headers: { "x-fidy-smoke-proof": proof, "content-type": "application/json" },
-            body: smokeBody("db7cd8d3-4425-4fe7-8c81-01bf963b6067"),
-          }),
-          environment
-        )
-      );
-
-      expect(response.status).toBe(503);
-
-      let acked = false;
-      const fixtureMessage = queueBatch({}).messages.at(0);
-
-      if (fixtureMessage === undefined) throw new Error("Missing Queue fixture message");
-      yield* Effect.tryPromise(() =>
-        receiveSmoke({
-          batch: {
-            ...queueBatch({ protocolVersion: 1, probeId: "b".repeat(32), gitRevision }),
-            queue: "SmokeQueue",
-            messages: [
-              {
-                ...fixtureMessage,
-                body: {
-                  protocolVersion: 2,
-                  probeId: "b".repeat(32),
-                  gitRevision,
-                  coreVersionId: environment.CF_VERSION_METADATA?.id,
-                  contractDigest,
-                  expiresAtMs: 0,
-                },
-                ack: (): void => {
-                  acked = true;
-                },
-              },
-            ],
-          },
-          environment: smokeEnvironment(environment),
-        })
-      );
-      expect(acked).toBe(true);
-    })
-  );
-
-  it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) =>
-    test.effect(
-      "publishes an admitted probe through Core fetch and hands it to the private smoke executor",
-      publishSmokeThroughCore
-    )
-  );
-});
-
 describe("Deployment configuration", () => {
-  it("changes candidate version tags when retrying the same immutable release", () => {
-    const configuration = (releaseAttemptId: string): ReleaseMetadata =>
-      Result.getOrThrow(
-        resolveDeploymentConfiguration({
-          contractDigest,
-          development: false,
-          gitRevision,
-          releaseAttemptId,
-          stage: "production",
-        })
-      );
-
-    const first = configuration("42379674321-1");
-    const retry = configuration("42379674321-2");
-    const next = configuration("42379674322-1");
-    expect(first.versionTag).not.toBe(retry.versionTag);
-    expect(first.versionTag).not.toBe(next.versionTag);
-    expect(retry.gitRevision).toBe(first.gitRevision);
-    expect(retry.contractDigest).toBe(first.contractDigest);
-  });
-
   it("selects remote state only for the supported Production stage", () => {
     expect(resolveStateBackend({ development: true, stage: "dev-test" })).toBe("local");
     expect(resolveStateBackend({ development: false, stage: "production" })).toBe("cloudflare");
@@ -345,7 +121,6 @@ describe("Deployment configuration", () => {
       contractDigest: "",
       development: true,
       gitRevision: "",
-      releaseAttemptId: "",
       stage: "dev-test",
     });
 
@@ -354,7 +129,6 @@ describe("Deployment configuration", () => {
     expect(configuration.success).toEqual({
       contractDigest: "0000000000000000000000000000000000000000000000000000000000000000",
       gitRevision: "0000000000000000000000000000000000000000",
-      versionTag: "development",
     });
   });
 
@@ -365,52 +139,25 @@ describe("Deployment configuration", () => {
     {
       contractDigest: "0000000000000000000000000000000000000000000000000000000000000000",
       gitRevision,
-      releaseAttemptId: "42379674321-1",
       stage: "production",
     },
   ])("rejects an unsupported or unidentifiable remote deployment", (input) => {
-    const configuration = resolveDeploymentConfiguration({
-      development: false,
-      releaseAttemptId: "42379674321-1",
-      ...input,
-    });
+    const configuration = resolveDeploymentConfiguration({ development: false, ...input });
 
     expect(Result.isFailure(configuration)).toBe(true);
   });
-
-  it.each(["", "0-1", "1-0", "1", "1-1/extra", "1-1000000", "1\n-1"])(
-    "rejects an invalid release attempt %j before remote deployment",
-    (releaseAttemptId) => {
-      expect(
-        Result.isFailure(
-          resolveDeploymentConfiguration({
-            contractDigest,
-            development: false,
-            gitRevision,
-            releaseAttemptId,
-            stage: "production",
-          })
-        )
-      ).toBe(true);
-    }
-  );
 
   it("accepts exact immutable Production metadata", () => {
     const configuration = resolveDeploymentConfiguration({
       contractDigest,
       development: false,
       gitRevision,
-      releaseAttemptId: "42379674321-1",
       stage: "production",
     });
 
     assert(Result.isSuccess(configuration));
 
-    expect(configuration.success).toEqual({
-      contractDigest,
-      gitRevision,
-      versionTag: "release-42379674321-1",
-    });
+    expect(configuration.success).toEqual({ contractDigest, gitRevision });
   });
 });
 
@@ -449,7 +196,7 @@ describe("Production topology contract", () => {
         phases: ["http_request_sbfm"],
         products: ["bic", "hot", "securityLevel", "uaBlock", "zoneLockdown"],
       },
-      expression: '(http.host in {"api.fidyapp.com" "storage-acceptance.fidyapp.com"})',
+      expression: '(http.host eq "api.fidyapp.com")',
     });
     expect(edgeSecurityPolicy.rulesets.managedFirewall.rules[0]).toMatchObject({
       action: "execute",
@@ -481,7 +228,7 @@ describe("Production topology contract", () => {
       action: "block",
       enabled: true,
       expression:
-        'not http.host in {"docs.fidyapp.com" "fidyapp.com" "app.fidyapp.com" "api.fidyapp.com" "storage-acceptance.fidyapp.com" "storage-web-acceptance.fidyapp.com"}',
+        'not http.host in {"docs.fidyapp.com" "fidyapp.com" "app.fidyapp.com" "api.fidyapp.com"}',
     });
     expect(rules[4]).toEqual({
       action: "skip",
@@ -504,7 +251,7 @@ describe("Production topology contract", () => {
     expect(edgeSecurityPolicy.rulesets.customFirewall.rules[2]).toMatchObject({
       action: "block",
       expression:
-        '(http.host in {"api.fidyapp.com" "storage-acceptance.fidyapp.com"} and not (http.request.method in {"GET" "POST" "OPTIONS" "DELETE" "PUT" "PATCH"}))',
+        '(http.host eq "api.fidyapp.com" and not (http.request.method in {"GET" "POST" "OPTIONS" "DELETE" "PUT" "PATCH"}))',
     });
   });
 
@@ -574,33 +321,6 @@ describe("Production topology contract", () => {
 });
 
 describe("Cloudflare Worker topology", () => {
-  it.effect("keeps private Core admission isolated while public routing propagates", () =>
-    Effect.gen(function* () {
-      const isolated = {
-        ...coreEnvironment,
-        RECOVERY_ISOLATION: "isolated",
-        SMOKE_PROOF: "a".repeat(64),
-      };
-
-      const response = yield* Effect.tryPromise(() =>
-        coreWorker.fetch(
-          new Request("https://core.internal/web/providers/disclosure", {
-            headers: { "x-fidy-smoke-proof": "a".repeat(64) },
-          }),
-          isolated
-        )
-      );
-
-      expect(response.status).toBe(503);
-      expect(response.headers.get("x-fidy-recovery-isolation")).toBe("isolated");
-
-      const health = yield* Effect.tryPromise(() =>
-        coreWorker.fetch(new Request("https://core.internal/health"), isolated)
-      );
-
-      expect(health.status).toBe(200);
-    })
-  );
   it.effect("returns only bounded release and health metadata from Core", () =>
     Effect.gen(function* () {
       const response = yield* Effect.tryPromise(() =>

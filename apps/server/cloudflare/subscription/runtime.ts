@@ -1,5 +1,3 @@
-import { backgroundWorkAllowed } from "../release-isolation/operations";
-import type { AcceptanceWindowBindings } from "../release-isolation/contract";
 import {
   offerRefunds,
   refundWake,
@@ -192,18 +190,10 @@ export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<
   {
     USER_STORE: DurableObjectNamespace;
     RELEASE_GIT_SHA: string;
-    RECOVERY_ISOLATION: string;
-  } & AcceptanceWindowBindings,
+  },
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return boundaryRuntime.runPromise(backgroundWorkAllowed(this.env)).then((allowed) => {
-      if (!allowed) throw Error("Billing execution is closed");
-
-      return this.execute(event, step);
-    });
-  }
-  private execute(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
     return observeWorkerPromise(
       () =>
         step.do(
@@ -234,17 +224,10 @@ export const receiveWompiBillingEvent = (
 export const isBillingCollectionWork = (body: unknown): boolean => recognizesWork(body);
 
 export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<
-  BillingWorkflowEnvironment & AcceptanceWindowBindings,
+  BillingWorkflowEnvironment,
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return boundaryRuntime.runPromise(backgroundWorkAllowed(this.env)).then((allowed) => {
-      if (!allowed) throw Error("Billing execution is closed");
-
-      return this.execute(event, step);
-    });
-  }
-  private execute(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
     return observeWorkerPromise(
       () =>
         runBillingCollectionWorkflow({
@@ -287,14 +270,12 @@ export const runBillingCollectionWorkflow = (
 export class Pricing {
   private readonly version: string;
   private readonly state: DurableObjectState;
-  private readonly window: AcceptanceWindowBindings;
   private readonly erasure: Option.Option<DurableObjectNamespace>;
   private readonly users: Option.Option<DurableObjectNamespace>;
   private readonly runtime;
   constructor(
     state: DurableObjectState,
     env: StoreReleaseEnvironment &
-      AcceptanceWindowBindings &
       Partial<
         Readonly<{
           USER_STORE: DurableObjectNamespace;
@@ -303,7 +284,6 @@ export class Pricing {
       >
   ) {
     this.state = state;
-    this.window = env;
     this.erasure = Option.fromUndefinedOr(env.ERASURE);
     this.users = Option.fromUndefinedOr(env.USER_STORE);
     this.version = env.CF_VERSION_METADATA.id;
@@ -323,17 +303,11 @@ export class Pricing {
   }
 
   alarm(): Promise<void> {
-    return boundaryRuntime.runPromise(backgroundWorkAllowed(this.window)).then((allowed) =>
-      allowed
-        ? Option.match(this.users, {
-            onNone: () => Promise.resolve(),
-            onSome: (users) =>
-              this.runtime
-                .runPromise(recoverPricing(this.state.storage, users))
-                .then(() => undefined),
-          })
-        : undefined
-    );
+    return Option.match(this.users, {
+      onNone: () => Promise.resolve(),
+      onSome: (users) =>
+        this.runtime.runPromise(recoverPricing(this.state.storage, users)).then(() => undefined),
+    });
   }
   private erasureCommand(request: Request): Promise<Response> {
     if (request.url === participantCleanupUrl && Option.isSome(this.erasure)) {

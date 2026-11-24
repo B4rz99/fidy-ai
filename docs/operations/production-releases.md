@@ -2,12 +2,12 @@
 
 Every push to `trunk` deploys the Alchemy stacks whose inputs changed. Nothing is dispatched by hand, there is no staged traffic and there is no separate acceptance host. [Decision](../adr/0063-deploy-every-trunk-push-directly.md)
 
-| Stack | Entrypoint                         | Serves                                                   | Workflow               | Deploys when these change                                    |
-| ----- | ---------------------------------- | -------------------------------------------------------- | ---------------------- | ------------------------------------------------------------ |
-| App   | `infra/cloudflare/alchemy.run.ts`  | `api.fidyapp.com`, `app.fidyapp.com`, Core, Email Worker | `deploy-app.yml`       | `apps/server`, `apps/web`, `infra/cloudflare`                |
-| Site  | `infra/cloudflare/alchemy.site.ts` | `fidyapp.com` and the zone edge policy                   | `deploy-site.yml`      | `apps/site`, `apps/server` (edge routes), `infra/cloudflare` |
-| Docs  | `infra/docs/alchemy.run.ts`        | `docs.fidyapp.com`                                       | `docs-publication.yml` | `apps/docs`, `infra/docs`, `design`, `tools/astro`           |
-| CLI   | `scripts/cli-release/release.py`   | GitHub Releases                                          | `cli-release.yml`      | resolved CLI inputs                                          |
+| Stack | Entrypoint                         | Serves                                                          | Workflow               | Deploys when these change                                    |
+| ----- | ---------------------------------- | --------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------ |
+| App   | `infra/cloudflare/alchemy.run.ts`  | `api.fidyapp.com`, `app.fidyapp.com`, Core, Email Worker        | `deploy-app.yml`       | `apps/server`, `apps/web`, `infra/cloudflare`                |
+| Site  | `infra/cloudflare/alchemy.site.ts` | `fidyapp.com`, the zone edge policy and the Access PIN provider | `deploy-site.yml`      | `apps/site`, `apps/server` (edge routes), `infra/cloudflare` |
+| Docs  | `infra/docs/alchemy.run.ts`        | `docs.fidyapp.com`                                              | `docs-publication.yml` | `apps/docs`, `infra/docs`, `design`, `tools/astro`           |
+| CLI   | `scripts/cli-release/release.py`   | GitHub Releases                                                 | `cli-release.yml`      | resolved CLI inputs                                          |
 
 Shared inputs (`bun.lock`, `package.json`, `patches/`, `tsconfig*.json`, `.github/actions/`, `scripts/install-*.sh`) and each stack's own workflow file redeploy every stack that depends on them. Each stack has its own concurrency group, so deploys of the same stack queue in push order.
 

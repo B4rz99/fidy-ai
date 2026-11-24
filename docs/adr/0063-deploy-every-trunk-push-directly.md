@@ -22,7 +22,7 @@ runtime branches and still failed on ordinary pushes, while protecting no real U
   state, alarms, queues, Workflow instances or R2 bytes, so storage migrations stay forward-only.
 - Plans need the production credentials, so the `production` environment admits every branch of
   this repository; deploy jobs run only on `trunk`, and fork pull requests are never planned.
-- The zone edge policy (HSTS and rulesets) lives in the site stack, which already owned it, and
-  redeploys whenever server routes change.
+- The zone edge policy (HSTS and rulesets) and the account one-time PIN provider live in the site
+  stack, which already owned them, and it redeploys whenever server routes change.
 - Reintroduce staged traffic, admission gates or a second stage only when real Users make a
   partial outage more expensive than the machinery.

@@ -55,6 +55,10 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     yield* edgeSecurity;
+    yield* Cloudflare.Access.IdentityProvider("RecoveryIdentity", {
+      name: "Fidy recovery email PIN",
+      type: "onetimepin",
+    });
     const site = yield* marketingSite(yield* Config.String("RELEASE_GIT_SHA"), true);
 
     return { siteUrl: site.url };

@@ -62,3 +62,11 @@ test("locked skill trees match and the shadcn instructions stay pinned", () => {
 
   expect(readText(`${directory}/SOURCE.md`)).toContain("a85299a9");
 });
+
+test("trunk pushes deploy the native release", () => {
+  const source = readText(".github/workflows/native-storage-release.yml");
+
+  expect(source).toMatch(/on:\s*\n\s*push:/u);
+  expect(source).toContain("branches: [trunk]");
+  expect(source).toContain("RELEASE_OPERATION: ${{ inputs.operation || 'rollout' }}");
+});

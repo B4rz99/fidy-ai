@@ -159,6 +159,8 @@ const {
 
 const origin = "https://" + nativeIngressHost;
 
+const stableOrigin = installedOrigins.production.api;
+
 const hostMode = ReleaseConfig.Literals(["acceptance", "staged"], "NATIVE_STORAGE_HOSTS").pipe(
   ReleaseConfig.withDefault("acceptance")
 );
@@ -2585,7 +2587,7 @@ const captureNative = Effect.fn(function* (
       client,
       proof: env.smokeProof,
     },
-    origin
+    stableOrigin
   );
 
   const snapshot = yield* releaseController.captureRelease(port, {
@@ -4004,7 +4006,7 @@ const verifyRestoredNative = Effect.fn(function* (
       proof: env.smokeProof,
       client,
     },
-    origin
+    stableOrigin
   ).pipe(rollbackCheck("serving identities"));
 
   if (

@@ -168,6 +168,7 @@ const supportApplication = Effect.fn(function* (
   return yield* Cloudflare.Access.Application(logicalId, {
     type: "self_hosted",
     name,
+    domain: productionTopology.ingress.hostname + path,
     destinations: [{ type: "public", uri: productionTopology.ingress.hostname + path }],
     sessionDuration: "15m",
     appLauncherVisible: false,

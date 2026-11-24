@@ -1,0 +1,31 @@
+.github/actions/alchemy-stack/action.yml
+  s_0a1387c8ccf49e::t_20bbcc8b303a4e 1-76
+.github/workflows/ci.yml
+  s_0a1387c8ccf49e::t_b84f4ce34977fc 33,370,372-384,386-423
+.github/workflows/deploy-app.yml
+  s_0a1387c8ccf49e::t_14c59dc6ba2d6a 27-34,36-73
+.github/workflows/deploy-site.yml
+  s_0a1387c8ccf49e::t_ead46b6ba75c7d 27-34,36-44
+docs/operations/production-releases.md
+  s_0a1387c8ccf49e::t_7685bf0d96679d 16,20
+scripts/ci-changes.test.ts
+  s_0a1387c8ccf49e::t_d5013924233134 213
+scripts/ci-changes.ts
+  s_0a1387c8ccf49e::t_849c3184054e91 106,162-167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b419990cd91251072217aab24d5d4abbf94fa8db",
+  "prompts": {},
+  "sessions": {
+    "s_0a1387c8ccf49e": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "violet-moonstone",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

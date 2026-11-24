@@ -1,0 +1,19 @@
+.ai-guard-baseline.json
+  s_0a1387c8ccf49e::t_a03098eb70aaf5 1-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6565782abdbf484140ad4f4161c09c3e13163532",
+  "prompts": {},
+  "sessions": {
+    "s_0a1387c8ccf49e": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "violet-moonstone",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

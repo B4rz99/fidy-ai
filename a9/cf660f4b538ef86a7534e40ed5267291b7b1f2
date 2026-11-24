@@ -1,0 +1,27 @@
+.patterns/alchemy.md
+  s_0a1387c8ccf49e::t_5c84a26f966dbf 151-152
+.patterns/sources.json
+  s_0a1387c8ccf49e::t_586562dc422503 58
+infra/cloudflare/native-application-bindings.ts
+  s_0a1387c8ccf49e::t_9fe8f674f41f59 171
+infra/cloudflare/native-application-plan.test.ts
+  s_0a1387c8ccf49e::t_e38837b54cbb00 68-69,97,100,111
+patches/alchemy@2.0.0-beta.80.patch
+  s_0a1387c8ccf49e::t_230851a497e820 958-999
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a9cf660f4b538ef86a7534e40ed5267291b7b1f2",
+  "prompts": {},
+  "sessions": {
+    "s_0a1387c8ccf49e": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "violet-moonstone",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

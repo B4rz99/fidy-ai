@@ -1,0 +1,21 @@
+package.json
+  s_1e2b4744deafe9::t_edd712e5d7b009 74
+bun.lock
+  s_1e2b4744deafe9::t_35b2582fdf525f 14,491,493,495,497,499,501,503,505,803,805,807,809,811,813,815,817,881,883,885,887,889,891,893,895,931,933,935,937,939,941,943,945,2601
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "588f4dc4af30bace3740aabd18948d67d8b840e1",
+  "prompts": {},
+  "sessions": {
+    "s_1e2b4744deafe9": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "flaxen-cheese",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,32 @@
+apps/server/cloudflare/agent/provider.test-fixture.ts
+  s_1e2b4744deafe9::t_c3416b1d2f654d 191,193-194
+  s_1e2b4744deafe9::t_bc9be87d5ae10b 87-88
+  s_1e2b4744deafe9::t_b421a8ba9a8f1a 98
+  s_1e2b4744deafe9::t_2b4afb343fc901 192
+apps/server/cloudflare/agent/user-store.test.ts
+  s_1e2b4744deafe9::t_5024e8c8b2a603 680-688
+  s_1e2b4744deafe9::t_9c90b07a09567d 884-886
+  s_1e2b4744deafe9::t_2e2a2c2bcf08f7 1078-1092
+  s_1e2b4744deafe9::t_1fe15e84cfe408 887-908,912-985
+  s_1e2b4744deafe9::t_e20ecf3e2e7647 911
+  s_1e2b4744deafe9::t_1cc90908565e0c 791-812
+  s_1e2b4744deafe9::t_299450fd667681 909-910
+  s_1e2b4744deafe9::t_23ac23d174636a 747
+  s_1e2b4744deafe9::t_30c55ff89efd25 648,650,652-653,656
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "774c886d00958ae58dc0c6db5abc1e4343011f10",
+  "prompts": {},
+  "sessions": {
+    "s_1e2b4744deafe9": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "flaxen-cheese",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -14,7 +14,7 @@ import {
 
 const compactViewportInset = 8;
 
-const compactQuery = "(max-height: 500px)";
+const compactQuery = "(max-height: 500px), (max-width: 600px)";
 
 const isCompact = (): boolean => window.matchMedia(compactQuery).matches;
 

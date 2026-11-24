@@ -71,7 +71,7 @@
     "@babel/types": "8.1.2",
     "@effect/platform-bun": "4.1.4",
     "@effect/platform-node": "4.1.4",
-    "@effect/tsgo": "0.69.0",
+    "@effect/tsgo": "0.70.0",
     "@effect/vitest": "4.1.4",
     "@enfect/oxlint": "0.10.0",
     "@interfere/landmines": "0.0.0",

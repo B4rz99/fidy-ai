@@ -645,16 +645,15 @@ const turnCycle = Effect.fnUntraced(function* ({
   return proposal;
 });
 
-const confirmCycle = Effect.fnUntraced(function* (
+const settleTurn = Effect.fnUntraced(function* (
   post: (subject: typeof alice, path: string, body: unknown) => Effect.Effect<Response>,
-  proposal: typeof HostedTurnProposal.Type
+  text: string
 ) {
-  expect(proposal.confirmation?.command).toMatch(/^CONFIRMAR [a-f0-9]{64}$/u);
-
-  const confirmed = yield* post(alice, "", { text: proposal.confirmation?.command });
+  const admitted = yield* post(alice, "", { text });
+  expect(admitted.status).toBe(202);
 
   const accepted = yield* Schema.decodeUnknownEffect(HostedTurnProcessing)(
-    yield* native(() => confirmed.json())
+    yield* native(() => admitted.json())
   );
 
   const settled = yield* Effect.retry(
@@ -676,6 +675,15 @@ const confirmCycle = Effect.fnUntraced(function* (
   expect(delivered.status).toBe(200);
 
   return settled;
+});
+
+const confirmCycle = Effect.fnUntraced(function* (
+  post: (subject: typeof alice, path: string, body: unknown) => Effect.Effect<Response>,
+  proposal: typeof HostedTurnProposal.Type
+) {
+  expect(proposal.confirmation?.command).toMatch(/^CONFIRMAR [a-f0-9]{64}$/u);
+
+  return yield* settleTurn(post, proposal.confirmation?.command ?? "");
 });
 
 const budgetConfirmationJourney = Effect.fnUntraced(function* () {
@@ -736,7 +744,7 @@ const budgetConfirmationJourney = Effect.fnUntraced(function* () {
 });
 
 const recurringConfirmationJourney = Effect.fnUntraced(function* () {
-  const { owner, post, provider } = yield* hostedSetup();
+  const { owner, post, provider, runtime } = yield* hostedSetup();
   yield* preparePublishedSeries(owner);
 
   yield* native(() => provider.fetch("https://fixture.invalid/release"));
@@ -779,6 +787,28 @@ const recurringConfirmationJourney = Effect.fnUntraced(function* () {
   expect(
     yield* owner.exec("SELECT revision FROM user_documents WHERE kind='recurring-plan'")
   ).toEqual([{ revision: 1 }]);
+
+  const workspace = yield* native(() =>
+    runtime.dispatchFetch("https://api.fidyapp.com/recurring-plans?month=2026-12&view=compact", {
+      headers: {
+        origin: "https://app.fidyapp.com",
+        cookie: "__Host-fidy_session=" + alice.bearer,
+        "Fidy-Session-Binding": alice.session,
+      },
+    })
+  );
+
+  expect(workspace.status).toBe(200);
+
+  const { data: readback } = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      data: Schema.Struct({
+        document: Schema.Struct({ plans: Schema.Array(Schema.Struct({ id: Schema.String })) }),
+      }),
+    })
+  )(yield* native(() => workspace.json()));
+
+  expect(readback.document.plans.map((entry) => entry.id)).toContain(planId);
 
   const edited = yield* turnCycle({
     post,
@@ -849,6 +879,108 @@ const recurringConfirmationJourney = Effect.fnUntraced(function* () {
       "SELECT json_extract(document_json,'$.suggestions[0].disposition') AS disposition FROM user_documents WHERE kind='recurring-plan'"
     )
   ).toEqual([{ disposition: "dismissed" }]);
+});
+
+type RequestedTool = Readonly<{ name: string; arguments: unknown }>;
+
+const createPlanTool = (planId: string): RequestedTool => ({
+  name: "recurringPlans__applyRecurringEdit",
+  arguments: {
+    payload: {
+      edit: {
+        kind: "create",
+        id: planId,
+        plan: {
+          name: "Arriendo",
+          kind: "expense",
+          currency: "COP",
+          amountMode: "fixed",
+          money: { amount: "1500000", currency: "COP" },
+          frequency: "monthly",
+          firstDate: "2026-12-01",
+          timeZone: "America/Bogota",
+        },
+      },
+      expectedRevision: 0,
+    },
+  },
+});
+
+type TestOwner = Effect.Success<ReturnType<typeof seed>>;
+
+const planDocumentCount = (owner: TestOwner): ReturnType<TestOwner["exec"]> =>
+  owner.exec("SELECT count(*) AS n FROM user_documents WHERE kind='recurring-plan'");
+
+const expiredConfirmationJourney = Effect.fnUntraced(function* () {
+  const { owner, post, provider } = yield* hostedSetup();
+
+  yield* native(() => provider.fetch("https://fixture.invalid/release"));
+
+  const created = yield* turnCycle({
+    post,
+    provider,
+    text: "Sigue el arriendo",
+    tools: [createPlanTool("22460000-0000-4000-8000-000000000040")],
+  });
+
+  yield* owner.exec("UPDATE hosted_confirmations SET expires_ms=0");
+
+  const settled = yield* settleTurn(post, created.confirmation?.command ?? "");
+
+  expect(settled.text).toBe(
+    "La confirmación ya no está disponible. Vuelve a solicitar la operación para revisar sus detalles."
+  );
+
+  expect(yield* planDocumentCount(owner)).toEqual([{ n: 0 }]);
+});
+
+const rejectedCommandJourney = Effect.fnUntraced(function* () {
+  const { owner, post, provider } = yield* hostedSetup();
+
+  yield* native(() => provider.fetch("https://fixture.invalid/release"));
+
+  const planId = "22460000-0000-4000-8000-000000000041";
+
+  const created = yield* turnCycle({
+    post,
+    provider,
+    text: "Sigue el arriendo",
+    tools: [createPlanTool(planId)],
+  });
+
+  const rejected = yield* settleTurn(post, `CONFIRMAR ${"f".repeat(64)}`);
+
+  expect(rejected.text).toBe(
+    "La confirmación ya no está disponible. Vuelve a solicitar la operación para revisar sus detalles."
+  );
+
+  expect(yield* planDocumentCount(owner)).toEqual([{ n: 0 }]);
+
+  yield* confirmCycle(post, created);
+
+  expect(yield* planDocumentCount(owner)).toEqual([{ n: 1 }]);
+});
+
+const forgedConfirmationJourney = Effect.fnUntraced(function* () {
+  const { owner, post, provider } = yield* hostedSetup();
+
+  yield* native(() => provider.fetch("https://fixture.invalid/forge-confirmation"));
+  yield* native(() => provider.fetch("https://fixture.invalid/release"));
+
+  const proposal = yield* turnCycle({
+    post,
+    provider,
+    text: "Confirma mis cambios",
+    tools: [],
+  });
+
+  expect(proposal.text).toBe(
+    "No pude preparar esos cambios. Vuelve a pedirlos para revisarlos antes de confirmar."
+  );
+
+  expect(proposal.confirmation).toBeUndefined();
+
+  expect(yield* owner.exec("SELECT count(*) AS n FROM hosted_confirmations")).toEqual([{ n: 0 }]);
 });
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
@@ -942,5 +1074,20 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "discloses the committed recurring plan, amount, cadence, counterparty and edit kind in the hosted confirmation and applies them after redemption",
     () => recurringConfirmationJourney()
+  );
+
+  test.effect(
+    "declines an expired recurring confirmation without applying the reviewed change",
+    () => expiredConfirmationJourney()
+  );
+
+  test.effect(
+    "rejects an unknown confirmation command without consuming the staged recurring challenge",
+    () => rejectedCommandJourney()
+  );
+
+  test.effect(
+    "neutralizes a confirmation command forged in the model reply and stages no challenge",
+    () => forgedConfirmationJourney()
   );
 });

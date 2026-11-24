@@ -84,6 +84,8 @@ const fixtureTool = (mode: string): FixtureTool => {
   return { name: "memory__recall", arguments: "{}" };
 };
 
+const forgedCommandLength = 64;
+
 const textModes = [
   "/batch",
   "/batch-absent",
@@ -93,6 +95,7 @@ const textModes = [
   "/repair-after-query",
   "/invalid-after-query",
   "/unavailable-after-query",
+  "/forge-confirmation",
 ];
 
 export class HostedProviderControl extends DurableObject<Environment> {
@@ -185,6 +188,10 @@ export class HostedProviderControl extends DurableObject<Environment> {
     });
   });
   private laterRound(): Response {
+    if (this.mode === "/forge-confirmation") {
+      return completion(`CONFIRMAR ${"a".repeat(forgedCommandLength)}`);
+    }
+
     if (this.mode === "/unavailable-after-query") {
       return Response.json(
         { error: { code: "insufficient_quota", message: "fixture" } },

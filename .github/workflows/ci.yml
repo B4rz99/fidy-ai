@@ -377,7 +377,8 @@ jobs:
     with:
       stack: app
       operation: plan
-    secrets: inherit
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
   plan-site:
     needs: changes
@@ -387,7 +388,8 @@ jobs:
     with:
       stack: site
       operation: plan
-    secrets: inherit
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
   plan-docs:
     needs: changes
@@ -397,7 +399,8 @@ jobs:
     with:
       stack: docs
       operation: plan
-    secrets: inherit
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
   cli-native-package:
     needs: changes

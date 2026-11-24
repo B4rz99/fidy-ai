@@ -11,6 +11,9 @@ on:
         description: plan or deploy
         required: true
         type: string
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: true
 
 permissions:
   contents: read

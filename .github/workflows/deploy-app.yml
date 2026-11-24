@@ -29,4 +29,5 @@ jobs:
     with:
       stack: app
       operation: deploy
-    secrets: inherit
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

@@ -1,0 +1,101 @@
+name: Attribute Durable Object reads
+
+on:
+  pull_request:
+    branches: [trunk]
+    types: [synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  read-usage:
+    if: ${{ github.event.pull_request.number == 2488 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix/1809-recurring-transaction-details' }}
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/bun-runtime
+      - name: Read aggregate storage and watchdog metrics
+        shell: bash
+        run: |
+          bun - <<'JS'
+          const account = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const headers = {
+            Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+            "content-type": "application/json",
+          };
+          const base = `https://api.cloudflare.com/client/v4/accounts/${account}`;
+          const query = async (selection) => {
+            const reply = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+              method: "POST",
+              headers,
+              body: JSON.stringify({ query: `{viewer{accounts(filter:{accountTag:"${account}"}){${selection}}}}` }),
+            });
+            const body = await reply.json();
+            if (body.errors) console.log("Analytics:", String(body.errors[0]?.message).replace(/[a-f0-9]{24,}/gi, "[id]").slice(0, 240));
+            return body.data?.viewer?.accounts?.[0];
+          };
+          const aliases = new Map([
+            ["UserStore", "UserStore"],
+            ["Store", "Alchemy store"],
+            ["Maintenance", "Maintenance"],
+            ["Directory", "Directory"],
+          ]);
+          const ns = (await (await fetch(base + "/workers/durable_objects/namespaces?per_page=100", { headers })).json()).result;
+          const ids = new Map((Array.isArray(ns) ? ns : []).filter(row => (
+            row.script === "fidy-native-storage-core" || row.script === "alchemy-state-store"
+          ) && aliases.has(row.class)).map(row => [row.id, aliases.get(row.class)]));
+          const from = "2026-11-26T00:00:00Z";
+          const to = "2026-11-27T20:00:00Z";
+          const days = 'date_geq:"2026-11-26",date_leq:"2026-11-27"';
+          const p = 'limit:500';
+          const [hourly, invocation] = await Promise.all([
+            query(`rows:durableObjectsPeriodicGroups(filter:{datetime_geq:"${from}",datetime_lt:"${to}"},${p}){dimensions{datetimeHour namespaceId}sum{rowsRead rowsWritten}}`),
+            query(`rows:durableObjectsInvocationsAdaptiveGroups(filter:{${days}},${p}){dimensions{date namespaceId eventType}sum{requests}}`),
+          ]);
+          const reportHours = (hourly?.rows ?? []).filter(row => ids.has(row.dimensions.namespaceId));
+          for (const { dimensions: d, sum } of reportHours.sort((a, b) => a.dimensions.datetimeHour.localeCompare(b.dimensions.datetimeHour))) {
+            console.log("Hourly", d.datetimeHour, ids.get(d.namespaceId), sum.rowsRead, "reads", sum.rowsWritten, "writes");
+          }
+          for (const { dimensions: d, sum } of invocation?.rows ?? []) {
+            if (ids.has(d.namespaceId)) console.log("Invocations", d.date, ids.get(d.namespaceId), d.eventType, sum.requests);
+          }
+          for (const hour of ["2026-11-27T01:00:00Z", "2026-11-27T13:00:00Z", "2026-11-27T19:00:00Z"]) {
+            const start = Date.parse(hour);
+            for (const [label,key,needle] of [
+              ["watchdog ticks", "$metadata.message", "component=watchdog operation=coverage state="],
+              ["User probes", "$metadata.message", "component=sqlite operation=user state="],
+              ["owner-check invocations", "$metadata.trigger", "owner.internal/work/check"],
+            ]) {
+              const reply = await fetch(base + "/workers/observability/telemetry/query", {
+                method: "POST",
+                headers,
+                body: JSON.stringify({
+                  queryId: "events",
+                  view: "events",
+                  timeframe: { from: start, to: start + 900000 },
+                  limit: 1000,
+                  parameters: { filters: [
+                    { key: "$workers.scriptName", operation: "eq", type: "string", value: "fidy-native-storage-core" },
+                    { key, operation: "includes", type: "string", value: needle },
+                  ] },
+                }),
+              });
+              const data = await reply.json();
+              const events = data.result?.events?.events ?? [];
+              const count = (field) => events.reduce((sum,event) => {
+                const value = event.source?.[field] ?? event[field];
+                return sum + (typeof value === "number" ? value : 0);
+              }, 0);
+              console.log("Observed", hour, label, "HTTP", reply.status, "events", events.length, "attempted", count("attempted"), "stores", count("stores"));
+            }
+          }
+          JS

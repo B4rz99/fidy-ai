@@ -1,4 +1,5 @@
-[data-review="workspace"] {
+[data-review="workspace"],
+[data-review="mobile-detail"] {
   --review-height: calc(100dvh - 221px);
   --review-soft: #f5f2ee;
   --review-line: #e9e2da;
@@ -7,7 +8,7 @@
   min-width: 0;
   padding: 0;
 }
-.dark [data-review="workspace"] {
+.dark :is([data-review="workspace"], [data-review="mobile-detail"]) {
   --review-soft: #292a25;
   --review-line: #373831;
 }
@@ -87,6 +88,17 @@
   align-items: stretch;
   min-width: 0;
 }
+[data-review="mobile-detail-bar"] {
+  flex-shrink: 0;
+  padding: 4px 18px;
+  border-bottom: 1px solid var(--border);
+}
+[data-review="mobile-detail"] [data-review="detail"] {
+  padding-top: 20px;
+}
+[data-review="mobile-detail"] [data-review="detail-heading"] {
+  margin-bottom: 20px;
+}
 [data-review="inbox"],
 [data-review="detail"],
 [data-review="expired"],
@@ -164,7 +176,7 @@
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
 }
-[data-review="workspace"] [data-review="deadline"] {
+:is([data-review="workspace"], [data-review="mobile-detail"]) [data-review="deadline"] {
   background: var(--secondary);
   color: var(--secondary-foreground);
   border-radius: 7px;

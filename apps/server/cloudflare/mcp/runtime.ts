@@ -557,6 +557,8 @@ const leasedResponse = (
             }
 
             controller.enqueue(value);
+
+            return undefined;
           })
           .catch((error: unknown) => {
             finish();

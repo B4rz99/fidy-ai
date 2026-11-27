@@ -269,6 +269,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const logs: string[] = [];
         const runtime = yield* (yield* nativeBrowserPlatform)("1", logs);
         const ns = yield* native(() => runtime.getDurableObjectNamespace("MAINTENANCE", "core"));
+
+        const registry = yield* native(() =>
+          runtime.unsafeGetDurableObjectStorage("core", "Maintenance", {
+            name: "core-maintenance-v1",
+          })
+        );
+
+        yield* native(() => registry.exec("UPDATE lifetime_registry SET observed_ms=0"));
         const now = yield* Clock.currentTimeMillis;
         expect(
           (yield* native(() =>

@@ -4,15 +4,11 @@ Each User stores accepted intent, original deadlines, checkpoints and outcomes i
 
 ## Maintenance cadence
 
-Core invokes the shared Maintenance watchdog every minute. It checks the shared owners and traverses due Users in bounded pages. A successful User inspection covers the next two scheduled minutes, which reduces repeated SQLite reads while new Users and failed inspections remain eligible. Each owner checks its own pending families and preserves its earliest alarm. User alarms recover receipts, provider reconciliation, recurring evaluations, reminders, eligible weekly work, financial work, and private byte retention. Directory reclaims expired bootstrap proofs and capacity slots. Erasure independently checks outstanding custody.
+Core invokes Maintenance every minute. The watchdog checks Pricing and independent Erasure every minute. For UserStores and Directory, it selects overdue recovery deadlines and runs one bounded pass over retained registrations whose deadlines have not been initialized. A successful initialization with no next alarm leaves that owner idle. Failed inspections remain eligible.
 
-The native minute watchdog measures time since registered Users were observed and the last
-completed traversal. Coverage warns after five minutes and becomes critical after ten. A failed
-shared check or deterministic migration failure is critical at detection. SQLite storage bands
-warn at 70% and become critical at 80%. The existing attention monitor evaluates these messages
-every ten minutes and repeats after thirty. User identifiers and financial contents stay out of
-the observations. A complete native-only sweep requires fresh observations of all registered
-Users and the three shared target owners. A repaired alarm schedules existing work.
+Before a registered UserStore starts application work or handles a native alarm, and before Directory modifies state or handles an alarm, Maintenance records a durable recovery reservation. A failure to reserve returns an unavailable result before that work starts. The owner retains the accepted intent and owns its earliest native alarm. Directory recalculates its next cleanup deadline after a mutation. A completed check reports the next native alarm, and Maintenance updates the matching reservation or clears it if there is no next alarm. A stale response cannot clear a newer reservation. An interrupted operation keeps a recovery deadline so a later tick can repair the missing alarm. Erasure handoffs remain independently discoverable.
+
+Coverage warns after an eligible recovery item or retained uninitialized registration has waited five minutes and becomes critical after ten. Shared check failures and deterministic migration failures remain critical at detection. SQLite storage bands warn at 70% and become critical at 80%. The existing attention monitor evaluates these messages every ten minutes and repeats after thirty. User identifiers and financial contents stay out of the observations. A complete native-only sweep covers the eligible recovery work and the two fixed owners. A repaired alarm schedules existing work.
 
 ## Reminder advancement
 

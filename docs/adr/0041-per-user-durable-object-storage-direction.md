@@ -197,17 +197,12 @@ existing hourly/daily batching initially. Alarm execution processes bounded owne
 progress and rearms while obligations remain. Independent owner failures cannot starve later work.
 No remaining obligation requires no alarm; the next intent commit must arm it again.
 
-The existing maintenance object keeps a minimal durable registry of object identities and checking
-progress, not individual jobs. Register each User idempotently before first accepted work/activation,
+The existing Maintenance object keeps a lifetime registry and a recovery deadline for Users with pending or uncertain work. Job payloads and authority stay in the UserStore. Register each User idempotently before first accepted work/activation,
 recover lost registration replies, and retain the entry for the owner's lifetime including idle time.
-An unused registration grants no authority or permission to initialize User domain state. Maintenance
-unavailability may delay new activation; registered Users continue locally. Directory, pricing and
-independent erasure owners are fixed watchdog targets too.
+An unused registration grants no authority or permission to initialize User domain state. Registered application work reserves a recovery deadline before acting. A failed reservation defers admission so a crash cannot leave accepted work invisible to Maintenance. Directory uses the same recovery reservation for mutations and its native alarm handles scheduled cleanup. Pricing and
+independent erasure remain fixed watchdog targets.
 
-The existing minute cron traverses bounded registry pages with durable progress and finite owner-call
-budgets. Under supported load, attempt a check of every registered object within five minutes,
-including idle objects and new registrations. This is an acceptance target, not completed recovery
-or outage availability. Advance past unavailable/busy Users and expose failed checks separately from
+The existing minute cron checks indexed overdue recovery deadlines in bounded pages with durable progress and finite owner-call budgets. It seeds retained registrations once and leaves known idle Users asleep. Under supported load, attempt eligible overdue checks within five minutes. This is an acceptance target for attempted recovery. Advance past unavailable/busy Users and expose failed checks separately from
 successful observations. Checks repair local missing/overdue alarms and handoffs. Registration before
 intent closes missed-notification gaps; independent checking also covers exhausted native alarm
 retries. Correctness does not depend on namespace enumeration.

@@ -38,6 +38,18 @@ const deliverRound = ({
   Effect.fnUntraced(function* (delivery) {
     yield* native(() => registry.exec("UPDATE watchdog_progress SET minute=-1"));
 
+    yield* native(() =>
+      registry.exec(
+        "INSERT INTO user_recovery VALUES(?,?,?,1),(?,?,?,1) ON CONFLICT(user_id) DO UPDATE SET due_ms=excluded.due_ms",
+        held,
+        held,
+        now,
+        healthy,
+        healthy,
+        now
+      )
+    );
+
     const tick = yield* native(() =>
       maintenance.fetch(watchdogUrl, {
         method: "POST",
@@ -52,7 +64,13 @@ const deliverRound = ({
     );
 
     expect(progress).toEqual([
-      { attempted: 5, observed: 4, failed: 0, unknown: 1, wraps: delivery },
+      {
+        attempted: delivery === 1 ? 5 : 4,
+        observed: delivery === 1 ? 4 : 3,
+        failed: 0,
+        unknown: 1,
+        wraps: delivery,
+      },
     ]);
 
     const heldChecks = yield* native(() => stalled.fetch("https://fixture.invalid/held-checks"));

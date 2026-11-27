@@ -30,9 +30,10 @@ const coverageAt = (
     );
     yield* native(() =>
       registry.exec(
-        "UPDATE watchdog_progress SET minute=-1,scheduled=-1,started_ms=?,wrapped_at=?",
+        "UPDATE watchdog_progress SET minute=-1,scheduled=-1,started_ms=?,wrapped_at=?,cursor=?",
         now - age,
-        now
+        now,
+        coveredUser
       )
     );
 
@@ -101,6 +102,16 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           )
         );
 
+        const registry = yield* native(() =>
+          runtime.unsafeGetDurableObjectStorage("core", "Maintenance", {
+            name: "core-maintenance-v1",
+          })
+        );
+
+        yield* native(() =>
+          registry.exec("INSERT INTO user_recovery VALUES(?,?,?,1)", user, user, now)
+        );
+
         const tick = (): ReturnType<typeof executor.fetch> =>
           executor.fetch("https://maintenance.invalid/watchdog", {
             method: "POST",
@@ -109,12 +120,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
         const responses = yield* native(() => Promise.all([tick(), tick()]));
         expect(responses.map((response) => response.status)).toEqual([204, 204]);
-
-        const registry = yield* native(() =>
-          runtime.unsafeGetDurableObjectStorage("core", "Maintenance", {
-            name: "core-maintenance-v1",
-          })
-        );
 
         expect(
           yield* native(() =>

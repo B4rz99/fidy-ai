@@ -1,4 +1,6 @@
-import { Data, type Effect, type Option } from "effect";
+import { Data, type Effect, type Option, Schema } from "effect";
+import { UserId } from "../../src/core/identity/contract";
+import { directoryName } from "../directory/contract";
 
 export type ScheduledOperation =
   | "provider.authenticationRetention"
@@ -62,6 +64,16 @@ export class UserRegistrationUnavailable extends Data.TaggedError("UserRegistrat
 
 export const watchdogUrl = "https://maintenance.invalid/watchdog";
 
+export const RecoveryOwner = Schema.Union([UserId, Schema.Literal(directoryName)]);
+
+export const reserveRecoveryUrl = "https://maintenance.invalid/recovery/reserve";
+
+export const settleRecoveryUrl = "https://maintenance.invalid/recovery/settle";
+
+export const recoveryGraceMs = 120_000;
+
+export const recoveryAlarmHeader = "fidy-next-recovery-alarm";
+
 export const ownerCheckUrl = "https://owner.internal/work/check";
 
 const privateCheckRequest =
@@ -78,6 +90,13 @@ export const ownerCheckResponse = (repaired = false): Response =>
     status: completedCheckStatus,
     headers: { "fidy-alarm-repaired": repaired ? "1" : "0" },
   });
+
+export const idleRecoveryResponse = (): Response => {
+  const response = ownerCheckResponse();
+  response.headers.set(recoveryAlarmHeader, "idle");
+
+  return response;
+};
 
 export const ownerCheckRequest = privateCheckRequest(ownerCheckUrl);
 

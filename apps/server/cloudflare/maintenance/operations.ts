@@ -102,6 +102,30 @@ export const maintenanceStoreHistory: StoreHistory = {
         "ALTER TABLE watchdog_progress ADD COLUMN sample_cursor TEXT NOT NULL DEFAULT ''",
       ],
     },
+    {
+      version: 6,
+      id: "user-recovery-deadlines",
+      statements: [
+        "ALTER TABLE lifetime_registry ADD COLUMN recovery_seeded INTEGER NOT NULL DEFAULT 0",
+        "CREATE INDEX unseeded_recovery_users ON lifetime_registry(user_id) WHERE retired=0 AND recovery_seeded=0",
+        `CREATE TABLE user_recovery (
+          user_id TEXT PRIMARY KEY REFERENCES lifetime_registry(user_id) ON DELETE CASCADE,
+          generation TEXT NOT NULL, due_ms INTEGER NOT NULL, uncertain INTEGER NOT NULL CHECK(uncertain IN (0,1))
+        ) STRICT`,
+        "CREATE INDEX due_user_recovery ON user_recovery(due_ms,user_id)",
+      ],
+    },
+    {
+      version: 7,
+      id: "directory-recovery-deadline",
+      statements: [
+        `CREATE TABLE directory_recovery (
+          singleton INTEGER PRIMARY KEY CHECK(singleton=1), generation TEXT,
+          due_ms INTEGER, uncertain INTEGER NOT NULL CHECK(uncertain IN (0,1))
+        ) STRICT`,
+        "INSERT INTO directory_recovery VALUES(1,NULL,0,0)",
+      ],
+    },
   ],
 };
 
@@ -149,7 +173,7 @@ export const handleLifetimeRegistration = Effect.fn(function* (
         }
 
         yield* admitGrowth;
-        yield* sql`INSERT INTO lifetime_registry(user_id,registered_ms) VALUES(${userId},${issuedAt})`;
+        yield* sql`INSERT INTO lifetime_registry(user_id,registered_ms,recovery_seeded) VALUES(${userId},${issuedAt},1)`;
 
         return acknowledgement(true);
       })
@@ -204,6 +228,10 @@ const changeLifetime = Effect.fn(function* (
           ? yield* sql`UPDATE lifetime_registry SET erasure_reference=${reference} WHERE user_id=${userId}
           AND (erasure_reference IS NULL OR erasure_reference=${reference}) RETURNING user_id`
           : yield* sql`UPDATE lifetime_registry SET retired=1 WHERE user_id=${userId} AND erasure_reference=${reference} RETURNING user_id`;
+
+      if (request.url === retireLifetimeUrl && matched.length === 1) {
+        yield* sql`DELETE FROM user_recovery WHERE user_id=${userId}`;
+      }
 
       return acknowledgement(matched.length === 1);
     })

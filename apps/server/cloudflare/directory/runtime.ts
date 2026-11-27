@@ -80,6 +80,7 @@ import type { ProviderConfiguration } from "../provider-authentication/contract"
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { pollPairing, startPairing } from "./internal/pairing";
+import { OwnerWorkRecovery } from "../maintenance/work-recovery";
 import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
 import {
   createStoreRuntime,
@@ -111,6 +112,7 @@ type DirectoryEnvironment = StoreReleaseEnvironment &
     DIRECTORY: DurableObjectNamespace;
     USER_STORE: DurableObjectNamespace;
     ERASURE: DurableObjectNamespace;
+    MAINTENANCE: DurableObjectNamespace;
   }>;
 
 const digestBytes = 32;
@@ -169,10 +171,25 @@ const inspectPressure = Effect.fnUntraced(function* (
   );
 });
 
+const firstServerErrorStatus = 500;
+
+const readOnlyRequest = (request: Request): boolean =>
+  isReadinessRequest(request) ||
+  [
+    sessionRouteUrl,
+    patRouteUrl,
+    handoffInspectUrl,
+    channelInspectUrl,
+    scopeDirectoryUrl,
+    participantDrainedUrl,
+  ].includes(request.url);
+
 export class Directory extends DurableObject<DirectoryEnvironment> {
   private readonly runtime;
+  private readonly recovery;
   constructor(state: DurableObjectState, env: DirectoryEnvironment) {
     super(state, env);
+    this.recovery = new OwnerWorkRecovery(state, env.MAINTENANCE);
     this.runtime = createStoreRuntime({
       storage: state.storage,
       owner: "directory",
@@ -185,6 +202,16 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     );
   }
   override alarm(): Promise<void> {
+    return this.runtime.runPromise(
+      this.recovery.run(
+        () => this.cleanUp(),
+        () => true,
+        true
+      )
+    );
+  }
+
+  private cleanUp(): Promise<void> {
     return this.runtime.runPromise(
       Effect.andThen(
         Effect.andThen(
@@ -256,11 +283,20 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
       );
     }
   }
-  override fetch(request: Request): Promise<Response> {
-    if (!this.ctx.id.equals(this.env.DIRECTORY.idFromName(directoryName))) {
-      return Promise.resolve(new Response(null, { status: 404 }));
-    }
+  private checkWork(): Promise<Response> {
+    return this.runtime.runPromise(
+      inspectPressure(this.ctx.storage, false).pipe(
+        Effect.map(ownerCheckResponse),
+        observeStoreCheck({
+          storage: this.ctx.storage,
+          history: directoryHistory,
+          release: this.env.CF_VERSION_METADATA.id,
+        })
+      )
+    );
+  }
 
+  private applicationRequest(request: Request): Promise<Response> {
     if (
       request.method === "POST" &&
       [
@@ -273,24 +309,42 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
       return this.erasure(request);
     }
 
-    if (ownerCheckRequest(request)) {
-      return this.runtime.runPromise(
-        inspectPressure(this.ctx.storage, false).pipe(
-          Effect.map(ownerCheckResponse),
-          observeStoreCheck({
-            storage: this.ctx.storage,
-            history: directoryHistory,
-            release: this.env.CF_VERSION_METADATA.id,
-          })
-        )
-      );
-    }
-
     return this.runtime.runPromise(
-      (request.url === emailCapacityUrl || request.url === mediaCapacityUrl
+      request.url === emailCapacityUrl || request.url === mediaCapacityUrl
         ? ingestionCapacityRequest(request, this.ctx.storage)
         : directoryRequest(request, this.env)
-      ).pipe(
+    );
+  }
+
+  override fetch(request: Request): Promise<Response> {
+    if (!this.ctx.id.equals(this.env.DIRECTORY.idFromName(directoryName))) {
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }
+
+    if (ownerCheckRequest(request)) {
+      return this.runtime.runPromise(this.recovery.inspect(() => this.checkWork()));
+    }
+
+    const invoke = (): Promise<Response> => this.applicationRequest(request);
+
+    const work = readOnlyRequest(request)
+      ? Effect.tryPromise(invoke)
+      : this.recovery.run(
+          () =>
+            this.runtime.runPromise(
+              Effect.tryPromise(invoke).pipe(
+                Effect.tap((response) =>
+                  response.status < firstServerErrorStatus
+                    ? inspectPressure(this.ctx.storage, false).pipe(Effect.asVoid)
+                    : Effect.void
+                )
+              )
+            ),
+          (response) => response.status < firstServerErrorStatus
+        );
+
+    return this.runtime.runPromise(
+      work.pipe(
         Effect.tapCause(() =>
           Effect.logWarning({
             component: "directory",

@@ -1,5 +1,6 @@
 import { betaRegistryUrl } from "../beta-pro/contract";
 import { readBetaRegistry } from "./internal/beta-registry";
+import { handleRecoveryIndex } from "./internal/overdue-work";
 import { reportWatchdog, runWatchdog } from "./internal/watchdog";
 import type { SharedBindings } from "../storage-bootstrap/contract";
 import { handleLifetimeRegistration, lifetimeRequest, maintenanceStoreHistory } from "./operations";
@@ -8,9 +9,20 @@ import { createStoreRuntime, openSqliteStore, storeReadiness } from "../runtime/
 import { type StoreReleaseEnvironment, storeReadinessUrl } from "../runtime/sqlite/contract";
 
 import { Effect, Option } from "effect";
-import { maintenanceName, watchdogRequest } from "./contract";
+import {
+  maintenanceName,
+  reserveRecoveryUrl,
+  settleRecoveryUrl,
+  watchdogRequest,
+} from "./contract";
 
 type MaintenanceEnvironment = StoreReleaseEnvironment & SharedBindings;
+
+const readinessRequest = (request: Request): boolean =>
+  request.method === "GET" && request.url === storeReadinessUrl;
+
+const recoveryRequest = (request: Request): boolean =>
+  request.method === "POST" && [reserveRecoveryUrl, settleRecoveryUrl].includes(request.url);
 
 export class Maintenance extends DurableObject<MaintenanceEnvironment> {
   private readonly runtime;
@@ -68,6 +80,20 @@ export class Maintenance extends DurableObject<MaintenanceEnvironment> {
         this.sweeping = false;
       });
   }
+  private controlRequest<E>(
+    operation: Effect.Effect<
+      Response,
+      E,
+      Effect.Services<ReturnType<typeof handleLifetimeRegistration>>
+    >
+  ): Promise<Response> {
+    return this.runtime.runPromise(
+      operation.pipe(
+        Effect.tapCause(Effect.logDebug),
+        Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+      )
+    );
+  }
   override fetch(request: Request): Promise<Response> {
     if (this.ctx.id.name !== maintenanceName) {
       return Promise.resolve(new Response(null, { status: 404 }));
@@ -79,16 +105,15 @@ export class Maintenance extends DurableObject<MaintenanceEnvironment> {
 
     if (watchdogRequest(request)) return this.watchdog(request);
 
+    if (recoveryRequest(request)) return this.controlRequest(handleRecoveryIndex(request));
+
     if (lifetimeRequest(request)) {
-      return this.runtime.runPromise(
-        handleLifetimeRegistration(request, Option.fromUndefinedOr(this.env.ERASURE)).pipe(
-          Effect.tapCause(Effect.logDebug),
-          Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
-        )
+      return this.controlRequest(
+        handleLifetimeRegistration(request, Option.fromUndefinedOr(this.env.ERASURE))
       );
     }
 
-    if (request.method !== "GET" || request.url !== storeReadinessUrl) {
+    if (!readinessRequest(request)) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
 

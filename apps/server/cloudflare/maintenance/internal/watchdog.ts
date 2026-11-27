@@ -1,3 +1,4 @@
+import { settleRecovery } from "./overdue-work";
 import { watchdogCoverage } from "./coverage";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, Effect, Option, Predicate, Schema } from "effect";
@@ -5,7 +6,7 @@ import { directoryName } from "../../directory/contract";
 import { erasureRegistryName } from "../../erasure/contract";
 import type { SharedBindings } from "../../storage-bootstrap/contract";
 import { pricingName } from "../../subscription/contract";
-import { completedCheckStatus, ownerCheckUrl } from "../contract";
+import { completedCheckStatus, ownerCheckUrl, recoveryAlarmHeader } from "../contract";
 
 const pageSize = 32;
 
@@ -14,8 +15,6 @@ const maximumUsers = 256;
 const concurrency = 5;
 
 const minuteMs = 60_000;
-
-const recentUserInspectionMs = 2 * minuteMs;
 
 const tickMs = 55_000;
 
@@ -28,6 +27,7 @@ type Target = Readonly<{
   name: string;
   family: "directory" | "pricing" | "erasure" | "user";
   sampleWork: boolean;
+  generation: Option.Option<string>;
 }>;
 
 type Outcome = "observed" | "repaired" | "failed" | "unsupported" | "unknown";
@@ -45,6 +45,7 @@ type Probe = Readonly<{
   outcome: Outcome;
   unsettled: boolean;
   sample: Option.Option<typeof Sample.Type>;
+  nextAlarm: Option.Option<number | "idle">;
 }>;
 
 const sampleFrom = (response: Response): Option.Option<typeof Sample.Type> => {
@@ -82,11 +83,13 @@ const probe = Effect.fnUntraced(function* (target: Target, pending: Set<Promise<
       outcome: "failed",
       unsettled: false,
       sample: Option.none<typeof Sample.Type>(),
+      nextAlarm: Option.none(),
     } satisfies Probe;
   }
 
   const binding = target.binding;
   let sample = Option.none<typeof Sample.Type>();
+  let nextAlarm = Option.none<number | "idle">();
   const started = yield* Clock.currentTimeMillis;
 
   const { result, observed } = yield* Effect.scoped(
@@ -106,6 +109,11 @@ const probe = Effect.fnUntraced(function* (target: Target, pending: Set<Promise<
         )
         .then((response) => {
           sample = sampleFrom(response);
+          const deadline = response.headers.get(recoveryAlarmHeader);
+          const instant = Number(deadline);
+
+          if (deadline === "idle") nextAlarm = Option.some("idle");
+          else if (Number.isSafeInteger(instant) && instant > 0) nextAlarm = Option.some(instant);
 
           return inspect(response);
         })
@@ -124,7 +132,9 @@ const probe = Effect.fnUntraced(function* (target: Target, pending: Set<Promise<
     })
   );
 
-  if (Option.isSome(observed)) return { outcome: observed.value, unsettled: false, sample };
+  if (Option.isSome(observed)) {
+    return { outcome: observed.value, unsettled: false, sample, nextAlarm };
+  }
 
   const remaining = Math.max(0, started + probeMs - (yield* Clock.currentTimeMillis));
   const settled = yield* result.pipe(Effect.timeoutOption(remaining));
@@ -133,6 +143,7 @@ const probe = Effect.fnUntraced(function* (target: Target, pending: Set<Promise<
     outcome: "unknown",
     unsettled: Option.isNone(settled),
     sample: Option.none<typeof Sample.Type>(),
+    nextAlarm: Option.none(),
   } satisfies Probe;
 });
 
@@ -143,13 +154,44 @@ const Window = Schema.Struct({
   defer_fixed: Schema.Int,
 });
 
-const Entry = Schema.Struct({ user_id: Schema.String });
+const Entry = Schema.Struct({
+  user_id: Schema.String,
+  generation: Schema.OptionFromNullOr(Schema.String),
+});
 
-const fixedTargets = (bindings: SharedBindings): Target[] => [
-  { binding: bindings.DIRECTORY, name: directoryName, family: "directory", sampleWork: false },
-  { binding: bindings.PRICING, name: pricingName, family: "pricing", sampleWork: false },
-  { binding: bindings.ERASURE, name: erasureRegistryName, family: "erasure", sampleWork: false },
-];
+const fixedTargets = Effect.fnUntraced(function* (bindings: SharedBindings, scheduled: number) {
+  const sql = yield* SqliteClient;
+
+  const due = yield* Schema.decodeUnknownEffect(
+    Schema.Array(Schema.Struct({ generation: Schema.OptionFromNullOr(Schema.String) }))
+  )(
+    yield* sql`SELECT generation FROM directory_recovery WHERE singleton=1 AND due_ms<=${scheduled}`
+  );
+
+  return [
+    ...due.map(({ generation }) => ({
+      binding: bindings.DIRECTORY,
+      name: directoryName,
+      family: "directory" as const,
+      sampleWork: false,
+      generation,
+    })),
+    {
+      binding: bindings.PRICING,
+      name: pricingName,
+      family: "pricing" as const,
+      sampleWork: false,
+      generation: Option.none(),
+    },
+    {
+      binding: bindings.ERASURE,
+      name: erasureRegistryName,
+      family: "erasure" as const,
+      sampleWork: false,
+      generation: Option.none(),
+    },
+  ];
+});
 
 const familyAt = (batch: ReadonlyArray<Target>, index: number): string =>
   batch[index]?.family ?? "unknown";
@@ -219,6 +261,25 @@ const saveUserObservations = Effect.fnUntraced(function* (
 ) {
   const sql = yield* SqliteClient;
 
+  yield* Effect.forEach(
+    batch.entries(),
+    ([index, target]) => {
+      const reply = replies[index];
+
+      return (target.family === "user" || target.family === "directory") &&
+        reply !== undefined &&
+        (reply.outcome === "observed" || reply.outcome === "repaired") &&
+        Option.isSome(reply.nextAlarm)
+        ? settleRecovery(
+            target.name,
+            target.generation,
+            reply.nextAlarm.value === "idle" ? Option.none() : Option.some(reply.nextAlarm.value)
+          )
+        : Effect.void;
+    },
+    { discard: true }
+  );
+
   const successfulUsers = batch.flatMap((target, index) =>
     target.family === "user" && Option.isSome(replies[index]?.sample ?? Option.none())
       ? [target.name]
@@ -230,7 +291,7 @@ const saveUserObservations = Effect.fnUntraced(function* (
       successfulUsers
     );
 
-    yield* sql`UPDATE lifetime_registry SET observed_ms=${now} WHERE user_id IN (SELECT value FROM json_each(${ids})) AND retired=0`;
+    yield* sql`UPDATE lifetime_registry SET observed_ms=${now} WHERE user_id IN (SELECT value FROM json_each(${ids})) AND retired=0 AND recovery_seeded=0`;
   }
 });
 
@@ -257,7 +318,11 @@ const reportShared = Effect.fnUntraced(function* (
         component: "watchdog",
         owner: target.family,
         outcome,
-      }).pipe(Effect.as(Option.isSome(reply.sample) ? shared + 1 : shared));
+      }).pipe(
+        Effect.as(
+          target.family !== "directory" && Option.isSome(reply.sample) ? shared + 1 : shared
+        )
+      );
     }
   );
 });
@@ -362,15 +427,22 @@ const scanUsers = Effect.fnUntraced(function* ({
     const limit = Math.min(pageSize, remaining);
 
     const page = yield* Schema.decodeUnknownEffect(Schema.Array(Entry))(
-      yield* sql`SELECT user_id FROM lifetime_registry WHERE retired=0 AND (observed_ms=0 OR observed_ms<${dueBefore}) AND user_id>${cursor} AND user_id<=${window.last_user}
-        ORDER BY user_id LIMIT ${limit}`
+      yield* sql`SELECT user_id,generation FROM (
+        SELECT r.user_id,r.generation FROM user_recovery r INDEXED BY due_user_recovery JOIN lifetime_registry u USING(user_id)
+        WHERE r.due_ms<=${dueBefore} AND u.retired=0 AND r.user_id>${cursor} AND r.user_id<=${window.last_user}
+        UNION ALL
+        SELECT u.user_id,NULL FROM lifetime_registry u
+        WHERE u.retired=0 AND u.recovery_seeded=0 AND u.user_id>${cursor} AND u.user_id<=${window.last_user}
+        AND NOT EXISTS(SELECT 1 FROM user_recovery r WHERE r.user_id=u.user_id)
+      ) ORDER BY user_id LIMIT ${limit}`
     );
 
     const targets = [
       ...shared.splice(0),
-      ...page.map(({ user_id }) => ({
+      ...page.map(({ user_id, generation }) => ({
         binding: bindings.USER_STORE,
         name: user_id,
+        generation,
         sampleWork: user_id === window.sample_user,
         family: "user" as const,
       })),
@@ -386,10 +458,6 @@ const scanUsers = Effect.fnUntraced(function* ({
     if (Predicate.isString(next)) return next;
     cursor = next.cursor;
     remaining -= page.length;
-
-    if (remaining === maximumUsers && cursor === "" && window.last_user !== "") {
-      return "recent" as const;
-    }
 
     if (page.length < limit || cursor === window.last_user) {
       const wrapped = yield* Clock.currentTimeMillis;
@@ -410,19 +478,18 @@ export const runWatchdog = Effect.fn(function* (
   const sql = yield* SqliteClient;
   const started = yield* Clock.currentTimeMillis;
   const minute = Math.floor(started / minuteMs);
-  const dueBefore = scheduled - recentUserInspectionMs;
+  const dueBefore = scheduled;
 
   const claimed =
     yield* sql`UPDATE watchdog_progress SET minute=${minute},scheduled=${scheduled},started_ms=CASE WHEN started_ms=0 THEN ${started} ELSE started_ms END,halt='running',
     shared_observed=0,admitted=0,attempted=0,observed=0,failed=0,unsupported=0,unknown=0,repaired=0
     WHERE singleton=1 AND minute<${minute} AND scheduled<${scheduled}
     RETURNING cursor,defer_fixed,coalesce((SELECT max(user_id) FROM lifetime_registry WHERE retired=0),'') AS last_user,
-      coalesce((SELECT user_id FROM lifetime_registry WHERE retired=0 AND (observed_ms=0 OR observed_ms<${dueBefore}) AND user_id>watchdog_progress.sample_cursor ORDER BY user_id LIMIT 1),
-        (SELECT user_id FROM lifetime_registry WHERE retired=0 AND (observed_ms=0 OR observed_ms<${dueBefore}) ORDER BY user_id LIMIT 1),'') AS sample_user`;
+      coalesce((SELECT user_id FROM user_recovery WHERE due_ms<=${dueBefore} ORDER BY due_ms,user_id LIMIT 1),'') AS sample_user`;
 
   if (claimed.length === 0) return "coalesced" as const;
   const [window] = yield* Schema.decodeUnknownEffect(Schema.Tuple([Window]))(claimed);
-  const shared = fixedTargets(bindings);
+  const shared = yield* fixedTargets(bindings, scheduled);
   const deadline = started + tickMs;
   const defer = window.defer_fixed === 1;
 
@@ -461,7 +528,7 @@ export const reportWatchdog = Effect.fnUntraced(function* (
 
   if (nativeCoverage && halt === "wrapped" && coverage.severity === "none") {
     const [observed] =
-      yield* sql`SELECT 1 FROM watchdog_progress WHERE singleton=1 AND failed=0 AND unsupported=0 AND unknown=0 AND shared_observed=3 AND NOT EXISTS(SELECT 1 FROM lifetime_registry WHERE retired=0 AND observed_ms=0)`;
+      yield* sql`SELECT 1 FROM watchdog_progress WHERE singleton=1 AND failed=0 AND unsupported=0 AND unknown=0 AND shared_observed=2 AND NOT EXISTS(SELECT 1 FROM directory_recovery WHERE due_ms<=watchdog_progress.scheduled) AND NOT EXISTS(SELECT 1 FROM lifetime_registry WHERE retired=0 AND recovery_seeded=0)`;
 
     if (observed !== undefined) {
       yield* Effect.logInfo({

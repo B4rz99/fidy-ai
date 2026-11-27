@@ -211,6 +211,7 @@ import {
 import { browserSessionRequest } from "./internal/browser-session";
 import { localChannelRequest, redeemLocalPairing } from "../browser-login/operations";
 import { completeLocalBootstrap } from "./internal/bootstrap";
+import { OwnerWorkRecovery } from "../maintenance/work-recovery";
 
 import {
   cancelLocalSubscription,
@@ -248,7 +249,11 @@ import {
   storeTransactionUrl,
 } from "../runtime/sqlite/contract";
 
-import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
+import {
+  idleRecoveryResponse,
+  ownerCheckRequest,
+  ownerCheckResponse,
+} from "../maintenance/contract";
 
 const uncertainCheckStatus = 503;
 
@@ -308,6 +313,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     return sandboxConnectionAdapters({ environment: this.env, userId: this.ctx.id.name ?? "" });
   }
   private readonly runtime;
+  private readonly recovery;
   private erased = false;
   private mcp?: McpResidency;
   private protocol(request: Request, owns: (id: string) => boolean): Promise<Response> {
@@ -371,6 +377,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   }
   constructor(state: DurableObjectState, env: UserStoreEnvironment) {
     super(state, env);
+    this.recovery = new OwnerWorkRecovery(state, env.MAINTENANCE);
     this.runtime = ManagedRuntime.make(
       Layer.mergeAll(
         Layer.succeed(HostedPauseNotice, nativePauseNotice),
@@ -514,7 +521,15 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     if (this.erased) return Promise.resolve();
 
     return this.registration().then((registration) =>
-      registration === "registered" ? this.checkWork() : undefined
+      registration === "registered"
+        ? this.runtime.runPromise(
+            this.recovery.run(
+              () => this.checkWork(),
+              () => true,
+              true
+            )
+          )
+        : undefined
     );
   }
 
@@ -623,7 +638,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   private erasedResponse(request: Request): Promise<Response> {
     if (request.url === betaUserUrl) return Promise.resolve(new Response(null, { status: 404 }));
 
-    if (ownerCheckRequest(request)) return Promise.resolve(ownerCheckResponse());
+    if (ownerCheckRequest(request)) return Promise.resolve(idleRecoveryResponse());
 
     if (
       request.method === "POST" &&
@@ -702,7 +717,26 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           return new Response(null, { status: uncertainCheckStatus });
         }
 
-        return this.registeredRequest(request, registration === "registered");
+        if (ownerCheckRequest(request)) {
+          return registration === "registered"
+            ? this.runtime.runPromise(
+                this.recovery.inspect(() =>
+                  this.inspectWork(request.headers.get("fidy-workflow-sample") === "1")
+                )
+              )
+            : Promise.resolve(idleRecoveryResponse());
+        }
+
+        if (registration !== "registered") return this.registeredRequest(request, false);
+
+        return this.runtime.runPromise(
+          this.recovery
+            .run(
+              () => this.registeredRequest(request, true),
+              (response) => response.ok
+            )
+            .pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
+        );
       },
       () => canonicalAdmissionUnavailable()
     );
@@ -1349,15 +1383,6 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
         )
       );
-    }
-
-    return this.workStatus(request, registered);
-  }
-  private workStatus(request: Request, registered: boolean): Promise<Response> {
-    if (ownerCheckRequest(request)) {
-      return registered
-        ? this.inspectWork(request.headers.get("fidy-workflow-sample") === "1")
-        : Promise.resolve(ownerCheckResponse());
     }
 
     return Promise.resolve(new Response(null, { status: 404 }));

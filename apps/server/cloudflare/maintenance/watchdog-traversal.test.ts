@@ -129,12 +129,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       );
       yield* fixture.exec("UPDATE watchdog_progress SET minute=minute-1");
       expect(yield* fixture.tick(start + 120000)).toBe(204);
+      const stillRecent = yield* fixture.ledger;
+      expect(stillRecent.names.slice(next.names.length)).toEqual([...shared, user(2)]);
+
+      yield* fixture.exec("UPDATE watchdog_progress SET minute=minute-1");
+      expect(yield* fixture.tick(start + 180000)).toBe(204);
       const due = yield* fixture.ledger;
-      expect(due.names.slice(next.names.length)).toEqual([...shared, user(1), user(2)]);
+      expect(due.names.slice(stillRecent.names.length)).toEqual([...shared, user(1), user(2)]);
 
       yield* fixture.exec("UPDATE lifetime_registry SET observed_ms=?", start + 120000);
       yield* fixture.exec("UPDATE watchdog_progress SET minute=minute-1");
-      expect(yield* fixture.tick(start + 180000)).toBe(204);
+      expect(yield* fixture.tick(start + 240000)).toBe(204);
       expect((yield* fixture.ledger).names.slice(due.names.length)).toEqual(shared);
       expect(yield* fixture.exec("SELECT halt FROM watchdog_progress")).toEqual([
         { halt: "recent" },

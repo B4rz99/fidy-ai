@@ -4,7 +4,7 @@ Each User stores accepted intent, original deadlines, checkpoints and outcomes i
 
 ## Maintenance cadence
 
-Core invokes the shared Maintenance watchdog every minute. It checks the shared owners and traverses due Users in bounded pages. A successful User inspection covers the following scheduled minute, which reduces repeated SQLite reads while new Users and failed inspections remain eligible. Each owner checks its own pending families and preserves its earliest alarm. User alarms recover receipts, provider reconciliation, recurring evaluations, reminders, eligible weekly work, financial work, and private byte retention. Directory reclaims expired bootstrap proofs and capacity slots. Erasure independently checks outstanding custody.
+Core invokes the shared Maintenance watchdog every minute. It checks the shared owners and traverses due Users in bounded pages. A successful User inspection covers the next two scheduled minutes, which reduces repeated SQLite reads while new Users and failed inspections remain eligible. Each owner checks its own pending families and preserves its earliest alarm. User alarms recover receipts, provider reconciliation, recurring evaluations, reminders, eligible weekly work, financial work, and private byte retention. Directory reclaims expired bootstrap proofs and capacity slots. Erasure independently checks outstanding custody.
 
 The native minute watchdog measures time since registered Users were observed and the last
 completed traversal. Coverage warns after five minutes and becomes critical after ten. A failed

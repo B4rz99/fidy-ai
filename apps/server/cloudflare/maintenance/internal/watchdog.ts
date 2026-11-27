@@ -15,6 +15,8 @@ const concurrency = 5;
 
 const minuteMs = 60_000;
 
+const recentUserInspectionMs = 2 * minuteMs;
+
 const tickMs = 55_000;
 
 const probeMs = 1_000;
@@ -408,7 +410,7 @@ export const runWatchdog = Effect.fn(function* (
   const sql = yield* SqliteClient;
   const started = yield* Clock.currentTimeMillis;
   const minute = Math.floor(started / minuteMs);
-  const dueBefore = scheduled - minuteMs;
+  const dueBefore = scheduled - recentUserInspectionMs;
 
   const claimed =
     yield* sql`UPDATE watchdog_progress SET minute=${minute},scheduled=${scheduled},started_ms=CASE WHEN started_ms=0 THEN ${started} ELSE started_ms END,halt='running',

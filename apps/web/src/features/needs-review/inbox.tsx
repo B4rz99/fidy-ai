@@ -27,7 +27,7 @@ export type InboxProps = Readonly<{
   filter: Filter;
   selected: Option.Option<Item["id"]>;
   checked: ReadonlyArray<Item["id"]>;
-  choose: (item: Item) => void;
+  choose: (item: Item, button: HTMLButtonElement) => void;
   toggle: (item: Item) => void;
   page: number;
   pageLength: number;
@@ -124,7 +124,7 @@ const ReviewRow = ({ item, props }: Readonly<{ item: Item; props: InboxProps }>)
         aria-label={`Abrir ${sources[item.source]} ${reference}`}
         aria-describedby={description}
         data-review="row-content"
-        onClick={() => props.choose(item)}
+        onClick={(event) => props.choose(item, event.currentTarget)}
         aria-current={Option.contains(props.selected, item.id) ? "true" : undefined}
       >
         <span className="grid min-w-0 gap-2">

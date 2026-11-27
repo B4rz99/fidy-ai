@@ -101,7 +101,7 @@ export const ApplicationShell = ({
 
   return (
     <ApplicationSurface>
-      <aside className="signed-in-sidebar application-sidebar">
+      <aside className="application-sidebar">
         <SignedInBrand readOnly={readOnly} />
         {desktop ? (
           <div className="application-desktop-navigation">

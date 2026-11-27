@@ -21,14 +21,24 @@ import { ReviewToolbar } from "./toolbar";
 import { useAtomValue } from "@effect/atom-react";
 import { Navigate, useRouter, useSearch } from "@tanstack/react-router";
 import { Option, Predicate } from "effect";
-import { type JSX, type ReactNode, type RefCallback, useContext, useId, useState } from "react";
+import {
+  type JSX,
+  type ReactNode,
+  type Ref,
+  type RefCallback,
+  useContext,
+  useId,
+  useState,
+} from "react";
 import { Toaster, toast } from "sonner";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { ReviewEditor } from "./editor";
-import { Inbox, ReviewPagination } from "./inbox";
-import { type Workspace, sources } from "./model";
+import { Inbox, type InboxProps, ReviewPagination } from "./inbox";
+import { type Item, type Workspace, sources } from "./model";
+import { MobileReviewDetail } from "./mobile-detail";
+import { useMobileReviewDetail } from "./mobile-detail-state";
 import { WorkspacePreviewContext } from "./fixture-context";
 import { type Filter, ReviewNavigation } from "./view-navigation";
 import { reviewWorkspaceQueries } from "./query";
@@ -321,6 +331,7 @@ const ReviewReadFailure = ({
 );
 
 type ReadyInboxProps = Readonly<{
+  active: boolean;
   children: ReactNode;
   filter: Filter;
   select: (status: Filter, offset: number) => void;
@@ -376,13 +387,8 @@ const useSelectionScope = (
   };
 };
 
-const ReadyInbox = ({
-  active,
-  ...props
-}: ReadyInboxProps &
-  Readonly<{
-    active: boolean;
-  }>): JSX.Element => {
+const ReadyInbox = (props: ReadyInboxProps): JSX.Element => {
+  const { active } = props;
   const [displayed, setDisplayed] = useState(active);
 
   if (active && !displayed) setDisplayed(true);
@@ -407,6 +413,7 @@ const useReviewFilters = (): ReviewFilters => {
 };
 
 const ReadyInboxView = ({
+  active,
   children,
   workspaceQuery,
   decisions,
@@ -417,7 +424,8 @@ const ReadyInboxView = ({
   filter,
   select,
 }: ReadyInboxProps): JSX.Element => {
-  const { source, setSource, search, setSearch } = useReviewFilters();
+  const reviewFilters = useReviewFilters();
+  const { source, search } = reviewFilters;
   const context = useReviewPageContext({ filter, page, items: view.items });
   const visible = filterReviewPage({ view, source, search, page, contexts: context.contexts });
   const inbox = useInboxControl({ view, visibleItems: visible.items, decisions });
@@ -430,6 +438,7 @@ const ReadyInboxView = ({
       {view.items.length === 0 || !context.loading ? children : null}
       {notice}
       <ReviewNavigation
+        {...reviewFilters}
         sourceId={scope.sourceId}
         contextFeedback={<SourceContextFeedback context={context} />}
         unavailable={false}
@@ -437,10 +446,6 @@ const ReadyInboxView = ({
         select={scope.select}
         count={Option.some(view.pendingCount)}
         refresh={control.recover}
-        source={source}
-        setSource={setSource}
-        search={search}
-        setSearch={setSearch}
       />
       <ReviewToolbar
         sourceId={scope.sourceId}
@@ -451,6 +456,7 @@ const ReadyInboxView = ({
         control={control}
       />
       <InboxWorkspace
+        active={active}
         unfilteredItems={view.items}
         contexts={context.contexts}
         originalDeadlines={context.deadlines}
@@ -461,7 +467,7 @@ const ReadyInboxView = ({
         view={visible}
         control={control}
         page={page}
-        move={scope.move}
+        scope={scope}
         pageLength={view.items.length}
       />
     </>
@@ -507,6 +513,7 @@ const EmptyInbox = ({
   );
 
 type InboxWorkspaceProps = Readonly<{
+  active: boolean;
   originalDeadlines: ReadonlyMap<string, Workspace["items"][number]["expiresAt"]>;
   unfilteredItems: ReadonlyArray<Workspace["items"][number]>;
   contexts: PageContexts;
@@ -517,27 +524,79 @@ type InboxWorkspaceProps = Readonly<{
   view: Workspace;
   control: InboxControl;
   page: number;
-  move: (offset: number) => void;
+  scope: Pick<SelectionScope, "move" | "sourceId">;
   pageLength: number;
 }>;
 
-const InboxWorkspace = ({
-  originalDeadlines,
+const InboxWorkspace = (props: InboxWorkspaceProps): JSX.Element => {
+  const { view, control } = props;
+
+  const item = Option.fromUndefinedOr(
+    view.items.find(({ id }) => Option.contains(control.selected, id)) ?? view.items[0]
+  );
+
+  const detail = useMobileReviewDetail({
+    available: props.active && Option.isSome(item),
+    select: control.choose,
+    returnFocusId: props.scope.sourceId,
+  });
+
+  const editor = Option.match(item, {
+    onNone: () => null,
+    onSome: (selected) => (
+      <ReviewEditor
+        workspaceQuery={props.workspaceQuery}
+        key={selected.id}
+        item={selected}
+        originalExpiresAt={props.originalDeadlines.get(selected.id) ?? selected.expiresAt}
+        decisions={control.decisions}
+        disabled={control.locked}
+      />
+    ),
+  });
+
+  return (
+    <>
+      <InboxContent {...props} item={item} choose={detail.choose} grid={detail.grid}>
+        {detail.mobile ? null : editor}
+      </InboxContent>
+      {detail.mobile ? (
+        <MobileReviewDetail
+          item={item}
+          open={detail.open}
+          onClose={detail.close}
+          returnFocus={props.active ? detail.returnFocus : Option.none}
+        >
+          {editor}
+        </MobileReviewDetail>
+      ) : null}
+    </>
+  );
+};
+
+const InboxContent = ({
+  children,
+  grid,
+  item,
+  choose,
   unfilteredItems,
   contexts,
   contextLoading,
-  workspaceQuery,
   filters,
   freshness,
   view,
   control,
   page,
-  move,
+  scope: { move },
   pageLength,
-}: InboxWorkspaceProps): JSX.Element => {
-  const item = view.items.find(({ id }) => Option.contains(control.selected, id)) ?? view.items[0];
-
-  if (item === undefined) {
+}: InboxWorkspaceProps &
+  Pick<InboxProps, "choose"> &
+  Readonly<{
+    children: ReactNode;
+    grid: Ref<HTMLDivElement>;
+    item: Option.Option<Item>;
+  }>): JSX.Element => {
+  if (Option.isNone(item)) {
     return (
       <>
         <EmptyInbox
@@ -553,29 +612,22 @@ const InboxWorkspace = ({
   }
 
   return (
-    <div data-review="grid">
+    <div ref={grid} data-review="grid">
       <Inbox
         unfilteredItems={unfilteredItems}
         contexts={contexts}
         contextLoading={contextLoading}
         view={view}
         filter={filters.filter}
-        selected={Option.some(item.id)}
+        selected={Option.some(item.value.id)}
         checked={control.checked}
-        choose={control.choose}
+        choose={choose}
         toggle={control.toggle}
         page={page}
         pageLength={pageLength}
         move={move}
       />
-      <ReviewEditor
-        workspaceQuery={workspaceQuery}
-        key={item.id}
-        item={item}
-        originalExpiresAt={originalDeadlines.get(item.id) ?? item.expiresAt}
-        decisions={control.decisions}
-        disabled={control.locked}
-      />
+      {children}
     </div>
   );
 };

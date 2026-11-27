@@ -33,11 +33,24 @@ jobs:
         run: |
           umask 077
           diagnostic_path="$(mktemp)"
-          trap 'rm -f "$diagnostic_path"' EXIT
+          tail_path="$(mktemp)"
+          timeout --signal=INT 45s bun run --silent wrangler tail alchemy-state-store --format json > "$tail_path" 2>&1 &
+          tail_pid=$!
+          trap 'kill -INT "$tail_pid" 2>/dev/null || true; rm -f "$diagnostic_path" "$tail_path"' EXIT
           if bun ../../node_modules/alchemy/bin/alchemy.js state logs --backend cloudflare --profile ci --limit 50 --since 1h --no-input > "$diagnostic_path" 2>&1; then
             echo "State-store log query succeeded."
           else
             echo "State-store log query failed."
           fi
-          pattern='State store listStacks failed|RpcCallError|SecretNotFound|Secrets Worker: Failed to fetch secret|Failed to fetch secret|Secrets Store|Invalid key length|InvalidAccessError|DataError|TypeError|RangeError|ReferenceError|SyntaxError|NotFoundError|CloudflareInternalError|InternalError|Unauthorized|Forbidden|not authorized|permission denied|no log entries|Durable Object[^.]{0,3}(was reset|is overloaded|not found)|WorkerHasNoVersions|NoSuchMethod|method not found|root DO|No such module|Cannot find module|InvalidArgument'
+          sleep 5
+          if bun ../../node_modules/alchemy/bin/alchemy.js state list --backend cloudflare --profile ci --no-input >> "$diagnostic_path" 2>&1; then
+            echo "State-store list succeeded."
+          else
+            echo "State-store list failed."
+          fi
+          sleep 3
+          pattern='State store listStacks failed|RpcCallError|SecretNotFound|Secrets Worker: Failed to fetch secret|Failed to fetch secret|Secrets Store|Invalid key length|InvalidAccessError|DataError|TypeError|RangeError|ReferenceError|SyntaxError|NotFoundError|CloudflareInternalError|InternalError|Unauthorized|Forbidden|not authorized|permission denied|no log entries|Durable Object[^.]{0,3}(was reset|is overloaded|not found)|WorkerHasNoVersions|NoSuchMethod|method not found|root DO|No such module|Cannot find module|InvalidArgument|Connected to alchemy-state-store|exception|exceeded CPU|exceeded memory|Illegal invocation|not a function|not a constructor|is not defined|Cannot read properties of undefined|storage failure|storage error|overloaded|reset because|runtime updated|AES-CTR'
+          echo "Historical logs and state read"
           sort -u < <(grep -oEi "$pattern" "$diagnostic_path" || true)
+          echo "Live tail"
+          sort -u < <(grep -oEi "$pattern" "$tail_path" || true)

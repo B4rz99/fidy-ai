@@ -1,6 +1,7 @@
 import { Link, useRouter } from "@tanstack/react-router";
 import { DateTime, Option } from "effect";
 import { type JSX, type Ref, useRef, useState } from "react";
+import { cn } from "@/ui/class-names";
 import { Button } from "@/ui/components/button";
 import { buttonVariants } from "@/ui/components/button-variants";
 import {
@@ -306,7 +307,7 @@ const ViewTransaction = ({
         recurringTransactionOrigin: { binding: sessionBinding, month, transactionId },
       })}
       data-slot="button"
-      className={buttonVariants({ variant: "outline" })}
+      className={cn(buttonVariants({ variant: "outline" }))}
       aria-label={label}
     >
       Ver transacción

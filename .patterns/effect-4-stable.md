@@ -1,7 +1,7 @@
 # Selected stable Effect source
 
-The application uses exact **effect@4.1.4**, coordinated platform/SQL/Atom packages at
-4.1.4 and **alchemy@2.0.0-beta.87**. Topic notes cite source files and symbols in these selected
+The application uses exact **effect@4.1.5**, coordinated platform/SQL/Atom packages at
+4.1.5 and **alchemy@2.0.0-beta.87**. Topic notes cite source files and symbols in these selected
 packages. Verify against the installed release before adopting an upstream example; matching
 package version strings alone do not establish identical source.
 
@@ -20,7 +20,7 @@ a newer behavior exists in the pinned application. `.repos/alchemy` remains an o
 the installed core and Cloudflare provider sources define the selected behavior. The retained
 Cloudflare patch handles retirement when the parent queue is already gone.
 For a fresh checkout, install the admitted frozen graph first. Published source is also
-available at `https://unpkg.com/effect@4.1.4/src/<module>.ts` and
+available at `https://unpkg.com/effect@4.1.5/src/<module>.ts` and
 `https://unpkg.com/alchemy@2.0.0-beta.87/src/<module>.ts`.
 
 | Topic                    | Current public namespace / source                                                               |

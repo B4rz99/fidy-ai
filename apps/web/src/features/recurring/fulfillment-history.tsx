@@ -114,7 +114,7 @@ export const FulfillmentHistory = ({
   return (
     <section className="grid gap-3" aria-label="Seguimiento de la ocurrencia">
       {records.length > 0 ? (
-        <h3 ref={heading} tabIndex={-1} className="font-medium">
+        <h3 ref={heading} tabIndex={-1} className="font-semibold">
           Seguimiento de esta fecha
         </h3>
       ) : null}
@@ -307,7 +307,7 @@ const ViewTransaction = ({
         recurringTransactionOrigin: { binding: sessionBinding, month, transactionId },
       })}
       data-slot="button"
-      className={cn(buttonVariants({ variant: "outline" }))}
+      className={cn(buttonVariants({ variant: "outline", contentLayout: "wrap" }))}
       aria-label={label}
     >
       Ver transacción

@@ -3,6 +3,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useSearch } from "@tanstack/react-router";
 import { type Data, Option, Predicate } from "effect";
 import type { JSX } from "react";
+import { cn } from "@/ui/class-names";
 import { useRecurringTransactionMonth } from "@/browser/recurring-transaction-origin";
 import type { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
@@ -14,7 +15,7 @@ export const RecurringReturnLink = ({ month }: Readonly<{ month: string }>): JSX
     to="/app/recurring"
     search={{ month }}
     state={(previous) => ({ ...previous, recurringTransactionOrigin: undefined })}
-    className={buttonVariants({ variant: "link", size: "label" })}
+    className={cn(buttonVariants({ variant: "link", size: "label", contentLayout: "wrap" }))}
   >
     <HugeiconsIcon icon={ArrowLeft01Icon} size={20} strokeWidth={1.5} aria-hidden="true" />
     Volver a Recurrentes

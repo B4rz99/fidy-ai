@@ -1,4 +1,4 @@
-name: Trace Alchemy state-store Worker
+name: Restore uninstrumented Alchemy state-store Worker
 
 on:
   pull_request:
@@ -73,31 +73,6 @@ jobs:
               'Effect.flatMap((ns) => Option.isNone(ns) ? Effect.die(new Error("Existing state-store Durable Object namespace required")) : Effect.succeed(ns.value.useSqlite === false ? "legacy-kv" as const : "sqlite" as const)),',
             );
           });
-          edit("StateStore/Api.ts", (text) => exact(text,
-            'Effect.tapError((error) => Effect.logError(`State store ${operation} failed`, error)),',
-            `Effect.tapError((error) => Effect.sync(() => {
-              if (operation !== "listStacks") return;
-              const cause = typeof error === "object" && error !== null && "cause" in error ? error.cause : error;
-              const detail =
-                typeof cause === "object" && cause !== null && "message" in cause
-                  ? String(cause.message)
-                  : typeof cause === "string" ? cause : String(error);
-              const safe = detail.replace(/https?:\\/\\/\\S+/gu, "[url]")
-                .replace(/[a-z0-9_=+/-]{20,}/giu, "[identifier]")
-                .replace(/[^\\x20-\\x7e]/gu, " ").slice(0, 220);
-              console.error("fidy-state-probe rpc: " + safe);
-            })),`,
-          ));
-          edit("StateStore/Store.ts", (text) => {
-            const started = exact(text, "const keyHex = yield* encryptionSecret",
-              'console.info("fidy-state-probe instance start");\n      const keyHex = yield* encryptionSecret');
-            const read = exact(started, "const cryptoKey = yield* Effect.tryPromise",
-              'console.info("fidy-state-probe key read");\n      const cryptoKey = yield* Effect.tryPromise');
-            const imported = exact(read, "const encryptValue = (value: unknown)",
-              'console.info("fidy-state-probe key imported");\n      const encryptValue = (value: unknown)');
-            return exact(imported, "const entries = yield* storage.list<number>",
-              'console.info("fidy-state-probe storage list entered");\n          const entries = yield* storage.list<number>');
-          });
           JS
       - name: Rebuild the Worker and read its stack index
         working-directory: infra/cloudflare
@@ -108,10 +83,43 @@ jobs:
           trap 'rm -f "$state_index"' EXIT
           bun ../../node_modules/alchemy/bin/alchemy.js state bootstrap --backend cloudflare --profile ci --force --no-input
           if bun ../../node_modules/alchemy/bin/alchemy.js state list --backend cloudflare --profile ci --no-input > "$state_index" 2>&1; then
-            echo "The rebuilt state store serves its stack index."
+            echo "The restored Worker can read the stack index."
           else
-            grep -oE "State store failed to listStacks \([A-Za-z0-9_]+\)" "$state_index" || true
+            grep -oE "State store failed to listStacks \([A-Za-z0-9_]+\)" "$state_index"
           fi
-          sleep 5
-          bun ../../node_modules/alchemy/bin/alchemy.js state logs --backend cloudflare --profile ci --limit 100 --since 2m --no-input > "$state_index" 2>&1
-          grep -oE 'fidy-state-probe .{1,230}' "$state_index" | sort -u
+      - name: Report daily row-read totals by Durable Object namespace
+        shell: bash
+        run: |
+          bun - <<'JS'
+          const account = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const headers = { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` };
+          const base = `https://api.cloudflare.com/client/v4/accounts/${account}`;
+          const now = Date.now();
+          const date = (ago) => new Date(now - ago * 86400000).toISOString().slice(0, 10);
+          const query = `{viewer{accounts(filter:{accountTag:"${account}"}){rows:durableObjectsPeriodicGroups(filter:{date_geq:"${date(2)}", date_leq:"${date(0)}"},limit:200,orderBy:[sum_rowsRead_DESC]){dimensions{date namespaceId}sum{rowsRead rowsWritten}}}}}`;
+          const [stats, namespaces] = await Promise.all([
+            fetch("https://api.cloudflare.com/client/v4/graphql", {
+              method: "POST",
+              headers: { ...headers, "content-type": "application/json" },
+              body: JSON.stringify({ query }),
+            }),
+            fetch(base + "/workers/durable_objects/namespaces?per_page=100", { headers }),
+          ]);
+          const result = await stats.json();
+          const message = result.errors?.[0]?.message;
+          if (message) console.log("Analytics:", String(message).replace(/[a-f0-9]{24,}/gi, "[id]").slice(0, 240));
+          const rows = result.data?.viewer?.accounts?.[0]?.rows ?? [];
+          const registry = (await namespaces.json()).result;
+          const names = new Map((Array.isArray(registry) ? registry : []).map(entry => [
+            entry.id, entry.script + "/" + entry.class,
+          ]));
+          console.log("Analytics HTTP", stats.status, "rows", rows.length, "namespaces HTTP", namespaces.status);
+          for (const day of [date(0), date(1), date(2)]) {
+            const daily = rows.filter(entry => entry.dimensions.date === day);
+            const total = daily.reduce((sum, entry) => sum + Number(entry.sum.rowsRead), 0);
+            console.log(day, "reported reads", total);
+            for (const { dimensions, sum } of daily.slice(0, 8)) {
+              console.log(names.get(dimensions.namespaceId) ?? "Unknown namespace", sum.rowsRead, "reads", sum.rowsWritten, "writes");
+            }
+          }
+          JS

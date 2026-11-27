@@ -341,12 +341,14 @@ const scanUsers = Effect.fnUntraced(function* ({
   bindings,
   window,
   shared,
+  dueBefore,
   deadline,
   pending,
 }: Readonly<{
   bindings: SharedBindings;
   window: typeof Window.Type;
   shared: Target[];
+  dueBefore: number;
   deadline: number;
   pending: Set<Promise<unknown>>;
 }>) {
@@ -358,7 +360,7 @@ const scanUsers = Effect.fnUntraced(function* ({
     const limit = Math.min(pageSize, remaining);
 
     const page = yield* Schema.decodeUnknownEffect(Schema.Array(Entry))(
-      yield* sql`SELECT user_id FROM lifetime_registry WHERE retired=0 AND user_id>${cursor} AND user_id<=${window.last_user}
+      yield* sql`SELECT user_id FROM lifetime_registry WHERE retired=0 AND (observed_ms=0 OR observed_ms<${dueBefore}) AND user_id>${cursor} AND user_id<=${window.last_user}
         ORDER BY user_id LIMIT ${limit}`
     );
 
@@ -383,6 +385,10 @@ const scanUsers = Effect.fnUntraced(function* ({
     cursor = next.cursor;
     remaining -= page.length;
 
+    if (remaining === maximumUsers && cursor === "" && window.last_user !== "") {
+      return "recent" as const;
+    }
+
     if (page.length < limit || cursor === window.last_user) {
       const wrapped = yield* Clock.currentTimeMillis;
       yield* sql`UPDATE watchdog_progress SET cursor='',wraps=wraps+1,wrapped_at=${wrapped} WHERE singleton=1`;
@@ -402,11 +408,15 @@ export const runWatchdog = Effect.fn(function* (
   const sql = yield* SqliteClient;
   const started = yield* Clock.currentTimeMillis;
   const minute = Math.floor(started / minuteMs);
+  const dueBefore = scheduled - minuteMs;
 
   const claimed =
     yield* sql`UPDATE watchdog_progress SET minute=${minute},scheduled=${scheduled},started_ms=CASE WHEN started_ms=0 THEN ${started} ELSE started_ms END,halt='running',
     shared_observed=0,admitted=0,attempted=0,observed=0,failed=0,unsupported=0,unknown=0,repaired=0
-    WHERE singleton=1 AND minute<${minute} AND scheduled<${scheduled} RETURNING cursor,defer_fixed,coalesce((SELECT max(user_id) FROM lifetime_registry WHERE retired=0),'') AS last_user,coalesce((SELECT user_id FROM lifetime_registry WHERE retired=0 AND user_id>watchdog_progress.sample_cursor ORDER BY user_id LIMIT 1),(SELECT user_id FROM lifetime_registry WHERE retired=0 ORDER BY user_id LIMIT 1),'') AS sample_user`;
+    WHERE singleton=1 AND minute<${minute} AND scheduled<${scheduled}
+    RETURNING cursor,defer_fixed,coalesce((SELECT max(user_id) FROM lifetime_registry WHERE retired=0),'') AS last_user,
+      coalesce((SELECT user_id FROM lifetime_registry WHERE retired=0 AND (observed_ms=0 OR observed_ms<${dueBefore}) AND user_id>watchdog_progress.sample_cursor ORDER BY user_id LIMIT 1),
+        (SELECT user_id FROM lifetime_registry WHERE retired=0 AND (observed_ms=0 OR observed_ms<${dueBefore}) ORDER BY user_id LIMIT 1),'') AS sample_user`;
 
   if (claimed.length === 0) return "coalesced" as const;
   const [window] = yield* Schema.decodeUnknownEffect(Schema.Tuple([Window]))(claimed);
@@ -418,6 +428,7 @@ export const runWatchdog = Effect.fn(function* (
     bindings,
     window,
     shared: defer ? [] : shared,
+    dueBefore,
     deadline: defer ? deadline - probeMs - cleanupMs : deadline,
     pending,
   });

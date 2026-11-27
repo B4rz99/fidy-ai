@@ -104,6 +104,44 @@ const fleet = Effect.fn(function* () {
 });
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect("checks new and due Users while observing the shared owners every minute", () =>
+    Effect.gen(function* () {
+      const create = yield* fleet();
+      const fixture = yield* create("freshness");
+      const start = yield* Clock.currentTimeMillis;
+      const shared = ["directory-v1", "pricing", "erasure-registry-v1"];
+
+      yield* fixture.exec("INSERT INTO lifetime_registry(user_id) VALUES(?),(?)", user(1), user(2));
+      expect(yield* fixture.tick(start)).toBe(204);
+      const first = yield* fixture.ledger;
+      expect(first.names).toEqual([...shared, user(1), user(2)]);
+
+      yield* fixture.exec("INSERT INTO lifetime_registry(user_id) VALUES(?)", user(3));
+      yield* fixture.exec("UPDATE watchdog_progress SET minute=minute-1");
+      expect(yield* fixture.tick(start + 60000)).toBe(204);
+      const next = yield* fixture.ledger;
+      expect(next.names.slice(first.names.length)).toEqual([...shared, user(2), user(3)]);
+
+      yield* fixture.exec(
+        "UPDATE lifetime_registry SET observed_ms=? WHERE user_id=?",
+        start + 60000,
+        user(3)
+      );
+      yield* fixture.exec("UPDATE watchdog_progress SET minute=minute-1");
+      expect(yield* fixture.tick(start + 120000)).toBe(204);
+      const due = yield* fixture.ledger;
+      expect(due.names.slice(next.names.length)).toEqual([...shared, user(1), user(2)]);
+
+      yield* fixture.exec("UPDATE lifetime_registry SET observed_ms=?", start + 120000);
+      yield* fixture.exec("UPDATE watchdog_progress SET minute=minute-1");
+      expect(yield* fixture.tick(start + 180000)).toBe(204);
+      expect((yield* fixture.ledger).names.slice(due.names.length)).toEqual(shared);
+      expect(yield* fixture.exec("SELECT halt FROM watchdog_progress")).toEqual([
+        { halt: "recent" },
+      ]);
+    })
+  );
+
   test.effect(
     "reconstructs mid-traversal, isolates a lost reply and a failed owner, and wraps to registrations behind the cursor",
     () =>

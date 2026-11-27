@@ -127,7 +127,7 @@ const admittedStatus = 204;
 
 const pressureStatus = 429;
 
-const admitUnresolved = Effect.fn(function* (source: string) {
+const admitUnresolved = Effect.fn(function* (source: string, storage: DurableObjectStorage) {
   const sql = yield* SqliteClient;
 
   return yield* withStoreAdmission((admitGrowth) =>
@@ -142,7 +142,14 @@ const admitUnresolved = Effect.fn(function* (source: string) {
       const rows = yield* sql`INSERT INTO unresolved_source_buckets(subject,virtual_at_ms)
             VALUES (${source},${current + intervalMs}) ON CONFLICT(subject) DO UPDATE
             SET virtual_at_ms=max(virtual_at_ms,${current})+${intervalMs}
-            WHERE virtual_at_ms<=${current + (burst - 1) * intervalMs} RETURNING subject`;
+            WHERE virtual_at_ms<=${current + (burst - 1) * intervalMs} RETURNING virtual_at_ms`;
+
+      const [admitted] = rows;
+
+      if (admitted !== undefined) {
+        const expires = yield* Schema.decodeUnknownEffect(Schema.Int)(admitted.virtual_at_ms);
+        yield* preserveStoreAlarm(storage, expires);
+      }
 
       return new Response(null, {
         status: rows.length === 1 ? admittedStatus : pressureStatus,
@@ -177,9 +184,10 @@ const inspectPressure = Effect.fnUntraced(function* (
 
 const firstServerErrorStatus = 500;
 
-const readOnlyRequest = (request: Request): boolean =>
+const unreservedRequest = (request: Request): boolean =>
   isReadinessRequest(request) ||
   [
+    sourcePressureUrl,
     sessionRouteUrl,
     patRouteUrl,
     handoffInspectUrl,
@@ -313,6 +321,18 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
       return this.erasure(request);
     }
 
+    if (request.method === "POST" && request.url === sourcePressureUrl) {
+      return this.runtime.runPromise(
+        Effect.gen({ self: this }, function* () {
+          const source = yield* Effect.tryPromise(() => request.text());
+
+          if (!/^[a-f0-9]{64}$/u.test(source)) return new Response(null, { status: 400 });
+
+          return yield* admitUnresolved(source, this.ctx.storage);
+        })
+      );
+    }
+
     return this.runtime.runPromise(
       request.url === emailCapacityUrl || request.url === mediaCapacityUrl
         ? ingestionCapacityRequest(request, this.ctx.storage)
@@ -333,7 +353,7 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
 
     const invoke = (): Promise<Response> => this.applicationRequest(request);
 
-    const work = readOnlyRequest(request)
+    const work = unreservedRequest(request)
       ? Effect.tryPromise(invoke)
       : this.recovery.run(
           () =>
@@ -367,14 +387,6 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
 const credentialLookup = Effect.fn(function* (request: Request) {
   yield* (yield* StoreCapacity).observe;
   const sql = yield* SqliteClient;
-
-  if (request.url === sourcePressureUrl) {
-    const source = yield* Effect.tryPromise(() => request.text());
-
-    if (!/^[0-9a-f]{64}$/u.test(source)) return new Response(null, { status: 400 });
-
-    return yield* admitUnresolved(source);
-  }
 
   if (request.url === patRouteUrl) {
     const shortId = yield* Schema.decodeEffect(TokenShortId)(
@@ -469,7 +481,6 @@ const routingCommands = new Map<
   [whatsappOwnerUrl, whatsappOwner],
   [rejectInvitationSendUrl, rejectInvitationSend],
   [sessionRouteUrl, credentialLookup],
-  [sourcePressureUrl, credentialLookup],
   [patRouteUrl, credentialLookup],
   [oauthRouteCommandUrl, handleOAuthRouteCommand],
   [nativePATDirectoryUrl, handlePATDirectoryCommand],

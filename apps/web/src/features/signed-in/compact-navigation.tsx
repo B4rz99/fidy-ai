@@ -1,8 +1,18 @@
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, Menu01Icon } from "@hugeicons/core-free-icons";
-import type { JSX, ReactNode } from "react";
+import { type JSX, type PointerEvent, type ReactNode, useRef } from "react";
 import { ApplicationMenuAction, ApplicationWordmark } from "@/ui/components/application";
 import { SignedInNavigation } from "./navigation";
+
+const dismissBackdrop = (event: PointerEvent<HTMLDialogElement>): void => {
+  const dialog = event.currentTarget;
+
+  if (event.target !== dialog || Reflect.has(dialog, "closedBy")) return;
+
+  const bounds = dialog.getBoundingClientRect();
+
+  if (event.clientX < bounds.left || event.clientX >= bounds.right) dialog.close();
+};
 
 export const CompactNavigation = ({
   readOnly,
@@ -16,37 +26,50 @@ export const CompactNavigation = ({
   onLogout: () => void;
   reviewPendingCount: ReactNode;
   prepareNavigation: (destination: string) => void;
-}>): JSX.Element => (
-  <>
-    <div className="application-menu-control">
-      <ApplicationMenuAction popoverTarget="signed-in-navigation" aria-label="Menú de navegación">
-        <HugeiconsIcon
-          className="signed-in-menu-bars"
-          icon={Menu01Icon}
-          size={24}
-          strokeWidth={1.5}
-          aria-hidden="true"
-        />
-        <HugeiconsIcon
-          className="signed-in-menu-close"
-          icon={Cancel01Icon}
-          size={24}
-          strokeWidth={1.5}
-          aria-hidden="true"
-        />
-      </ApplicationMenuAction>
-    </div>
-    <div id="signed-in-navigation" className="signed-in-compact-navigation" popover="auto">
-      <div className="application-menu-brand">
-        <ApplicationWordmark />
+}>): JSX.Element => {
+  const drawer = useRef<HTMLDialogElement>(null);
+
+  return (
+    <>
+      <div className="application-menu-control">
+        <ApplicationMenuAction
+          type="button"
+          aria-label="Menú de navegación"
+          aria-haspopup="dialog"
+          aria-controls="signed-in-navigation"
+          onClick={(event) => {
+            event.currentTarget.focus();
+            drawer.current?.showModal();
+          }}
+        >
+          <HugeiconsIcon icon={Menu01Icon} size={24} strokeWidth={1.5} aria-hidden="true" />
+        </ApplicationMenuAction>
       </div>
-      <SignedInNavigation
-        readOnly={readOnly}
-        loggingOut={loggingOut}
-        onLogout={onLogout}
-        reviewPendingCount={reviewPendingCount}
-        prepareNavigation={prepareNavigation}
-      />
-    </div>
-  </>
-);
+      <dialog
+        ref={drawer}
+        id="signed-in-navigation"
+        aria-label="Menú de navegación"
+        closedby="any"
+        onPointerDown={dismissBackdrop}
+      >
+        <div className="application-menu-brand">
+          <ApplicationWordmark />
+          <ApplicationMenuAction
+            type="button"
+            aria-label="Cerrar menú"
+            onClick={() => drawer.current?.close()}
+          >
+            <HugeiconsIcon icon={Cancel01Icon} size={24} strokeWidth={1.5} aria-hidden="true" />
+          </ApplicationMenuAction>
+        </div>
+        <SignedInNavigation
+          readOnly={readOnly}
+          loggingOut={loggingOut}
+          onLogout={onLogout}
+          reviewPendingCount={reviewPendingCount}
+          prepareNavigation={prepareNavigation}
+        />
+      </dialog>
+    </>
+  );
+};

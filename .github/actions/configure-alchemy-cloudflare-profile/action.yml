@@ -9,9 +9,10 @@ runs:
 
     - name: Configure Alchemy's ephemeral Cloudflare profile
       shell: bash
+      working-directory: infra/cloudflare
       run: |
-        bunx alchemy profile create "$ALCHEMY_PROFILE" --no-input
-        bunx alchemy profile edit \
+        bun ../../node_modules/alchemy/bin/alchemy.js profile create "$ALCHEMY_PROFILE" --no-input
+        bun ../../node_modules/alchemy/bin/alchemy.js profile edit \
           --profile "$ALCHEMY_PROFILE" \
           --add Cloudflare \
           --method stored \

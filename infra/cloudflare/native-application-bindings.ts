@@ -1,5 +1,5 @@
 import { Hex } from "effect/encoding";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { type Output, map } from "alchemy/Output";
 import { Config, Effect, Option, Redacted, Schema } from "effect";
 import { ApprovedOpenAiModel } from "@fidy/server/hosted-inference-contract";
@@ -150,8 +150,9 @@ const accessRoles = {
   BetaProAccess: { name: "Fidy native beta Pro operator", path: "/internal/beta-pro" },
 } as const;
 
-const recoveryPin = map(Cloudflare.Access.getIdentityProvider({ type: "onetimepin" }), (provider) =>
-  Schema.decodeUnknownSync(Schema.String.check(Schema.isUUID()))(provider?.identityProviderId)
+const recoveryPin = map(
+  Cloudflare.Access.IdentityProvider.lookup({ type: "onetimepin" }).identityProviderId,
+  Schema.decodeUnknownSync(Schema.String.check(Schema.isUUID()))
 );
 
 const supportApplication = Effect.fn(function* (

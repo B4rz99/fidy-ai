@@ -1,4 +1,4 @@
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { Effect } from "effect";
 import { productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 import { freeTierWorkerObservability } from "./worker-observability";

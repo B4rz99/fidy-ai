@@ -3,8 +3,9 @@ import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import * as Alchemy from "alchemy";
 import * as Alchemist from "alchemy/Alchemist";
-import * as Cloudflare from "alchemy/Cloudflare";
-import { evalStack } from "alchemy/Stack";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { AuthProviders } from "alchemy/Auth";
+import { evalStack } from "alchemy/EvalStack";
 import { evaluate } from "alchemy/Output";
 import { FetchHttpClient } from "effect/http";
 import { ConfigProvider, Effect, Schema } from "effect";
@@ -135,5 +136,8 @@ it.effect("plans the production application on its canonical hosts with live pro
         expect(resources.some((node) => node.LogicalId.startsWith("ReleaseSmoke"))).toBe(false);
       }),
     { stage: "production" }
-  ).pipe(Effect.provide([Alchemist.layer(), Alchemy.inMemoryState()]));
+  ).pipe(
+    Effect.provideService(AuthProviders, {}),
+    Effect.provide([Alchemist.layer(), Alchemy.inMemoryState()])
+  );
 });

@@ -37,14 +37,19 @@
       "version": "2.0.0-beta.79",
       "revision": "1f251fa6a8bcbe4ea19e85fd64aedf00c814fd95",
       "revisionKind": "upstream-commit",
-      "provenance": "git subtree metadata in 52409ac4e8e3a06c909286aae788a8d09dfe7e4b; published beta.81 plus the retained patch is application authority.",
+      "provenance": "git subtree metadata in 52409ac4e8e3a06c909286aae788a8d09dfe7e4b.",
       "status": "historical"
     },
     "packages": [
       {
         "name": "alchemy",
         "manifest": "infra/cloudflare/package.json",
-        "version": "2.0.0-beta.81"
+        "version": "2.0.0-beta.87"
+      },
+      {
+        "name": "@alchemy.run/cloudflare",
+        "manifest": "infra/cloudflare/package.json",
+        "version": "2.0.0-beta.87"
       }
     ],
     "sourcePaths": [
@@ -54,8 +59,8 @@
     ],
     "patches": [
       {
-        "path": "patches/alchemy@2.0.0-beta.81.patch",
-        "sha256": "88e6d9c105ec22520125c3701bec274b81307415ff26f7b3ed5a16d9b5426aca"
+        "path": "patches/@alchemy.run%2Fcloudflare@2.0.0-beta.87.patch",
+        "sha256": "131bf4ac4a5deb9480690c000ce94506907569d27e4571ee78e7b213c565ef8b"
       }
     ]
   },

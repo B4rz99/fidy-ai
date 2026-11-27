@@ -1,7 +1,7 @@
 import { Credentials, apiTokenCredentials } from "@distilled.cloud/cloudflare/Credentials";
 import { putScript } from "@distilled.cloud/cloudflare/workers";
 import { it } from "@effect/vitest";
-import { Effect, Predicate, Schema } from "effect";
+import { Effect, Predicate, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { expect } from "vitest";
 import { freeTierWorkerObservability } from "./worker-observability";
@@ -60,7 +60,7 @@ it.effect("uploads query-redacted custom logs without automatic request invocati
       Effect.provideService(HttpClient.HttpClient, client),
       Effect.provideService(
         Credentials,
-        Effect.succeed(apiTokenCredentials({ apiToken: "test-only" }))
+        Effect.succeed(apiTokenCredentials({ apiToken: Redacted.make("test-only") }))
       )
     );
     expect(captured).toBe(true);

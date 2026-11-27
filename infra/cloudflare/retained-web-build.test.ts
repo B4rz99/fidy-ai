@@ -3,7 +3,8 @@ import * as Alchemist from "alchemy/Alchemist";
 import * as Apply from "alchemy/Apply";
 import * as Command from "alchemy/Command";
 import * as Plan from "alchemy/Plan";
-import { evalStack } from "alchemy/Stack";
+import { AuthProviders } from "alchemy/Auth";
+import { evalStack } from "alchemy/EvalStack";
 import { InMemoryService, State } from "alchemy/State";
 import { it } from "@effect/vitest";
 import { BunServices } from "@effect/platform-bun";
@@ -52,5 +53,9 @@ it.effect(
       yield* fs.makeDirectory(cwd + "/dist");
       yield* fs.writeFileString(cwd + "/dist/asset", "retained source");
       expect(yield* inspect(false)).toBe("noop");
-    }).pipe(Effect.provide([Alchemist.layer(), BunServices.layer]), Effect.scoped)
+    }).pipe(
+      Effect.provideService(AuthProviders, {}),
+      Effect.provide([Alchemist.layer(), BunServices.layer]),
+      Effect.scoped
+    )
 );

@@ -136,9 +136,7 @@
   },
   "packageManager": "bun@1.4.5",
   "patchedDependencies": {
-    "@distilled.cloud/cloudflare@1.0.0-rc.13": "patches/@distilled.cloud%2Fcloudflare@1.0.0-rc.13.patch",
-    "@distilled.cloud/aws@1.0.0-rc.13": "patches/@distilled.cloud-aws@1.0.0-rc.13.patch",
-    "alchemy@2.0.0-beta.81": "patches/alchemy@2.0.0-beta.81.patch",
-    "vitest@5.1.1": "patches/vitest@5.1.1.patch"
+    "vitest@5.1.1": "patches/vitest@5.1.1.patch",
+    "@alchemy.run/cloudflare@2.0.0-beta.87": "patches/@alchemy.run%2Fcloudflare@2.0.0-beta.87.patch"
   }
 }

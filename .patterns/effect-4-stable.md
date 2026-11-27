@@ -1,7 +1,7 @@
 # Selected stable Effect source
 
 The application uses exact **effect@4.1.4**, coordinated platform/SQL/Atom packages at
-4.1.4 and **alchemy@2.0.0-beta.81**. Topic notes cite source files and symbols in these selected
+4.1.4 and **alchemy@2.0.0-beta.87**. Topic notes cite source files and symbols in these selected
 packages. Verify against the installed release before adopting an upstream example; matching
 package version strings alone do not establish identical source.
 
@@ -17,10 +17,11 @@ sources are `node_modules/effect/src`, `node_modules/@effect/atom-react/src` and
 `.repos/effect` is refreshed to upstream main **f9f43352d6**, which declares 4.0.4 but differs from
 the published 4.0.4 source. Use it for upstream tests, examples, and investigation, not as proof that
 a newer behavior exists in the pinned application. `.repos/alchemy` remains an older snapshot;
-the installed beta.81 source plus `patches/alchemy@2.0.0-beta.81.patch` defines the selected behavior.
+the installed core and Cloudflare provider sources define the selected behavior. The retained
+Cloudflare patch handles retirement when the parent queue is already gone.
 For a fresh checkout, install the admitted frozen graph first. Published source is also
 available at `https://unpkg.com/effect@4.1.4/src/<module>.ts` and
-`https://unpkg.com/alchemy@2.0.0-beta.81/src/<module>.ts`; the latter does not contain Fidy's patch.
+`https://unpkg.com/alchemy@2.0.0-beta.87/src/<module>.ts`.
 
 | Topic                    | Current public namespace / source                                                               |
 | ------------------------ | ----------------------------------------------------------------------------------------------- |
@@ -47,12 +48,7 @@ available at `https://unpkg.com/effect@4.1.4/src/<module>.ts` and
 - `Terminal.make` requires a scoped `size` queue subscription, including in test fixtures.
 - `HttpClientRequest.method` accepts extension methods. Keep telemetry restricted to its
   closed catalog and omit the method attribute for an unrecognized method.
-- Alchemy retains its Distilled rc.13 provider graph. The AWS S3 patch uses
-  `Schema.UndefinedOr(Schema.String)` for Metadata record values: Effect 4.1 rejects
-  optional-key annotations on index signatures. Native release/retirement imports exercise
-  this eager schema even though production state remains Cloudflare-owned.
-- The beta.81 Alchemy patch also migrates its OAuth and platform service composition to
-  separate entropy/digest services, with generated declarations matching the runtime.
+- Alchemy beta.87 uses the Distilled rc.20 provider graph and Effect 4.1 crypto services upstream.
 
 - `Encoding` is gone. Use `Hex.encode`, `Hex.decode`, `Base64Url.encode`,
   `Base64Url.decode` and `Base64Url.decodeString`. Decoders still return Result, not throwing
@@ -74,15 +70,12 @@ available at `https://unpkg.com/effect@4.1.4/src/<module>.ts` and
   endpoint failures. The session registry remains the isolation boundary. React registry
   disposal remains delayed 500 ms; it is not credential revocation. Web transport/lifetime
   tests exercise these behaviors against the stable distribution.
-- With Bun, beta.81's `bin/cli.js` launcher forces its package TS config globally and loses
+- With Bun, beta.87's `bin/cli.js` launcher forces its package TS config globally and loses
   Fidy's `~` aliases. Invoke its `bin/alchemy.js` entrypoint directly with the pinned Bun;
   it calls the public main/runMain interfaces without a custom loader or fallback runtime.
   Real local-emulation tests exercise the actual stack and ingress-to-Core binding.
-- The retained beta.81 WorkerProvider patch validates stored `output.versionId` with
-  `workers.getScriptVersion` and carries the upload receipt forward. There is no beta.79
-  patch or alternate provider implementation. The patch also adds explicit deferred/cleanup-only
-  Apply phases through the public SDK; actual-engine fixture tests cover tracked generations,
-  dependency ordering and refusal before mutation. Import success is not live deployment parity.
+- The Cloudflare provider validates stored `output.versionId` with `workers.getScriptVersion`
+  and carries the verified upload receipt forward.
 
 The compiler uses @effect/tsgo 0.73.2. Its
 [`unstableApiUsage`](https://github.com/Effect-TS/tsgo/blob/main/docs/rules/unstable-api-usage.md)

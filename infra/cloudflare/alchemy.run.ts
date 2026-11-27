@@ -1,5 +1,5 @@
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { nativeApplication, nativeState } from "./native-application";
 import { nativeStack } from "./storage-installation";
 

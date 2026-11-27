@@ -1,0 +1,42 @@
+diff --git a/lib/Queues/Consumer.js b/lib/Queues/Consumer.js
+--- a/lib/Queues/Consumer.js
++++ b/lib/Queues/Consumer.js
+@@ -420,7 +420,7 @@
+             queueId: output.queueId,
+             consumerId: output.consumerId,
+         })
+-            .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.void));
++            .pipe(Effect.catchTag(["ConsumerNotFound", "QueueNotFound"], () => Effect.void));
+         // Block until Cloudflare's worker subsystem stops claiming
+         // the script as a queue consumer. Without this the
+         // sibling Worker.delete races on `QueueConsumerConflict`
+@@ -432,7 +432,7 @@
+             queueId: output.queueId,
+             consumerId: output.consumerId,
+         })
+-            .pipe(Effect.flatMap(() => Effect.fail("still-attached")), Effect.catchTag("ConsumerNotFound", () => Effect.void), Effect.retry({
++            .pipe(Effect.flatMap(() => Effect.fail("still-attached")), Effect.catchTag(["ConsumerNotFound", "QueueNotFound"], () => Effect.void), Effect.retry({
+             while: (e) => e === "still-attached",
+             schedule: Schedule.max([Schedule.spaced("1 second"), Schedule.recurs(30)]),
+         }), Effect.ignore);
+diff --git a/src/Queues/Consumer.ts b/src/Queues/Consumer.ts
+--- a/src/Queues/Consumer.ts
++++ b/src/Queues/Consumer.ts
+@@ -608,7 +608,7 @@
+           queueId: output.queueId,
+           consumerId: output.consumerId,
+         })
+-        .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.void));
++        .pipe(Effect.catchTag(["ConsumerNotFound", "QueueNotFound"], () => Effect.void));
+ 
+       // Block until Cloudflare's worker subsystem stops claiming
+       // the script as a queue consumer. Without this the
+@@ -623,7 +623,7 @@
+         })
+         .pipe(
+           Effect.flatMap(() => Effect.fail("still-attached" as const)),
+-          Effect.catchTag("ConsumerNotFound", () => Effect.void),
++          Effect.catchTag(["ConsumerNotFound", "QueueNotFound"], () => Effect.void),
+           Effect.retry({
+             while: (e) => e === "still-attached",
+             schedule: Schedule.max([Schedule.spaced("1 second"), Schedule.recurs(30)]),

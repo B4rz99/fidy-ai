@@ -1,17 +1,27 @@
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, Menu01Icon } from "@hugeicons/core-free-icons";
-import { type JSX, type PointerEvent, type ReactNode, useRef } from "react";
+import { type JSX, type ReactNode, useRef } from "react";
 import { ApplicationMenuAction, ApplicationWordmark } from "@/ui/components/application";
 import { SignedInNavigation } from "./navigation";
 
-const dismissBackdrop = (event: PointerEvent<HTMLDialogElement>): void => {
-  const dialog = event.currentTarget;
+const showNavigation = (dialog: HTMLDialogElement, trigger: HTMLButtonElement): void => {
+  trigger.focus();
+  dialog.showModal();
 
-  if (event.target !== dialog || Reflect.has(dialog, "closedBy")) return;
+  if (Reflect.has(dialog, "closedBy")) return;
 
-  const bounds = dialog.getBoundingClientRect();
+  const dismissBackdrop = (event: MouseEvent): void => {
+    if (event.target !== dialog) return;
 
-  if (event.clientX < bounds.left || event.clientX >= bounds.right) dialog.close();
+    const bounds = dialog.getBoundingClientRect();
+
+    if (event.clientX < bounds.left || event.clientX >= bounds.right) dialog.close();
+  };
+
+  dialog.addEventListener("click", dismissBackdrop);
+  dialog.addEventListener("close", () => dialog.removeEventListener("click", dismissBackdrop), {
+    once: true,
+  });
 };
 
 export const CompactNavigation = ({
@@ -38,20 +48,13 @@ export const CompactNavigation = ({
           aria-haspopup="dialog"
           aria-controls="signed-in-navigation"
           onClick={(event) => {
-            event.currentTarget.focus();
-            drawer.current?.showModal();
+            if (drawer.current !== null) showNavigation(drawer.current, event.currentTarget);
           }}
         >
           <HugeiconsIcon icon={Menu01Icon} size={24} strokeWidth={1.5} aria-hidden="true" />
         </ApplicationMenuAction>
       </div>
-      <dialog
-        ref={drawer}
-        id="signed-in-navigation"
-        aria-label="Menú de navegación"
-        closedby="any"
-        onPointerDown={dismissBackdrop}
-      >
+      <dialog ref={drawer} id="signed-in-navigation" aria-label="Menú de navegación" closedby="any">
         <div className="application-menu-brand">
           <ApplicationWordmark />
           <ApplicationMenuAction

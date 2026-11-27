@@ -40,6 +40,7 @@ export type ProviderViewState =
   | Readonly<{ status: "awaiting_chat" }>
   | Readonly<{ status: "recovery"; code: string }>
   | Readonly<{ status: "uncertain" }>
+  | Readonly<{ status: "popupBlocked" }>
   | Readonly<{ status: "refused" }>
   | Readonly<{ status: "cancelled" }>;
 
@@ -237,6 +238,9 @@ type ActiveAttempt = {
   provider: AuthenticationProvider;
   poll: ProviderPoll;
 };
+
+const canRetryProvider = (phase: ActiveAttempt["phase"]): boolean =>
+  phase === "popupBlocked" || phase === "refused" || phase === "cancelled";
 
 const isDOMException = Schema.is(Schema.instanceOf(DOMException));
 
@@ -581,11 +585,7 @@ const providerAdmission = (
     reserveStart: (binding) => {
       if (!matches(binding) || refuseExpiredAttempt(input, active)) return Option.none();
 
-      if (
-        active.phase !== "editing" &&
-        active.phase !== "refused" &&
-        active.phase !== "cancelled"
-      ) {
+      if (active.phase !== "editing" && !canRetryProvider(active.phase)) {
         return Option.none();
       }
 
@@ -677,7 +677,7 @@ const startProvider = ({
 
   if (popup === null) {
     if (!controller.matches(reservation.value)) return false;
-    controller.show({ status: "refused" });
+    controller.show({ status: "popupBlocked" });
 
     return true;
   }
@@ -792,7 +792,7 @@ const providerActions = ({
     mounted,
     start,
     retry: (): void => {
-      if (state.status !== "refused" && state.status !== "cancelled") return;
+      if (!canRetryProvider(state.status)) return;
       Option.map(retryInput, ({ provider, intent, revision }) => start(provider, intent, revision));
     },
     cancel: (): void => {

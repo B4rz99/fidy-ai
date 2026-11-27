@@ -21,7 +21,7 @@ export const failures: Readonly<Record<CliFailure["reason"], string>> = {
     "Proceso interrumpido durante el guardado local. El guardado terminó, pero el acceso puede haberse guardado sin mostrar confirmación. Comprueba fidy status antes de iniciar otra vinculación. No se deshizo el acceso guardado. " +
     recovery,
   UnsupportedRuntime:
-    "Este CLI requiere el Bun verificado 38afee6c8. Ejecuta bash scripts/install-bun.sh y usa ese ejecutable.",
+    "Este CLI requiere el Bun verificado a7733435c. Ejecuta bash scripts/install-bun.sh y usa ese ejecutable.",
   InvalidInput:
     "Uso: fidy login [--no-browser] [--recipient NOMBRE --scopes read,write,dashboard --lifetime DÍAS] | status | logout | commands | GRUPO OPERACIÓN [--input ARCHIVO|- | --CAMPO VALOR ...] [--json]. No mezcles fuentes, repitas flags ni uses nombres desconocidos. Usa GRUPO OPERACIÓN --help para consultar nombres, requisitos, opciones y entrada estructurada. Texto libre o sensible: archivo/stdin, no historial del shell.",
   StorageUnavailable:

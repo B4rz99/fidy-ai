@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-[[ "$(bun --revision)" == '1.4.4+38afee6c8' ]] || { echo 'Use the reviewed Bun runtime.' >&2; exit 1; }
+[[ "$(bun --revision)" == '1.4.5+a7733435c' ]] || { echo 'Use the reviewed Bun runtime.' >&2; exit 1; }
 case "$(uname -s)/$(uname -m)" in
   Linux/x86_64) target=linux-x64; executable=fidy ;;
   Darwin/arm64) target=darwin-arm64; executable=fidy ;;

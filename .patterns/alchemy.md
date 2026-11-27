@@ -3,7 +3,7 @@
 Use when declaring Cloudflare resources, connecting Worker bindings, or changing deployment state
 and release behavior. Public imports are `alchemy`, `alchemy/Cloudflare`, and `alchemy/Output`.
 
-API authority is installed `alchemy@2.0.0-beta.80`, including Fidy's retained patch, not the older
+API authority is installed `alchemy@2.0.0-beta.81`, including Fidy's retained patch, not the older
 `.repos/alchemy` snapshot. Selected sources under `node_modules/alchemy/src/` are `Phase.ts`,
 `Stack.ts`, `Cloudflare/Website/StaticSite.ts`, and `Cloudflare/Workers/{Worker,WorkerProvider}.ts`.
 Fidy's composition is `infra/cloudflare/alchemy.run.ts`; see [the source map](effect-4-stable.md)
@@ -39,7 +39,7 @@ or copying a provider ID from an earlier deployment. The existing
 [`resolveAccessConfig`](../infra/cloudflare/alchemy.run.ts) demonstrates output-dependent inputs:
 `identity.identityProviderId` and `operators.groupId` feed the Access Application declaration.
 
-Source symbols in beta.80: `Resource` / `ResourceLike.FQN` in `src/Resource.ts`, `PropsInput` in
+Source symbols in beta.81: `Resource` / `ResourceLike.FQN` in `src/Resource.ts`, `PropsInput` in
 `src/Input.ts`, and `ResourceExpr`, `PropExpr`, `map`, `evaluate` in `src/Output.ts`.
 
 ## Storage and private bindings
@@ -141,11 +141,11 @@ preserving path and query. Redirect hostnames do not appear in `worker.urls`. Un
 
 ## Runtime and deployment evidence
 
-Invoke beta.80 via `node_modules/alchemy/bin/alchemy.js` with the pinned Bun, as existing scripts do.
+Invoke beta.81 via `node_modules/alchemy/bin/alchemy.js` with the pinned Bun, as existing scripts do.
 The package's `bin/cli.js` wrapper applies a package TS configuration that loses Fidy's aliases.
 Use the existing entrypoint rather than adding another loader or runtime fallback.
 
-The patch `patches/alchemy@2.0.0-beta.80.patch` preserves and verifies the uploaded Worker version
+The patch `patches/alchemy@2.0.0-beta.81.patch` preserves and verifies the uploaded Worker version
 receipt using `getScriptVersion`. It also forwards placement into self-rollout version metadata,
 verified with the [native placement controls](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/research/core-placement-2026-10-30.md).
 Its queue consumer delete also treats a missing queue as already deleted, so retiring a consumer
@@ -169,6 +169,6 @@ needs the corresponding Cloudflare adapter tests. The declared production graph 
 [`native-application-plan.test.ts`](../infra/cloudflare/native-application-plan.test.ts). A fake binding
 or successful local emulation does not prove remote provider convergence.
 
-Sources above were inspected in the beta.80 tarball verified against `bun.lock` on 2026-10-12;
+Sources above were inspected in the beta.81 tarball verified against `bun.lock` on 2026-11-26;
 the retained patch passed `git apply --check` against that package. This is source verification,
 not a live-cloud deployment result.

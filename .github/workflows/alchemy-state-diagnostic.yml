@@ -54,3 +54,60 @@ jobs:
           sort -u < <(grep -oEi "$pattern" "$diagnostic_path" || true)
           echo "Live tail"
           sort -u < <(grep -oEi "$pattern" "$tail_path" || true)
+          bun - "$tail_path" <<'JS'
+          import { readFileSync } from "node:fs";
+          const traces = readFileSync(process.argv[2], "utf8").match(/^\{[\s\S]*?^\}/gm) ?? [];
+          const knownSecrets = {
+            AlchemyStateStoreToken: "AlchemyStateStoreToken",
+            StateStoreEncryptionKey: "AlchemyStateStoreEncryptionKey",
+          };
+          const diagnostic = new Set();
+          const redact = (text) => text
+            .replace(/https?:\/\/\S+/gu, "[url]")
+            .replace(/["'][^"'\n]*["']/gu, "[value]")
+            .replace(/[a-z0-9_/-]{20,}/giu, "[identifier]")
+            .replace(/[\x00-\x1f\x7f]/gu, " ")
+            .slice(0, 240);
+          for (const body of traces) {
+            const trace = JSON.parse(body);
+            const request = trace.event?.request?.url;
+            if (request && new URL(request).pathname !== "/state/stacks") continue;
+            for (const exception of trace.exceptions ?? []) {
+              diagnostic.add(redact(`${exception.name}: ${exception.message}`));
+            }
+            for (const log of trace.logs ?? []) {
+              if (!JSON.stringify(log.message).includes("State store listStacks failed")) continue;
+              for (const item of log.message ?? []) {
+                const text = typeof item === "string" ? item : JSON.stringify(item);
+                for (const match of text.matchAll(/(?:\bcause\s*:\s*|\berror:\s*)([^\n]{1,240})/giu)) {
+                  diagnostic.add(redact(match[1]));
+                }
+              }
+            }
+          }
+          console.log(`Parsed ${traces.length} Worker tail events.`);
+          for (const message of diagnostic) console.log(message);
+          const config = "https://api.cloudflare.com/client/v4/accounts/" + process.env.CLOUDFLARE_ACCOUNT_ID;
+          const get = async (path) => {
+            const response = await fetch(config + path, {
+              headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` },
+            });
+            if (!response.ok) {
+              console.log("Worker metadata request HTTP", response.status);
+              return undefined;
+            }
+            return (await response.json()).result;
+          };
+          const settings = await get("/workers/scripts/alchemy-state-store/settings");
+          for (const [bindingName, expectedSecret] of Object.entries(knownSecrets)) {
+            const binding = settings?.bindings?.find(({ name }) => name === bindingName);
+            if (!binding || binding.type !== "secrets_store_secret" || binding.secret_name !== expectedSecret) {
+              console.log(bindingName, "expected secret binding absent");
+              continue;
+            }
+            const secrets = await get(`/secrets_store/stores/${binding.store_id}/secrets?per_page=100`);
+            const secret = secrets?.find(({ name }) => name === expectedSecret);
+            const active = secret?.status === "active" && (secret.scopes == null || secret.scopes.includes("workers"));
+            console.log(bindingName, active ? "active for Workers" : "active Workers scope unconfirmed");
+          }
+          JS

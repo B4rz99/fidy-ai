@@ -262,7 +262,7 @@
     width: 42px;
     height: 42px;
   }
-  .application-sidebar .signed-in-compact-navigation {
+  #signed-in-navigation {
     position: fixed;
     inset: 0 auto 0 0;
     margin: 0;
@@ -279,21 +279,28 @@
     overflow-y: auto;
     box-shadow: none;
   }
-  .application-sidebar .signed-in-compact-navigation:popover-open {
+  #signed-in-navigation[open] {
     display: flex;
     flex-direction: column;
   }
-  .application-sidebar .signed-in-compact-navigation::backdrop {
+  #signed-in-navigation::backdrop {
     background: #0007;
   }
   .application-menu-brand {
-    display: block;
-    margin: 0 14px 40px;
+    display: flex;
+    flex-shrink: 0;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0 0 40px 14px;
   }
   .application-menu-brand .application-logo {
     width: 96px;
     height: 61px;
     border-radius: 15px;
+  }
+  .application-menu-brand .application-theme-button {
+    width: 44px;
+    height: 44px;
   }
   .application-agent-trigger {
     top: 21px;
@@ -301,7 +308,7 @@
     width: 42px;
     height: 42px;
   }
-  body:has(.signed-in-compact-navigation:popover-open) .application-agent-trigger {
+  body:has(#signed-in-navigation[open]) .application-agent-trigger {
     display: none;
   }
   .application-habitat-plants {

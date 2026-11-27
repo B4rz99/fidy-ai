@@ -374,6 +374,7 @@ const reread = (
     if (!afterRejection) owner.workspaceGeneration += 1;
     owner.status = statuses.waiting;
     notify(owner);
+    yield* Reactivity.invalidate(["transaction-detail"]);
     owner.get.set(owner.historyAction, "refresh-pages");
 
     const results = yield* Effect.all(

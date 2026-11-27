@@ -1,4 +1,5 @@
 import { lazyRouteComponent } from "@tanstack/react-router";
+import { useRecurringTransactionMonth } from "@/browser/recurring-transaction-origin";
 import { formatMoneyWithCode } from "@/transport/money";
 import { type CaptureHistoryVersion, ManualCaptureContext } from "./manual-capture-context";
 import { TransactionPeriodControls } from "./period-controls";
@@ -34,6 +35,7 @@ import {
 } from "./view-state";
 import { InlineTransactionCategory } from "./inline-category";
 import { TransactionLedger } from "./ledger";
+import { RecurringReturnLink } from "./destination";
 import {
   BulkSelection,
   DetailMode,
@@ -243,15 +245,23 @@ const DetailPanel = ({
     props.transactions.find((record) => record.id === panel.id)
   );
 
+  const originMonth = useRecurringTransactionMonth();
+  const addressed = Option.contains(props.locate, panel.id);
+  const recurringMonth = Option.filter(originMonth, () => addressed);
   const close = (): void => closeTransactionPanel(panel, onPanel, props.onRefresh);
 
   if (Option.isNone(transaction)) {
     return renderPanel(
       <div className="flex flex-col gap-3">
         <p>Esta transacción ya no aparece en el periodo seleccionado.</p>
-        <Button variant="outline" onClick={close}>
-          Volver al resumen
-        </Button>
+        {Option.match(recurringMonth, {
+          onSome: (month) => <RecurringReturnLink month={month} />,
+          onNone: () => (
+            <Button variant="outline" onClick={close}>
+              Volver al resumen
+            </Button>
+          ),
+        })}
       </div>
     );
   }
@@ -267,7 +277,8 @@ const DetailPanel = ({
       timeZone={props.currentUser.timeZone}
       editable={props.editable}
       inspectable={props.readOnly !== true}
-      fromReview={Option.contains(props.locate, panel.id) && props.dateFilter.value === ""}
+      fromReview={addressed && Option.isNone(recurringMonth) && props.dateFilter.value === ""}
+      recurringMonth={recurringMonth}
       mode={panel.mode}
       onMode={(mode) => onPanel(TransactionPanel.Detail({ id: panel.id, mode }))}
       onClose={close}
@@ -962,6 +973,7 @@ const useWorkspacePanel = (props: WorkspaceProps): WorkspacePanelState => {
   const generation = props.generation;
   const capture = use(ManualCaptureContext);
   const corrections = use(TransactionCorrectionContext);
+  const recurringMonth = useRecurringTransactionMonth();
 
   const defaultPanel: TransactionPanel = Option.exists(capture, (owner) => owner.uncertain)
     ? TransactionPanel.Capture({ status: "uncertain" })
@@ -972,7 +984,10 @@ const useWorkspacePanel = (props: WorkspaceProps): WorkspacePanelState => {
   >({ generation, panel: Option.none() });
 
   if (interaction.generation !== generation) {
-    setInteraction({ generation, panel: Option.some(defaultPanel) });
+    setInteraction({
+      generation,
+      panel: Option.isSome(recurringMonth) ? Option.none() : Option.some(defaultPanel),
+    });
   }
 
   const located = Option.filter(

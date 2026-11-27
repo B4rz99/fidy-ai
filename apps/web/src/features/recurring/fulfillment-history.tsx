@@ -1,6 +1,8 @@
+import { Link, useRouter } from "@tanstack/react-router";
 import { DateTime, Option } from "effect";
 import { type JSX, type Ref, useRef, useState } from "react";
 import { Button } from "@/ui/components/button";
+import { buttonVariants } from "@/ui/components/button-variants";
 import {
   type Category,
   type Occurrence,
@@ -14,7 +16,12 @@ type Mark = Occurrence["fulfillments"][number];
 
 type Transaction = Workspace["linkedTransactions"][number];
 
-type UnlinkLabels = Readonly<{ action: string; accessibleAction: string; target: string }>;
+type LinkedLabels = Readonly<{
+  unlink: string;
+  accessibleUnlink: string;
+  accessibleView: string;
+  target: string;
+}>;
 
 type RecordFacts = Readonly<{
   mark: Mark;
@@ -24,6 +31,7 @@ type RecordFacts = Readonly<{
 
 type Props = Readonly<{
   item: Occurrence;
+  month: Workspace["month"];
   transactions: Workspace["linkedTransactions"];
   invalidMarks: ReadonlyArray<Mark>;
   categories: ReadonlyArray<Category>;
@@ -62,11 +70,11 @@ const linkedAmountCounts = (records: ReadonlyArray<RecordFacts>): ReadonlyMap<st
   return counts;
 };
 
-const unlinkLabels = (
+const linkedLabels = (
   { mark, transaction, amount }: RecordFacts,
   timeZone: string,
   position: Option.Option<number>
-): UnlinkLabels => {
+): LinkedLabels => {
   const date = Option.match(transaction, {
     onNone: () => dayLabel(mark.actualDate),
     onSome: (entry) =>
@@ -85,11 +93,12 @@ const unlinkLabels = (
     onSome: (value) => ` · Registro ${value}`,
   });
 
-  const action = `Desvincular ${amount}${record}`;
+  const unlink = `Desvincular ${amount}${record}`;
 
   return {
-    action,
-    accessibleAction: `${action} · ${date}${name}`,
+    unlink,
+    accessibleUnlink: `${unlink} · ${date}${name}`,
+    accessibleView: `Ver transacción · ${amount} · ${date}${name}${record}`,
     target: `la transacción de ${amount} del ${date}${name}${record}`,
   };
 };
@@ -135,7 +144,7 @@ const FulfillmentRecord = ({
   const labels =
     mark.transactionId === undefined
       ? Option.none()
-      : Option.some(unlinkLabels(record, props.item.plan.timeZone, position));
+      : Option.some(linkedLabels(record, props.item.plan.timeZone, position));
 
   return (
     <article
@@ -149,7 +158,23 @@ const FulfillmentRecord = ({
       ) : (
         <LinkedFacts {...props} mark={mark} transaction={transaction} name={name} amount={amount} />
       )}
-      <FulfillmentAction mark={mark} labels={labels} save={props.save} disabled={props.disabled} />
+      <FulfillmentAction
+        mark={mark}
+        labels={labels}
+        save={props.save}
+        disabled={props.disabled}
+        viewTransaction={
+          Option.isSome(transaction) && Option.isSome(labels) && !props.disabled
+            ? Option.some(
+                <ViewTransaction
+                  transactionId={transaction.value.id}
+                  month={props.month}
+                  label={labels.value.accessibleView}
+                />
+              )
+            : Option.none()
+        }
+      />
     </article>
   );
 };
@@ -261,34 +286,70 @@ const TransactionFacts = ({
   );
 };
 
+const ViewTransaction = ({
+  transactionId,
+  month,
+  label,
+}: Readonly<{
+  transactionId: Transaction["id"];
+  month: Props["month"];
+  label: string;
+}>): JSX.Element => {
+  const { sessionBinding } = useRouter().options.context;
+
+  return (
+    <Link
+      to="/app/transactions"
+      search={{ transaction: transactionId }}
+      state={(previous) => ({
+        ...previous,
+        recurringTransactionOrigin: { binding: sessionBinding, month, transactionId },
+      })}
+      data-slot="button"
+      className={buttonVariants({ variant: "outline" })}
+      aria-label={label}
+    >
+      Ver transacción
+    </Link>
+  );
+};
+
 const FulfillmentAction = ({
   mark,
   labels,
   save,
   disabled,
+  viewTransaction,
 }: Pick<Props, "save" | "disabled"> &
-  Readonly<{ mark: Mark; labels: Option.Option<UnlinkLabels> }>): JSX.Element => {
+  Readonly<{
+    mark: Mark;
+    labels: Option.Option<LinkedLabels>;
+    viewTransaction: Option.Option<JSX.Element>;
+  }>): JSX.Element => {
   const [reviewing, setReviewing] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
 
   return (
     <div className="grid gap-3">
-      <Button
-        ref={trigger}
-        className="justify-self-start"
-        contentLayout="wrap"
-        variant="destructive"
-        disabled={disabled}
-        aria-label={Option.getOrUndefined(Option.map(labels, (label) => label.accessibleAction))}
-        aria-expanded={Option.isSome(labels) ? reviewing : undefined}
-        onClick={() =>
-          Option.isSome(labels)
-            ? setReviewing(true)
-            : save({ kind: "reverse", fulfillmentId: mark.id })
-        }
-      >
-        {Option.match(labels, { onNone: () => "Revertir", onSome: (label) => label.action })}
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        {Option.getOrNull(viewTransaction)}
+        <Button
+          ref={trigger}
+          className="justify-self-start"
+          contentLayout="wrap"
+          variant="destructive"
+          disabled={disabled}
+          aria-label={Option.getOrUndefined(Option.map(labels, (label) => label.accessibleUnlink))}
+          aria-expanded={Option.isSome(labels) ? reviewing : undefined}
+          onClick={() =>
+            Option.isSome(labels)
+              ? setReviewing(true)
+              : save({ kind: "reverse", fulfillmentId: mark.id })
+          }
+        >
+          {Option.match(labels, { onNone: () => "Revertir", onSome: (label) => label.unlink })}
+        </Button>
+      </div>
       {reviewing && Option.isSome(labels) ? (
         <UnlinkConfirmation
           target={labels.value.target}

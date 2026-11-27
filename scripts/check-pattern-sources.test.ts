@@ -103,7 +103,10 @@ it.effect("rejects a refreshed snapshot whose recorded version has not been revi
 it.effect("detects changed selected patch content even when the package version stays fixed", () =>
   Effect.gen(function* () {
     const root = yield* fixture;
-    yield* write(`${root}/patches/alchemy@2.0.0-beta.81.patch`, "changed provider behavior\n");
+    yield* write(
+      `${root}/patches/@alchemy.run%2Fcloudflare@2.0.0-beta.87.patch`,
+      "changed provider behavior\n"
+    );
     const result = run(root);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("alchemy: patch content changed");

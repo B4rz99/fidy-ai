@@ -1,11 +1,12 @@
 # Alchemy v2 resources and Cloudflare topology
 
 Use when declaring Cloudflare resources, connecting Worker bindings, or changing deployment state
-and release behavior. Public imports are `alchemy`, `alchemy/Cloudflare`, and `alchemy/Output`.
+and release behavior. Public imports are `alchemy`, `@alchemy.run/cloudflare`, and `alchemy/Output`.
 
-API authority is installed `alchemy@2.0.0-beta.81`, including Fidy's retained patch, not the older
-`.repos/alchemy` snapshot. Selected sources under `node_modules/alchemy/src/` are `Phase.ts`,
-`Stack.ts`, `Cloudflare/Website/StaticSite.ts`, and `Cloudflare/Workers/{Worker,WorkerProvider}.ts`.
+API authority is installed `alchemy@2.0.0-beta.87`, including Fidy's Cloudflare provider patch, not the older
+`.repos/alchemy` snapshot. The core package owns `Stack.ts`. Provider sources live under
+`node_modules/@alchemy.run/cloudflare/src/`, including `Website/StaticSite.ts` and
+`Workers/{Worker,WorkerProvider}.ts`.
 Fidy's composition is `infra/cloudflare/alchemy.run.ts`; see [the source map](effect-4-stable.md)
 for CLI and WorkerProvider patch behavior.
 
@@ -19,8 +20,9 @@ Invalid stages must be rejected before they contact remote state.
 Alchemy's CLI sets `ALCHEMY_DEV`; a configured profile is still required for local emulation.
 A placeholder profile is safe only with local state and local resource modes. CI uses an ephemeral
 profile from environment credentials; credentials stay out of command arguments and repository files.
-Bootstrap the provider's remote state before the first plan, and pass explicit approval for
-non-interactive deployment. Scope `AdoptPolicy.adopt(true)` to a known existing resource, not the stack.
+Run `alchemy state bootstrap --backend cloudflare` from the provider workspace before
+the first remote plan. The command adopts or upgrades the existing store and preserves its
+credentials and deployment state. Pass explicit approval for non-interactive deployment. Scope `AdoptPolicy.adopt(true)` to a known existing resource, not the stack.
 
 ## Stable identity and output-dependent inputs
 
@@ -39,7 +41,7 @@ or copying a provider ID from an earlier deployment. The existing
 [`resolveAccessConfig`](../infra/cloudflare/alchemy.run.ts) demonstrates output-dependent inputs:
 `identity.identityProviderId` and `operators.groupId` feed the Access Application declaration.
 
-Source symbols in beta.81: `Resource` / `ResourceLike.FQN` in `src/Resource.ts`, `PropsInput` in
+Source symbols in beta.87: `Resource` / `ResourceLike.FQN` in `src/Resource.ts`, `PropsInput` in
 `src/Input.ts`, and `ResourceExpr`, `PropExpr`, `map`, `evaluate` in `src/Output.ts`.
 
 ## Storage and private bindings
@@ -50,17 +52,13 @@ by each Durable Object; it is not provisioned as a shared Alchemy database resou
 release checks use the SQLite Durable Object owners and their first-install verifier. See
 [SQL atomicity](sql.md) for runtime operations.
 
-The pinned Alchemy patch drops its unused D1 SQL client dependency. Bun resolves the dependency
-graph from `bun.lock` and applies the package patch during installation. If regenerating the lockfile
-restores the upstream Alchemy dependency edge, remove it and the unused package entry again.
-
 `Cloudflare.R2.Bucket("StatementStagingBucket")` creates the resource used by Core's private byte
 staging binding. Keep `publicAccess` disabled and omit public `domains` for these private buckets.
 `BucketProps.lifecycleRules` can expire objects but does not implement Fidy's authorization,
 publication, or retention reconciliation. `forceDestroy` defaults to false: deleting a nonempty
 bucket fails instead of emptying it. Keep that protection for retained data.
 
-`BucketProps`, `BucketLifecycleRule`, `Bucket` in `src/Cloudflare/R2/Bucket.ts`.
+`BucketProps`, `BucketLifecycleRule`, `Bucket` in `src/R2/Bucket.ts`.
 
 ## Queue producers, consumers, and dead letters
 
@@ -88,8 +86,8 @@ an operational reader and recovery path: use the existing
 The provider supports one Worker consumer per queue and refuses a conflicting script. Its bounded
 queue-handler-readiness retry handles propagation after upload; it is separate from message retries.
 Source symbols: `ConsumerProps`, `ConsumerSettings`, `ConsumerProviderLive`,
-`queueHandlerReadinessSchedule` in `src/Cloudflare/Queues/Consumer.ts`; `Queue` in
-`src/Cloudflare/Queues/Queue.ts`.
+`queueHandlerReadinessSchedule` in `src/Queues/Consumer.ts`; `Queue` in
+`src/Queues/Queue.ts`.
 
 ## Durable Object, Workflow, and secret bindings
 
@@ -120,9 +118,9 @@ out of stack outputs, logs, static-site build inputs, and client-visible configu
 existing protected credentials/state owners.
 
 Sources: `DurableObjectProps`, reference-form `DurableObject` in
-`src/Cloudflare/Workers/DurableObject.ts`; `WorkflowRefProps`, reference-form `Workflow` in
-`src/Cloudflare/Workflows/Workflow.ts`; `LiveWorkerProvider` environment serialization in
-`src/Cloudflare/Workers/WorkerProvider.ts`.
+`src/Workers/DurableObject.ts`; `WorkflowRefProps`, reference-form `Workflow` in
+`src/Workflows/Workflow.ts`; `LiveWorkerProvider` environment serialization in
+`src/Workers/WorkerProvider.ts`.
 
 ## Assets and Worker exposure
 
@@ -141,16 +139,14 @@ preserving path and query. Redirect hostnames do not appear in `worker.urls`. Un
 
 ## Runtime and deployment evidence
 
-Invoke beta.81 via `node_modules/alchemy/bin/alchemy.js` with the pinned Bun, as existing scripts do.
+Invoke beta.87 via `node_modules/alchemy/bin/alchemy.js` with the pinned Bun, as existing scripts do.
 The package's `bin/cli.js` wrapper applies a package TS configuration that loses Fidy's aliases.
 Use the existing entrypoint rather than adding another loader or runtime fallback.
 
-The patch `patches/alchemy@2.0.0-beta.81.patch` preserves and verifies the uploaded Worker version
-receipt using `getScriptVersion`. It also forwards placement into self-rollout version metadata,
-verified with the [native placement controls](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/research/core-placement-2026-10-30.md).
-Its queue consumer delete also treats a missing queue as already deleted, so retiring a consumer
-whose queue is gone converges. An upload receipt is not proof of active traffic assignment;
-retain the deployment/version checks at their existing owners.
+The provider verifies uploaded Worker version receipts with `getScriptVersion` and forwards
+placement into rollout metadata. The retained Cloudflare provider patch lets queue consumer
+retirement converge when the parent queue is already gone. Verify traffic assignment at the
+existing deployment check.
 
 Production deploys use the plain CLI `deploy` and `plan` commands from `infra/cloudflare/package.json`
 and `infra/docs/package.json`; no script drives `Apply.apply` directly.
@@ -169,6 +165,6 @@ needs the corresponding Cloudflare adapter tests. The declared production graph 
 [`native-application-plan.test.ts`](../infra/cloudflare/native-application-plan.test.ts). A fake binding
 or successful local emulation does not prove remote provider convergence.
 
-Sources above were inspected in the beta.81 tarball verified against `bun.lock` on 2026-11-26;
+Sources above were inspected in the beta.87 tarball verified against `bun.lock` on 2026-11-26;
 the retained patch passed `git apply --check` against that package. This is source verification,
 not a live-cloud deployment result.

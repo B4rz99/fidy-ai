@@ -13,7 +13,7 @@ import {
   emailReplacementPath,
 } from "@fidy/server/email-authentication-api";
 import { statementStagingPath } from "@fidy/server/ingestion-contract";
-import type * as Cloudflare from "alchemy/Cloudflare";
+import type * as Cloudflare from "@alchemy.run/cloudflare";
 import { browserOrigins, productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 import { refundSupportBasePath } from "../../apps/server/cloudflare/subscription/contract";
 

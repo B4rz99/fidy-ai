@@ -1,6 +1,6 @@
 import { marketingSite } from "./marketing-site";
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { Config, Effect, Layer, Schema } from "effect";
 import { productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 import { resolveStateBackend } from "./deployment-configuration";

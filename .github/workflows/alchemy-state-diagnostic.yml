@@ -1,0 +1,117 @@
+name: Trace Alchemy state-store Worker
+
+on:
+  pull_request:
+    branches: [trunk]
+    types: [synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: alchemy-cloudflare-state-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    name: Rebuild the existing state-store Worker
+    if: ${{ github.event.pull_request.number == 2488 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix/1809-recurring-transaction-details' }}
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      ALCHEMY_PROFILE: ci
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/bun-runtime
+      - run: bash scripts/install-workspace.sh --ignore-scripts
+      - uses: ./.github/actions/configure-alchemy-cloudflare-profile
+      - name: Require existing Worker, secrets, and namespace
+        shell: bash
+        run: |
+          bun - <<'JS'
+          import assert from "node:assert/strict";
+          import { readFileSync, writeFileSync } from "node:fs";
+          const source = new URL("../", import.meta.resolve("@alchemy.run/cloudflare/Alchemist"));
+          assert.ok(decodeURIComponent(source.pathname).endsWith("/@alchemy.run/cloudflare/src/"));
+          const edit = (relativePath, transform) => {
+            const path = new URL(relativePath, source);
+            writeFileSync(path, transform(readFileSync(path, "utf8")));
+          };
+          const exact = (text, before, after, count = 1) => {
+            assert.equal(text.split(before).length - 1, count);
+            return text.replaceAll(before, () => after);
+          };
+          edit("Alchemist/StateStore.ts", (text) => exact(text,
+            "const store = yield* bootstrapStateStore({",
+            'if (!existed) return yield* Effect.die(new Error("Existing state-store Worker required"));\n        const store = yield* bootstrapStateStore({',
+          ));
+          edit("StateStore/State.ts", (text) => {
+            const guarded = exact(text, "!(force || (yield* confirmNewEncryptionKey(scriptName, isCI)))", "true");
+            return exact(guarded, "yield* forgetLegacyBootstrapStack(credentials, scriptName);", "void 0;", 2);
+          });
+          edit("StateStore/Deploy.ts", (text) => {
+            const store = exact(text,
+              "if (existing) return existing.id;",
+              'if (existing) return existing.id;\n  return yield* Effect.die(new Error("Existing Secrets Store required"));',
+            );
+            const secrets = exact(store,
+              "Stream.filter((secret) => secret.name === name),\n    Stream.runHead,",
+              'Stream.filter((secret) => secret.name === name && secret.status === "active" && (secret.scopes == null || secret.scopes.includes("workers"))),\n    Stream.runHead,',
+            );
+            const noCreation = exact(secrets,
+              "if (exists) return undefined;",
+              'if (exists) return undefined;\n  return yield* Effect.die(new Error("Existing active state-store secret required"));',
+            );
+            return exact(noCreation,
+              'Effect.map((ns) =>\n      Option.isSome(ns) && ns.value.useSqlite === false\n        ? ("legacy-kv" as const)\n        : ("sqlite" as const),\n    ),',
+              'Effect.flatMap((ns) => Option.isNone(ns) ? Effect.die(new Error("Existing state-store Durable Object namespace required")) : Effect.succeed(ns.value.useSqlite === false ? "legacy-kv" as const : "sqlite" as const)),',
+            );
+          });
+          edit("StateStore/Api.ts", (text) => exact(text,
+            'Effect.tapError((error) => Effect.logError(`State store ${operation} failed`, error)),',
+            `Effect.tapError((error) => Effect.sync(() => {
+              if (operation !== "listStacks") return;
+              const cause = typeof error === "object" && error !== null && "cause" in error ? error.cause : error;
+              const detail =
+                typeof cause === "object" && cause !== null && "message" in cause
+                  ? String(cause.message)
+                  : typeof cause === "string" ? cause : String(error);
+              const safe = detail.replace(/https?:\\/\\/\\S+/gu, "[url]")
+                .replace(/[a-z0-9_=+/-]{20,}/giu, "[identifier]")
+                .replace(/[^\\x20-\\x7e]/gu, " ").slice(0, 220);
+              console.error("fidy-state-probe rpc: " + safe);
+            })),`,
+          ));
+          edit("StateStore/Store.ts", (text) => {
+            const started = exact(text, "const keyHex = yield* encryptionSecret",
+              'console.info("fidy-state-probe instance start");\n      const keyHex = yield* encryptionSecret');
+            const read = exact(started, "const cryptoKey = yield* Effect.tryPromise",
+              'console.info("fidy-state-probe key read");\n      const cryptoKey = yield* Effect.tryPromise');
+            const imported = exact(read, "const encryptValue = (value: unknown)",
+              'console.info("fidy-state-probe key imported");\n      const encryptValue = (value: unknown)');
+            return exact(imported, "const entries = yield* storage.list<number>",
+              'console.info("fidy-state-probe storage list entered");\n          const entries = yield* storage.list<number>');
+          });
+          JS
+      - name: Rebuild the Worker and read its stack index
+        working-directory: infra/cloudflare
+        shell: bash
+        run: |
+          umask 077
+          state_index="$(mktemp)"
+          trap 'rm -f "$state_index"' EXIT
+          bun ../../node_modules/alchemy/bin/alchemy.js state bootstrap --backend cloudflare --profile ci --force --no-input
+          if bun ../../node_modules/alchemy/bin/alchemy.js state list --backend cloudflare --profile ci --no-input > "$state_index" 2>&1; then
+            echo "The rebuilt state store serves its stack index."
+          else
+            grep -oE "State store failed to listStacks \([A-Za-z0-9_]+\)" "$state_index" || true
+          fi
+          sleep 5
+          bun ../../node_modules/alchemy/bin/alchemy.js state logs --backend cloudflare --profile ci --limit 100 --since 2m --no-input > "$state_index" 2>&1
+          grep -oE 'fidy-state-probe .{1,230}' "$state_index" | sort -u

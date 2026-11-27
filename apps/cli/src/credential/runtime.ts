@@ -19,7 +19,7 @@ import {
 } from "./contract";
 import { checkLocalPath } from "./internal/local-path";
 
-export const supportedBunRevision = "38afee6c84fcf48c0edb2466aa4b27d287a59c30";
+export const supportedBunRevision = "a7733435cf40429e3b35c36072769df2052b80f1";
 
 const nativeService = "com.fidy.cli.api.fidyapp.com";
 

@@ -1,0 +1,37 @@
+diff --git a/dist/chunks/index.ER9afepi.js b/dist/chunks/index.ER9afepi.js
+--- a/dist/chunks/index.ER9afepi.js
++++ b/dist/chunks/index.ER9afepi.js
+@@ -5533,7 +5533,7 @@
+ 	});
+ 	// must never keep the main process alive
+ 	child.unref();
+-	child.channel?.unref();
++	child.channel?.unref?.();
+ 	// losing the watchdog only loses the cleanup, the test run is not affected
+ 	child.on("error", () => {});
+ 	child.once("exit", () => {
+@@ -5598,7 +5598,6 @@
+ 			serialization: "advanced"
+ 		});
+ 		this._fork.on("error", this.emitError);
+-		watchProcess(this._fork, this.distPath);
+ 		// `end: false`: the logger streams are shared by every worker, so one
+ 		// ending worker stream must not end them for everyone else
+ 		if (this._fork.stdout) {
+@@ -5609,6 +5608,7 @@
+ 			this.stderr.setMaxListeners(1 + this.stderr.getMaxListeners());
+ 			this._fork.stderr.pipe(this.stderr, { end: false });
+ 		}
++		watchProcess(this._fork, this.distPath);
+ 	}
+ 	async stop() {
+ 		const fork = this.fork;
+@@ -6053,7 +6053,7 @@
+ 			// Runner termination can also already start from task cancellation.
+ 			if (!runner.isTerminated) {
+ 				const id = setTimeout(() => this.logger.error(`[vitest-pool]: Timeout terminating ${task.worker} worker for test files ${formatFiles(task)}.`), this.options.teardownTimeout);
+-				this.exitPromises.push(runner.stop({ force: resolver.isRejected }).then(() => clearTimeout(id)).catch((error) => this.logger.error(`[vitest-pool]: Failed to terminate ${task.worker} worker for test files ${formatFiles(task)}.`, error)));
++				this.exitPromises.push(runner.stop({ force: resolver.isRejected }).finally(() => clearTimeout(id)).catch((error) => this.logger.error(`[vitest-pool]: Failed to terminate ${task.worker} worker for test files ${formatFiles(task)}.`, error)));
+ 			}
+ 			workerIds.set(poolId, true);
+ 		} 

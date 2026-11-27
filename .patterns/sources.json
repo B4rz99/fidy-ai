@@ -31,20 +31,20 @@
   },
   "alchemy": {
     "repository": "https://github.com/alchemy-run/alchemy",
-    "verifiedOn": "2026-11-10",
+    "verifiedOn": "2026-11-26",
     "snapshot": {
       "manifest": ".repos/alchemy/packages/alchemy/package.json",
       "version": "2.0.0-beta.79",
       "revision": "1f251fa6a8bcbe4ea19e85fd64aedf00c814fd95",
       "revisionKind": "upstream-commit",
-      "provenance": "git subtree metadata in 52409ac4e8e3a06c909286aae788a8d09dfe7e4b; published beta.80 plus the retained patch is application authority.",
+      "provenance": "git subtree metadata in 52409ac4e8e3a06c909286aae788a8d09dfe7e4b; published beta.81 plus the retained patch is application authority.",
       "status": "historical"
     },
     "packages": [
       {
         "name": "alchemy",
         "manifest": "infra/cloudflare/package.json",
-        "version": "2.0.0-beta.80"
+        "version": "2.0.0-beta.81"
       }
     ],
     "sourcePaths": [
@@ -54,8 +54,8 @@
     ],
     "patches": [
       {
-        "path": "patches/alchemy@2.0.0-beta.80.patch",
-        "sha256": "c840921368a4b21f662033ee6dd5b0ddff43310b761639bb85376e78770d927e"
+        "path": "patches/alchemy@2.0.0-beta.81.patch",
+        "sha256": "88e6d9c105ec22520125c3701bec274b81307415ff26f7b3ed5a16d9b5426aca"
       }
     ]
   },

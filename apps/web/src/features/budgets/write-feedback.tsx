@@ -6,8 +6,7 @@ const writeMessages = {
   save: {
     saving: "Guardando presupuesto…",
     saved: "Presupuesto guardado.",
-    failed:
-      "No se pudo guardar. Usa un importe positivo con la precisión de su moneda y un nombre de grupo válido.",
+    failed: "No se pudo guardar el presupuesto. Revisa los datos e inténtalo de nuevo.",
     uncertain:
       "No pudimos confirmar el guardado. Actualiza para comprobar el plan antes de volver a editar.",
   },

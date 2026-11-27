@@ -146,7 +146,11 @@ const BudgetPanel = ({
 }: ViewProps & Readonly<{ groups: ReadonlyArray<string> }>): JSX.Element => (
   <WorkspacePanel
     open={Option.isSome(controller.draft)}
-    locked={controller.saveState === "saving" || controller.saveState === "uncertain"}
+    locked={
+      controller.saveState === "saving" ||
+      controller.saveState === "uncertain" ||
+      controller.groupRecovery === "refreshing"
+    }
     onClose={controller.closeEditor}
     title="Configurar presupuesto"
     description="Categoría, importe y grupo del plan mensual."
@@ -169,6 +173,7 @@ const BudgetPanel = ({
             onSubmit={controller.write}
             onRemove={controller.remove}
             onRefresh={controller.refresh}
+            groupRecovery={controller.groupRecovery}
             saveState={controller.saveState}
             writeAction={controller.writeAction}
           />

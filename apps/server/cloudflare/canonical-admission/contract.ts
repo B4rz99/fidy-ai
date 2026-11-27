@@ -255,16 +255,25 @@ export const acceptedReadRejection = (
   });
 };
 
-export const validationRejection = (message: string): CanonicalRejection =>
+export const validationRejectionWithFields = ({
+  message,
+  fields,
+}: Readonly<{
+  message: string;
+  fields: ReadonlyArray<typeof FieldIssue.Type>;
+}>): CanonicalRejection =>
   rejection({
     status: canonicalRejectionStatus.badRequest,
     outcome: "validation_failed",
     code: "validation_failed",
     wireMessage: Option.some(message),
-    fields: Option.some([]),
+    fields: Option.some(fields),
     detail: Option.none(),
     next: [],
   });
+
+export const validationRejection = (message: string): CanonicalRejection =>
+  validationRejectionWithFields({ message, fields: [] });
 
 export const bareValidationRejection = (message: string): CanonicalRejection =>
   rejection({

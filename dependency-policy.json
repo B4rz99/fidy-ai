@@ -22,6 +22,12 @@
   ],
   "deferredUpdates": [
     {
+      "name": "@interfere/landmines",
+      "manifest": "package.json",
+      "reason": "0.1.1 fails lint on existing Vitest project timeouts. The Cloudflare workerd suites use explicit deadlines for process startup and native integration. Move startup into owned fixtures or adopt a rule that distinguishes project deadlines from per-test overrides, then rerun lint and the Cloudflare suites before updating.",
+      "until": "2026-12-20T00:00:00Z"
+    },
+    {
       "name": "typescript",
       "manifest": "tools/astro/package.json",
       "reason": "AstroCheck from @astrojs/language-server 2.17.2 rejects TypeScript 7.0.2 before checking any files because findConfigFile and sys are absent. Reproduced with the installed workspace compiler on 2026-10-16 UTC; the isolated TypeScript 6.0.3 checker remains operational. TypeScript 7.0 intentionally ships no programmatic API (https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/); revisit when Astro supports its replacement API, then rerun the site checker and repository typecheck before updating.",

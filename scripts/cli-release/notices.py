@@ -12,7 +12,7 @@ for name in inputs:
     if parts[0] == 'node_modules':
         packages.add(Path(*parts[:3 if parts[1].startswith('@') else 2]))
 sections = ['Fidy CLI third-party notices\n\nRuntime source and rebuild instructions:\n'
-            'https://github.com/oven-sh/bun/tree/38afee6c84fcf48c0edb2466aa4b27d287a59c30\n'
+            'https://github.com/oven-sh/bun/tree/a7733435cf40429e3b35c36072769df2052b80f1\n'
             'The accompanying fidy.js contains the bundled application for use with a rebuilt runtime.\n',
             (root / 'scripts/cli-release/BUN-NOTICES.md').read_text()]
 for package in sorted(packages):

@@ -1,4 +1,4 @@
-name: Alchemy state diagnostic
+name: Rebuild Alchemy state-store Worker
 
 on:
   pull_request:
@@ -8,13 +8,17 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: alchemy-cloudflare-state-bootstrap
+  cancel-in-progress: false
+
 jobs:
-  state-logs:
-    name: Read state store diagnostics
+  recover:
+    name: Rebuild the existing state-store Worker
     if: ${{ github.event.pull_request.number == 2488 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix/1809-recurring-transaction-details' }}
     environment: production
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     env:
       ALCHEMY_PROFILE: ci
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -27,87 +31,63 @@ jobs:
       - uses: ./.github/actions/bun-runtime
       - run: bash scripts/install-workspace.sh --ignore-scripts
       - uses: ./.github/actions/configure-alchemy-cloudflare-profile
-      - name: Extract error classifications without logging state
+      - name: Require existing Worker, secrets, and namespace
+        shell: bash
+        run: |
+          bun - <<'JS'
+          import assert from "node:assert/strict";
+          import { readFileSync, writeFileSync } from "node:fs";
+          const source = new URL("../", import.meta.resolve("@alchemy.run/cloudflare/Alchemist"));
+          assert.ok(decodeURIComponent(source.pathname).endsWith("/@alchemy.run/cloudflare/src/"));
+          const edit = (relativePath, transform) => {
+            const path = new URL(relativePath, source);
+            writeFileSync(path, transform(readFileSync(path, "utf8")));
+          };
+          const exact = (text, before, after, count = 1) => {
+            assert.equal(text.split(before).length - 1, count);
+            return text.replaceAll(before, () => after);
+          };
+          edit("Alchemist/StateStore.ts", (text) => exact(text,
+            "const store = yield* bootstrapStateStore({",
+            'if (!existed) return yield* Effect.die(new Error("Existing state-store Worker required"));\n        const store = yield* bootstrapStateStore({',
+          ));
+          edit("StateStore/State.ts", (text) => {
+            const guarded = exact(text, "!(force || (yield* confirmNewEncryptionKey(scriptName, isCI)))", "true");
+            return exact(guarded, "yield* forgetLegacyBootstrapStack(credentials, scriptName);", "void 0;", 2);
+          });
+          edit("StateStore/Deploy.ts", (text) => {
+            const store = exact(text,
+              "if (existing) return existing.id;",
+              'if (existing) return existing.id;\n  return yield* Effect.die(new Error("Existing Secrets Store required"));',
+            );
+            const secrets = exact(store,
+              "Stream.filter((secret) => secret.name === name),\n    Stream.runHead,",
+              'Stream.filter((secret) => secret.name === name && secret.status === "active" && (secret.scopes == null || secret.scopes.includes("workers"))),\n    Stream.runHead,',
+            );
+            const noCreation = exact(secrets,
+              "if (exists) return undefined;",
+              'if (exists) return undefined;\n  return yield* Effect.die(new Error("Existing active state-store secret required"));',
+            );
+            return exact(noCreation,
+              'Effect.map((ns) =>\n      Option.isSome(ns) && ns.value.useSqlite === false\n        ? ("legacy-kv" as const)\n        : ("sqlite" as const),\n    ),',
+              'Effect.flatMap((ns) => Option.isNone(ns) ? Effect.die(new Error("Existing state-store Durable Object namespace required")) : Effect.succeed(ns.value.useSqlite === false ? "legacy-kv" as const : "sqlite" as const)),',
+            );
+          });
+          JS
+      - name: Rebuild the Worker and read its stack index
         working-directory: infra/cloudflare
         shell: bash
         run: |
           umask 077
-          diagnostic_path="$(mktemp)"
-          tail_path="$(mktemp)"
-          timeout --signal=INT 45s bun run --silent wrangler tail alchemy-state-store --format json > "$tail_path" 2>&1 &
-          tail_pid=$!
-          trap 'kill -INT "$tail_pid" 2>/dev/null || true; rm -f "$diagnostic_path" "$tail_path"' EXIT
-          if bun ../../node_modules/alchemy/bin/alchemy.js state logs --backend cloudflare --profile ci --limit 50 --since 1h --no-input > "$diagnostic_path" 2>&1; then
-            echo "State-store log query succeeded."
-          else
-            echo "State-store log query failed."
-          fi
-          sleep 5
-          if bun ../../node_modules/alchemy/bin/alchemy.js state list --backend cloudflare --profile ci --no-input >> "$diagnostic_path" 2>&1; then
-            echo "State-store list succeeded."
-          else
-            echo "State-store list failed."
-          fi
-          sleep 3
-          pattern='State store listStacks failed|RpcCallError|SecretNotFound|Secrets Worker: Failed to fetch secret|Failed to fetch secret|Secrets Store|Invalid key length|InvalidAccessError|DataError|TypeError|RangeError|ReferenceError|SyntaxError|NotFoundError|CloudflareInternalError|InternalError|Unauthorized|Forbidden|not authorized|permission denied|no log entries|Durable Object[^.]{0,3}(was reset|is overloaded|not found)|WorkerHasNoVersions|NoSuchMethod|method not found|root DO|No such module|Cannot find module|InvalidArgument|Connected to alchemy-state-store|exception|exceeded CPU|exceeded memory|Illegal invocation|not a function|not a constructor|is not defined|Cannot read properties of undefined|storage failure|storage error|overloaded|reset because|runtime updated|AES-CTR'
-          echo "Historical logs and state read"
-          sort -u < <(grep -oEi "$pattern" "$diagnostic_path" || true)
-          echo "Live tail"
-          sort -u < <(grep -oEi "$pattern" "$tail_path" || true)
-          bun - "$tail_path" <<'JS'
-          import { readFileSync } from "node:fs";
-          const traces = readFileSync(process.argv[2], "utf8").match(/^\{[\s\S]*?^\}/gm) ?? [];
-          const knownSecrets = {
-            AlchemyStateStoreToken: "AlchemyStateStoreToken",
-            StateStoreEncryptionKey: "AlchemyStateStoreEncryptionKey",
-          };
-          const diagnostic = new Set();
-          const redact = (text) => text
-            .replace(/https?:\/\/\S+/gu, "[url]")
-            .replace(/["'][^"'\n]*["']/gu, "[value]")
-            .replace(/[a-z0-9_/-]{20,}/giu, "[identifier]")
-            .replace(/[\x00-\x1f\x7f]/gu, " ")
-            .slice(0, 240);
-          for (const body of traces) {
-            const trace = JSON.parse(body);
-            const request = trace.event?.request?.url;
-            if (request && new URL(request).pathname !== "/state/stacks") continue;
-            for (const exception of trace.exceptions ?? []) {
-              diagnostic.add(redact(`${exception.name}: ${exception.message}`));
-            }
-            for (const log of trace.logs ?? []) {
-              if (!JSON.stringify(log.message).includes("State store listStacks failed")) continue;
-              for (const item of log.message ?? []) {
-                const text = typeof item === "string" ? item : JSON.stringify(item);
-                for (const match of text.matchAll(/(?:\bcause\s*:\s*|\berror:\s*)([^\n]{1,240})/giu)) {
-                  diagnostic.add(redact(match[1]));
-                }
-              }
-            }
-          }
-          console.log(`Parsed ${traces.length} Worker tail events.`);
-          for (const message of diagnostic) console.log(message);
-          const config = "https://api.cloudflare.com/client/v4/accounts/" + process.env.CLOUDFLARE_ACCOUNT_ID;
-          const get = async (path) => {
-            const response = await fetch(config + path, {
-              headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` },
-            });
-            if (!response.ok) {
-              console.log("Worker metadata request HTTP", response.status);
-              return undefined;
-            }
-            return (await response.json()).result;
-          };
-          const settings = await get("/workers/scripts/alchemy-state-store/settings");
-          for (const [bindingName, expectedSecret] of Object.entries(knownSecrets)) {
-            const binding = settings?.bindings?.find(({ name }) => name === bindingName);
-            if (!binding || binding.type !== "secrets_store_secret" || binding.secret_name !== expectedSecret) {
-              console.log(bindingName, "expected secret binding absent");
-              continue;
-            }
-            const secrets = await get(`/secrets_store/stores/${binding.store_id}/secrets?per_page=100`);
-            const secret = secrets?.find(({ name }) => name === expectedSecret);
-            const active = secret?.status === "active" && (secret.scopes == null || secret.scopes.includes("workers"));
-            console.log(bindingName, active ? "active for Workers" : "active Workers scope unconfirmed");
-          }
-          JS
+          state_index="$(mktemp)"
+          trap 'rm -f "$state_index"' EXIT
+          bun ../../node_modules/alchemy/bin/alchemy.js state bootstrap --backend cloudflare --profile ci --force --no-input
+          for attempt in 1 2 3; do
+            if bun ../../node_modules/alchemy/bin/alchemy.js state list --backend cloudflare --profile ci --no-input > "$state_index" 2>&1; then
+              echo "The rebuilt state store serves its stack index."
+              exit 0
+            fi
+            if [[ "$attempt" != 3 ]]; then sleep 10; fi
+          done
+          grep -oE "State store failed to listStacks \([A-Za-z0-9_]+\)" "$state_index" || true
+          exit 1

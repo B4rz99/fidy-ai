@@ -1,0 +1,35 @@
+name: Upgrade Alchemy state store
+
+on:
+  pull_request:
+    branches: [trunk]
+    types: [synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: alchemy-cloudflare-state-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    if: ${{ github.event.pull_request.number == 2486 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'chore/alchemy-beta-87' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      ALCHEMY_PROFILE: ci
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/bun-runtime
+      - run: bash scripts/install-workspace.sh --ignore-scripts
+      - uses: ./.github/actions/configure-alchemy-cloudflare-profile
+      - name: Upgrade the existing store in place
+        working-directory: infra/cloudflare
+        run: bun ../../node_modules/alchemy/bin/alchemy.js state bootstrap --backend cloudflare --profile ci

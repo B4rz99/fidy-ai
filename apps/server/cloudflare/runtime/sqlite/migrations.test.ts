@@ -200,7 +200,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         AND name NOT IN ('store_migrations','store_migration_attempts')
         ORDER BY type,name`);
 
-      const encoded = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(catalog);
+      const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(catalog);
 
       const digest = yield* native(() =>
         crypto.subtle.digest("SHA-256", new TextEncoder().encode(encoded))

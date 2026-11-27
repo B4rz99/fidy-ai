@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Clock, Effect, Schedule } from "effect";
+import { type Cause, Clock, Effect, Schedule } from "effect";
 import type { Miniflare } from "miniflare";
 import { expect } from "vitest";
 import { native, nativeBrowserPlatform, nativeUserPlatform } from "../user-store.test-fixture";
@@ -17,7 +17,7 @@ const coverageAt = (
   registry: MaintenanceStorage,
   maintenanceNamespace: MaintenanceNamespace,
   logs: readonly string[]
-): ((coverage: readonly [number, string]) => Effect.Effect<void>) =>
+): ((coverage: readonly [number, string]) => Effect.Effect<void, Cause.TimeoutError>) =>
   Effect.fnUntraced(function* ([age, severity]: readonly [number, string]) {
     const now = yield* Clock.currentTimeMillis;
     const logged = logs.length;

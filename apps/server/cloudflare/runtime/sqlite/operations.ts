@@ -8,6 +8,7 @@ import {
   Effect,
   Layer,
   ManagedRuntime,
+  Order,
   type PlatformError,
   Predicate,
   Ref,
@@ -44,20 +45,30 @@ const json = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 const checksum = (data: unknown): Effect.Effect<string, PlatformError.PlatformError> =>
   digestBytes(new TextEncoder().encode(json(data))).pipe(Effect.map(Hex.encode));
 
+const catalogEntry = Schema.Struct({
+  type: Schema.String,
+  name: Schema.String,
+  sql: Schema.NullOr(Schema.String),
+});
+
 const schemaCatalog = Effect.gen(function* () {
   const sql = yield* SqliteClient;
 
   const rows = yield* sql`SELECT type, name, sql FROM sqlite_schema
     WHERE name NOT GLOB 'sqlite_*' AND name NOT IN ('_cf_KV','_cf_METADATA')
     AND NOT (name='__miniflare_do_name' AND sql='CREATE TABLE __miniflare_do_name (id INTEGER PRIMARY KEY, name TEXT)')
-    AND name NOT IN ('store_migrations','store_migration_attempts')
-    ORDER BY type,name`;
+    AND name NOT IN ('store_migrations','store_migration_attempts')`;
 
-  return yield* Schema.decodeUnknownEffect(
-    Schema.Array(
-      Schema.Struct({ type: Schema.String, name: Schema.String, sql: Schema.NullOr(Schema.String) })
-    )
-  )(rows);
+  const entries = yield* Schema.decodeUnknownEffect(Schema.Array(catalogEntry))(rows);
+  const encoder = new TextEncoder();
+
+  return entries
+    .map((entry) => ({
+      entry,
+      utf8Key: Hex.encode(encoder.encode(`${entry.type}\0${entry.name}`)),
+    }))
+    .sort((left, right) => Order.String(left.utf8Key, right.utf8Key))
+    .map(({ entry }) => entry);
 });
 
 const markers = Schema.Array(

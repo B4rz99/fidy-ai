@@ -231,8 +231,25 @@ describe("PR check selection", () => {
       docs: true,
     });
     expect(selectStackPlans(["bun.lock"])).toEqual({ app: true, site: true, docs: true });
+    expect(selectStackPlans(["apps/web/package.json"])).toEqual({
+      app: true,
+      site: true,
+      docs: true,
+    });
+    expect(selectStackPlans(["apps/web/src/clock.ts", "apps/server/unit.test.ts"])).toEqual({
+      app: true,
+      site: false,
+      docs: false,
+    });
     expect(
-      selectStackPlans(["docs/operations/production-releases.md", "apps/cli/main.ts"])
+      selectStackPlans([
+        "docs/operations/production-releases.md",
+        "apps/cli/main.ts",
+        "apps/site/src/page.test.tsx",
+        "apps/server/cloudflare/user-store.test-fixture.ts",
+        "tools/depcruise/bun.lock",
+        "tools/mcp-inspector/package.json",
+      ])
     ).toEqual({ app: false, site: false, docs: false });
   });
 });

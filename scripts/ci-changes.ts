@@ -101,9 +101,12 @@ const deployedStacks = {
 type DeployedStack = keyof typeof deployedStacks;
 
 const sharesDeployInput = (path: string): boolean =>
-  isDependencyInput(path) ||
+  /^(?:(?:apps|infra)\/[^/]+\/)?(?:package\.json|bun\.lockb?|bunfig\.toml)$/u.test(path) ||
   /^tsconfig[^/]*\.json$/u.test(path) ||
   ["patches/", "scripts/install-", ".github/actions/"].some((prefix) => path.startsWith(prefix));
+
+const isApplicationTest = (path: string): boolean =>
+  /^apps\/(?:server|web|site)\/.+\.test(?:-fixture)?\.tsx?$/u.test(path);
 
 export const selectStackPlans = (
   paths: ReadonlyArray<string>
@@ -112,6 +115,7 @@ export const selectStackPlans = (
     paths.some(
       (path) =>
         !isProse(path) &&
+        !isApplicationTest(path) &&
         (sharesDeployInput(path) || deployedStacks[stack].some((prefix) => path.startsWith(prefix)))
     );
 

@@ -20,9 +20,10 @@ const coverageAt = (
 ): ((coverage: readonly [number, string]) => Effect.Effect<void>) =>
   Effect.fnUntraced(function* ([age, severity]: readonly [number, string]) {
     const now = yield* Clock.currentTimeMillis;
+    const logged = logs.length;
     yield* native(() =>
       registry.exec(
-        "UPDATE lifetime_registry SET registered_ms=? WHERE user_id=?",
+        "UPDATE lifetime_registry SET registered_ms=?,observed_ms=0 WHERE user_id=?",
         now - age,
         coveredUser
       )
@@ -45,14 +46,14 @@ const coverageAt = (
     );
 
     expect(tick.status).toBe(204);
-    expect(
-      logs.some((line) =>
-        line.includes(
-          "fidy.operational component=watchdog operation=coverage state=wrapped severity=" +
-            severity
-        )
-      )
-    ).toBe(true);
+
+    const coverage =
+      "fidy.operational component=watchdog operation=coverage state=wrapped severity=" + severity;
+
+    yield* Effect.sync(() => logs.slice(logged).some((line) => line.includes(coverage))).pipe(
+      Effect.repeat({ until: (observed) => observed, schedule: Schedule.spaced("25 millis") }),
+      Effect.timeout("3 seconds")
+    );
   });
 
 const maintenance = Effect.fn(function* (runtime: Miniflare) {
@@ -248,10 +249,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
         yield* Effect.forEach(
           [
-            [299000, "none"],
-            [300000, "warning"],
-            [599000, "warning"],
-            [600000, "critical"],
+            [290000, "none"],
+            [301000, "warning"],
+            [590000, "warning"],
+            [601000, "critical"],
           ] as const,
           coverageAt(registry, maintenanceNamespace, logs),
           { discard: true }

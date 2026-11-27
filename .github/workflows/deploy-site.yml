@@ -14,6 +14,14 @@ on:
       - scripts/install-*.sh
       - .github/actions/**
       - .github/workflows/deploy-site.yml
+      - "!apps/server/**/*.test.ts"
+      - "!apps/server/**/*.test.tsx"
+      - "!apps/server/**/*.test-fixture.ts"
+      - "!apps/server/**/*.test-fixture.tsx"
+      - "!apps/site/**/*.test.ts"
+      - "!apps/site/**/*.test.tsx"
+      - "!apps/site/**/*.test-fixture.ts"
+      - "!apps/site/**/*.test-fixture.tsx"
 
 permissions:
   contents: read

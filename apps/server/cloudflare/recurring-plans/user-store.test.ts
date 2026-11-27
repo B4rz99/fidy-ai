@@ -96,6 +96,40 @@ const capture = Effect.fn(function* (
   )(yield* native(() => result.json()))).data.id;
 });
 
+const fullWorkspace = Effect.gen(function* () {
+  const db = yield* nativeTransactionJourney;
+  const token = "fin_abcdefgh_" + "2".repeat(43);
+  yield* seedNativePAT({
+    db,
+    userId: alice.user,
+    token,
+    scopes: ["read", "write"],
+    current: yield* Clock.currentTimeMillis,
+  });
+  yield* native(() =>
+    db.exec(
+      "INSERT INTO user_documents VALUES(?,'recurring-plan',?,1)",
+      alice.user,
+      JSON.stringify({ excludedTransactionIds: [], suggestions: [] })
+    )
+  );
+  yield* native(() =>
+    db.exec(
+      "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<99) INSERT INTO recurring_plans SELECT ?,printf('40000000-0000-4000-8000-%012d',i),i,'[]',NULL FROM n",
+      alice.user
+    )
+  );
+  yield* native(() =>
+    db.exec(
+      "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<99) INSERT INTO recurring_plan_revisions SELECT p.user_id,p.id,i,date('2000-01-01',printf('+%d month',i)),json_set(?,'$.name',printf('Renta %d',i)) FROM recurring_plans p CROSS JOIN n WHERE p.user_id=?",
+      JSON.stringify(plan),
+      alice.user
+    )
+  );
+
+  return { db, token };
+});
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "fulfills a long-lived plan exactly once after a lost response under current User authority",
@@ -247,150 +281,131 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       })
   );
   test.effect(
-    "returns every supported plan revision and replays a full-size fulfillment receipt",
+    "returns every supported plan revision and compacts the requested comparison month",
     () =>
       Effect.gen(function* () {
-        const db = yield* nativeTransactionJourney;
-        const token = "fin_abcdefgh_" + "2".repeat(43);
-        yield* seedNativePAT({
-          db,
-          userId: alice.user,
-          token,
-          scopes: ["read", "write"],
-          current: yield* Clock.currentTimeMillis,
-        });
-        const plans = 100;
-        const revisions = 100;
-        yield* native(() =>
-          db.exec(
-            "INSERT INTO user_documents VALUES(?,'recurring-plan',?,1)",
-            alice.user,
-            JSON.stringify({ excludedTransactionIds: [], suggestions: [] })
-          )
-        );
-        yield* native(() =>
-          db.exec(
-            "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<99) INSERT INTO recurring_plans SELECT ?,printf('40000000-0000-4000-8000-%012d',i),i,'[]',NULL FROM n",
-            alice.user
-          )
-        );
-        yield* native(() =>
-          db.exec(
-            "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<99) INSERT INTO recurring_plan_revisions SELECT p.user_id,p.id,i,date('2000-01-01',printf('+%d month',i)),json_set(?,'$.name',printf('Renta %d',i)) FROM recurring_plans p CROSS JOIN n WHERE p.user_id=?",
-            JSON.stringify(plan),
-            alice.user
-          )
-        );
+        const { db } = yield* fullWorkspace;
+
         const full = yield* read(yield* native(() => db.browser(0, month)));
-        expect(full.document.plans).toHaveLength(plans);
-        expect(full.document.plans.every((entry) => entry.revisions.length === revisions)).toBe(
-          true
-        );
+        expect(full.document.plans).toHaveLength(100);
+        expect(full.document.plans.every((entry) => entry.revisions.length === 100)).toBe(true);
 
         const earlier = yield* read(
           yield* native(() => db.browser(0, month + "&previousMonth=2003-02&view=compact"))
         );
 
         expect(earlier.previousMonth).toBe("2003-01");
-        expect(earlier.previous).toHaveLength(plans);
+        expect(earlier.previous).toHaveLength(100);
         expect(earlier.previous.every((item) => item.plan.name === "Renta 37")).toBe(true);
         expect(earlier.document.plans.every((entry) => entry.revisions.length === 2)).toBe(true);
-        const mark = { ...fulfillment, planId: "40000000-0000-4000-8000-000000000099" };
+      })
+  );
 
-        const fulfill = (): Effect.Effect<Response> =>
-          native(() =>
-            db.send(
-              new Request("https://api.fidyapp.com/recurring-plans/edits", {
-                method: "POST",
-                headers: {
-                  authorization: "Bearer " + token,
-                  "content-type": "application/json",
-                  "Fidy-Retry-Key": "large-fulfillment",
-                },
-                body: JSON.stringify({
-                  expectedRevision: 1,
-                  edit: { kind: "fulfill", fulfillment: mark },
-                }),
-              })
-            )
-          );
+  test.effect("replays a full-size fulfillment receipt and cleans up its parts", () =>
+    Effect.gen(function* () {
+      const { db, token } = yield* fullWorkspace;
+      const mark = { ...fulfillment, planId: "40000000-0000-4000-8000-000000000099" };
 
-        const committed = yield* fulfill();
-        expect(committed.status).toBe(200);
-        const body = yield* native(() => committed.text());
-        expect(body.length).toBeGreaterThan(2_097_152);
-        expect(
-          yield* native(() =>
-            db.exec(
-              "SELECT min(length(part)>0 AND length(CAST(part AS BLOB))<1000000) AS bounded FROM canonical_receipt_parts"
-            )
+      const fulfill = (): Effect.Effect<Response> =>
+        native(() =>
+          db.send(
+            new Request("https://api.fidyapp.com/recurring-plans/edits", {
+              method: "POST",
+              headers: {
+                authorization: "Bearer " + token,
+                "content-type": "application/json",
+                "Fidy-Retry-Key": "large-fulfillment",
+              },
+              body: JSON.stringify({
+                expectedRevision: 1,
+                edit: { kind: "fulfill", fulfillment: mark },
+              }),
+            })
           )
-        ).toEqual([{ bounded: 1 }]);
-        const replay = yield* fulfill();
-        expect(replay.status).toBe(200);
-        expect(yield* native(() => replay.text())).toBe(body);
+        );
 
-        const batch = (): Effect.Effect<Response> =>
-          native(() =>
-            db.send(
-              new Request("https://api.fidyapp.com/operations/atomic-batch", {
-                method: "POST",
-                headers: {
-                  authorization: "Bearer " + token,
-                  "content-type": "application/json",
-                  "Fidy-Retry-Key": "large-batch",
-                },
-                body: JSON.stringify({
-                  calls: [
-                    {
-                      callId: mark.id,
-                      operation: "recurringPlans.applyRecurringEdit",
-                      input: {
-                        payload: {
-                          expectedRevision: 2,
-                          edit: {
-                            kind: "fulfill",
-                            fulfillment: {
-                              ...mark,
-                              id: "40000000-0000-4000-8000-000000000152",
-                              date: "2024-03-31",
-                              actualDate: "2024-03-31",
-                            },
+      const committed = yield* fulfill();
+      expect(committed.status).toBe(200);
+      const body = yield* native(() => committed.text());
+      expect(body.length).toBeGreaterThan(2_097_152);
+      expect(
+        yield* native(() =>
+          db.exec(
+            "SELECT min(length(part)>0 AND length(CAST(part AS BLOB))<1000000) AS bounded FROM canonical_receipt_parts"
+          )
+        )
+      ).toEqual([{ bounded: 1 }]);
+      const replay = yield* fulfill();
+      expect(replay.status).toBe(200);
+      expect(yield* native(() => replay.text())).toBe(body);
+
+      yield* native(() => db.exec("UPDATE canonical_request_receipts SET accepted_at_ms=0"));
+      expect((yield* native(() => db.checkWork(alice.user))).status).toBe(204);
+      yield* native(() => db.exec("SELECT 1 FROM canonical_receipt_parts LIMIT 1")).pipe(
+        Effect.repeat({
+          until: (rows) => rows.length === 0,
+          schedule: Schedule.spaced("50 millis"),
+        }),
+        Effect.timeout("5 seconds")
+      );
+      expect(
+        yield* native(() => db.exec("SELECT count(*) AS receipts FROM canonical_request_receipts"))
+      ).toEqual([{ receipts: 0 }]);
+      expect((yield* fulfill()).status).toBe(400);
+      expect(
+        yield* native(() => db.exec("SELECT count(*) AS marks FROM recurring_plan_fulfillments"))
+      ).toEqual([{ marks: 1 }]);
+    })
+  );
+
+  test.effect("replays a full-size atomic batch receipt", () =>
+    Effect.gen(function* () {
+      const { db, token } = yield* fullWorkspace;
+      const mark = { ...fulfillment, planId: "40000000-0000-4000-8000-000000000099" };
+
+      const batch = (): Effect.Effect<Response> =>
+        native(() =>
+          db.send(
+            new Request("https://api.fidyapp.com/operations/atomic-batch", {
+              method: "POST",
+              headers: {
+                authorization: "Bearer " + token,
+                "content-type": "application/json",
+                "Fidy-Retry-Key": "large-batch",
+              },
+              body: JSON.stringify({
+                calls: [
+                  {
+                    callId: mark.id,
+                    operation: "recurringPlans.applyRecurringEdit",
+                    input: {
+                      payload: {
+                        expectedRevision: 1,
+                        edit: {
+                          kind: "fulfill",
+                          fulfillment: {
+                            ...mark,
+                            id: "40000000-0000-4000-8000-000000000152",
+                            date: "2024-03-31",
+                            actualDate: "2024-03-31",
                           },
                         },
                       },
                     },
-                  ],
-                }),
-              })
-            )
-          );
-
-        const accepted = yield* batch();
-        expect(accepted.status).toBe(200);
-        const original = yield* native(() => accepted.text());
-        expect(original.length).toBeGreaterThan(2_097_152);
-        const recovered = yield* batch();
-        expect(recovered.status).toBe(200);
-        expect(yield* native(() => recovered.text())).toBe(original);
-        yield* native(() => db.exec("UPDATE canonical_request_receipts SET accepted_at_ms=0"));
-        expect((yield* native(() => db.checkWork(alice.user))).status).toBe(204);
-        yield* native(() => db.exec("SELECT 1 FROM canonical_receipt_parts LIMIT 1")).pipe(
-          Effect.repeat({
-            until: (rows) => rows.length === 0,
-            schedule: Schedule.spaced("50 millis"),
-          }),
-          Effect.timeout("5 seconds")
-        );
-        expect(
-          yield* native(() =>
-            db.exec("SELECT count(*) AS receipts FROM canonical_request_receipts")
+                  },
+                ],
+              }),
+            })
           )
-        ).toEqual([{ receipts: 0 }]);
-        expect((yield* fulfill()).status).toBe(400);
-        expect(
-          yield* native(() => db.exec("SELECT count(*) AS marks FROM recurring_plan_fulfillments"))
-        ).toEqual([{ marks: 2 }]);
-      })
+        );
+
+      const accepted = yield* batch();
+      expect(accepted.status).toBe(200);
+      const original = yield* native(() => accepted.text());
+      expect(original.length).toBeGreaterThan(2_097_152);
+      const recovered = yield* batch();
+      expect(recovered.status).toBe(200);
+      expect(yield* native(() => recovered.text())).toBe(original);
+    })
   );
 });

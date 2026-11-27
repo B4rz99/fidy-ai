@@ -4,6 +4,7 @@ import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Config, Effect, FileSystem, Schema } from "effect";
+import { Hex } from "effect/encoding";
 import { Miniflare } from "miniflare";
 import { native } from "../../user-store.test-fixture";
 
@@ -185,6 +186,29 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           expect(yield* store.exec("PRAGMA foreign_key_check")).toEqual([]);
         })
       );
+    })
+  );
+  test.effect("preserves the stored layout digest from SQLite catalog ordering", () =>
+    Effect.gen(function* () {
+      const activate = yield* probe;
+      const store = yield* activate("userCurrent", "catalog-ordering");
+      expect(yield* store.request).toBe(200);
+
+      const catalog = yield* store.exec(`SELECT type, name, sql FROM sqlite_schema
+        WHERE name NOT GLOB 'sqlite_*' AND name NOT IN ('_cf_KV','_cf_METADATA')
+        AND NOT (name='__miniflare_do_name' AND sql='CREATE TABLE __miniflare_do_name (id INTEGER PRIMARY KEY, name TEXT)')
+        AND name NOT IN ('store_migrations','store_migration_attempts')
+        ORDER BY type,name`);
+
+      const encoded = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(catalog);
+
+      const digest = yield* native(() =>
+        crypto.subtle.digest("SHA-256", new TextEncoder().encode(encoded))
+      );
+
+      expect(
+        yield* store.exec("SELECT layout FROM store_migrations ORDER BY version DESC LIMIT 1")
+      ).toEqual([{ layout: Hex.encode(new Uint8Array(digest)) }]);
     })
   );
   test.effect("preserves committed steps and a deterministic refusal across reconstruction", () =>

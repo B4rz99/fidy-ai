@@ -1,24 +1,30 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, Effect, Option, Schema } from "effect";
-import { boundedJsonBody } from "../../http/operations";
-import { RequestBodyPolicy } from "../../http/contract";
-import { newId } from "../../secret-material/operations";
+import { SecureRandom } from "effect/crypto";
 import { directoryName } from "../../directory/contract";
 import { withStoreAdmission } from "../../runtime/sqlite/operations";
-import { RecoveryOwner, recoveryGraceMs, reserveRecoveryUrl } from "../contract";
+import {
+  RecoveryOwner,
+  recoveryAlarmHeader,
+  recoveryGenerationHeader,
+  recoveryGraceMs,
+  recoveryOwnerHeader,
+  reserveRecoveryUrl,
+} from "../contract";
 
-const policy = Schema.decodeSync(RequestBodyPolicy)({
-  maximumBytes: 512,
-  deadlineMilliseconds: 1000,
-});
+const decodeReservation = Schema.decodeUnknownOption(
+  Schema.Struct({
+    userId: RecoveryOwner,
+    generation: Schema.String.check(Schema.isUUID()),
+  })
+);
 
-const Reservation = Schema.Struct({
-  userId: RecoveryOwner,
-  generation: Schema.String.check(Schema.isUUID()),
-  next: Schema.OptionFromOptionalKey(
-    Schema.OptionFromNullOr(Schema.Int.check(Schema.isGreaterThan(0)))
-  ),
-});
+const decodeAlarm = Schema.decodeUnknownOption(
+  Schema.Union([
+    Schema.Literal("idle"),
+    Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  ])
+);
 
 export const settleRecovery = Effect.fnUntraced(function* (
   userId: string,
@@ -30,7 +36,7 @@ export const settleRecovery = Effect.fnUntraced(function* (
   if (userId === directoryName) {
     const now = yield* Clock.currentTimeMillis;
     const due = Option.getOrNull(Option.map(next, (wake) => Math.max(wake, now) + recoveryGraceMs));
-    yield* sql`UPDATE directory_recovery SET generation=${newId()},due_ms=${due},uncertain=0
+    yield* sql`UPDATE directory_recovery SET generation=${SecureRandom.uuidV4Unsafe()},due_ms=${due},uncertain=0
       WHERE singleton=1 AND generation IS ${Option.getOrNull(generation)}`;
 
     return;
@@ -52,14 +58,17 @@ export const settleRecovery = Effect.fnUntraced(function* (
 
       const due = Math.max(next.value, yield* Clock.currentTimeMillis) + recoveryGraceMs;
       yield* sql`INSERT INTO user_recovery(user_id,generation,due_ms,uncertain)
-      SELECT user_id,${newId()},${due},0 FROM lifetime_registry WHERE user_id=${userId} AND retired=0
+      SELECT user_id,${SecureRandom.uuidV4Unsafe()},${due},0 FROM lifetime_registry WHERE user_id=${userId} AND retired=0
       ON CONFLICT(user_id) DO UPDATE SET generation=excluded.generation,due_ms=excluded.due_ms,uncertain=0`;
     })
   );
 });
 
 export const handleRecoveryIndex = Effect.fnUntraced(function* (request: Request) {
-  const parsed = yield* boundedJsonBody({ request, schema: Reservation, policy });
+  const parsed = decodeReservation({
+    userId: request.headers.get(recoveryOwnerHeader),
+    generation: request.headers.get(recoveryGenerationHeader),
+  });
 
   if (Option.isNone(parsed)) return new Response(null, { status: 400 });
 
@@ -67,8 +76,14 @@ export const handleRecoveryIndex = Effect.fnUntraced(function* (request: Request
   const sql = yield* SqliteClient;
 
   if (request.url !== reserveRecoveryUrl) {
-    if (Option.isNone(input.next)) return new Response(null, { status: 400 });
-    yield* settleRecovery(input.userId, Option.some(input.generation), input.next.value);
+    const next = decodeAlarm(request.headers.get(recoveryAlarmHeader));
+
+    if (Option.isNone(next)) return new Response(null, { status: 400 });
+    yield* settleRecovery(
+      input.userId,
+      Option.some(input.generation),
+      next.value === "idle" ? Option.none() : Option.some(next.value)
+    );
 
     return new Response(null, { status: 204 });
   }

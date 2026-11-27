@@ -80,9 +80,9 @@ import type { ProviderConfiguration } from "../provider-authentication/contract"
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { pollPairing, startPairing } from "./internal/pairing";
-import { OwnerWorkRecovery } from "../maintenance/work-recovery";
 import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
 import {
+  OwnerWorkRecovery,
   createStoreRuntime,
   observeStoreCheck,
   openSqliteStore,

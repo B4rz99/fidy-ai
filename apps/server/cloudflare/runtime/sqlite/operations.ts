@@ -2,6 +2,7 @@ import type { UnknownError } from "effect/Cause";
 import type * as Sql from "effect/sql/SqlClient";
 import { SqliteClient, layer } from "@effect/sql-sqlite-do/SqliteClient";
 import {
+  type Cause,
   Clock,
   Console,
   Data,
@@ -15,7 +16,17 @@ import {
   Schema,
 } from "effect";
 import { SqlClient, SqlError } from "effect/sql";
+import { SecureRandom } from "effect/crypto";
 import { Hex } from "effect/encoding";
+import {
+  RecoveryOwner,
+  maintenanceName,
+  recoveryAlarmHeader,
+  recoveryGenerationHeader,
+  recoveryOwnerHeader,
+  reserveRecoveryUrl,
+  settleRecoveryUrl,
+} from "../../maintenance/contract";
 import { digestBytes } from "../../secret-material/operations";
 import {
   StoreCapacity,
@@ -482,3 +493,91 @@ export const preserveStoreAlarm = Effect.fnUntraced(function* (
 
   return false;
 });
+
+class RecoveryReservationUnavailable extends Data.TaggedError("RecoveryReservationUnavailable") {}
+
+const RecoveryReservation = Schema.Struct({ clean: Schema.Boolean, hadDeadline: Schema.Boolean });
+
+type RecoveryFailure =
+  | Cause.UnknownError
+  | Cause.TimeoutError
+  | Schema.SchemaError
+  | RecoveryReservationUnavailable;
+
+export class OwnerWorkRecovery {
+  private running = 0;
+  private readonly state: DurableObjectState;
+  private readonly maintenance: Pick<DurableObjectNamespace, "getByName">;
+
+  constructor(state: DurableObjectState, maintenance: Pick<DurableObjectNamespace, "getByName">) {
+    this.state = state;
+    this.maintenance = maintenance;
+  }
+
+  private send(
+    url: string,
+    headers: Record<string, string>
+  ): Effect.Effect<Response, RecoveryFailure> {
+    return Effect.tryPromise((signal) =>
+      this.maintenance.getByName(maintenanceName).fetch(url, { method: "POST", signal, headers })
+    ).pipe(Effect.timeout("3 seconds"));
+  }
+
+  run<A>(
+    work: () => Promise<A>,
+    completed: (result: A) => boolean,
+    alarm = false
+  ): Effect.Effect<A, RecoveryFailure> {
+    return Effect.gen({ self: this }, function* () {
+      this.running++;
+      const generation = SecureRandom.uuidV4Unsafe();
+      const userId = yield* Schema.decodeUnknownEffect(RecoveryOwner)(this.state.id.name);
+      const headers = { [recoveryOwnerHeader]: userId, [recoveryGenerationHeader]: generation };
+      const reservation = yield* this.send(reserveRecoveryUrl, headers);
+
+      if (!reservation.ok) return yield* new RecoveryReservationUnavailable();
+
+      const { clean, hadDeadline } = yield* Schema.decodeUnknownEffect(RecoveryReservation)(
+        yield* Effect.tryPromise(() => reservation.json())
+      );
+
+      const result = yield* Effect.tryPromise(work);
+
+      if (clean && this.running === 1 && completed(result)) {
+        yield* Effect.gen({ self: this }, function* () {
+          const next = yield* Effect.tryPromise(() => this.state.storage.getAlarm());
+
+          if (this.running === 1 && (next !== null || alarm || !hadDeadline)) {
+            yield* this.send(settleRecoveryUrl, {
+              ...headers,
+              [recoveryAlarmHeader]: next === null ? "idle" : String(next),
+            });
+          }
+        }).pipe(Effect.ignore);
+      }
+
+      return result;
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          this.running--;
+        })
+      )
+    );
+  }
+
+  inspect(work: () => Promise<Response>): Effect.Effect<Response, Cause.UnknownError> {
+    return Effect.gen({ self: this }, function* () {
+      if (this.running !== 0) return new Response(null, { status: 503 });
+
+      const response = yield* Effect.tryPromise(work);
+
+      if (!response.ok) return response;
+
+      const next = yield* Effect.tryPromise(() => this.state.storage.getAlarm());
+      response.headers.set(recoveryAlarmHeader, next === null ? "idle" : String(next));
+
+      return response;
+    });
+  }
+}

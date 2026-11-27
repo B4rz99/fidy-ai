@@ -211,7 +211,6 @@ import {
 import { browserSessionRequest } from "./internal/browser-session";
 import { localChannelRequest, redeemLocalPairing } from "../browser-login/operations";
 import { completeLocalBootstrap } from "./internal/bootstrap";
-import { OwnerWorkRecovery } from "../maintenance/work-recovery";
 
 import {
   cancelLocalSubscription,
@@ -222,6 +221,7 @@ import {
 } from "../subscription/operations";
 import { DurableObject } from "cloudflare:workers";
 import {
+  OwnerWorkRecovery,
   observeStoreCheck,
   openSqliteStore,
   sqliteStoreLayer,

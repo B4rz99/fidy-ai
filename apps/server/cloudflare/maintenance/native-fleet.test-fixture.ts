@@ -1,6 +1,6 @@
 import { Clock, Effect } from "effect";
 import { Directory as NativeDirectory, UserStore as NativeUserStore } from "../core-worker";
-import { OwnerWorkRecovery } from "./work-recovery";
+import { OwnerWorkRecovery } from "../runtime/sqlite/operations";
 import { Maintenance as NativeMaintenance } from "./runtime";
 
 export * from "../core-worker";

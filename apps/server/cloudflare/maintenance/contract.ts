@@ -72,6 +72,8 @@ export const settleRecoveryUrl = "https://maintenance.invalid/recovery/settle";
 
 export const recoveryGraceMs = 120_000;
 
+export const indexedRecoveryHeader = "fidy-indexed-recovery";
+
 export const recoveryOwnerHeader = "fidy-recovery-owner";
 
 export const recoveryGenerationHeader = "fidy-recovery-generation";

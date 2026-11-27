@@ -6,7 +6,12 @@ import { directoryName } from "../../directory/contract";
 import { erasureRegistryName } from "../../erasure/contract";
 import type { SharedBindings } from "../../storage-bootstrap/contract";
 import { pricingName } from "../../subscription/contract";
-import { completedCheckStatus, ownerCheckUrl, recoveryAlarmHeader } from "../contract";
+import {
+  completedCheckStatus,
+  indexedRecoveryHeader,
+  ownerCheckUrl,
+  recoveryAlarmHeader,
+} from "../contract";
 
 const pageSize = 32;
 
@@ -95,17 +100,17 @@ const probe = Effect.fnUntraced(function* (target: Target, pending: Set<Promise<
   const { result, observed } = yield* Effect.scoped(
     Effect.gen(function* () {
       const signal = yield* Effect.abortSignal;
+      const headers = new Headers({ [indexedRecoveryHeader]: "1" });
+
+      if (target.sampleWork) headers.set("fidy-workflow-sample", "1");
 
       const work = Promise.resolve()
         .then(() =>
-          binding
-            .getByName(target.name)
-            .fetch(
-              ownerCheckUrl,
-              target.sampleWork === true
-                ? { method: "POST", signal, headers: { "fidy-workflow-sample": "1" } }
-                : { method: "POST", signal }
-            )
+          binding.getByName(target.name).fetch(ownerCheckUrl, {
+            method: "POST",
+            signal,
+            headers,
+          })
         )
         .then((response) => {
           sample = sampleFrom(response);

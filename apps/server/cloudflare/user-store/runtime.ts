@@ -251,6 +251,7 @@ import {
 
 import {
   idleRecoveryResponse,
+  indexedRecoveryHeader,
   ownerCheckRequest,
   ownerCheckResponse,
 } from "../maintenance/contract";
@@ -713,19 +714,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           return canonicalAdmissionUnavailable();
         }
 
-        if (registration === "unavailable" && ownerCheckRequest(request)) {
-          return new Response(null, { status: uncertainCheckStatus });
-        }
-
-        if (ownerCheckRequest(request)) {
-          return registration === "registered"
-            ? this.runtime.runPromise(
-                this.recovery.inspect(() =>
-                  this.inspectWork(request.headers.get("fidy-workflow-sample") === "1")
-                )
-              )
-            : Promise.resolve(idleRecoveryResponse());
-        }
+        if (ownerCheckRequest(request)) return this.ownerInspection(request, registration);
 
         if (registration !== "registered") return this.registeredRequest(request, false);
 
@@ -740,6 +729,23 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       },
       () => canonicalAdmissionUnavailable()
     );
+  }
+
+  private ownerInspection(
+    request: Request,
+    registration: Effect.Success<ReturnType<typeof observeUserRegistration>>
+  ): Promise<Response> {
+    if (registration === "unavailable") {
+      return Promise.resolve(new Response(null, { status: uncertainCheckStatus }));
+    }
+
+    if (registration !== "registered") return Promise.resolve(idleRecoveryResponse());
+
+    const sample = request.headers.get("fidy-workflow-sample") === "1";
+
+    return request.headers.get(indexedRecoveryHeader) === "1"
+      ? this.runtime.runPromise(this.recovery.inspect(() => this.inspectWork(sample)))
+      : this.inspectWork(sample);
   }
 
   private observePendingWork(remindersEnabled: { category: boolean; weekly: boolean }): void {

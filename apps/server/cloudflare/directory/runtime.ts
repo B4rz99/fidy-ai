@@ -80,7 +80,11 @@ import type { ProviderConfiguration } from "../provider-authentication/contract"
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { pollPairing, startPairing } from "./internal/pairing";
-import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
+import {
+  indexedRecoveryHeader,
+  ownerCheckRequest,
+  ownerCheckResponse,
+} from "../maintenance/contract";
 import {
   OwnerWorkRecovery,
   createStoreRuntime,
@@ -322,7 +326,9 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     }
 
     if (ownerCheckRequest(request)) {
-      return this.runtime.runPromise(this.recovery.inspect(() => this.checkWork()));
+      return request.headers.get(indexedRecoveryHeader) === "1"
+        ? this.runtime.runPromise(this.recovery.inspect(() => this.checkWork()))
+        : this.checkWork();
     }
 
     const invoke = (): Promise<Response> => this.applicationRequest(request);

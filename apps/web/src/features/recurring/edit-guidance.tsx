@@ -42,7 +42,7 @@ export const EditScope = ({
           {item.fulfillments.length === 0 && hasOccurrenceTracking({ document, item }) ? (
             <p>
               Hay un vínculo que necesita revisión. Usa Revisar seguimiento en Solo esta vez para
-              revisar el registro y, si corresponde, Desvincular transacción.
+              revisar el registro y, si corresponde, usar la opción Desvincular.
             </p>
           ) : null}
           {restored.length > 0 ? (
@@ -132,7 +132,7 @@ const OnceScope = ({
   <>
     <p id={id}>
       {tracked
-        ? "Esta fecha ya tiene seguimiento registrado y no se puede editar solo esta vez. Revisa las transacciones vinculadas y las marcas manuales. Si el seguimiento es incorrecto, usa Desvincular transacción en los vínculos y Revertir en las marcas manuales de esta fecha antes de editarla. Esto solo retira el seguimiento: no elimina transacciones ni revierte pagos reales."
+        ? "Esta fecha ya tiene seguimiento registrado y no se puede editar solo esta vez. Revisa las transacciones vinculadas y las marcas manuales. Si el seguimiento es incorrecto, usa Desvincular en los vínculos y Revertir en las marcas manuales de esta fecha antes de editarla. Esto solo retira el seguimiento: no elimina transacciones ni revierte pagos reales."
         : "Los cambios se aplican solo a esta fecha. Las próximas fechas conservan sus datos."}
     </p>
     {tracked ? (

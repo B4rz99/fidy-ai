@@ -1,11 +1,26 @@
-import { Array, DateTime, Option } from "effect";
+import { DateTime, Option } from "effect";
 import { type JSX, type Ref, useRef, useState } from "react";
 import { Button } from "@/ui/components/button";
-import { type Category, type Occurrence, type Save, type Workspace, money } from "./model";
+import {
+  type Category,
+  type Occurrence,
+  type Save,
+  type Workspace,
+  dayLabel,
+  money,
+} from "./model";
 
 type Mark = Occurrence["fulfillments"][number];
 
 type Transaction = Workspace["linkedTransactions"][number];
+
+type UnlinkLabels = Readonly<{ action: string; accessibleAction: string; target: string }>;
+
+type RecordFacts = Readonly<{
+  mark: Mark;
+  transaction: Option.Option<Transaction>;
+  amount: string;
+}>;
 
 type Props = Readonly<{
   item: Occurrence;
@@ -16,32 +31,111 @@ type Props = Readonly<{
   disabled: boolean;
 }>;
 
+const recordFacts = ({ item, invalidMarks, transactions }: Props): ReadonlyArray<RecordFacts> => {
+  const byId = new Map<string, Transaction>(transactions.map((entry) => [entry.id, entry]));
+
+  return [...item.fulfillments, ...invalidMarks].map((mark) => {
+    const transaction = Option.flatMap(Option.fromUndefinedOr(mark.transactionId), (id) =>
+      Option.fromUndefinedOr(byId.get(id))
+    );
+
+    return {
+      mark,
+      transaction,
+      amount: money(
+        Option.match(transaction, {
+          onNone: () => mark.money,
+          onSome: (entry) => entry.money,
+        })
+      ),
+    };
+  });
+};
+
+const linkedAmountCounts = (records: ReadonlyArray<RecordFacts>): ReadonlyMap<string, number> => {
+  const counts = new Map<string, number>();
+
+  for (const { mark, amount } of records) {
+    if (mark.transactionId !== undefined) counts.set(amount, (counts.get(amount) ?? 0) + 1);
+  }
+
+  return counts;
+};
+
+const unlinkLabels = (
+  { mark, transaction, amount }: RecordFacts,
+  timeZone: string,
+  position: Option.Option<number>
+): UnlinkLabels => {
+  const date = Option.match(transaction, {
+    onNone: () => dayLabel(mark.actualDate),
+    onSome: (entry) =>
+      DateTime.format(entry.occurredAt, { locale: "es-CO", timeZone, dateStyle: "long" }),
+  });
+
+  const counterparty = Option.flatMap(transaction, (entry) => entry.counterparty);
+
+  const name = Option.match(counterparty, {
+    onNone: () => "",
+    onSome: (value) => ` · ${value}`,
+  });
+
+  const record = Option.match(position, {
+    onNone: () => "",
+    onSome: (value) => ` · Registro ${value}`,
+  });
+
+  const action = `Desvincular ${amount}${record}`;
+
+  return {
+    action,
+    accessibleAction: `${action} · ${date}${name}`,
+    target: `la transacción de ${amount} del ${date}${name}${record}`,
+  };
+};
+
 export const FulfillmentHistory = ({
   heading,
   ...props
-}: Props & Readonly<{ heading: Ref<HTMLHeadingElement> }>): JSX.Element => (
-  <section className="grid gap-3" aria-label="Seguimiento de la ocurrencia">
-    {props.item.fulfillments.length + props.invalidMarks.length > 0 ? (
-      <h3 ref={heading} tabIndex={-1} className="font-medium">
-        Seguimiento de esta fecha
-      </h3>
-    ) : null}
-    {[...props.item.fulfillments, ...props.invalidMarks].map((mark) => (
-      <FulfillmentRecord key={mark.id} {...props} mark={mark} />
-    ))}
-  </section>
-);
+}: Props & Readonly<{ heading: Ref<HTMLHeadingElement> }>): JSX.Element => {
+  const records = recordFacts(props);
+  const counts = linkedAmountCounts(records);
 
-const FulfillmentRecord = ({ mark, ...props }: Props & Readonly<{ mark: Mark }>): JSX.Element => {
-  const transaction = Array.findFirst(
-    props.transactions,
-    (entry) => entry.id === mark.transactionId
+  return (
+    <section className="grid gap-3" aria-label="Seguimiento de la ocurrencia">
+      {records.length > 0 ? (
+        <h3 ref={heading} tabIndex={-1} className="font-medium">
+          Seguimiento de esta fecha
+        </h3>
+      ) : null}
+      {records.map((record, index) => (
+        <FulfillmentRecord
+          key={record.mark.id}
+          {...props}
+          record={record}
+          position={(counts.get(record.amount) ?? 0) > 1 ? Option.some(index + 1) : Option.none()}
+        />
+      ))}
+    </section>
   );
+};
+
+const FulfillmentRecord = ({
+  record,
+  position,
+  ...props
+}: Props & Readonly<{ record: RecordFacts; position: Option.Option<number> }>): JSX.Element => {
+  const { mark, transaction, amount } = record;
 
   const name = Option.match(transaction, {
     onNone: () => "Transacción no disponible",
     onSome: (entry) => Option.getOrElse(entry.counterparty, () => "Contraparte no identificada"),
   });
+
+  const labels =
+    mark.transactionId === undefined
+      ? Option.none()
+      : Option.some(unlinkLabels(record, props.item.plan.timeZone, position));
 
   return (
     <article
@@ -51,19 +145,19 @@ const FulfillmentRecord = ({ mark, ...props }: Props & Readonly<{ mark: Mark }>)
       }
     >
       {mark.transactionId === undefined ? (
-        <ManualMark mark={mark} />
+        <ManualMark mark={mark} amount={amount} />
       ) : (
-        <LinkedFacts {...props} mark={mark} transaction={transaction} name={name} />
+        <LinkedFacts {...props} mark={mark} transaction={transaction} name={name} amount={amount} />
       )}
-      <FulfillmentAction mark={mark} name={name} save={props.save} disabled={props.disabled} />
+      <FulfillmentAction mark={mark} labels={labels} save={props.save} disabled={props.disabled} />
     </article>
   );
 };
 
-const ManualMark = ({ mark }: Readonly<{ mark: Mark }>): JSX.Element => (
+const ManualMark = ({ mark, amount }: Readonly<{ mark: Mark; amount: string }>): JSX.Element => (
   <>
     <p>
-      {mark.actualDate} · {money(mark.money)} · Sin transacción vinculada
+      {mark.actualDate} · {amount} · Sin transacción vinculada
     </p>
     <p className="text-sm text-muted-foreground">
       Esta marca no modifica tus gastos o presupuestos. Si la transacción ya está en tu historial,
@@ -76,6 +170,7 @@ const LinkedFacts = ({
   mark,
   transaction,
   name,
+  amount,
   item,
   categories,
   invalidMarks,
@@ -84,6 +179,7 @@ const LinkedFacts = ({
     mark: Mark;
     transaction: Option.Option<Transaction>;
     name: string;
+    amount: string;
   }>): JSX.Element => {
   const invalid = invalidMarks.some((entry) => entry.id === mark.id);
 
@@ -93,8 +189,8 @@ const LinkedFacts = ({
         <h3>{name}</h3>
         <strong className="tabular-nums">
           {Option.match(transaction, {
-            onNone: () => money(mark.money),
-            onSome: (entry) => `${entry.direction === "inflow" ? "+" : "−"}${money(entry.money)}`,
+            onNone: () => amount,
+            onSome: (entry) => `${entry.direction === "inflow" ? "+" : "−"}${amount}`,
           })}
         </strong>
       </div>
@@ -167,13 +263,13 @@ const TransactionFacts = ({
 
 const FulfillmentAction = ({
   mark,
-  name,
+  labels,
   save,
   disabled,
-}: Pick<Props, "save" | "disabled"> & Readonly<{ mark: Mark; name: string }>): JSX.Element => {
+}: Pick<Props, "save" | "disabled"> &
+  Readonly<{ mark: Mark; labels: Option.Option<UnlinkLabels> }>): JSX.Element => {
   const [reviewing, setReviewing] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
-  const linked = mark.transactionId !== undefined;
 
   return (
     <div className="grid gap-3">
@@ -183,44 +279,64 @@ const FulfillmentAction = ({
         contentLayout="wrap"
         variant="destructive"
         disabled={disabled}
+        aria-label={Option.getOrUndefined(Option.map(labels, (label) => label.accessibleAction))}
+        aria-expanded={Option.isSome(labels) ? reviewing : undefined}
         onClick={() =>
-          linked ? setReviewing(true) : save({ kind: "reverse", fulfillmentId: mark.id })
+          Option.isSome(labels)
+            ? setReviewing(true)
+            : save({ kind: "reverse", fulfillmentId: mark.id })
         }
       >
-        {linked ? "Desvincular transacción" : "Revertir"}
+        {Option.match(labels, { onNone: () => "Revertir", onSome: (label) => label.action })}
       </Button>
-      {reviewing ? (
-        <fieldset
-          className="grid gap-3 border-t pt-3"
-          aria-label={`Confirmar desvinculación: ${name}`}
-        >
-          <legend className="pt-3">¿Desvincular {name}?</legend>
-          <p className="text-sm text-muted-foreground">
-            Se retirará este registro del seguimiento de esta fecha. La transacción no se elimina de
-            tu historial.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              disabled={disabled}
-              onClick={() => {
-                setReviewing(false);
-                trigger.current?.focus();
-              }}
-            >
-              Volver
-            </Button>
-            <Button
-              contentLayout="wrap"
-              variant="destructive"
-              disabled={disabled}
-              onClick={() => save({ kind: "reverse", fulfillmentId: mark.id })}
-            >
-              Confirmar desvinculación
-            </Button>
-          </div>
-        </fieldset>
+      {reviewing && Option.isSome(labels) ? (
+        <UnlinkConfirmation
+          target={labels.value.target}
+          disabled={disabled}
+          onCancel={() => {
+            setReviewing(false);
+            trigger.current?.focus();
+          }}
+          onConfirm={() => save({ kind: "reverse", fulfillmentId: mark.id })}
+        />
       ) : null}
     </div>
   );
 };
+
+const UnlinkConfirmation = ({
+  target,
+  disabled,
+  onCancel,
+  onConfirm,
+}: Readonly<{
+  target: string;
+  disabled: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}>): JSX.Element => (
+  <fieldset
+    className="grid gap-3 border-t pt-3"
+    aria-label={`Confirmar desvinculación de ${target}`}
+  >
+    <legend className="pt-3">¿Desvincular {target}?</legend>
+    <p className="text-sm text-muted-foreground">
+      Se retirará este registro del seguimiento de esta fecha. La transacción no se elimina de tu
+      historial.
+    </p>
+    <div className="flex flex-wrap gap-2">
+      <Button variant="outline" disabled={disabled} onClick={onCancel}>
+        Volver
+      </Button>
+      <Button
+        contentLayout="wrap"
+        variant="destructive"
+        disabled={disabled}
+        aria-label={`Confirmar desvinculación de ${target}`}
+        onClick={onConfirm}
+      >
+        Confirmar desvinculación
+      </Button>
+    </div>
+  </fieldset>
+);

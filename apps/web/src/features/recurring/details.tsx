@@ -26,6 +26,7 @@ import {
 
 type Props = Readonly<{
   item: Occurrence;
+  month: Workspace["month"];
   document: Workspace["document"];
   transactions: Workspace["linkedTransactions"];
   invalidMarks: Occurrence["fulfillments"];

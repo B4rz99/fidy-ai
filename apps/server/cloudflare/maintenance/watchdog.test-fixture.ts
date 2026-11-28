@@ -1,5 +1,5 @@
 import { Maintenance } from "./runtime";
-import { ownerCheckResponse } from "./contract";
+import { ownerCheckResponse, recoveryAlarmHeader } from "./contract";
 
 type Environment = ConstructorParameters<typeof Maintenance>[1] & Readonly<{ MODE: string }>;
 
@@ -64,7 +64,16 @@ const reply = ({
 
     if (name.endsWith("000000000002")) return Promise.resolve(new Response(null, { status: 503 }));
 
-    return Promise.resolve(ownerCheckResponse());
+    const response = ownerCheckResponse();
+
+    if (mode === "freshness") {
+      response.headers.set(recoveryAlarmHeader, "idle");
+      response.headers.set("fidy-schema-version", "1");
+      response.headers.set("fidy-schema-release", "22530000-0000-4000-8000-000000000001");
+      response.headers.set("fidy-storage-band", "normal");
+    }
+
+    return Promise.resolve(response);
   };
 
   return transport().finally(() => {

@@ -221,6 +221,7 @@ import {
 } from "../subscription/operations";
 import { DurableObject } from "cloudflare:workers";
 import {
+  OwnerWorkRecovery,
   observeStoreCheck,
   openSqliteStore,
   sqliteStoreLayer,
@@ -248,7 +249,12 @@ import {
   storeTransactionUrl,
 } from "../runtime/sqlite/contract";
 
-import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
+import {
+  idleRecoveryResponse,
+  indexedRecoveryHeader,
+  ownerCheckRequest,
+  ownerCheckResponse,
+} from "../maintenance/contract";
 
 const uncertainCheckStatus = 503;
 
@@ -308,6 +314,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     return sandboxConnectionAdapters({ environment: this.env, userId: this.ctx.id.name ?? "" });
   }
   private readonly runtime;
+  private readonly recovery;
   private erased = false;
   private mcp?: McpResidency;
   private protocol(request: Request, owns: (id: string) => boolean): Promise<Response> {
@@ -371,6 +378,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   }
   constructor(state: DurableObjectState, env: UserStoreEnvironment) {
     super(state, env);
+    this.recovery = new OwnerWorkRecovery(state, env.MAINTENANCE);
     this.runtime = ManagedRuntime.make(
       Layer.mergeAll(
         Layer.succeed(HostedPauseNotice, nativePauseNotice),
@@ -514,7 +522,15 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     if (this.erased) return Promise.resolve();
 
     return this.registration().then((registration) =>
-      registration === "registered" ? this.checkWork() : undefined
+      registration === "registered"
+        ? this.runtime.runPromise(
+            this.recovery.run(
+              () => this.checkWork(),
+              () => true,
+              true
+            )
+          )
+        : undefined
     );
   }
 
@@ -623,7 +639,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   private erasedResponse(request: Request): Promise<Response> {
     if (request.url === betaUserUrl) return Promise.resolve(new Response(null, { status: 404 }));
 
-    if (ownerCheckRequest(request)) return Promise.resolve(ownerCheckResponse());
+    if (ownerCheckRequest(request)) return Promise.resolve(idleRecoveryResponse());
 
     if (
       request.method === "POST" &&
@@ -698,14 +714,38 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           return canonicalAdmissionUnavailable();
         }
 
-        if (registration === "unavailable" && ownerCheckRequest(request)) {
-          return new Response(null, { status: uncertainCheckStatus });
-        }
+        if (ownerCheckRequest(request)) return this.ownerInspection(request, registration);
 
-        return this.registeredRequest(request, registration === "registered");
+        if (registration !== "registered") return this.registeredRequest(request, false);
+
+        return this.runtime.runPromise(
+          this.recovery
+            .run(
+              () => this.registeredRequest(request, true),
+              (response) => response.ok
+            )
+            .pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
+        );
       },
       () => canonicalAdmissionUnavailable()
     );
+  }
+
+  private ownerInspection(
+    request: Request,
+    registration: Effect.Success<ReturnType<typeof observeUserRegistration>>
+  ): Promise<Response> {
+    if (registration === "unavailable") {
+      return Promise.resolve(new Response(null, { status: uncertainCheckStatus }));
+    }
+
+    if (registration !== "registered") return Promise.resolve(idleRecoveryResponse());
+
+    const sample = request.headers.get("fidy-workflow-sample") === "1";
+
+    return request.headers.get(indexedRecoveryHeader) === "1"
+      ? this.runtime.runPromise(this.recovery.inspect(() => this.inspectWork(sample)))
+      : this.inspectWork(sample);
   }
 
   private observePendingWork(remindersEnabled: { category: boolean; weekly: boolean }): void {
@@ -1349,15 +1389,6 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
         )
       );
-    }
-
-    return this.workStatus(request, registered);
-  }
-  private workStatus(request: Request, registered: boolean): Promise<Response> {
-    if (ownerCheckRequest(request)) {
-      return registered
-        ? this.inspectWork(request.headers.get("fidy-workflow-sample") === "1")
-        : Promise.resolve(ownerCheckResponse());
     }
 
     return Promise.resolve(new Response(null, { status: 404 }));

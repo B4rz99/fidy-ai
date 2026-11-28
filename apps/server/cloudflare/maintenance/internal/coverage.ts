@@ -29,7 +29,13 @@ export const watchdogCoverage = Effect.gen(function* () {
 
   const [raw] =
     yield* sql`SELECT nullif(last_attempt_ms,0) AS lastAttemptMs,nullif(last_observed_ms,0) AS lastObservedMs,started_ms AS started,wrapped_at AS wrapped,
-    (SELECT max(observed_ms,registered_ms) FROM lifetime_registry WHERE retired=0 ORDER BY max(observed_ms,registered_ms) LIMIT 1) AS oldest FROM watchdog_progress WHERE singleton=1`;
+    (SELECT min(candidate) FROM (
+      SELECT min(max(observed_ms,registered_ms)) AS candidate FROM lifetime_registry WHERE retired=0 AND recovery_seeded=0
+      UNION ALL
+      SELECT min(due_ms) AS candidate FROM user_recovery JOIN lifetime_registry USING(user_id) WHERE retired=0
+      UNION ALL
+      SELECT nullif(due_ms,0) AS candidate FROM directory_recovery WHERE singleton=1
+    )) AS oldest FROM watchdog_progress WHERE singleton=1`;
 
   const row = yield* Schema.decodeUnknownEffect(coverage)(raw);
   const oldest = row.oldest === 0 ? row.started : row.oldest;

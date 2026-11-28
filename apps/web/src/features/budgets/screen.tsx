@@ -58,6 +58,11 @@ const MonthlyBudgets = ({
     Ready: ({ stale, waiting, workspace }) => (
       <>
         {stale ? <Failure retry={workspace.editing.refresh} waiting={waiting} /> : null}
+        {!stale && waiting && Option.isNone(workspace.editing.draft) ? (
+          <output className="block px-5 pt-4 text-sm text-muted-foreground">
+            Actualizando presupuestos…
+          </output>
+        ) : null}
         <Suspense fallback={<PendingRead label="Cargando presupuestos" />}>
           <Workspace {...workspace} />
           {children}

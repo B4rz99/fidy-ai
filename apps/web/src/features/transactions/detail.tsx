@@ -14,6 +14,7 @@ import type { CanonicalSuccess, FidyClient } from "@/transport/client";
 import { DetailMode, reconciliationLocked } from "./panel-state";
 import { TransactionCorrection } from "./correction";
 import { TransactionDeletion } from "./deletion";
+import { RecurringReturnLink } from "./destination";
 import {
   type CaptureSources,
   type Category,
@@ -36,6 +37,7 @@ type DetailProps = Readonly<{
   editable: boolean;
   inspectable: boolean;
   fromReview: boolean;
+  recurringMonth: Option.Option<string>;
   mode: DetailMode;
   onMode: (mode: DetailMode) => void;
 }>;
@@ -232,15 +234,26 @@ const DetailClose = ({ props }: Readonly<{ props: InspectedProps }>): JSX.Elemen
   );
 };
 
+const DetailHeader = ({ props }: Readonly<{ props: InspectedProps }>): JSX.Element => (
+  <header className="grid gap-2">
+    {Option.isSome(props.recurringMonth) && Predicate.isTagged(props.mode, "Viewing") ? (
+      <div>
+        <RecurringReturnLink month={props.recurringMonth.value} />
+      </div>
+    ) : null}
+    <div className="flex items-center justify-between gap-3">
+      <h2>{detailTitle(props.mode)}</h2>
+      <DetailClose props={props} />
+    </div>
+  </header>
+);
+
 const DetailFrame = ({
   props,
   children,
 }: Readonly<{ props: InspectedProps; children: JSX.Element }>): JSX.Element => (
   <section aria-label="Detalle de transacción" className="flex flex-col gap-6">
-    <header className="flex items-center justify-between gap-3">
-      <h2>{detailTitle(props.mode)}</h2>
-      <DetailClose props={props} />
-    </header>
+    <DetailHeader props={props} />
     {props.fromReview ? (
       <Badge variant="information" className="self-start">
         Desde Historial de revisión

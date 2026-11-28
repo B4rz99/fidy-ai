@@ -120,6 +120,22 @@ const testCase = Effect.fn(function* (scenario: Scenario) {
   const core = yield* native(() => runtime.getWorker("core"));
   const scheduled = Math.floor(now / 3600000) * 3600000 + 5000;
 
+  const registry = yield* native(() =>
+    runtime.unsafeGetDurableObjectStorage("core", "Maintenance", { name: maintenanceName })
+  );
+
+  yield* native(() =>
+    registry.exec(
+      "INSERT INTO user_recovery VALUES(?,?,?,1),(?,?,?,1) ON CONFLICT(user_id) DO UPDATE SET due_ms=excluded.due_ms",
+      alice.user,
+      alice.user,
+      scheduled,
+      bob.user,
+      bob.user,
+      scheduled
+    )
+  );
+
   const ran = yield* Effect.tryPromise(() =>
     core.scheduled({
       cron: "* * * * *",

@@ -1,12 +1,32 @@
+import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useSearch } from "@tanstack/react-router";
 import { type Data, Option, Predicate } from "effect";
 import type { JSX } from "react";
+import { cn } from "@/ui/class-names";
+import { useRecurringTransactionMonth } from "@/browser/recurring-transaction-origin";
 import type { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
+import { buttonVariants } from "@/ui/components/button-variants";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
+
+export const RecurringReturnLink = ({ month }: Readonly<{ month: string }>): JSX.Element => (
+  <Link
+    to="/app/recurring"
+    search={{ month }}
+    state={(previous) => ({ ...previous, recurringTransactionOrigin: undefined })}
+    className={cn(buttonVariants({ variant: "link", size: "label", contentLayout: "wrap" }))}
+  >
+    <HugeiconsIcon icon={ArrowLeft01Icon} size={20} strokeWidth={1.5} aria-hidden="true" />
+    Volver a Recurrentes
+  </Link>
+);
 
 export const TransactionDestinationRecovery = (): JSX.Element => {
   const search = useSearch({ from: "/independent-application/app/transactions" });
+  const month = useRecurringTransactionMonth();
+
+  if (Option.isSome(month)) return <RecurringReturnLink month={month.value} />;
 
   return search.date === undefined ? (
     <Button

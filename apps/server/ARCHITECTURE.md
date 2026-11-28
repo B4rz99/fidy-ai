@@ -96,10 +96,11 @@ per-child accountability and the batch result share one commit. PAT replay uses 
 retained response bodies. Hosted confirmation binds ordered child effects and revisions to the
 original Session. The confirming Turn records each child outcome with the parent tool call.
 
-The Core minute Cron calls Maintenance to traverse the lifetime registry and check Directory,
-Pricing and independent Erasure. A private check inspects retained owner work and repairs the
-earliest required alarm. Owner alarms execute the continuation. Maintenance persists its cursor
-before each batch and reports interrupted or unanswered checks as unknown. A repaired alarm and
+The Core minute Cron calls Maintenance to inspect overdue User and Directory work and check Pricing
+and independent Erasure. A durable Maintenance reservation precedes registered User work. The
+User retains the intent and its native alarm executes the continuation. A private check repairs the
+earliest required alarm and returns the next deadline. Maintenance advances only the reservation
+that the check inspected and reports interrupted or unanswered checks as unknown. A repaired alarm and
 a confirmed domain outcome have separate evidence. A probe whose cancellation cannot settle
 stops the tick. Maintenance flushes its progress before resetting the object to release outstanding
 I/O. A stalled shared owner runs after the User page budget on the next tick. A stalled User

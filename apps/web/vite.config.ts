@@ -10,9 +10,12 @@ const publicDirectory = (mode: string): string | false => {
   return false;
 };
 
-const bootstrapModules = [
+const browserTransportModules = [
   "/apps/server/src/browser-transport.ts",
   "/apps/server/src/shell/browser-transport/contract.ts",
+];
+
+const bootstrapModules = [
   "/apps/server/src/shell/browser-transport/operations.ts",
   "/apps/web/src/transport/origin.ts",
   "/apps/web/src/transport/initial-request.ts",
@@ -34,7 +37,9 @@ const bootstrapCodeModule = (id: string): boolean => {
 const sharedRuntimeModule = (id: string): boolean => {
   const path = id.replaceAll("\\", "/").replace(/\?.*$/u, "");
 
-  if (bootstrapModules.some((suffix) => path.endsWith(suffix))) return false;
+  if ([...bootstrapModules, ...browserTransportModules].some((suffix) => path.endsWith(suffix))) {
+    return false;
+  }
 
   return /\/apps\/server\/src\/|node_modules\/(?:effect|@effect|react|react-dom|scheduler|use-sync-external-store|@tanstack\/(?:react-router|router-core|history|react-store|store))\//u.test(
     path

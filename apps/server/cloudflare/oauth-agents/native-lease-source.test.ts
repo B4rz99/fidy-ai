@@ -4,7 +4,7 @@ import { Clock, Effect } from "effect";
 import type { Miniflare } from "miniflare";
 import { expect } from "vitest";
 import { storeReadinessUrl } from "../runtime/sqlite/contract";
-import { native, nativeOAuthPlatform } from "../user-store.test-fixture";
+import { native, nativeUserPlatform } from "../user-store.test-fixture";
 
 type LeaseStorage = Awaited<ReturnType<Miniflare["unsafeGetDurableObjectStorage"]>>;
 
@@ -24,7 +24,7 @@ const seedLeases = (
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("caps concurrent OAuth leases per source while other sources stay admitted", () =>
     Effect.gen(function* () {
-      const create = yield* nativeOAuthPlatform;
+      const create = yield* nativeUserPlatform;
       const runtime = yield* create();
       const directory = yield* native(() => runtime.getDurableObjectNamespace("DIRECTORY", "core"));
       const store = directory.getByName("directory-v1");

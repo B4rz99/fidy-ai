@@ -311,7 +311,8 @@
   margin-bottom: 22px;
   border-bottom: 1px solid var(--application-line);
 }
-:is([data-recurring-slot="workspace"], [data-recurring-slot="mobile-panel"]) [data-slot="button"] {
+:is([data-recurring-slot="workspace"], [data-recurring-slot="mobile-panel"])
+  [data-slot="button"]:not([data-recurring-slot="fulfillment"] *) {
   font-size: 0.8125rem;
   font-weight: 400;
   border-radius: 10px;

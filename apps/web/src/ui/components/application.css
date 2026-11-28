@@ -298,9 +298,10 @@
     height: 61px;
     border-radius: 15px;
   }
+  .application-menu-control .application-theme-button,
   .application-menu-brand .application-theme-button {
-    width: 44px;
-    height: 44px;
+    width: var(--fidy-touch-target);
+    height: var(--fidy-touch-target);
   }
   .application-agent-trigger {
     top: 21px;

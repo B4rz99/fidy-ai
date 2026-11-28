@@ -6,6 +6,7 @@ import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { AsyncResult } from "effect/reactivity";
 import { type JSX, type ReactNode, useState } from "react";
+import { Alert } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
 import {
   AccessAction,
@@ -234,6 +235,26 @@ const AttemptStatus = ({
   </>
 );
 
+const PopupBlocked = ({
+  provider,
+  retry,
+}: Readonly<{ provider: AuthenticationProvider; retry: () => void }>): JSX.Element => (
+  <div className="grid justify-items-start gap-4">
+    <Alert variant="warning">
+      <div className="grid gap-2 p-1.5 text-base">
+        <strong className="font-semibold">
+          No pudimos abrir la ventana de {provider === "google" ? "Google" : "Microsoft"}
+        </strong>
+        <p>
+          Si tu navegador bloqueó la ventana, permite las ventanas emergentes para Fidy y vuelve a
+          intentar.
+        </p>
+      </div>
+    </Alert>
+    <Button onClick={retry}>Volver a intentar</Button>
+  </div>
+);
+
 const RetryStatus = ({
   authentication,
   provider,
@@ -242,6 +263,9 @@ const RetryStatus = ({
   provider: AuthenticationProvider;
 }>): JSX.Element => (
   <>
+    {authentication.state.status === "popupBlocked" && (
+      <PopupBlocked provider={provider} retry={authentication.retry} />
+    )}
     {(authentication.state.status === "refused" || authentication.state.status === "cancelled") && (
       <>
         <p role="alert">
@@ -285,9 +309,11 @@ const ProviderIntroduction = ({
       <AccessHeading key={status}>
         {confirmingIdentity ? "Confirma tu identidad" : headingForIntent(intent)}
       </AccessHeading>
-      <p data-access-intro="">
-        {webSignup ? "Elige cómo crear tu cuenta." : "Elige cómo iniciar sesión."}
-      </p>
+      {status !== "popupBlocked" && (
+        <p data-access-intro="">
+          {webSignup ? "Elige cómo crear tu cuenta." : "Elige cómo iniciar sesión."}
+        </p>
+      )}
       {confirmingToken && (
         <p>
           Usa la misma cuenta para volver a crear el token con el formulario que ya completaste.

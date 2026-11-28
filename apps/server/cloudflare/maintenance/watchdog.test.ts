@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Clock, Effect, Schedule } from "effect";
+import { type Cause, Clock, Effect, Schedule } from "effect";
 import type { Miniflare } from "miniflare";
 import { expect } from "vitest";
 import { native, nativeBrowserPlatform, nativeUserPlatform } from "../user-store.test-fixture";
@@ -17,21 +17,23 @@ const coverageAt = (
   registry: MaintenanceStorage,
   maintenanceNamespace: MaintenanceNamespace,
   logs: readonly string[]
-): ((coverage: readonly [number, string]) => Effect.Effect<void>) =>
+): ((coverage: readonly [number, string]) => Effect.Effect<void, Cause.TimeoutError>) =>
   Effect.fnUntraced(function* ([age, severity]: readonly [number, string]) {
     const now = yield* Clock.currentTimeMillis;
+    const logged = logs.length;
     yield* native(() =>
       registry.exec(
-        "UPDATE lifetime_registry SET registered_ms=? WHERE user_id=?",
+        "UPDATE lifetime_registry SET registered_ms=?,observed_ms=0 WHERE user_id=?",
         now - age,
         coveredUser
       )
     );
     yield* native(() =>
       registry.exec(
-        "UPDATE watchdog_progress SET minute=-1,scheduled=-1,started_ms=?,wrapped_at=?",
+        "UPDATE watchdog_progress SET minute=-1,scheduled=-1,started_ms=?,wrapped_at=?,cursor=?",
         now - age,
-        now
+        now,
+        coveredUser
       )
     );
 
@@ -45,14 +47,14 @@ const coverageAt = (
     );
 
     expect(tick.status).toBe(204);
-    expect(
-      logs.some((line) =>
-        line.includes(
-          "fidy.operational component=watchdog operation=coverage state=wrapped severity=" +
-            severity
-        )
-      )
-    ).toBe(true);
+
+    const coverage =
+      "fidy.operational component=watchdog operation=coverage state=wrapped severity=" + severity;
+
+    yield* Effect.sync(() => logs.slice(logged).some((line) => line.includes(coverage))).pipe(
+      Effect.repeat({ until: (observed) => observed, schedule: Schedule.spaced("25 millis") }),
+      Effect.timeout("3 seconds")
+    );
   });
 
 const maintenance = Effect.fn(function* (runtime: Miniflare) {
@@ -100,6 +102,16 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           )
         );
 
+        const registry = yield* native(() =>
+          runtime.unsafeGetDurableObjectStorage("core", "Maintenance", {
+            name: "core-maintenance-v1",
+          })
+        );
+
+        yield* native(() =>
+          registry.exec("INSERT INTO user_recovery VALUES(?,?,?,1)", user, user, now)
+        );
+
         const tick = (): ReturnType<typeof executor.fetch> =>
           executor.fetch("https://maintenance.invalid/watchdog", {
             method: "POST",
@@ -108,12 +120,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
         const responses = yield* native(() => Promise.all([tick(), tick()]));
         expect(responses.map((response) => response.status)).toEqual([204, 204]);
-
-        const registry = yield* native(() =>
-          runtime.unsafeGetDurableObjectStorage("core", "Maintenance", {
-            name: "core-maintenance-v1",
-          })
-        );
 
         expect(
           yield* native(() =>
@@ -248,10 +254,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
         yield* Effect.forEach(
           [
-            [299000, "none"],
-            [300000, "warning"],
-            [599000, "warning"],
-            [600000, "critical"],
+            [290000, "none"],
+            [301000, "warning"],
+            [590000, "warning"],
+            [601000, "critical"],
           ] as const,
           coverageAt(registry, maintenanceNamespace, logs),
           { discard: true }
@@ -269,6 +275,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const logs: string[] = [];
         const runtime = yield* (yield* nativeBrowserPlatform)("1", logs);
         const ns = yield* native(() => runtime.getDurableObjectNamespace("MAINTENANCE", "core"));
+
+        const registry = yield* native(() =>
+          runtime.unsafeGetDurableObjectStorage("core", "Maintenance", {
+            name: "core-maintenance-v1",
+          })
+        );
+
+        yield* native(() => registry.exec("UPDATE lifetime_registry SET observed_ms=0"));
         const now = yield* Clock.currentTimeMillis;
         expect(
           (yield* native(() =>

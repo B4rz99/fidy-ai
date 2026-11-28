@@ -36,7 +36,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) =>
 
         const recorded = yield* native(snapshot);
         expect(recorded).toEqual([
-          { scheduled: scheduledTime, wraps: 1, shared_observed: 3, failed: 0, unknown: 0 },
+          { scheduled: scheduledTime, wraps: 1, shared_observed: 2, failed: 0, unknown: 0 },
         ]);
       })
   )

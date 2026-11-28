@@ -15,6 +15,7 @@ import {
   type LocalMutationResult,
   notFoundRejection,
   validationRejection,
+  validationRejectionWithFields,
 } from "../../canonical-admission/contract";
 import { resolveLocalCategory, retainLocalCategory } from "../../categories/operations";
 import { newId } from "../../secret-material/operations";
@@ -209,16 +210,23 @@ const validGroup = Effect.fn(function* (
   );
 
   if (input.groupCurrency !== undefined) {
-    return (
-      sameCurrency &&
-      (yield* groupPrecision(user, {
-        ids: input.groupCategoryIds ?? [],
-        name: input.groupName ?? "",
-        month: input.month ?? latestMonth,
-        currency: input.groupCurrency,
-        amount: encodeMoneyAmount(input.cap.amount),
-      }))
-    );
+    if (!sameCurrency) {
+      return yield* validationRejectionWithFields({
+        message:
+          "The submitted cap Currency differs from the saved Budget Group Currency. Read the current Budget before retrying.",
+        fields: [
+          { path: "cap.currency", message: "Use the saved Currency for the existing Budget cap." },
+        ],
+      });
+    }
+
+    return yield* groupPrecision(user, {
+      ids: input.groupCategoryIds ?? [],
+      name: input.groupName ?? "",
+      month: input.month ?? latestMonth,
+      currency: input.groupCurrency,
+      amount: encodeMoneyAmount(input.cap.amount),
+    });
   }
 
   if (input.groupName === undefined) {

@@ -80,8 +80,13 @@ import type { ProviderConfiguration } from "../provider-authentication/contract"
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { pollPairing, startPairing } from "./internal/pairing";
-import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
 import {
+  indexedRecoveryHeader,
+  ownerCheckRequest,
+  ownerCheckResponse,
+} from "../maintenance/contract";
+import {
+  OwnerWorkRecovery,
   createStoreRuntime,
   observeStoreCheck,
   openSqliteStore,
@@ -111,6 +116,7 @@ type DirectoryEnvironment = StoreReleaseEnvironment &
     DIRECTORY: DurableObjectNamespace;
     USER_STORE: DurableObjectNamespace;
     ERASURE: DurableObjectNamespace;
+    MAINTENANCE: DurableObjectNamespace;
   }>;
 
 const digestBytes = 32;
@@ -121,7 +127,7 @@ const admittedStatus = 204;
 
 const pressureStatus = 429;
 
-const admitUnresolved = Effect.fn(function* (source: string) {
+const admitUnresolved = Effect.fn(function* (source: string, storage: DurableObjectStorage) {
   const sql = yield* SqliteClient;
 
   return yield* withStoreAdmission((admitGrowth) =>
@@ -136,7 +142,14 @@ const admitUnresolved = Effect.fn(function* (source: string) {
       const rows = yield* sql`INSERT INTO unresolved_source_buckets(subject,virtual_at_ms)
             VALUES (${source},${current + intervalMs}) ON CONFLICT(subject) DO UPDATE
             SET virtual_at_ms=max(virtual_at_ms,${current})+${intervalMs}
-            WHERE virtual_at_ms<=${current + (burst - 1) * intervalMs} RETURNING subject`;
+            WHERE virtual_at_ms<=${current + (burst - 1) * intervalMs} RETURNING virtual_at_ms`;
+
+      const [admitted] = rows;
+
+      if (admitted !== undefined) {
+        const expires = yield* Schema.decodeUnknownEffect(Schema.Int)(admitted.virtual_at_ms);
+        yield* preserveStoreAlarm(storage, expires);
+      }
 
       return new Response(null, {
         status: rows.length === 1 ? admittedStatus : pressureStatus,
@@ -169,10 +182,26 @@ const inspectPressure = Effect.fnUntraced(function* (
   );
 });
 
+const firstServerErrorStatus = 500;
+
+const unreservedRequest = (request: Request): boolean =>
+  isReadinessRequest(request) ||
+  [
+    sourcePressureUrl,
+    sessionRouteUrl,
+    patRouteUrl,
+    handoffInspectUrl,
+    channelInspectUrl,
+    scopeDirectoryUrl,
+    participantDrainedUrl,
+  ].includes(request.url);
+
 export class Directory extends DurableObject<DirectoryEnvironment> {
   private readonly runtime;
+  private readonly recovery;
   constructor(state: DurableObjectState, env: DirectoryEnvironment) {
     super(state, env);
+    this.recovery = new OwnerWorkRecovery(state, env.MAINTENANCE);
     this.runtime = createStoreRuntime({
       storage: state.storage,
       owner: "directory",
@@ -185,6 +214,16 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     );
   }
   override alarm(): Promise<void> {
+    return this.runtime.runPromise(
+      this.recovery.run(
+        () => this.cleanUp(),
+        () => true,
+        true
+      )
+    );
+  }
+
+  private cleanUp(): Promise<void> {
     return this.runtime.runPromise(
       Effect.andThen(
         Effect.andThen(
@@ -256,11 +295,20 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
       );
     }
   }
-  override fetch(request: Request): Promise<Response> {
-    if (!this.ctx.id.equals(this.env.DIRECTORY.idFromName(directoryName))) {
-      return Promise.resolve(new Response(null, { status: 404 }));
-    }
+  private checkWork(): Promise<Response> {
+    return this.runtime.runPromise(
+      inspectPressure(this.ctx.storage, false).pipe(
+        Effect.map(ownerCheckResponse),
+        observeStoreCheck({
+          storage: this.ctx.storage,
+          history: directoryHistory,
+          release: this.env.CF_VERSION_METADATA.id,
+        })
+      )
+    );
+  }
 
+  private applicationRequest(request: Request): Promise<Response> {
     if (
       request.method === "POST" &&
       [
@@ -273,24 +321,56 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
       return this.erasure(request);
     }
 
-    if (ownerCheckRequest(request)) {
+    if (request.method === "POST" && request.url === sourcePressureUrl) {
       return this.runtime.runPromise(
-        inspectPressure(this.ctx.storage, false).pipe(
-          Effect.map(ownerCheckResponse),
-          observeStoreCheck({
-            storage: this.ctx.storage,
-            history: directoryHistory,
-            release: this.env.CF_VERSION_METADATA.id,
-          })
-        )
+        Effect.gen({ self: this }, function* () {
+          const source = yield* Effect.tryPromise(() => request.text());
+
+          if (!/^[a-f0-9]{64}$/u.test(source)) return new Response(null, { status: 400 });
+
+          return yield* admitUnresolved(source, this.ctx.storage);
+        })
       );
     }
 
     return this.runtime.runPromise(
-      (request.url === emailCapacityUrl || request.url === mediaCapacityUrl
+      request.url === emailCapacityUrl || request.url === mediaCapacityUrl
         ? ingestionCapacityRequest(request, this.ctx.storage)
         : directoryRequest(request, this.env)
-      ).pipe(
+    );
+  }
+
+  override fetch(request: Request): Promise<Response> {
+    if (!this.ctx.id.equals(this.env.DIRECTORY.idFromName(directoryName))) {
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }
+
+    if (ownerCheckRequest(request)) {
+      return request.headers.get(indexedRecoveryHeader) === "1"
+        ? this.runtime.runPromise(this.recovery.inspect(() => this.checkWork()))
+        : this.checkWork();
+    }
+
+    const invoke = (): Promise<Response> => this.applicationRequest(request);
+
+    const work = unreservedRequest(request)
+      ? Effect.tryPromise(invoke)
+      : this.recovery.run(
+          () =>
+            this.runtime.runPromise(
+              Effect.tryPromise(invoke).pipe(
+                Effect.tap((response) =>
+                  response.status < firstServerErrorStatus
+                    ? inspectPressure(this.ctx.storage, false).pipe(Effect.asVoid)
+                    : Effect.void
+                )
+              )
+            ),
+          (response) => response.status < firstServerErrorStatus
+        );
+
+    return this.runtime.runPromise(
+      work.pipe(
         Effect.tapCause(() =>
           Effect.logWarning({
             component: "directory",
@@ -307,14 +387,6 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
 const credentialLookup = Effect.fn(function* (request: Request) {
   yield* (yield* StoreCapacity).observe;
   const sql = yield* SqliteClient;
-
-  if (request.url === sourcePressureUrl) {
-    const source = yield* Effect.tryPromise(() => request.text());
-
-    if (!/^[0-9a-f]{64}$/u.test(source)) return new Response(null, { status: 400 });
-
-    return yield* admitUnresolved(source);
-  }
 
   if (request.url === patRouteUrl) {
     const shortId = yield* Schema.decodeEffect(TokenShortId)(
@@ -409,7 +481,6 @@ const routingCommands = new Map<
   [whatsappOwnerUrl, whatsappOwner],
   [rejectInvitationSendUrl, rejectInvitationSend],
   [sessionRouteUrl, credentialLookup],
-  [sourcePressureUrl, credentialLookup],
   [patRouteUrl, credentialLookup],
   [oauthRouteCommandUrl, handleOAuthRouteCommand],
   [nativePATDirectoryUrl, handlePATDirectoryCommand],

@@ -540,15 +540,25 @@ const leasedResponse = (
             if (chunk.done) {
               finish();
               controller.close();
-            } else {
-              const value: unknown = chunk.value;
 
-              if (!Predicate.isUint8Array(value)) {
-                throw new Error("Invalid native MCP response bytes.");
-              }
-
-              controller.enqueue(value);
+              return;
             }
+
+            if (Option.isSome(owner.disposal)) {
+              controller.close();
+
+              return cancel();
+            }
+
+            const value: unknown = chunk.value;
+
+            if (!Predicate.isUint8Array(value)) {
+              throw new Error("Invalid native MCP response bytes.");
+            }
+
+            controller.enqueue(value);
+
+            return undefined;
           })
           .catch((error: unknown) => {
             finish();

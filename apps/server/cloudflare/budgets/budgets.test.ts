@@ -935,6 +935,24 @@ it("versions currency for every group member without changing earlier months or 
       expect(yield* groupCurrenciesAt(db, "2026-12")).toEqual(["USD", "USD"]);
       expect((yield* groupCurrenciesAt(db, "2026-11", 1))[0]).toBe("COP");
 
+      const staleGroup = yield* Effect.tryPromise(() =>
+        db.send(
+          request(0, `/budgets/${created.data.id}`, "PUT", {
+            ...payload(),
+            month: "2026-11",
+            groupName: "Borrador",
+            groupCategoryIds: [category, second],
+            groupCurrency: "COP",
+          })
+        )
+      );
+
+      expect(staleGroup.status).toBe(400);
+      expect(yield* Effect.tryPromise(() => staleGroup.json())).toMatchObject({
+        error: { code: "validation_failed", fields: [{ path: "cap.currency" }] },
+      });
+      expect(yield* groupCurrenciesAt(db, "2026-11")).toEqual(["USD", "USD"]);
+
       yield* Effect.forEach(
         ["2026-10", "2026-11"],
         Effect.fnUntraced(function* (month) {

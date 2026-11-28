@@ -203,6 +203,7 @@ const OccurrenceEditor = ({
       {lifecycle}
       <OccurrenceDetails
         item={item.value}
+        month={view.month}
         document={view.document}
         transactions={view.linkedTransactions}
         invalidMarks={view.document.fulfillments.filter(
@@ -700,7 +701,9 @@ const EditorSheet = ({
       title={editorTitle(panel, view)}
       themeControl={<RecurringThemeControl theme={theme} toggle={toggle} />}
       open={active && Option.isSome(panel)}
-      onClose={() => setPanel(Option.none())}
+      onClose={() => {
+        if (active) setPanel(Option.none());
+      }}
     >
       {notice}
       {Option.isSome(panel) ? (

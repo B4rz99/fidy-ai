@@ -19,6 +19,15 @@ export type WorkspaceProps = Readonly<{
 
 export type SaveState = "idle" | "saving" | "saved" | "failed" | "uncertain";
 
+export type GroupRecovery =
+  | "idle"
+  | "required"
+  | "conflict"
+  | "refreshing"
+  | "retry"
+  | "review"
+  | "unavailable";
+
 export type BudgetDraft = Readonly<{
   category: Category;
   budget: Option.Option<Budget>;
@@ -46,6 +55,7 @@ export type BudgetEditing = Readonly<{
   write: (edit: BudgetEdit) => void;
   remove: () => void;
   refresh: () => void;
+  groupRecovery: GroupRecovery;
   closeEditor: () => void;
   assignCategory: (category: Category) => void;
   configureCategory: (status: BudgetStatus) => void;

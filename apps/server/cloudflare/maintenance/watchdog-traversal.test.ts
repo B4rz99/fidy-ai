@@ -104,6 +104,47 @@ const fleet = Effect.fn(function* () {
 });
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect("wakes only unseeded and overdue UserStores", () =>
+    Effect.gen(function* () {
+      const create = yield* fleet();
+      const fixture = yield* create("freshness");
+      const start = yield* Clock.currentTimeMillis;
+      const shared = ["directory-v1", "pricing", "erasure-registry-v1"];
+
+      yield* fixture.exec(
+        "INSERT INTO lifetime_registry(user_id,recovery_seeded) VALUES(?,0),(?,1),(?,1)",
+        user(1),
+        user(3),
+        user(4)
+      );
+      yield* fixture.exec(
+        "INSERT INTO user_recovery VALUES(?,?,?,1),(?,?,?,1)",
+        user(3),
+        user(3),
+        start,
+        user(4),
+        user(4),
+        start + 120000
+      );
+      expect(yield* fixture.tick(start)).toBe(204);
+      const first = yield* fixture.ledger;
+      expect(first.names).toEqual([...shared, user(1), user(3)]);
+
+      yield* fixture.exec("UPDATE watchdog_progress SET minute=minute-1");
+      expect(yield* fixture.tick(start + 60000)).toBe(204);
+      const second = yield* fixture.ledger;
+      expect(second.names.slice(first.names.length)).toEqual(shared.slice(1));
+
+      yield* fixture.exec("UPDATE watchdog_progress SET minute=minute-1");
+      expect(yield* fixture.tick(start + 120000)).toBe(204);
+      expect((yield* fixture.ledger).names.slice(second.names.length)).toEqual([
+        ...shared.slice(1),
+        user(4),
+      ]);
+      expect(yield* fixture.exec("SELECT user_id FROM user_recovery")).toEqual([]);
+    })
+  );
+
   test.effect(
     "reconstructs mid-traversal, isolates a lost reply and a failed owner, and wraps to registrations behind the cursor",
     () =>

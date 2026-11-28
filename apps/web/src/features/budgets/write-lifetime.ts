@@ -1,11 +1,12 @@
 import { Option } from "effect";
 import { useLayoutEffect, useRef, useState } from "react";
-import type { BudgetDraft, BudgetEdit, SaveState, WorkspaceProps } from "./model";
+import type { BudgetDraft, BudgetEdit, GroupRecovery, SaveState, WorkspaceProps } from "./model";
 
 export type BudgetWriteContext = Readonly<{
   editable: boolean;
   data: Option.Option<Omit<WorkspaceProps, "editing">>;
   saveState: SaveState;
+  groupRecovery: GroupRecovery;
   writeAction: "save" | "delete";
   draft: Option.Option<BudgetDraft>;
   inlineDraft: Option.Option<BudgetEdit>;
